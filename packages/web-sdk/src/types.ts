@@ -117,6 +117,26 @@ export interface OmnigentProviderOptions {
   readonly credentials?: RequestCredentials;
 }
 
+export interface ConnectAgentOptions {
+  readonly baseUrl: string;
+  readonly appId: string;
+  readonly tools: readonly ApplicationTool[];
+  readonly pairingCode?: string;
+  readonly accessToken?: string;
+  readonly fetch?: typeof globalThis.fetch;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly credentials?: RequestCredentials;
+}
+
+export interface AgentConnection {
+  readonly session: import("./agent-session.js").AgentSession;
+  /** Opaque Agent Connect id; never an underlying harness/provider id. */
+  readonly sessionId: string;
+  readonly accessToken: string;
+  readonly expiresAt: string;
+  readonly toolHash: string;
+}
+
 export type ApplicationToolHandler<Arguments extends JsonObject = JsonObject> =
   (
     arguments_: Arguments,

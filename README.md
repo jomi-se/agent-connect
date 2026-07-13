@@ -18,6 +18,12 @@ The first end-to-end browser slice now passes. `@agent-connect/web` provides:
 - in-memory duplicate action suppression; and
 - isolated experimental ACP/WebSocket and MCP-over-ACP helpers.
 
+The gateway now owns the next lifecycle boundary: a user pairs a hosted app
+with a one-time code from the connector terminal, the browser receives a scoped
+capability and opaque Agent Connect session, and the gateway provisions or
+heals the matching OmniGENT/Codex runner. Applications no longer need an
+OmniGENT session id.
+
 The [`browser-nonce` demo](apps/browser-nonce/README.md) proves that a normal web
 application can lend a fresh tool to the user's Codex-backed OmniGENT session
 without preinstalling an application MCP server.

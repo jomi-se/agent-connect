@@ -6,6 +6,21 @@ test("the dynamically defined tool writes an agent message onto the page", async
   const postedEvents: unknown[] = [];
   await page.route("https://gateway.example/**", async (route) => {
     const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/v1/app-sessions") {
+      expect(request.headers()["authorization"]).toBe("Pairing AC-TEST-CODE");
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          sessionId: "acs-canvas",
+          accessToken: "scoped-token",
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          toolHash: "tool-hash",
+        }),
+      });
+      return;
+    }
     if (request.method() === "GET") {
       await route.fulfill({
         contentType: "text/event-stream",
@@ -30,9 +45,8 @@ test("the dynamically defined tool writes an agent message onto the page", async
     await route.fulfill({ status: 202, body: "{}" });
   });
 
-  await page.goto(
-    "/?gateway=https%3A%2F%2Fgateway.example&session=session-canvas",
-  );
+  await page.goto("/?gateway=https%3A%2F%2Fgateway.example");
+  await page.locator("#pairing-code").fill("AC-TEST-CODE");
   await page.getByRole("button", { name: "Run with my Codex" }).click();
 
   await expect(page.locator("body")).toHaveAttribute("data-demo", "passed");

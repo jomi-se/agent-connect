@@ -4,7 +4,8 @@
 
 | Capability                                          | Current milestone | Observable evidence                                               |
 | --------------------------------------------------- | ----------------- | ----------------------------------------------------------------- |
-| Bind to an existing OmniGENT session                | Browser slice     | Browser-safe client uses only fetch/SSE-compatible primitives     |
+| Create an opaque application session                | Session slice     | Browser receives no OmniGENT id                                   |
+| Pair user presence through a private channel        | Session slice     | One-time terminal code exchanges for a scoped capability          |
 | Reach a user-owned runtime from an HTTPS web app    | Remote slice      | Tailnet-only HTTPS gateway enforces Origin and Tailscale identity |
 | Mutate visible state from a dynamically lent tool   | Remote demo       | Firebase Canvas exposes one bounded in-memory page-write tool     |
 | Supply a fixed request-scoped tool snapshot         | Browser slice     | First message event carries OpenAI-format dynamic tool schemas    |
@@ -29,7 +30,9 @@
 | Pass request-scoped tools into the first turn     | Proven spike      | Live nonce composition passed on 2026-07-13                 |
 | Drive maintained `@agentclientprotocol/codex-acp` | Proven spike      | Live Codex turn completed with published adapter 1.1.2      |
 | Round-trip `action_required` tool output          | Proven spike      | Exact-once callback and same-turn completion observed       |
-| Provision and bind runners                        | Deferred          | First client binds an already-created, online session       |
+| Provision and bind runners                        | Session slice     | Gateway uploads the fixed agent bundle and selects one host |
+| Reuse a healthy matching session                  | Session slice     | Same origin/app/tool hash resolves to one logical session   |
+| Heal an offline matching runner                   | Session slice     | Gateway transparently provisions a replacement runner       |
 | Persist pending application actions               | Reliability slice | OmniGENT currently does not persist `action_required` calls |
 
 ## Security and reliability constraints
@@ -39,6 +42,13 @@
 - Browser origins and Tailscale logins are exact allowlists; CORS is not user authentication.
 - Mutating tools require visible approval or a preview policy.
 - The conductor authenticates and pairs applications; raw Codex app-server is never internet-exposed.
+- A pairing code is single-use and is delivered only through the connector's
+  local terminal. It is never compiled into a hosted application.
+- Application capabilities are signed, expiring, and bound to origin, app id,
+  logical session id, and canonical tool-snapshot hash.
+- Prompt ingress is an execution capability: an authenticated application may
+  instruct the agent, but it cannot raise the agent's local sandbox or approval
+  policy through Agent Connect.
 - Stable action IDs are preserved across retries and reconnects.
 - The demo application's mutation endpoint is idempotent by action ID.
 - Loss of token deltas is acceptable; loss of an unresolved mutation request is not.

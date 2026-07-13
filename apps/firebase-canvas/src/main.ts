@@ -1,13 +1,12 @@
 import {
-  connectOmnigent,
+  connectAgent,
   defineTool,
   type AgentTaskEvent,
 } from "@agent-connect/web";
 
 const form = requireElement<HTMLFormElement>("task-form");
 const gatewayInput = requireElement<HTMLInputElement>("gateway-url");
-const sessionInput = requireElement<HTMLInputElement>("session-id");
-const tokenInput = requireElement<HTMLInputElement>("access-token");
+const pairingInput = requireElement<HTMLInputElement>("pairing-code");
 const promptInput = requireElement<HTMLTextAreaElement>("prompt");
 const runButton = requireElement<HTMLButtonElement>("run");
 const canvasMessage = requireElement<HTMLParagraphElement>("canvas-message");
@@ -19,8 +18,6 @@ gatewayInput.value =
   params.get("gateway") ??
   sessionStorage.getItem("agent-connect.gateway") ??
   "https://artifex-box.tail246db1.ts.net:8443";
-sessionInput.value = params.get("session") ?? "";
-tokenInput.value = sessionStorage.getItem("agent-connect.token") ?? "";
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -33,56 +30,57 @@ async function run(): Promise<void> {
   status.textContent = "Asking your agent…";
   document.body.dataset["demo"] = "running";
   sessionStorage.setItem("agent-connect.gateway", gatewayInput.value);
-  if (tokenInput.value) {
-    sessionStorage.setItem("agent-connect.token", tokenInput.value);
-  } else {
-    sessionStorage.removeItem("agent-connect.token");
-  }
 
   let writes = 0;
-  const headers = tokenInput.value
-    ? { Authorization: `Bearer ${tokenInput.value}` }
-    : {};
-  const session = connectOmnigent({
-    baseUrl: gatewayInput.value,
-    sessionId: sessionInput.value,
-    headers,
-    tools: [
-      defineTool({
-        name: "set_page_message",
-        description:
-          "Replace the large visible message on the user's web page.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            message: {
-              type: "string",
-              minLength: 1,
-              maxLength: 180,
-              description: "The complete message to show on the page.",
-            },
+  const tools = [
+    defineTool({
+      name: "set_page_message",
+      description: "Replace the large visible message on the user's web page.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          message: {
+            type: "string",
+            minLength: 1,
+            maxLength: 180,
+            description: "The complete message to show on the page.",
           },
-          required: ["message"],
-          additionalProperties: false,
         },
-        execute: ({ message }) => {
-          if (typeof message !== "string") {
-            throw new TypeError("message must be a string");
-          }
-          writes += 1;
-          canvasMessage.textContent = message;
-          canvasMessage.dataset["agentWrites"] = String(writes);
-          return {
-            content: [{ type: "text", text: "The page message was updated." }],
-            structuredContent: { displayed: true, message, writes },
-          };
-        },
-      }),
-    ],
-  });
+        required: ["message"],
+        additionalProperties: false,
+      },
+      execute: ({ message }) => {
+        if (typeof message !== "string") {
+          throw new TypeError("message must be a string");
+        }
+        writes += 1;
+        canvasMessage.textContent = message;
+        canvasMessage.dataset["agentWrites"] = String(writes);
+        return {
+          content: [{ type: "text", text: "The page message was updated." }],
+          structuredContent: { displayed: true, message, writes },
+        };
+      },
+    }),
+  ];
 
   try {
-    for await (const taskEvent of session.streamTask(promptInput.value)) {
+    const storedToken = sessionStorage.getItem("agent-connect.capability");
+    const connection = await connectAgent({
+      baseUrl: gatewayInput.value,
+      appId: "agent-connect-demo",
+      tools,
+      ...(pairingInput.value
+        ? { pairingCode: pairingInput.value }
+        : storedToken
+          ? { accessToken: storedToken }
+          : {}),
+    });
+    sessionStorage.setItem("agent-connect.capability", connection.accessToken);
+    pairingInput.value = "";
+    for await (const taskEvent of connection.session.streamTask(
+      promptInput.value,
+    )) {
       appendEvent(taskEvent);
       if (taskEvent.type === "task.completed") {
         if (writes === 0) {

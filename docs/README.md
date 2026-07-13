@@ -12,6 +12,8 @@
 
 - [ADR 0001: ACP-first application boundary](decisions/0001-acp-first-application-boundary.md)
 - [ADR 0002: OmniGENT as conductor candidate](decisions/0002-omnigent-conductor.md)
+- [ADR 0003: Tailnet HTTPS gateway](decisions/0003-tailnet-https-gateway.md)
+- [ADR 0004: Pairing and session broker](decisions/0004-pairing-and-session-broker.md)
 
 ## Research
 

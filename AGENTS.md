@@ -11,9 +11,11 @@ the default application API.
 
 ## Current scope
 
-The first browser-to-Codex spike has passed. Continue to assume one online
-OmniGENT session, one active task, one fixed application tool snapshot, and one
-downstream agent until durability and approval behavior are implemented.
+The browser-to-Codex spike and gateway-owned provisioning pass. Continue to
+assume one online OmniGENT host, one active task per application session, one
+fixed tool snapshot per logical/downstream session, and one downstream agent
+until durability and approval behavior are implemented. Browser APIs must use
+opaque Agent Connect sessions, never raw OmniGENT ids.
 
 Do not add generalized multi-agent orchestration, arbitrary MCP features, Android automation, or a second proprietary session protocol without recording a decision under `docs/decisions/`.
 

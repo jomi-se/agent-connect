@@ -30,7 +30,7 @@ Use the stable Firebase origin in the gateway configuration:
 ```sh
 export AGENT_CONNECT_ALLOWED_ORIGINS='https://PROJECT_ID.web.app'
 export AGENT_CONNECT_ALLOWED_TAILSCALE_USERS='YOUR_TAILSCALE_LOGIN'
-export AGENT_CONNECT_ACCESS_TOKEN='OPTIONAL_LONG_RANDOM_SECRET'
+export AGENT_CONNECT_WORKSPACE='/path/the/codex-agent-may-use'
 npm run start --workspace @agent-connect/gateway
 ```
 
@@ -42,13 +42,15 @@ tailscale serve --bg --https=8443 http://127.0.0.1:8787
 ```
 
 Open `https://PROJECT_ID.web.app` from a Tailscale-connected browser, enter the
-OmniGENT session ID and optional runtime access token, and ask Codex to write a
-message. The page supplies `set_page_message` dynamically and should update its
-large visible canvas text during the same task.
+one-time `AC-…` code printed by the gateway, and ask Codex to write a message.
+The gateway provisions the OmniGENT/Codex runner automatically. The page
+supplies `set_page_message` dynamically and should update its large visible
+canvas text during the same task.
 
 ## Credential boundary
 
 The Firebase service account exists only as an encrypted GitHub Actions secret.
 The hosted page contains no Firebase SDK configuration and no deployment
-credential. The optional Agent Connect bearer token is entered by the user and
-stored only in browser `sessionStorage` for this personal demo.
+credential. The pairing code is delivered through the user's local terminal,
+rotates after one use, and is never stored by the page. The resulting scoped,
+expiring capability is stored only in browser `sessionStorage` for this demo.

@@ -10,8 +10,9 @@ browser application
              | Firebase HTTPS origin -> Tailscale Serve HTTPS
              v
 Agent Connect gateway
-  exact Origin + Tailscale identity authorization
-  connection and session mapping
+  one-time pairing + scoped application capabilities
+  exact Origin (+ Tailscale identity in direct mode)
+  logical -> provider session mapping and health recovery
   pending-action persistence
   fixed tool snapshot + provider adapter
              |
@@ -38,10 +39,21 @@ Owns browser transport setup, ACP client handlers, application tool registration
 
 ### Gateway
 
-Owns authorization, mapping application sessions to OmniGENT conversations,
+Owns pairing, authorization, mapping application sessions to OmniGENT conversations,
 request-scoped tool-schema injection, normalized events, and durable pending
 application actions. Its provider interface contains no browser-facing
 OmniGENT types.
+
+The gateway prints a one-time pairing code to its local operator channel. A
+browser proves possession once and receives an expiring signed capability. The
+capability is audience-bound to the requesting Origin, application id, opaque
+Agent Connect session id, and canonical tool snapshot. Origin and CORS checks
+are defense in depth, not proof of the user.
+
+The gateway provisions a provider session on first use. A healthy provider
+session with the same origin, application id, and tool hash is reused. A
+different tool hash creates a different downstream ACP session; an unhealthy
+matching session is replaced behind the same opaque application session.
 
 The deployed gateway listens only on loopback. Tailscale Serve terminates HTTPS
 and supplies authenticated identity headers; the gateway checks those headers
@@ -59,16 +71,17 @@ Owns the actual side effect. It receives a stable action ID and must make conseq
 ## Tool-call translation
 
 ```text
-1. Browser registers a fixed tool snapshot for the application session.
-2. Gateway validates and records the snapshot.
-3. OmniGENT provider attaches the schemas to the first session message event.
-4. Codex calls a tool through OmniGENT's downstream MCP relay.
-5. OmniGENT emits action_required.
-6. Gateway persists a pending action.
-7. Gateway sends the normalized tool call to the browser.
-8. Browser approves and executes the application handler.
-9. Gateway posts the correlated tool result to OmniGENT.
-10. Codex resumes and completes the turn.
+1. Browser registers a fixed tool snapshot while creating the application session.
+2. Gateway validates, canonically hashes, authorizes, and records the snapshot.
+3. Gateway provisions and binds a healthy OmniGENT runner for that snapshot.
+4. OmniGENT provider attaches the schemas to the first session message event.
+5. Codex calls a tool through OmniGENT's downstream MCP relay.
+6. OmniGENT emits action_required.
+7. Gateway persists a pending action.
+8. Gateway sends the normalized tool call to the browser.
+9. Browser approves and executes the application handler.
+10. Gateway posts the correlated tool result to OmniGENT.
+11. Codex resumes and completes the turn.
 ```
 
 ## Fallback architecture
