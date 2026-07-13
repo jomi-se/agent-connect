@@ -1,0 +1,26 @@
+{
+  "name": "agent-connect",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ACP-first application bridge for user-owned agent runtimes",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "verify": "npm run format:check && npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "prettier": "3.9.0",
+    "typescript": "6.0.2",
+    "vitest": "4.1.0"
+  }
+}

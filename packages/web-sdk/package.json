@@ -1,0 +1,33 @@
+{
+  "name": "@agent-connect/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Browser-oriented ACP client helpers with a narrow embedded MCP-over-ACP server",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "1.2.1"
+  },
+  "devDependencies": {
+    "typescript": "6.0.2",
+    "vitest": "4.1.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
