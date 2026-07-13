@@ -57,7 +57,24 @@ Exit criteria:
 - the same Codex turn included its unpredictable result;
 - console and asserted network flow were clean.
 
-## Milestone 3: durable pending actions
+## Milestone 3: tailnet HTTPS application slice
+
+Deliverables:
+
+- loopback-only Agent Connect gateway;
+- Tailscale Serve HTTPS endpoint without disturbing existing Serve routes;
+- exact Firebase preview Origin and Tailscale login allowlists;
+- optional runtime bearer token and documented future pairing capability;
+- remote nonce proof from a Firebase Hosting preview URL.
+
+Exit criteria:
+
+- allowlisted remote browser completes the same nonce flow over HTTPS;
+- mixed-content, CORS preflight, SSE, and event POST checks pass;
+- unlisted Origin and Tailscale identity probes are rejected;
+- raw OmniGENT and Codex endpoints remain unexposed.
+
+## Milestone 4: durable pending actions
 
 Deliverables:
 
@@ -73,7 +90,7 @@ Exit criteria:
 - disconnect after execution but before acknowledgement does not produce a second demonstrated spreadsheet write;
 - conversation completion resumes after result recovery.
 
-## Milestone 4: spreadsheet demonstration
+## Milestone 5: spreadsheet demonstration
 
 Initial tools:
 

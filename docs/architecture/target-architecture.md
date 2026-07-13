@@ -7,9 +7,10 @@ browser application
   @agent-connect/web
   define tools, run task, events, approve
              |
-             | authenticated gateway channel
+             | Firebase HTTPS origin -> Tailscale Serve HTTPS
              v
 Agent Connect gateway
+  exact Origin + Tailscale identity authorization
   connection and session mapping
   pending-action persistence
   fixed tool snapshot + provider adapter
@@ -41,6 +42,11 @@ Owns authorization, mapping application sessions to OmniGENT conversations,
 request-scoped tool-schema injection, normalized events, and durable pending
 application actions. Its provider interface contains no browser-facing
 OmniGENT types.
+
+The deployed gateway listens only on loopback. Tailscale Serve terminates HTTPS
+and supplies authenticated identity headers; the gateway checks those headers
+and an exact application Origin allowlist before accepting a session request.
+Firebase hosts application assets, not the gateway or the user-owned runtime.
 
 ### OmniGENT
 

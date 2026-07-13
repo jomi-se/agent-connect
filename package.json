@@ -12,7 +12,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "npm run build --workspace @agent-connect/web && npm run build --workspace @agent-connect/browser-nonce",
+    "build": "npm run build --workspace @agent-connect/web && npm run build --workspace @agent-connect/gateway && npm run build --workspace @agent-connect/browser-nonce",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "npm run test --workspaces --if-present",
