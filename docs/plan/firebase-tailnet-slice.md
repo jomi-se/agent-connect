@@ -60,3 +60,31 @@ Replace the shared optional bearer secret with a short-lived pairing capability
 bound to Tailscale login, application origin, application session, and tool
 snapshot hash. Move OmniGENT session provisioning behind the gateway so an
 external application never needs a raw conductor session ID.
+
+## Observed remote result — 2026-07-13
+
+The dedicated Firebase Canvas completed the live path from a mobile browser:
+
+```text
+Firebase page
+  -> tailnet HTTPS gateway
+  -> OmniGENT generic ACP runner
+  -> codex-acp / Codex
+  -> set_page_message action_required
+  -> browser-owned handler
+  -> correlated tool result
+  -> same-turn Codex completion
+```
+
+The first retry exposed an important lifecycle constraint: an OmniGENT session
+previously initialized with `get_browser_nonce` could not replace its downstream
+ACP tool surface with `set_page_message`. A fresh application session succeeded.
+The gateway must therefore provision and own one provider session per fixed
+application tool snapshot rather than asking users to paste reusable raw
+OmniGENT session IDs.
+
+Chrome displayed its Local Network Access permission because the public
+Firebase origin directly contacted a private tailnet destination. This direct
+transport remains a personal deployment mode, not the general SDK topology. A
+public relay with an outbound runtime connector is required for arbitrary
+hosted applications without the local-network permission prompt.
