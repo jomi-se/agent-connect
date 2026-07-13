@@ -32,21 +32,28 @@ An application can:
   actions after the browser loop works; do not claim generic exactly-once
   execution.
 
-## Hackathon acceptance boundary
+## Current acceptance boundary
 
-The next accepted slice is a browser-safe client bound to one already-created,
-online OmniGENT session. It streams one task, lends a fixed set of
-application-defined tools, executes calls locally, returns correlated results,
-and reaches the same turn's terminal event. Session provisioning, remote
-pairing, durable reconnect, and mutations follow after this read-only loop.
+The browser tool loop has passed against a manually provisioned OmniGENT/Codex
+session. The current slice removes that operator step: an application proves
+the user's presence with a one-time code delivered through the user's local
+connector terminal, receives a short-lived capability bound to its exact
+origin, app identity, logical session, and tool snapshot, and asks the gateway
+to create or recover the matching OmniGENT/Codex runner automatically.
+
+Raw OmniGENT session identifiers are an internal provider detail. A user starts
+the connector once; normal application use must not require opening OmniGENT,
+copying a conversation id, or restarting a runner when the application tool
+surface changes.
 
 ## Non-goals for the first slice
 
 - a finalized universal protocol;
 - full MCP feature coverage;
-- multiple applications, MCP servers, agents, or concurrent sessions;
+- multiple users, hosts, agents, or concurrent tasks;
 - arbitrary device or Android control;
 - production multi-tenancy or billing;
 - importing normal Codex CLI history;
 - replaying every streamed token;
-- generic exactly-once side effects.
+- generic exactly-once side effects;
+- production identity federation, account recovery, or a public relay.

@@ -8,8 +8,10 @@ Codex or OmniGENT in advance.
 The app needs:
 
 - the Tailscale Serve HTTPS URL for the Agent Connect gateway;
-- an already provisioned OmniGENT session ID;
-- the optional gateway bearer token, entered at runtime.
+- the one-time pairing code printed by the gateway at startup.
+
+The gateway creates and owns the OmniGENT/Codex session. After pairing, the page
+keeps its scoped capability in `sessionStorage` for the life of the tab.
 
 Build with:
 

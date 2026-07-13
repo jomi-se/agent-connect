@@ -197,12 +197,13 @@
               <input id="gateway-url" type="url" required />
             </label>
             <label>
-              OmniGENT session ID
-              <input id="session-id" required />
-            </label>
-            <label>
-              Access token (optional)
-              <input id="access-token" type="password" autocomplete="off" />
+              One-time pairing code
+              <input
+                id="pairing-code"
+                type="password"
+                autocomplete="one-time-code"
+                placeholder="AC-… (first connection only)"
+              />
             </label>
             <label>
               Task for your agent

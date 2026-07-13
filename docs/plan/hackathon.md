@@ -57,14 +57,15 @@ Exit criteria:
 - the same Codex turn included its unpredictable result;
 - console and asserted network flow were clean.
 
-## Milestone 3: tailnet HTTPS application slice
+## Milestone 3: tailnet HTTPS application slice — complete
 
 Deliverables:
 
 - loopback-only Agent Connect gateway;
 - Tailscale Serve HTTPS endpoint without disturbing existing Serve routes;
 - exact Firebase preview Origin and Tailscale login allowlists;
-- optional runtime bearer token and documented future pairing capability;
+- one-time pairing and tool-scoped expiring capability;
+- gateway-owned OmniGENT conversation and runner provisioning;
 - dedicated Firebase Canvas demo deployed without VM-held credentials;
 - remote page-write proof from the Firebase Hosting URL.
 
@@ -74,6 +75,12 @@ Exit criteria:
 - mixed-content, CORS preflight, SSE, and event POST checks pass;
 - unlisted Origin and Tailscale identity probes are rejected;
 - raw OmniGENT and Codex endpoints remain unexposed.
+
+Observed result: the Firebase Canvas completed the remote tool loop on
+2026-07-13. The session broker and pairing follow-up then provisioned a fresh
+live `codex-acp` runner and completed `set_page_message` using only an opaque
+Agent Connect id. Independent mobile network capture remains useful evidence,
+but raw provider session configuration is no longer part of the demo UX.
 
 ## Milestone 4: durable pending actions
 

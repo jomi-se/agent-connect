@@ -5,11 +5,12 @@ a user-owned agent runtime. OmniGENT is the first provider; its HTTP/SSE and
 tool-result wire shapes stay behind the provider adapter.
 
 ```ts
-import { connectOmnigent, defineTool } from "@agent-connect/web";
+import { connectAgent, defineTool } from "@agent-connect/web";
 
-const session = connectOmnigent({
-  baseUrl: "/my-user-runtime",
-  sessionId: pairedSessionId,
+const connection = await connectAgent({
+  baseUrl: "https://my-user-runtime.example",
+  appId: "my-spreadsheet",
+  pairingCode: codeEnteredByTheUser,
   tools: [
     defineTool({
       name: "read_range",
@@ -24,7 +25,9 @@ const session = connectOmnigent({
   ],
 });
 
-for await (const event of session.streamTask("Clean up the selected table")) {
+for await (const event of connection.session.streamTask(
+  "Clean up the selected table",
+)) {
   renderAgentEvent(event);
 }
 ```
@@ -32,7 +35,10 @@ for await (const event of session.streamTask("Clean up the selected table")) {
 `AgentSession` snapshots the tool set at task start, validates tool arguments
 against JSON Schema in the browser, suppresses repeated action IDs within that
 live task, and exposes provider-neutral task/text/tool events. Session
-provisioning and pairing belong to the user-owned runtime.
+provisioning and pairing belong to the user-owned runtime. `connectAgent`
+exchanges a one-time code for an expiring capability and returns only an opaque
+Agent Connect session id; OmniGENT conversation ids stay internal. Reconnect
+with `accessToken: connection.accessToken` while that capability remains valid.
 
 The package also retains the deliberately narrow `SingleMcpServer` and
 `createBrowserAcpStream` experimental ACP/MCP-over-ACP helpers. They are not on
@@ -40,12 +46,13 @@ the first provider's critical path.
 
 ## Current constraints
 
-- one already-created, online OmniGENT session;
+- one online OmniGENT host, selected explicitly when more than one is online;
 - one active task per provider instance;
 - a fixed tool snapshot per task;
 - in-memory duplicate suppression only, not durable exactly-once execution;
-- no session provisioning, remote pairing, reconnect recovery, or mutation
-  approval yet;
+- session/capability state is in-memory and does not survive a gateway restart;
+- no durable device identity, revocation UI, public relay, or mutation approval
+  yet;
 - the experimental MCP-over-ACP helper still supports only one connection and
   MCP `initialize`, `notifications/initialized`, `ping`, `tools/list`, and
   `tools/call`.

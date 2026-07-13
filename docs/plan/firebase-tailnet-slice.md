@@ -45,7 +45,7 @@ grocery application.
 
 ## Phase C: remote real-surface proof
 
-1. Start OmniGENT and provision one Codex-backed session.
+1. Start OmniGENT and its host once.
 2. Start the gateway with the preview origin and owner login allowlisted.
 3. Expose gateway port 8787 with Tailscale Serve HTTPS on an unused port.
 4. Open the Firebase preview on a Tailscale-connected phone or laptop.
@@ -54,12 +54,17 @@ grocery application.
    the final Codex response.
 7. Repeat once with a disallowed Origin and once without Tailscale access.
 
-## After the slice
+## Session-management follow-up — completed 2026-07-13
 
-Replace the shared optional bearer secret with a short-lived pairing capability
-bound to Tailscale login, application origin, application session, and tool
-snapshot hash. Move OmniGENT session provisioning behind the gateway so an
-external application never needs a raw conductor session ID.
+The shared optional bearer secret was replaced on the public path with a
+single-use terminal pairing code and a short-lived capability bound to
+application origin, app id, opaque application session, and tool-snapshot hash.
+OmniGENT session provisioning and runner health recovery now live behind the
+gateway; external applications no longer need a raw conductor session ID.
+
+The remaining transport follow-up is a public relay reached by outbound
+connections from both the browser SDK and local connector. That removes the
+Local Network Access prompt without making the local gateway public.
 
 ## Observed remote result — 2026-07-13
 
