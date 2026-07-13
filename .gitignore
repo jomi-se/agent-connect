@@ -1,0 +1,48 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.playwright-mcp/
+
+# Agent local settings
+.antigravitycli/
+.gemini/settings.local.json
+.codex/config.local.toml
+.codex/playwright-mcp.json
+.codex/.uv-cache/
+.claude/settings.local.json
+.mcp.json
+
+# Harness-materialized skill catalog. A harness (Claude/Codex) drops its full skill
+# set — mirrors of .agents/skills plus plugin skills (impeccable, agent-browser,
+# validators, mission playbooks) — into the adapter dirs on load. Never committed;
+# not repo content. Keep only the tracked ck-orchestration adapter in each.
+/.claude/skills/*
+/.codex/skills/*
+/.agents/skills/*
+/.agents/bundles/*
+/.codex/agents/*
+/.codex/config.toml
+
+#
