@@ -1,0 +1,25 @@
+name: Deploy Firebase demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspace @agent-connect/web
+      - run: npm run build --workspace @agent-connect/firebase-canvas
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AGENT_CONNECT_DEMO }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID_AGENT_CONNECT_DEMO }}
+          channelId: live

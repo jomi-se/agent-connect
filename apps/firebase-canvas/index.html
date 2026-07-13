@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>Agent Connect Canvas</title>
+    <style>
+      :root {
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: #15221c;
+        background: #e8efe9;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 15% 15%, #fff7cf 0 12%, transparent 34%),
+          radial-gradient(circle at 85% 5%, #cce9dc 0 10%, transparent 31%),
+          #e8efe9;
+      }
+      main {
+        width: min(1080px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 42px 0 64px;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 24px;
+        margin-bottom: 36px;
+      }
+      .brand {
+        font-weight: 850;
+        letter-spacing: -0.04em;
+        font-size: 1.25rem;
+      }
+      .pill {
+        padding: 7px 12px;
+        border: 1px solid #94aa9c;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 750;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+        gap: 22px;
+      }
+      .canvas,
+      .controls {
+        border: 1px solid #aebeb3;
+        border-radius: 24px;
+        box-shadow: 0 24px 70px #2945351a;
+      }
+      .canvas {
+        min-height: 570px;
+        padding: clamp(28px, 6vw, 72px);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        background: #fffdf5;
+      }
+      .eyebrow {
+        margin: 0;
+        color: #53685c;
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      #canvas-message {
+        margin: 50px 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(2.6rem, 7vw, 5.8rem);
+        line-height: 0.98;
+        letter-spacing: -0.055em;
+        overflow-wrap: anywhere;
+      }
+      #status {
+        display: block;
+        min-height: 3em;
+        color: #53685c;
+        line-height: 1.45;
+      }
+      .controls {
+        padding: 24px;
+        background: #183f2d;
+        color: #f6fff8;
+      }
+      .controls h1 {
+        margin: 0 0 8px;
+        font-size: 1.55rem;
+        letter-spacing: -0.03em;
+      }
+      .controls > p {
+        color: #c8dbcf;
+        line-height: 1.5;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        margin: 15px 0;
+        font-size: 0.8rem;
+        font-weight: 750;
+      }
+      input,
+      textarea,
+      button {
+        font: inherit;
+      }
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid #527562;
+        border-radius: 10px;
+        padding: 10px 11px;
+        color: #f6fff8;
+        background: #0f3022;
+      }
+      textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 16px;
+        color: #173726;
+        background: #f4dd76;
+        cursor: pointer;
+        font-weight: 850;
+      }
+      button:disabled {
+        cursor: wait;
+        opacity: 0.55;
+      }
+      details {
+        margin-top: 20px;
+        color: #c8dbcf;
+        font-size: 0.8rem;
+      }
+      pre {
+        max-height: 180px;
+        overflow: auto;
+        white-space: pre-wrap;
+        font-size: 0.7rem;
+      }
+      @media (max-width: 780px) {
+        main {
+          padding-top: 24px;
+        }
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        .canvas {
+          min-height: 430px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand">Agent Connect</div>
+        <div class="pill">Your agent · this page</div>
+      </header>
+      <div class="layout">
+        <section class="canvas" aria-label="Agent-writable canvas">
+          <p class="eyebrow">A web page with one borrowed tool</p>
+          <p id="canvas-message">Your agent can write here.</p>
+          <output id="status">Waiting for a task.</output>
+        </section>
+        <aside class="controls">
+          <h1>Give the page to Codex</h1>
+          <p>
+            This app defines <code>set_page_message</code> for one agent task.
+            Nothing was installed into Codex in advance.
+          </p>
+          <form id="task-form">
+            <label>
+              Tailnet gateway
+              <input id="gateway-url" type="url" required />
+            </label>
+            <label>
+              OmniGENT session ID
+              <input id="session-id" required />
+            </label>
+            <label>
+              Access token (optional)
+              <input id="access-token" type="password" autocomplete="off" />
+            </label>
+            <label>
+              Task for your agent
+              <textarea id="prompt" required>
+Write a short, surprising welcome message directly onto this page. You must use set_page_message once.</textarea>
+            </label>
+            <button id="run" type="submit">Run with my Codex</button>
+          </form>
+          <details>
+            <summary>Session events</summary>
+            <pre id="events"></pre>
+          </details>
+        </aside>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
