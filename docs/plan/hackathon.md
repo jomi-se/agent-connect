@@ -4,54 +4,56 @@
 
 A spreadsheet web application connects to the user's runtime, exposes safe range operations, asks Codex to clean and augment a table, previews mutations, survives a deliberate disconnect with one pending write, and completes without applying the demonstrated write twice.
 
-## Milestone 0: repository and web SDK foundation
+## Milestone 0: conductor composition proof — complete
 
 Deliverables:
 
-- npm-workspaces TypeScript monorepo;
-- browser-safe `@agent-connect/web` package;
-- ACP WebSocket transport composition point;
-- one-server MCP-over-ACP descriptor and handler;
-- fixed tool registration and `tools/call` execution;
-- unit tests and public example documentation.
+- OmniGENT 0.5.1 and published Codex ACP 1.1.2 pinned;
+- one fresh nonce supplied as a request-scoped client tool;
+- live local Codex turn through OmniGENT's generic ACP harness;
+- captured exact-once callback and same-turn completion.
 
 Exit criteria:
 
-- clean install, typecheck, tests, build, and formatting checks;
+- **passed 2026-07-13** without an OmniGENT or Codex ACP fork;
+- compatibility code is limited to session-message schema injection;
+- OmniGENT selected as the first internal provider.
+
+## Milestone 1: harness-neutral web SDK and provider contract
+
+The existing `@agent-connect/web` ACP/MCP prototype remains useful protocol
+research, but the stable public API must not require that draft wire.
+
+Deliverables:
+
+- browser-safe `defineTools`, `connect`, `runTask`, event, approval, and close API;
+- fixed tool snapshot per application session;
+- internal gateway/provider contract derived from the passing trace;
+- OmniGENT provider adapter for create session, prompt/events, tool result, cancel,
+  and close;
+- explicit separation between browser package and Node gateway code.
+
+Exit criteria:
+
+- clean install, typecheck, unit tests, build, and formatting checks;
 - public imports work from built output;
-- unsupported methods and unknown connections/tools fail explicitly.
+- provider types do not leak into the browser package.
 
-## Milestone 1: OmniGENT composition spike
-
-Time box: one focused day.
+## Milestone 2: loopback browser-to-Codex slice
 
 Deliverables:
 
-- exact OmniGENT version and fork baseline pinned;
-- maintained `@agentclientprotocol/codex-acp` configured as the downstream agent;
-- fake application MCP server with `get_magic_number`;
-- one live Codex prompt that must call the tool and repeat its unguessable result;
-- captured trace covering session creation, MCP discovery, downstream call, `action_required`, result submission, and completion.
+- loopback gateway transport;
+- one browser session that lends a read-only nonce tool;
+- normalized text, status, and tool-call events;
+- deterministic cancellation and cleanup;
+- real-browser smoke test and sanitized end-to-end trace.
 
 Exit criteria:
 
-- go: the exact path works or needs only a narrow patch with an identified owner;
-- no-go: record the failure and switch the conductor implementation without changing the web SDK contract.
-
-## Milestone 2: upstream ACP edge adapter
-
-Deliverables:
-
-- authenticated WebSocket ACP endpoint;
-- `initialize`, new/load session, prompt, cancel, update, and permission mappings;
-- one MCP-over-ACP connection routed to the browser SDK;
-- deterministic cleanup when the connection or turn ends.
-
-Exit criteria:
-
-- browser SDK drives a live Codex session through the conductor;
-- text and tool progress arrive on the browser surface;
-- one read-only browser tool completes.
+- browser SDK drives a live Codex session through OmniGENT;
+- the request-scoped browser tool executes exactly once;
+- the same Codex turn includes its unpredictable result.
 
 ## Milestone 3: durable pending actions
 
@@ -97,7 +99,9 @@ Exit criteria:
 
 ## Stretch work
 
-- upstream an ACP server surface or pending-action persistence patch to OmniGENT;
+- implement a named experimental ACP-over-WebSocket/MCP-over-ACP adapter;
+- upstream the SessionsChat request-scoped-tools API gap;
+- upstream pending-action persistence improvements to OmniGENT;
 - replace the temporary downstream relay with native Codex MCP-over-ACP support;
 - add a second ACP agent only after the Codex slice is stable;
 - publish the web package after protocol disclaimers and compatibility policy are complete.

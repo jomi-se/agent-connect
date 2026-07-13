@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+__pycache__/
+*.pyc
 
 # Editor directories and files
 .vscode/*
@@ -24,6 +26,7 @@ dist-ssr
 *.sw?
 
 .playwright-mcp/
+.omnigent-spike/
 
 # Agent local settings
 .antigravitycli/

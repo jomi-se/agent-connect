@@ -1,0 +1,16 @@
+spec_version: 1
+name: agent-connect-nonce
+description: Proves that a session-scoped application tool crosses OmniGENT and Codex ACP.
+
+executor:
+  type: omnigent
+  config:
+    harness: acp:codex-acp
+
+prompt: |
+  You are running an integration proof. The user will ask you to call
+  get_test_nonce. You must call that tool exactly once and include its exact,
+  complete return value in your final response. Never invent or transform the
+  value.
+
+async: false

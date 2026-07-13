@@ -5,17 +5,17 @@
 ```text
 browser application
   @agent-connect/web
-  ACP client + one embedded MCP server
+  define tools, run task, events, approve
              |
-             | ACP over authenticated WebSocket
-             | nested MCP-over-ACP messages
+             | authenticated gateway channel
              v
-OmniGENT ACP edge adapter
+Agent Connect gateway
   connection and session mapping
   pending-action persistence
-  ACP <-> OmniGENT event translation
+  fixed tool snapshot + provider adapter
              |
-             | OmniGENT Sessions API / internal services
+             | OmniGENT HTTP/SSE Sessions API
+             | request-scoped client tools
              v
 OmniGENT conductor
   normalized sessions, policy, harness lifecycle
@@ -35,9 +35,12 @@ Codex
 
 Owns browser transport setup, ACP client handlers, application tool registration, the single MCP server implementation, application approval hooks, and reconnection orchestration. It does not know OmniGENT or Codex message shapes.
 
-### ACP edge adapter
+### Gateway
 
-Owns upstream ACP semantics, authorization, mapping upstream session IDs to OmniGENT conversations, nested MCP routing, and durable pending application actions. It is the temporary compatibility conductor while native remote ACP and MCP-over-ACP support remain unstable.
+Owns authorization, mapping application sessions to OmniGENT conversations,
+request-scoped tool-schema injection, normalized events, and durable pending
+application actions. Its provider interface contains no browser-facing
+OmniGENT types.
 
 ### OmniGENT
 
@@ -50,18 +53,26 @@ Owns the actual side effect. It receives a stable action ID and must make conseq
 ## Tool-call translation
 
 ```text
-1. Browser declares MCP server in ACP session/new.
-2. Edge adapter connects and performs MCP initialize + tools/list.
-3. Fixed tool schemas are attached to the first OmniGENT turn.
+1. Browser registers a fixed tool snapshot for the application session.
+2. Gateway validates and records the snapshot.
+3. OmniGENT provider attaches the schemas to the first session message event.
 4. Codex calls a tool through OmniGENT's downstream MCP relay.
 5. OmniGENT emits action_required.
-6. Edge adapter persists a pending action.
-7. Edge adapter sends MCP tools/call to the browser over ACP.
+6. Gateway persists a pending action.
+7. Gateway sends the normalized tool call to the browser.
 8. Browser approves and executes the application handler.
-9. Edge adapter posts function_call_output to OmniGENT.
+9. Gateway posts the correlated tool result to OmniGENT.
 10. Codex resumes and completes the turn.
 ```
 
 ## Fallback architecture
 
-If step 4 or 5 cannot be made reliable with a narrow OmniGENT patch, replace the downstream half with a Codex app-server provider. The application-facing ACP and MCP-over-ACP surface remains unchanged; the provider maps listed tools to Codex `dynamicTools` and maps `item/tool/call` back to the pending-action broker.
+If the proven OmniGENT path regresses or blocks the browser slice, replace the
+provider with a Codex app-server dynamic-tool adapter. The application API and
+pending-action broker remain unchanged.
+
+## Deferred ACP adapter
+
+ACP-over-WebSocket plus MCP-over-ACP remains the preferred future standardized
+wire candidate. It implements the same gateway/application API after the first
+working browser slice; it is not required to demonstrate the hackathon product.
