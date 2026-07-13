@@ -66,9 +66,26 @@ export OMNIGENT_CONFIG_HOME="$PWD/.omnigent-spike"
 export OMNIGENT_DATA_DIR="$PWD/.omnigent-spike"
 ```
 
-The generic ACP subprocess inherits the user's normal `HOME`, so the Codex
-adapter can use the existing Codex login. Do not put OpenAI credentials in the
-experiment YAML or commit them to the repository.
+The generic ACP subprocess does not use OmniGENT's native Codex executor, so it
+does not automatically receive that executor's private writable `CODEX_HOME`.
+Do not point it directly at the user's real `~/.codex`: Codex app-server writes
+SQLite state there. Instead, create a private runtime home, link only the login
+file, and copy configuration using the same isolation pattern as OmniGENT's
+native Codex executor:
+
+```sh
+mkdir -p .omnigent-spike/codex-home
+ln -s "$HOME/.codex/auth.json" .omnigent-spike/codex-home/auth.json
+cp "$HOME/.codex/config.toml" .omnigent-spike/codex-home/config.toml
+export CODEX_HOME="$PWD/.omnigent-spike/codex-home"
+export OMNIGENT_RUNNER_ENV_PASSTHROUGH=CODEX_HOME
+```
+
+The explicit passthrough is required because `omnigent host` allowlists the
+environment inherited by a runner. The auth symlink remains read-only from the
+runtime's perspective while app-server state stays under the gitignored spike
+directory. Do not put OpenAI credentials in experiment YAML or commit the
+private runtime home.
 
 ## Start and inspect OmniGENT
 
