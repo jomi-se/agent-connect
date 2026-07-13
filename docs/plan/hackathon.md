@@ -65,7 +65,8 @@ Deliverables:
 - Tailscale Serve HTTPS endpoint without disturbing existing Serve routes;
 - exact Firebase preview Origin and Tailscale login allowlists;
 - optional runtime bearer token and documented future pairing capability;
-- remote nonce proof from a Firebase Hosting preview URL.
+- dedicated Firebase Canvas demo deployed without VM-held credentials;
+- remote page-write proof from the Firebase Hosting URL.
 
 Exit criteria:
 

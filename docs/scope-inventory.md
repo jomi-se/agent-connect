@@ -6,6 +6,7 @@
 | --------------------------------------------------- | ----------------- | ----------------------------------------------------------------- |
 | Bind to an existing OmniGENT session                | Browser slice     | Browser-safe client uses only fetch/SSE-compatible primitives     |
 | Reach a user-owned runtime from an HTTPS web app    | Remote slice      | Tailnet-only HTTPS gateway enforces Origin and Tailscale identity |
+| Mutate visible state from a dynamically lent tool   | Remote demo       | Firebase Canvas exposes one bounded in-memory page-write tool     |
 | Supply a fixed request-scoped tool snapshot         | Browser slice     | First message event carries OpenAI-format dynamic tool schemas    |
 | Stream normalized task progress                     | Browser slice     | Text, lifecycle, and tool events are observable incrementally     |
 | Execute a typed application tool handler            | Browser slice     | `action_required` invokes the registered handler exactly once     |

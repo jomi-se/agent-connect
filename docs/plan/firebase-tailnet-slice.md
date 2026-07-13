@@ -29,19 +29,19 @@ OmniGENT (127.0.0.1:6767)
 - expose it on a Tailscale HTTPS port that does not replace the current port 443
   mapping.
 
-## Phase B: non-production application origin
+## Phase B: dedicated demo application origin
 
-From the grocery application's Firebase project, create a preview channel:
+Before changing the grocery application, create a separate Hosting-only
+Firebase project and deploy `apps/firebase-canvas` through the repository's
+manual GitHub Actions workflow. Its stable live URL is the non-production demo
+origin:
 
-```sh
-firebase hosting:channel:deploy agent-connect
-```
+`https://PROJECT_ID.web.app`
 
-Record the exact generated `https://...web.app` origin in
-`AGENT_CONNECT_ALLOWED_ORIGINS`. Preview URLs are shareable and may still talk
-to the application's real Firebase backend. Do not use real grocery data for
-the first destructive tool test; begin with read-only tools or a seeded test
-record.
+Record that exact origin in `AGENT_CONNECT_ALLOWED_ORIGINS`. The Canvas demo has
+no Firebase backend and writes only to its own in-memory DOM. Once this passes,
+integrate a Firebase preview channel or separate development project for the
+grocery application.
 
 ## Phase C: remote real-surface proof
 

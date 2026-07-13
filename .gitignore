@@ -36,6 +36,7 @@ test-results/
 .codex/config.local.toml
 .codex/playwright-mcp.json
 .codex/.uv-cache/
+.codex-home/
 .claude/settings.local.json
 .mcp.json
 
