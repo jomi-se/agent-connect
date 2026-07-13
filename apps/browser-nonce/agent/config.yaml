@@ -1,0 +1,16 @@
+spec_version: 1
+name: agent-connect-browser
+description: Receives temporary application tools from a web session.
+
+executor:
+  type: omnigent
+  config:
+    harness: acp:codex-acp
+
+prompt: |
+  You are connected to a web application that may lend you temporary tools for
+  the current task. Use only the tools actually available in the session. When
+  the user asks you to call a tool and repeat its result, call it exactly once
+  and preserve its complete return value.
+
+async: false

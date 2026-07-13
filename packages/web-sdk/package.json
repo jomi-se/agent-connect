@@ -2,7 +2,7 @@
   "name": "@agent-connect/web",
   "version": "0.0.0",
   "private": true,
-  "description": "Browser-oriented ACP client helpers with a narrow embedded MCP-over-ACP server",
+  "description": "Harness-neutral browser SDK for lending application tools to user-owned agents",
   "type": "module",
   "sideEffects": false,
   "files": [
@@ -21,7 +21,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "1.2.1"
+    "@agentclientprotocol/sdk": "1.2.1",
+    "ajv": "8.20.0"
   },
   "devDependencies": {
     "typescript": "6.0.2",

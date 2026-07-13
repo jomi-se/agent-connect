@@ -4,11 +4,16 @@
 
 Agent Connect is an application-to-user-owned-agent bridge. Keep the application-facing API agent- and harness-neutral. Codex, OmniGENT, ACP adapters, and transport bridges belong behind internal adapter boundaries.
 
-ACP is the primary session protocol. MCP-over-ACP is currently unstable; isolate draft-specific code and types so they can be replaced without changing the public tool-registration API.
+The public task/tool API is provider-neutral. OmniGENT HTTP/SSE is the first
+working provider transport. ACP remains the preferred future standardized
+adapter; MCP-over-ACP is unstable, so keep draft-specific code and types out of
+the default application API.
 
 ## Current scope
 
-The first implementation target is `packages/web-sdk`. Until the first end-to-end spike passes, assume exactly one upstream ACP connection, one session, one application-owned MCP server, one active MCP connection, and one downstream Codex agent.
+The first browser-to-Codex spike has passed. Continue to assume one online
+OmniGENT session, one active task, one fixed application tool snapshot, and one
+downstream agent until durability and approval behavior are implemented.
 
 Do not add generalized multi-agent orchestration, arbitrary MCP features, Android automation, or a second proprietary session protocol without recording a decision under `docs/decisions/`.
 

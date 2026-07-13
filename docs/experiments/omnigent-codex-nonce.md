@@ -157,6 +157,23 @@ one request-scoped tool surface, one OmniGENT runner, one generic ACP agent, and
 one same-turn result. It does not yet prove browser transport, reconnect,
 durability, mutation authorization, or multi-session behavior.
 
+## Browser result — 2026-07-13
+
+The follow-up browser slice also passed. An ordinary Vite application imported
+the built `@agent-connect/web` package, created a provider-neutral
+`AgentSession`, and supplied `get_browser_nonce` through the OmniGENT adapter.
+A real Chromium run observed exactly one `tool.requested`, one
+`tool.completed`, and a terminal `task.completed`; the final Codex text
+contained the unpredictable nonce generated inside the page. The test asserted
+the message tool schema, correlated `function_call_output`, browser console,
+and visible result.
+
+This proves the current bring-your-own-agent path over OmniGENT to Codex. It
+does not prove a second conductor implementation or a second underlying agent.
+The public provider contract and conformance tests preserve that future seam;
+OmniGENT's own multi-harness support supplies the immediate agent-level
+agnosticism.
+
 ### Decision
 
 Keep OmniGENT as the first provider behind a harness-neutral gateway interface.

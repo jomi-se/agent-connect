@@ -35,6 +35,88 @@ export interface ApplicationToolContext {
   readonly actionId: string | undefined;
 }
 
+export interface AgentToolDefinition {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: JsonSchema;
+}
+
+export interface AgentProviderTaskRequest {
+  readonly prompt: string;
+  readonly tools: readonly AgentToolDefinition[];
+}
+
+export type AgentProviderEvent =
+  | { readonly type: "text.delta"; readonly delta: string }
+  | {
+      readonly type: "tool.requested";
+      readonly requestToken: string;
+      readonly actionId: string;
+      readonly name: string;
+      readonly arguments: unknown;
+    }
+  | { readonly type: "task.completed" }
+  | { readonly type: "task.failed"; readonly message: string }
+  | { readonly type: "task.cancelled" };
+
+export interface AgentProvider {
+  streamTask(
+    request: AgentProviderTaskRequest,
+  ): AsyncIterable<AgentProviderEvent>;
+  submitToolResult(requestToken: string, output: string): Promise<void>;
+  cancel(): Promise<void>;
+}
+
+export type AgentConnectErrorCode =
+  | "http_error"
+  | "protocol_error"
+  | "unknown_tool"
+  | "invalid_tool_arguments"
+  | "tool_execution_failed";
+
+export interface AgentTaskError {
+  readonly code: AgentConnectErrorCode;
+  readonly message: string;
+}
+
+export type AgentTaskEvent =
+  | { readonly type: "task.started" }
+  | { readonly type: "text.delta"; readonly delta: string }
+  | {
+      readonly type: "tool.requested";
+      readonly actionId: string;
+      readonly name: string;
+      readonly arguments: JsonObject;
+    }
+  | {
+      readonly type: "tool.completed";
+      readonly actionId: string;
+      readonly name: string;
+      readonly isError: boolean;
+      readonly error?: AgentTaskError;
+    }
+  | { readonly type: "task.completed"; readonly text: string }
+  | { readonly type: "task.failed"; readonly error: AgentTaskError }
+  | { readonly type: "task.cancelled" };
+
+export interface AgentTaskResult {
+  readonly text: string;
+}
+
+export interface AgentSessionOptions {
+  readonly provider: AgentProvider;
+  readonly tools: readonly ApplicationTool[];
+  readonly createSessionId?: () => string;
+}
+
+export interface OmnigentProviderOptions {
+  readonly baseUrl: string;
+  readonly sessionId: string;
+  readonly fetch?: typeof globalThis.fetch;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly credentials?: RequestCredentials;
+}
+
 export type ApplicationToolHandler<Arguments extends JsonObject = JsonObject> =
   (
     arguments_: Arguments,

@@ -20,15 +20,25 @@ An application can:
 
 ## Current strategy
 
-- Use ACP for application-to-conductor session lifecycle and events.
-- Use the draft MCP-over-ACP shape for one application-provided MCP server.
-- Add the smallest durability extension necessary for unresolved application actions; do not duplicate ACP session and prompt methods.
-- Evaluate a narrow OmniGENT fork as the conductor. OmniGENT would terminate upstream ACP, map prompts and events to its Sessions API, and drive Codex through its generic ACP harness.
-- Keep direct Codex app-server integration as a fallback if the exact OmniGENT client-tool composition spike fails.
+- Give web applications a harness-neutral tool and task API.
+- Use OmniGENT's existing HTTP/SSE Sessions API as the first transport and
+  conductor implementation. OmniGENT selects and launches the user's underlying
+  agent harness; the application does not depend on that choice.
+- Supply a fixed tool snapshot on each task's first session message. Execute
+  `action_required` calls in the application and return correlated results.
+- Keep OmniGENT wire types behind a browser-safe adapter so ACP-over-WebSocket,
+  MCP-over-ACP, or another conductor can implement the same public API later.
+- Add the smallest durability extension necessary for unresolved application
+  actions after the browser loop works; do not claim generic exactly-once
+  execution.
 
 ## Hackathon acceptance boundary
 
-The target demonstration is a browser spreadsheet application with one active session and a small set of read/write tools. A successful end-to-end slice visibly proves application-defined tool discovery, a Codex-requested mutation, user approval, live application state change, and recovery of a pending mutation request after reconnect.
+The next accepted slice is a browser-safe client bound to one already-created,
+online OmniGENT session. It streams one task, lends a fixed set of
+application-defined tools, executes calls locally, returns correlated results,
+and reaches the same turn's terminal event. Session provisioning, remote
+pairing, durable reconnect, and mutations follow after this read-only loop.
 
 ## Non-goals for the first slice
 

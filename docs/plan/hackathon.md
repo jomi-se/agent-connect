@@ -39,7 +39,7 @@ Exit criteria:
 - public imports work from built output;
 - provider types do not leak into the browser package.
 
-## Milestone 2: loopback browser-to-Codex slice
+## Milestone 2: loopback browser-to-Codex slice — complete
 
 Deliverables:
 
@@ -51,9 +51,11 @@ Deliverables:
 
 Exit criteria:
 
-- browser SDK drives a live Codex session through OmniGENT;
-- the request-scoped browser tool executes exactly once;
-- the same Codex turn includes its unpredictable result.
+- **passed 2026-07-13** in a real Chromium run;
+- browser SDK drove a live Codex session through OmniGENT;
+- the request-scoped browser tool executed once;
+- the same Codex turn included its unpredictable result;
+- console and asserted network flow were clean.
 
 ## Milestone 3: durable pending actions
 

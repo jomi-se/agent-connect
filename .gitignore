@@ -26,6 +26,8 @@ __pycache__/
 *.sw?
 
 .playwright-mcp/
+playwright-report/
+test-results/
 .omnigent-spike/
 
 # Agent local settings

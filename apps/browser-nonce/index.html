@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Connect browser nonce</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        color: #172033;
+        background: #f4f7fb;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+      main {
+        width: min(760px, calc(100vw - 32px));
+        background: white;
+        border: 1px solid #dce3ee;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 18px 50px #17203314;
+      }
+      h1 {
+        margin-top: 0;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        margin: 14px 0;
+        font-weight: 650;
+      }
+      input,
+      textarea,
+      button {
+        font: inherit;
+      }
+      input,
+      textarea {
+        padding: 10px 12px;
+        border: 1px solid #aebbd0;
+        border-radius: 8px;
+      }
+      textarea {
+        min-height: 72px;
+        resize: vertical;
+      }
+      button {
+        padding: 10px 16px;
+        border: 0;
+        border-radius: 8px;
+        color: white;
+        background: #3157d5;
+        cursor: pointer;
+        font-weight: 700;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+      pre {
+        min-height: 120px;
+        padding: 14px;
+        overflow: auto;
+        border-radius: 8px;
+        background: #111827;
+        color: #d5e4ff;
+        white-space: pre-wrap;
+      }
+      output {
+        display: block;
+        padding: 12px;
+        border-left: 4px solid #3157d5;
+        background: #eef3ff;
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Bring your own agent</h1>
+      <p>
+        This page lends one temporary nonce tool to the user’s OmniGENT session.
+      </p>
+      <form id="task-form">
+        <label>OmniGENT session ID <input id="session-id" required /></label>
+        <label
+          >Task
+          <textarea id="prompt" required>
+Call get_browser_nonce exactly once, then reply with the exact value it returned.</textarea>
+        </label>
+        <button id="run" type="submit">Run with my agent</button>
+      </form>
+      <h2>Final response</h2>
+      <output id="result">Not started.</output>
+      <h2>Event log</h2>
+      <pre id="events"></pre>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

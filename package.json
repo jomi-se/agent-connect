@@ -2,16 +2,17 @@
   "name": "agent-connect",
   "version": "0.0.0",
   "private": true,
-  "description": "ACP-first application bridge for user-owned agent runtimes",
+  "description": "Browser SDK bridge for user-owned agent runtimes",
   "type": "module",
   "workspaces": [
+    "apps/*",
     "packages/*"
   ],
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspace @agent-connect/web && npm run build --workspace @agent-connect/browser-nonce",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "npm run test --workspaces --if-present",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@agentclientprotocol/codex-acp": "1.1.2",
+    "@playwright/test": "1.58.2",
     "prettier": "3.9.0",
     "typescript": "6.0.2",
     "vitest": "4.1.0"
