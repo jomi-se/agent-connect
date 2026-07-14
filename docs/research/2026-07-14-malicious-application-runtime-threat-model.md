@@ -231,9 +231,16 @@ The limitations matter just as much:
   open when its evaluator is unavailable;
 - harness-native sandbox and approval semantics still need compatibility tests.
 
-Therefore Agent Connect should use OmniGENT's facilities but own and verify a
-provider-neutral confinement contract. A future OpenClaw or other adapter must
-meet the same observable contract even if its implementation differs.
+Therefore Agent Connect should use OmniGENT's facilities, define a
+provider-neutral confinement vocabulary, and report how each claim is sourced.
+It cannot independently verify a self-hosted connector's claims. A future
+OpenClaw or other adapter should use the same vocabulary even if its
+implementation and evidence differ.
+
+A Codex process launched directly as the connector's VM user is not an isolated
+profile. Launch arguments, configuration inspection, and canary probes can
+detect some mistakes, but they do not remove ambient filesystem, credential,
+process, or network authority and do not constitute remote attestation.
 
 ## Implementation and validation sequence
 
@@ -263,7 +270,7 @@ meet the same observable contract even if its implementation differs.
 
 ## Validation floor
 
-The security claim requires real enforcement evidence:
+Confidence in a trusted deployment requires real enforcement evidence:
 
 - process-level filesystem and network probes from the live Codex/ACP session;
 - direct gateway requests that bypass the SDK;
@@ -294,8 +301,10 @@ Even after the first profile is complete:
 - a connector-owned integration profile can still be over-broad;
 - availability and subscription costs can be bounded but not made free.
 
-Agent Connect should report the active confinement profile and its verified
-properties, not display a generic "sandboxed" badge.
+Agent Connect should report the configured confinement profile, who asserted
+it, and any named observations or external attestation. It must not display a
+generic "sandboxed" badge or call connector-local inspection independent
+verification.
 
 ## Sources
 

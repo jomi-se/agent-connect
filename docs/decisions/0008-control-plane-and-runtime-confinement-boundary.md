@@ -34,7 +34,8 @@ plane. Runtime adapters own agent execution and confinement mechanics.
 - separation of application-tool results from connector/runtime approvals;
 - opaque logical sessions and durable unresolved application actions;
 - connector-level concurrency, request, time, and abuse ceilings;
-- a provider-neutral vocabulary for requested and effective runtime posture;
+- a provider-neutral vocabulary for requested, configured, and observed runtime
+  posture;
 - preventing an application request from broadening the selected runtime
   policy.
 
@@ -64,16 +65,33 @@ runtime posture remains visible to authorization and policy:
 - the application may request a named posture such as `application-tools-only`
   or `ephemeral-capable`;
 - the connector selects an equal or stricter locally configured profile;
-- the runtime adapter reports the effective properties it can determine;
-- the connector labels evidence honestly as locally verified, provider-backed,
-  attested, or self-reported;
-- an application may require a minimum assurance level, but it cannot request a
-  weaker sandbox, new host mount, broader network, ambient integration, or local
-  approval authority.
+- the runtime adapter reports configured properties and separately reports
+  observations that support or contradict them;
+- the connector labels the source honestly as connector-configured,
+  runtime-reported, externally attested, or observed by a named probe;
+- an application may require a named posture or evidence source, but the
+  connector must reject the session when it cannot substantiate that request;
+  it must not promote a self-report into proof;
+- an application cannot request a weaker sandbox, new host mount, broader
+  network, ambient integration, or local approval authority.
 
 Agent Connect does not claim to remotely prove arbitrary self-hosted sandbox
 enforcement without an independent attestation source. Connector identity proves
 which connector answered, not that all of its runtime claims are true.
+
+A connector that launches Codex directly as its own VM user has no independent
+confinement boundary to report. It may observe Codex's command line, configured
+approval mode, child processes, or successful and failed canary probes, but the
+same-user process may still inherit host filesystem, credential, process, and
+network authority. That deployment must be described as direct/ambient host
+execution, not `application-tools-only`. A signature by the connector proves
+who made that statement, not that the statement is true.
+
+Runtime probes are useful regression tests for a trusted installation. They do
+not prove the absence of another escape path, defend against a compromised
+connector or host, or create remote attestation. Stronger evidence requires an
+independent enforcement boundary and, if a remote application needs to verify
+it cryptographically, an attestation system rooted outside the connector.
 
 ### Approval boundary
 
@@ -127,6 +145,7 @@ Connect connector itself needs to implement the full connector trust contract.
 - The reference connector can make secure deployment and policy approachable
   without turning OmniGENT wire shapes into the public standard.
 - Runtime-specific confinement remains testable through adapter integration and
-  real enforcement probes, even though its implementation is not standardized.
+  real enforcement probes, but those probes are regression evidence rather
+  than general proof of confinement.
 - Applications must not interpret a generic `sandboxed: true` claim as strong
   evidence; posture and evidence are structured and explicit.
