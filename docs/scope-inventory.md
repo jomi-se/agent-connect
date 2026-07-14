@@ -6,6 +6,8 @@
 | --------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------- |
 | Create an opaque application session                | Session slice     | Browser receives no OmniGENT id                                                   |
 | Pair user presence through a private channel        | Session slice     | One-time terminal code exchanges for a scoped capability                          |
+| Export reusable runtime identity once               | Identity slice    | Non-secret runtime card is saved without granting agent access                    |
+| Authorize a new app without terminal access         | Identity slice    | Connector-owned OAuth page returns a PKCE-protected scoped grant                  |
 | Reach a user-owned runtime from an HTTPS web app    | Remote slice      | Tailnet-only HTTPS gateway enforces Origin and Tailscale identity                 |
 | Verify continuity with an enrolled runtime          | Identity slice    | Connector proves possession of the key bound during first-use enrollment          |
 | Report transport/runtime assurance                  | Identity slice    | SDK distinguishes Tailscale transport, connector-key proof, and unverified claims |
@@ -49,7 +51,8 @@
 - Mutating tools require visible approval or a preview policy.
 - The conductor authenticates and pairs applications; raw Codex app-server is never internet-exposed.
 - A pairing code is single-use and is delivered only through the connector's
-  local terminal. It is never compiled into a hosted application.
+  local terminal in the current prototype. The target terminal output is a
+  stable public runtime card; per-app approval moves to connector-hosted OAuth.
 - Application capabilities are signed, expiring, and bound to origin, app id,
   logical session id, and canonical tool-snapshot hash.
 - Prompt ingress is an execution capability: an authenticated application may

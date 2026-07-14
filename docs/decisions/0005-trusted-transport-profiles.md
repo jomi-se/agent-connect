@@ -73,14 +73,14 @@ Therefore first-use enrollment must deliberately bind:
 expected Tailscale Serve endpoint
 + expected Tailscale owner/login or tailnet context
 + Agent Connect connector public key
-+ user-approved application request
 ```
 
 The initial implementation may obtain that binding from the connector's local
-operator channel: show the Serve endpoint, local Tailscale identity, connector
-key fingerprint, and application request together; have the user approve or
-transfer a one-time pairing payload. The gateway then pins the connector key
-for subsequent handshakes. A later managed directory can replace this manual
+operator channel: show the Serve endpoint, local Tailscale identity, and
+connector key fingerprint together and export them as a stable runtime card.
+The user stores and transfers that card deliberately. Each application then
+uses a separate connector-hosted OAuth flow to request exact origin/tool
+authority. A later managed directory can replace the manual runtime-card
 bootstrap with an account-backed signed enrollment statement.
 
 The connector should inspect its local Tailscale status/LocalAPI and refuse to
@@ -132,6 +132,8 @@ harness-neutral and must not expose OmniGENT, Codex, or ACP types.
 - The connector-key enrollment closes that browser visibility gap for future
   connections: the address routes to a peer, while the pinned key identifies
   the enrolled Agent Connect runtime.
+- After bootstrap, per-app authorization occurs on a connector-owned browser
+  page and does not require returning to the terminal.
 - Shared nodes, shared tailnets, tagged devices, Funnel, and public custom URLs
   require explicit policy and cannot inherit the personal same-user claim.
 - A later generic managed profile still needs device enrollment, revocation,

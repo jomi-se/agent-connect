@@ -23,7 +23,7 @@ portable arbitrary-URL authentication or host integrity.
 | Describe local identity          | Enrollment UI shows endpoint, local node/user context, and connector-key fingerprint                    |
 | Bind connector identity          | First-use pairing binds the selected endpoint to a generated connector public key                       |
 | Authenticate requester           | Gateway accepts only Serve-injected, allowlisted Tailscale user identity                                |
-| Authorize application separately | Approval names exact Origin, app id, tools/scopes, and browser/app key                                  |
+| Authorize application separately | Connector-hosted OAuth consent names exact Origin, app id, tools/scopes, and browser/app key            |
 | Verify continuity                | Later sessions require proof of the enrolled connector private key                                      |
 | Report assurance honestly        | SDK distinguishes provider-backed, enrolled, TOFU, and unverified properties                            |
 | Rotate or remove binding         | User can invalidate the connector identity and re-enroll deliberately                                   |
@@ -51,15 +51,17 @@ explicitly accepted.
 - Generate a connector signing key and store it with owner-only permissions;
   use OS key storage later where available.
 - Derive an opaque `runtimeId` from the public-key thumbprint.
-- Replace the generic startup code with a request-specific pairing payload that
-  includes runtime id, endpoint, key fingerprint, expiry, nonce, Origin, app id,
-  requested scopes, and tool-snapshot hash.
-- Present the full request in the connector's trusted local operator channel.
+- Replace the generic startup code with a stable, non-secret runtime card that
+  includes runtime id, endpoint, connector public key, and transport profile.
+- Export the card through the connector's trusted local operator channel once
+  and allow later re-export without restart.
 - Record the approved binding durably and support list/revoke/rotate commands.
 - Require a nonce-bound connector signature during connection establishment.
 
-The first UI can be terminal plus copy/paste. QR transfer is optional polish,
-not a different trust model.
+The initial trusted channel can be terminal plus copy/paste into a password
+manager. QR transfer is optional polish, not a different trust model. Routine
+application authorization moves to the connector-owned OAuth page described in
+the [authorization plan](connector-oauth-authorization.md).
 
 ### 3. Browser SDK transport profile
 
@@ -76,6 +78,8 @@ not a different trust model.
 
 - Generate an origin-scoped app-instance key in the browser where platform
   storage permits it.
+- Run OAuth Authorization Code with PKCE on a top-level connector-owned page;
+  identify the user from Tailscale Serve and display exact origin and authority.
 - Bind grants to connector key, app key, exact Origin, app id, tool hash,
   prompt/result scopes, and expiry.
 - Add per-request proof or an authenticated session so a copied bearer token is

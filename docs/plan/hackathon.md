@@ -93,11 +93,14 @@ authenticates node transport and the requesting user, while Agent Connect binds
 the selected endpoint to a connector key and separately approves the app.
 
 Deliverables and adversarial cases are defined in the
-[Tailscale transport identity plan](tailscale-transport-identity.md).
+[Tailscale transport identity plan](tailscale-transport-identity.md) and
+[connector OAuth authorization plan](connector-oauth-authorization.md).
 
 Exit criteria:
 
 - the browser verifies connector-key continuity before prompt ingress;
+- initial terminal setup exports one runtime card, while a new app is approved
+  through a same-phone connector-owned OAuth page with no SSH or restart;
 - the gateway verifies private Serve posture, loopback isolation, allowed
   Tailscale requester, exact Origin, and scoped application grant;
 - `.ts.net` suffix recognition, Funnel, a substituted connector, wrong user,
