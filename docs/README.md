@@ -21,6 +21,7 @@
 - [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md)
 - [ADR 0006: Explore AG-UI application boundary](decisions/0006-explore-ag-ui-application-boundary.md)
 - [ADR 0007: Runtime card and connector OAuth](decisions/0007-runtime-card-and-connector-oauth.md)
+- [ADR 0008: Control plane and runtime confinement boundary](decisions/0008-control-plane-and-runtime-confinement-boundary.md)
 
 ## Research
 

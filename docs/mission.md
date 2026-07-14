@@ -44,10 +44,12 @@ An application can:
 - Add the smallest durability extension necessary for unresolved application
   actions after the browser loop works; do not claim generic exactly-once
   execution.
-- Treat an authenticated application as an adversarial principal. Default
-  remote sessions to an application-tools-only confinement profile with an
-  empty workspace, no ambient integrations or tool network, no local privilege
-  escalation, and connector-enforced resource ceilings.
+- Treat an authenticated application as an adversarial principal. Require the
+  selected runtime to enforce an application-tools-only profile by default,
+  while Agent Connect prevents policy expansion, separates approvals, enforces
+  connector-level ceilings, and reports the effective posture. Keep the
+  filesystem, network, persistence, and sandbox mechanism inside the runtime
+  adapter.
 
 ## Current acceptance boundary
 
@@ -62,6 +64,11 @@ Raw OmniGENT session identifiers are an internal provider detail. A user starts
 the connector once; normal application use must not require opening OmniGENT,
 copying a conversation id, or restarting a runner when the application tool
 surface changes.
+
+The reference connector uses OmniGENT, but applications integrate with Agent
+Connect rather than OmniGENT. Adding another agent harness should normally
+require only a narrow runtime adapter; it must not require reimplementing
+enrollment, OAuth, application grants, or recovery.
 
 The target security UX also removes per-app terminal pairing. The terminal is
 used once to export the connector's runtime card and thereafter only for
