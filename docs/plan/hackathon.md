@@ -6,7 +6,15 @@ storyboard, and the final checklist live in the
 
 ## Guiding demo
 
-A spreadsheet web application connects to the user's runtime, exposes safe range operations, asks Codex to clean and augment a table, previews mutations, survives a deliberate disconnect with one pending write, and completes without applying the demonstrated write twice.
+The submission-safe demo is Firebase Canvas: import the public runtime card,
+verify the connector before disclosure, approve the application on the
+connector-owned page (enrolling the browser with the saved secret on first
+use), ask Codex to call `set_page_message`, show the visible page mutation,
+then list/revoke the grant and prove the derived capability stops working.
+
+The spreadsheet, durable reconnect, and exactly-once-style demonstration below
+are post-submission milestones unless they are completed without weakening this
+coherent Canvas story.
 
 ## Milestone 0: conductor composition proof — complete
 
@@ -86,7 +94,7 @@ live `codex-acp` runner and completed `set_page_message` using only an opaque
 Agent Connect id. Independent mobile network capture remains useful evidence,
 but raw provider session configuration is no longer part of the demo UX.
 
-## Milestone 3.5: Tailscale transport identity
+## Milestone 3.5: Tailscale transport identity — implemented, mobile proof pending
 
 Turn the working tailnet deployment into an explicit trust profile. Tailscale
 authenticates node transport and the requesting user, while Agent Connect binds
@@ -107,7 +115,15 @@ Exit criteria:
   wrong Origin, changed tools, and replayed enrollment cannot pass as trusted;
 - the successful profile still completes the live OmniGENT/Codex tool loop.
 
-## Milestone 4: durable pending actions
+Implementation status (2026-07-14): connector identity, runtime challenge,
+generated enrollment secret, connector-owned consent, PKCE grant, exact
+origin/app/tool-metadata binding, and revocation are implemented with automated
+coverage. The complete deployed phone flow has not yet been rerun, so this
+milestone is not real-surface complete. The demo must use the proven
+unsandboxed OmniGENT profile; the VM-local sandbox has both a dynamic-MCP
+startup failure and an unresolved Codex-credential exposure.
+
+## Milestone 4: durable pending actions — post-submission unless completed early
 
 Deliverables:
 
@@ -123,7 +139,7 @@ Exit criteria:
 - disconnect after execution but before acknowledgement does not produce a second demonstrated spreadsheet write;
 - conversation completion resumes after result recovery.
 
-## Milestone 5: spreadsheet demonstration
+## Milestone 5: spreadsheet demonstration — stretch
 
 Initial tools:
 

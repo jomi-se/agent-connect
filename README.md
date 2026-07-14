@@ -18,17 +18,26 @@ The first end-to-end browser slice now passes. `@agent-connect/web` provides:
 - in-memory duplicate action suppression; and
 - isolated experimental ACP/WebSocket and MCP-over-ACP helpers.
 
-The gateway now owns the next lifecycle boundary: a user pairs a hosted app
-with a one-time code from the connector terminal, the browser receives a scoped
-capability and opaque Agent Connect session, and the gateway provisions or
-heals the matching OmniGENT/Codex runner. Applications no longer need an
-OmniGENT session id.
+The gateway now owns runtime enrollment and application authorization. On first
+start it creates a durable connector key and one high-entropy enrollment
+passphrase. The browser verifies that key before disclosing tool schemas, then
+uses a connector-owned consent page and PKCE to obtain a revocable grant. The
+gateway provisions or heals the matching OmniGENT/Codex runner behind an opaque
+Agent Connect session; applications never receive an OmniGENT session id.
 
 The [`browser-nonce` demo](apps/browser-nonce/README.md) proves that a normal web
 application can lend a fresh tool to the user's Codex-backed OmniGENT session
 without preinstalling an application MCP server.
 
 See [the documentation index](docs/README.md) and [the hackathon plan](docs/plan/hackathon.md).
+
+The VM-local OmniGENT sandbox profile is experimental. Its outer bubblewrap
+boundary passes live mount/seccomp/sentinel checks, but its downstream MCP
+relay currently fails to initialize under that boundary, and the
+network-capable agent can see the copied Codex login in its dedicated home. It
+is not a malicious-app security boundary. The normal live demo
+must use the proven profile until that compatibility issue is closed; see the
+[sandbox spike](docs/research/2026-07-14-omnigent-vm-sandbox-spike.md).
 
 ## Development
 

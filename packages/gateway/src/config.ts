@@ -8,6 +8,7 @@ export interface GatewayRuntimeConfig extends GatewayOptions {
 export function configFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): GatewayRuntimeConfig {
+  const sandbox = sandboxFromEnv(env);
   return {
     host: env.AGENT_CONNECT_HOST ?? "127.0.0.1",
     port: parsePort(env.AGENT_CONNECT_PORT ?? "8787"),
@@ -16,6 +17,7 @@ export function configFromEnv(
     ...(env.AGENT_CONNECT_OMNIGENT_HOST_ID
       ? { omnigentHostId: env.AGENT_CONNECT_OMNIGENT_HOST_ID }
       : {}),
+    ...(sandbox ? { omnigentSandbox: sandbox } : {}),
     allowedOrigins: csvSet(env.AGENT_CONNECT_ALLOWED_ORIGINS),
     allowedTailscaleUsers: csvSet(env.AGENT_CONNECT_ALLOWED_TAILSCALE_USERS),
     ...(env.AGENT_CONNECT_ACCESS_TOKEN
@@ -27,6 +29,18 @@ export function configFromEnv(
     ...(env.AGENT_CONNECT_SIGNING_SECRET
       ? { capabilitySigningSecret: env.AGENT_CONNECT_SIGNING_SECRET }
       : {}),
+    ...(env.AGENT_CONNECT_STATE_PATH
+      ? { authStatePath: env.AGENT_CONNECT_STATE_PATH }
+      : {}),
+    ...(env.AGENT_CONNECT_PUBLIC_ENDPOINT
+      ? { publicEndpoint: env.AGENT_CONNECT_PUBLIC_ENDPOINT }
+      : {}),
+    ...(env.AGENT_CONNECT_TRANSPORT_PROFILE
+      ? { transportProfile: env.AGENT_CONNECT_TRANSPORT_PROFILE }
+      : {}),
+    ...(env.AGENT_CONNECT_ENROLLMENT_PASSPHRASE
+      ? { enrollmentPassphrase: env.AGENT_CONNECT_ENROLLMENT_PASSPHRASE }
+      : {}),
     capabilityTtlSeconds: parsePositiveInteger(
       env.AGENT_CONNECT_CAPABILITY_TTL_SECONDS ?? "3600",
       "AGENT_CONNECT_CAPABILITY_TTL_SECONDS",
@@ -36,6 +50,33 @@ export function configFromEnv(
       "AGENT_CONNECT_PAIRING_CODE_TTL_SECONDS",
     ),
   };
+}
+
+function sandboxFromEnv(
+  env: NodeJS.ProcessEnv,
+): GatewayRuntimeConfig["omnigentSandbox"] | undefined {
+  const type = env.AGENT_CONNECT_OMNIGENT_SANDBOX;
+  if (!type) return undefined;
+  if (type !== "linux_bwrap") {
+    throw new TypeError(`Invalid AGENT_CONNECT_OMNIGENT_SANDBOX: ${type}`);
+  }
+  const codexHome = requiredEnv(env, "AGENT_CONNECT_SANDBOX_CODEX_HOME");
+  const hostSentinel = requiredEnv(env, "AGENT_CONNECT_SANDBOX_HOST_SENTINEL");
+  return {
+    type,
+    codexHome,
+    hostSentinel,
+    readPaths: (env.AGENT_CONNECT_SANDBOX_READ_PATHS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  };
+}
+
+function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
+  const value = env[name];
+  if (!value) throw new TypeError(`${name} is required`);
+  return value;
 }
 
 function csvSet(value: string | undefined): ReadonlySet<string> {

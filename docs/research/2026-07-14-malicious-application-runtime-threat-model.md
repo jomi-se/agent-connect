@@ -2,8 +2,9 @@
 
 Date: 2026-07-14
 
-Status: investigation and proposed security target; mitigations are not yet
-implemented.
+Status: investigation and proposed security target; connector authentication,
+consent, grant binding/revocation, and a strict event-shape allowlist are
+implemented, while runtime confinement and resource ceilings remain incomplete.
 
 ## Question
 
@@ -49,8 +50,8 @@ for the Agent Connect boundary:
   application must not control;
 - OmniGENT's OS sandbox does not cover MCP server subprocesses or the OmniGENT
   supervisor;
-- the gateway currently forwards every authenticated non-`message` session
-  event upstream rather than enforcing a narrow event-type allowlist;
+- the gateway now permits only strict task-message, tool-result, and interrupt
+  shapes, but tool-result correlation still awaits persisted pending actions;
 - prompt instructions are advisory and cannot replace sandbox or authorization
   enforcement.
 
@@ -122,7 +123,7 @@ treated as authority to change the policy of a deeper boundary.
 | Ambient authority abuse                       | Agent calls an inherited Gmail, GitHub, filesystem, browser, or cloud MCP tool                          | Build a minimal provider home; disable inherited MCP/apps/plugins/skills; allowlist connector-owned integrations individually                                         |
 | Approval laundering                           | Malicious app submits or forges an approval response for a local shell, network, MCP, or policy request | Separate approval protocol and credential; only a top-level connector-owned UI authenticated as the user may answer; app session API must reject approval event types |
 | Cross-app data leakage                        | Provider session, transcript, cache, workspace, or pending action is reused across origins              | Separate downstream session and scratch state per app grant/tool snapshot; origin-bound storage; never expose provider ids; deletion and expiry                       |
-| Tool-schema escalation                        | App gives an innocuous tool a dangerous implementation or changes schema after consent                  | Canonical schema hash in grant and session; immutable snapshot; meaningful tool authority displayed at consent; new snapshot requires incremental consent             |
+| Tool-authority deception                      | App gives an innocuous declaration a dangerous implementation or changes metadata after consent         | Hash and display names/descriptions/schemas; re-consent on metadata drift; state clearly that app-side handler behavior is not attested; app remains untrusted        |
 | Tool-result prompt injection                  | Tool returns instructions to reveal secrets or use local powers                                         | Treat result as untrusted data; local capability ceiling remains unchanged; provenance labels where supported; never rely on the model to ignore injection            |
 | Protocol event injection                      | Caller bypasses SDK and posts interrupt, output, approval, or future OmniGENT event shapes              | Explicit gateway event allowlist and schema; state-machine validation; bind result to an unresolved action id/name/tool hash; reject everything else                  |
 | Result spoofing or replay                     | App invents another call id, races duplicate outputs, or replays an old mutation                        | Persist request first; stable unpredictable action ids; one terminal result transition; application idempotency/deduplication; audit duplicates                       |

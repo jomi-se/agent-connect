@@ -1,0 +1,7 @@
+telemetry: false
+
+acp:
+  agents:
+    - name: Codex ACP
+      command: /home/dev/agent-connect/scripts/omnigent-codex-sandbox-guard.sh
+      session_id_mode: server

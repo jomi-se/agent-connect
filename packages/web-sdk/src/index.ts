@@ -1,6 +1,12 @@
 export { createBrowserAcpStream } from "./transport.js";
 export { AgentConnectError, AgentSession } from "./agent-session.js";
 export { connectAgent } from "./agent-connection.js";
+export {
+  beginAgentAuthorization,
+  completeAgentAuthorization,
+  parseAuthorizationTransaction,
+  serializeAuthorizationTransaction,
+} from "./authorization.js";
 export { OmnigentProvider } from "./omnigent-provider.js";
 export { connectOmnigent } from "./omnigent-session.js";
 export type { ConnectOmnigentOptions } from "./omnigent-session.js";
@@ -16,6 +22,9 @@ export type {
   ApplicationToolResult,
   AgentConnectErrorCode,
   AgentConnection,
+  AgentAuthorizationGrant,
+  AgentAuthorizationStart,
+  AgentAuthorizationTransaction,
   AgentProvider,
   AgentProviderEvent,
   AgentProviderTaskRequest,
@@ -26,10 +35,13 @@ export type {
   AgentToolDefinition,
   BrowserAcpStreamOptions,
   ConnectAgentOptions,
+  BeginAgentAuthorizationOptions,
+  CompleteAgentAuthorizationOptions,
   JsonObject,
   JsonSchema,
   JsonValue,
   OmnigentProviderOptions,
+  RuntimeCard,
   McpContent,
   SingleMcpServerOptions,
 } from "./types.js";

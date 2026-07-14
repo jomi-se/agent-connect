@@ -6,8 +6,10 @@ Build Week. It does not replace the [implementation plan](hackathon.md), the
 [official hackathon rules](https://openai.devpost.com/rules).
 
 Rule and submission details below were checked through the Devpost Hackathons
-plugin on 2026-07-14. Recheck the official rules and recent announcements before
-submitting.
+plugin again at 2026-07-14 23:35 UTC. The timestamped structured refresh,
+including live field IDs, is in
+[`2026-07-14-openai-build-week-refresh.md`](../research/2026-07-14-openai-build-week-refresh.md).
+Recheck the official rules and recent announcements before submitting.
 
 ## Submission decision
 
@@ -15,16 +17,17 @@ Submit Agent Connect to the **Developer Tools** category.
 
 Agent Connect is a developer SDK and gateway that let an application use an
 agent running in the user's environment while lending that agent temporary,
-typed application capabilities. The spreadsheet application is the clearest
-demonstration of the developer tool; it is not the product category itself.
+typed application capabilities. Firebase Canvas is the coherent implemented
+demonstration. The spreadsheet is a stronger follow-up only if its durability
+and approval behavior are actually completed.
 
 Do not position the entry as half consumer app and half developer tool. Use one
 clear hierarchy:
 
 1. **Product:** a developer tool for connecting applications to user-owned
    agents.
-2. **Demonstration:** a spreadsheet application that lends scoped range tools
-   to the user's Codex agent.
+2. **Demonstration:** Firebase Canvas lends one visible page-mutation tool to
+   the user's Codex agent after connector authentication and app consent.
 3. **End-user benefit:** useful agent behavior inside an application without
    exposing raw provider session identifiers or requiring an application MCP
    server to be installed in advance.
@@ -119,18 +122,19 @@ present.
 The guiding demonstration should make the application experience primary and
 keep protocol internals in supporting narration.
 
-1. Open a spreadsheet containing inconsistent data.
-2. Pair the web application with the user's Agent Connect runtime.
-3. Ask Codex to clean the table, normalize categories, and flag suspicious
-   rows.
-4. Show Codex inspecting the sheet through temporary `get_selection` and
-   `read_range` capabilities.
-5. Show a preview of a proposed mutation and obtain visible approval.
-6. Apply the spreadsheet change.
-7. Deliberately disconnect while a second write is pending.
-8. Reconnect, resurface the unresolved action, and complete it without applying
-   the demonstrated mutation twice.
-9. End on the changed sheet, concise audit trail, and final agent explanation.
+1. Paste the public runtime card into Firebase Canvas; explicitly show that the
+   enrollment secret is not app input.
+2. Start authorization and show that the connector proves its pinned identity
+   before the app sends tool metadata.
+3. On the connector-owned page, show the app origin, callback, expiry, required
+   scopes, and `set_page_message` schema; enter the saved enrollment secret
+   only if this is the first device, then approve.
+4. Return through PKCE and ask Codex for a short welcome message.
+5. Show the streamed run, application tool request, and visible page mutation.
+6. Open the connector grant list, revoke Canvas, and show that the existing
+   capability can no longer reach the agent.
+7. End on the simple architecture: neutral web SDK, security gateway,
+   OmniGENT adapter, and Codex/GPT-5.6.
 
 The video should show a real working path, not architecture slides. A brief
 closing diagram may explain that the application-facing API remains
@@ -148,9 +152,9 @@ durability work.
 
 ### Design
 
-Treat this as the highest-risk criterion. Pairing, progress, approval,
-disconnect, recovery, and completion must feel like one coherent product
-experience. Judges should not need to understand OmniGENT, ACP, MCP, SSE, or
+Treat this as the highest-risk criterion. Runtime-card import, enrollment,
+consent, progress, completion, and revocation must feel like one coherent
+product experience. Judges should not need to understand OmniGENT, ACP, MCP, SSE, or
 the internal session mapping to understand the result.
 
 ### Potential Impact
@@ -172,15 +176,25 @@ claiming those approaches are always wrong.
 
 Prioritize product completion over additional protocol generalization:
 
-1. Complete durable pending-action recovery and the spreadsheet demonstration
-   in [the implementation plan](hackathon.md).
-2. Provide a judge-accessible testing path that does not depend on membership in
+1. Deploy and validate the runtime-card/passphrase/PKCE flow from the real
+   Firebase origin on a phone. Capture the app origin, connector origin,
+   consent, redirect, tool request, page mutation, grant list, and revocation.
+2. Use the proven OmniGENT runtime for the recorded demo unless the experimental
+   bwrap MCP startup gap is fixed and revalidated end to end.
+3. Freeze the smallest coherent demo. Prefer the Canvas authorization/tool/
+   revoke story if spreadsheet durability is not complete; do not show planned
+   recovery as working.
+4. Provide a judge-accessible testing path that does not depend on membership in
    the developer's tailnet and does not require rebuilding the project.
-3. Make the downstream GPT-5.6 runtime choice and its role observable and
+5. Make the downstream GPT-5.6 runtime choice and its role observable and
    documented; do not rely only on hidden session metadata.
-4. Add the required submission-oriented README material and repository license.
-5. Record the demo as the product stabilizes, then produce the final concise
-   cut.
+6. Add the required submission-oriented README material, supported-platform
+   matrix, sanitized evidence, one-command judge test, and repository license.
+7. Run `/feedback` in the primary build session and fill live fields
+   27945–27951 as applicable.
+8. Record the public narrated demo under three minutes, re-fetch announcements
+   and requirements, and verify the submitted state before
+   2026-07-22 00:00 UTC.
 
 The current Firebase Canvas and browser-to-Codex path are valid technical
 evidence, but they should not be presented as completion of the pending-action

@@ -9,6 +9,7 @@
 - [Hackathon plan](plan/hackathon.md): milestones and exit criteria.
 - [Tailscale transport identity plan](plan/tailscale-transport-identity.md): first trusted remote profile and its validation cases.
 - [Connector OAuth authorization plan](plan/connector-oauth-authorization.md): one-time runtime-card bootstrap followed by same-device per-app consent.
+- [Secure enrollment implementation](plan/secure-enrollment-implementation.md): implemented credential boundaries, configuration, validation contracts, and deferred hardening.
 - [AG-UI compatibility spike](plan/ag-ui-compatibility-spike.md): pending application-protocol comparison against the passing OmniGENT path.
 - [OpenAI Build Week submission guide](plan/openai-build-week-submission.md): category, positioning, evidence, demo, and submission checklist.
 
@@ -29,6 +30,8 @@
 - [Mutual runtime identity without hardware attestation, 2026-07-14](research/2026-07-14-mutual-runtime-identity.md)
 - [AG-UI application-boundary fit, 2026-07-14](research/2026-07-14-ag-ui-fit.md)
 - [Malicious-application runtime threat model, 2026-07-14](research/2026-07-14-malicious-application-runtime-threat-model.md)
+- [OmniGENT VM-local sandbox spike, 2026-07-14](research/2026-07-14-omnigent-vm-sandbox-spike.md)
+- [OpenAI Build Week live requirements refresh, 2026-07-14](research/2026-07-14-openai-build-week-refresh.md)
 - [Original repository handoff](../USER_OWNED_AGENT_RUNTIME_HACKATHON_HANDOFF.md)
 
 Research documents record what was true when inspected. Decisions and plans may supersede their recommendations.

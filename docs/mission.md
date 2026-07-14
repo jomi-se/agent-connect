@@ -46,20 +46,21 @@ An application can:
   execution.
 - Treat an authenticated application as an adversarial principal. Require the
   selected runtime to enforce an application-tools-only profile by default,
-  while Agent Connect prevents policy expansion, separates approvals, enforces
-  connector-level ceilings, and reports the configured posture, evidence
+  while Agent Connect prevents policy expansion and separates approvals. Add
+  connector-level ceilings and posture reporting before claiming resistance to
+  subscription abuse or verified confinement; report the configured evidence
   source, and relevant observations without claiming independent verification.
   Keep the filesystem, network, persistence, and sandbox mechanism inside the
   runtime adapter.
 
 ## Current acceptance boundary
 
-The browser tool loop has passed against a manually provisioned OmniGENT/Codex
-session. The current slice removes that operator step: an application proves
-the user's presence with a one-time code delivered through the user's local
-connector terminal, receives a short-lived capability bound to its exact
-origin, app identity, logical session, and tool snapshot, and asks the gateway
-to create or recover the matching OmniGENT/Codex runner automatically.
+The browser tool loop has passed against an automatically provisioned
+OmniGENT/Codex session. The enrolled connector slice is now implemented: the
+SDK verifies a pinned connector key before tool disclosure, the user enrolls a
+browser device with a generated passphrase only on the connector origin, and a
+top-level connector page issues a PKCE-protected revocable grant bound to the
+exact origin, app id, scopes, and tool snapshot.
 
 Raw OmniGENT session identifiers are an internal provider detail. A user starts
 the connector once; normal application use must not require opening OmniGENT,
@@ -71,10 +72,11 @@ Connect rather than OmniGENT. Adding another agent harness should normally
 require only a narrow runtime adapter; it must not require reimplementing
 enrollment, OAuth, application grants, or recovery.
 
-The target security UX also removes per-app terminal pairing. The terminal is
-used once to export the connector's runtime card and thereafter only for
-recovery. New apps are approved through the connector's Tailscale-hosted OAuth
-page in the user's browser.
+The terminal is used once to export the connector's runtime card and enrollment
+passphrase and thereafter only for recovery. New apps are approved through the
+connector's Tailscale-hosted OAuth-style page. Live mobile deployment proof,
+app-instance sender binding, recovery/key rotation, and durable provider
+session mappings remain outstanding.
 
 ## Non-goals for the first slice
 

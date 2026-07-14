@@ -56,9 +56,11 @@ grocery application.
 
 ## Session-management follow-up — completed 2026-07-13
 
-The shared optional bearer secret was replaced on the public path with a
-single-use terminal pairing code and a short-lived capability bound to
-application origin, app id, opaque application session, and tool-snapshot hash.
+The shared optional bearer secret was first replaced with a single-use terminal
+pairing code. The enrolled profile now supersedes that flow with a durable
+runtime key/card, connector-only enrollment passphrase, PKCE application grant,
+and short-lived capability bound to application origin, app id, opaque session,
+and tool-snapshot hash.
 OmniGENT session provisioning and runner health recovery now live behind the
 gateway; external applications no longer need a raw conductor session ID.
 

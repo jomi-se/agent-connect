@@ -1,38 +1,47 @@
 import {
+  beginAgentAuthorization,
+  completeAgentAuthorization,
   connectAgent,
   defineTool,
+  parseAuthorizationTransaction,
+  serializeAuthorizationTransaction,
   type AgentTaskEvent,
+  type ApplicationTool,
+  type RuntimeCard,
 } from "@agent-connect/web";
 
 const form = requireElement<HTMLFormElement>("task-form");
-const gatewayInput = requireElement<HTMLInputElement>("gateway-url");
-const pairingInput = requireElement<HTMLInputElement>("pairing-code");
+const runtimeCardInput = requireElement<HTMLTextAreaElement>("runtime-card");
 const promptInput = requireElement<HTMLTextAreaElement>("prompt");
 const runButton = requireElement<HTMLButtonElement>("run");
 const canvasMessage = requireElement<HTMLParagraphElement>("canvas-message");
 const status = requireElement<HTMLOutputElement>("status");
 const eventLog = requireElement<HTMLPreElement>("events");
 
-const params = new URL(location.href).searchParams;
-gatewayInput.value =
-  params.get("gateway") ??
-  sessionStorage.getItem("agent-connect.gateway") ??
-  "https://artifex-box.tail246db1.ts.net:8443";
+const STORED_CARD = "agent-connect.runtime-card";
+const STORED_GRANT = "agent-connect.grant";
+const STORED_TRANSACTION = "agent-connect.authorization-transaction";
+const STORED_PROMPT = "agent-connect.pending-prompt";
+
+runtimeCardInput.value = localStorage.getItem(STORED_CARD) ?? "";
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   void run();
 });
 
+void resumeAuthorization();
+
 async function run(): Promise<void> {
   runButton.disabled = true;
   eventLog.textContent = "";
   status.textContent = "Asking your agent…";
   document.body.dataset["demo"] = "running";
-  sessionStorage.setItem("agent-connect.gateway", gatewayInput.value);
+  const runtimeCard = parseRuntimeCard(runtimeCardInput.value);
+  localStorage.setItem(STORED_CARD, JSON.stringify(runtimeCard));
 
   let writes = 0;
-  const tools = [
+  const tools: readonly ApplicationTool[] = [
     defineTool({
       name: "set_page_message",
       description: "Replace the large visible message on the user's web page.",
@@ -65,19 +74,32 @@ async function run(): Promise<void> {
   ];
 
   try {
-    const storedToken = sessionStorage.getItem("agent-connect.capability");
+    const storedToken = sessionStorage.getItem(STORED_GRANT);
+    if (!storedToken) {
+      sessionStorage.setItem(STORED_PROMPT, promptInput.value);
+      const authorization = await beginAgentAuthorization({
+        runtimeCard,
+        appId: "agent-connect-demo",
+        redirectUri: callbackUri(),
+        tools,
+      });
+      sessionStorage.setItem(
+        STORED_TRANSACTION,
+        serializeAuthorizationTransaction(authorization.transaction),
+      );
+      status.textContent = "Opening your connector for approval…";
+      location.assign(authorization.authorizeUrl);
+      return;
+    }
     const connection = await connectAgent({
-      baseUrl: gatewayInput.value,
+      baseUrl: runtimeCard.endpoint,
       appId: "agent-connect-demo",
       tools,
-      ...(pairingInput.value
-        ? { pairingCode: pairingInput.value }
-        : storedToken
-          ? { accessToken: storedToken }
-          : {}),
+      accessToken: storedToken,
     });
-    sessionStorage.setItem("agent-connect.capability", connection.accessToken);
-    pairingInput.value = "";
+    // Keep the durable authorization grant. The connection token is a
+    // short-lived session capability and must not replace the credential that
+    // can mint a fresh capability after a restart or expiry.
     for await (const taskEvent of connection.session.streamTask(
       promptInput.value,
     )) {
@@ -98,6 +120,70 @@ async function run(): Promise<void> {
   } finally {
     runButton.disabled = false;
   }
+}
+
+async function resumeAuthorization(): Promise<void> {
+  const callback = new URL(location.href);
+  if (
+    !callback.searchParams.has("code") &&
+    !callback.searchParams.has("error")
+  ) {
+    return;
+  }
+  const serialized = sessionStorage.getItem(STORED_TRANSACTION);
+  const serializedCard = localStorage.getItem(STORED_CARD);
+  if (!serialized || !serializedCard) {
+    status.textContent = "The saved authorization transaction is missing.";
+    return;
+  }
+  try {
+    const runtimeCard = parseRuntimeCard(serializedCard);
+    const grant = await completeAgentAuthorization({
+      runtimeCard,
+      appId: "agent-connect-demo",
+      redirectUri: callbackUri(),
+      transaction: parseAuthorizationTransaction(serialized),
+      callbackUrl: location.href,
+    });
+    sessionStorage.setItem(STORED_GRANT, grant.accessToken);
+    sessionStorage.removeItem(STORED_TRANSACTION);
+    const pendingPrompt = sessionStorage.getItem(STORED_PROMPT);
+    sessionStorage.removeItem(STORED_PROMPT);
+    history.replaceState({}, "", callback.pathname);
+    status.textContent = "Authorized. Starting your task…";
+    if (pendingPrompt) promptInput.value = pendingPrompt;
+    await run();
+  } catch (error) {
+    status.textContent =
+      error instanceof Error ? error.message : "Authorization failed";
+    document.body.dataset["demo"] = "failed";
+  }
+}
+
+function callbackUri(): string {
+  return `${location.origin}${location.pathname}`;
+}
+
+function parseRuntimeCard(value: string): RuntimeCard {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new TypeError("Paste a valid Agent Connect runtime card");
+  }
+  const candidate = parsed as Partial<RuntimeCard>;
+  if (
+    candidate.version !== 1 ||
+    typeof candidate.runtimeId !== "string" ||
+    typeof candidate.endpoint !== "string" ||
+    typeof candidate.connectorPublicKey !== "object" ||
+    candidate.connectorPublicKey === null ||
+    typeof candidate.transportProfile !== "string" ||
+    typeof candidate.authorizationServer !== "string"
+  ) {
+    throw new TypeError("Paste a valid Agent Connect runtime card");
+  }
+  return candidate as RuntimeCard;
 }
 
 function appendEvent(event: AgentTaskEvent): void {

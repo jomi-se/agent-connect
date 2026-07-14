@@ -20,8 +20,12 @@ are deferred.
 
 ## Current status
 
-The in-process possession boundary passes automated API coverage: one-use code
+Superseded for enrolled connectors by VAL-ENROLL-001, VAL-AUTHZ-001, and
+VAL-REVOKE-001. The legacy in-process possession boundary still passes
+automated API coverage: one-use code
 rotation, signed capability issuance, expiration, tamper rejection,
 cross-origin rejection, session binding, changed-snapshot rejection, and
 pre-upstream tool-envelope enforcement. Production identity, durable device
 keys, revocation, and relay security remain explicitly unproven.
+It is disabled whenever durable connector authorization is configured so it
+cannot bypass connector-owned consent.

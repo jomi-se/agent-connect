@@ -1,6 +1,6 @@
 # 0007: Bootstrap once with a runtime card, then authorize apps through the connector
 
-- Status: accepted target direction; not yet implemented
+- Status: accepted; narrow Tailscale profile implemented, hardening deferred
 - Date: 2026-07-14
 
 ## Context
@@ -41,7 +41,7 @@ bearer credential:
 ```json
 {
   "version": 1,
-  "runtimeId": "sha256:<connector-key-thumbprint>",
+  "runtimeId": "<connector identifier>",
   "endpoint": "https://device.tailnet.ts.net:8443",
   "connectorPublicKey": {},
   "transportProfile": "tailscale-serve",
@@ -52,7 +52,8 @@ bearer credential:
 The user stores this card in a password manager or another trusted personal
 store and imports it into each application that should know about the runtime.
 Manual transfer is the user-mediated statement that this is the connector they
-set up. The card can be re-exported without restarting the connector. Possession
+set up. Re-export without restart is a target recovery operation but no command
+implements it yet. Possession
 of the public card alone does not authorize agent use.
 
 Before disclosing prompts, application data, or tool results, the SDK challenges
@@ -78,7 +79,7 @@ The connector:
    an exact validated redirect URI;
 5. requires the browser app's PKCE verifier and app-instance key during token
    exchange;
-6. issues a revocable grant bound to connector key, app key, origin, app id,
+6. issues a revocable grant bound to connector key, origin, app id,
    requested scopes, canonical tool hash, and expiry.
 
 Normal reconnections use the existing grant silently. A material privilege
@@ -86,12 +87,18 @@ increase—new tools, broader prompt/result access, or a longer policy—require
 incremental approval. Revocation, expiry, connector-key rotation, or app-key
 loss requires reauthorization.
 
+The first implementation uses an opaque bearer grant plus S256 PKCE. It does
+not yet generate an app-instance key or sender-bind the token with DPoP. That
+gap is recorded explicitly rather than implying that the target binding is
+already complete.
+
 ### Terminal is recovery, not routine UX
 
 After runtime-card export, routine app authorization must not require terminal
 access, connector restart, OmniGENT access, or knowledge of a downstream
-provider session. The operator channel remains available for recovery, key
-rotation, disabling browser authorization, and re-exporting the public card.
+provider session. The operator channel remains the target surface for recovery,
+key rotation, disabling browser authorization, and re-exporting the public card;
+those operator commands remain deferred.
 
 ## Standards profile
 
@@ -142,6 +149,16 @@ and must not claim generic OAuth conformance before interoperability tests pass.
   durable grant/revocation storage.
 - Managed account, push/CIBA, companion-app, extension, and credential-wallet
   profiles remain compatible future UX improvements.
+
+## Implemented profile
+
+The implementation and its exact durable/memory-only boundary are recorded in
+[`docs/plan/secure-enrollment-implementation.md`](../plan/secure-enrollment-implementation.md).
+It includes a generated high-entropy enrollment passphrase used only on the
+connector origin, signed runtime challenges before tool disclosure, pushed
+authorization details, top-level consent, PKCE, durable hashed grants,
+revocation, and removal of the legacy pairing bypass. It must not be described
+as a generally conformant OAuth authorization server.
 
 ## References
 
