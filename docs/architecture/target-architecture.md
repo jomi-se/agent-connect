@@ -19,7 +19,7 @@ Agent Connect gateway
   logical -> provider session mapping and health recovery
   pending-action persistence
   fixed tool snapshot + provider adapter
-  application-tools-only confinement profile
+  requested/effective runtime posture
   input event allowlist + resource ceilings
              |
              | OmniGENT HTTP/SSE Sessions API
@@ -48,6 +48,11 @@ permission requests. It does not know OmniGENT or Codex message shapes. AG-UI is
 the leading pending candidate for standard run, message, and frontend-tool
 payloads; the existing ACP/MCP browser prototype remains experimental until the
 comparison spike is decided.
+
+The current package still exports `OmnigentProvider`, `connectOmnigent`, and
+OmniGENT option types from the spike. Those are transitional provider entry
+points, not the intended default public integration. The neutral `connectAgent`
+and task/tool types are the target application surface.
 
 ### Gateway
 
@@ -87,13 +92,16 @@ session with the same origin, application id, and tool hash is reused. A
 different tool hash creates a different downstream ACP session; an unhealthy
 matching session is replaced behind the same opaque application session.
 
-An authenticated application remains untrusted. The gateway applies a
-connector-owned confinement profile that the application cannot broaden. The
-default profile exposes only the approved application tool snapshot in an empty
-isolated workspace, removes ambient integrations, denies local escalation and
-tool network access, and enforces resource ceilings. Application result events
-and connector approval events use separate protocols and credentials. See the
-[malicious-application threat model](../research/2026-07-14-malicious-application-runtime-threat-model.md).
+An authenticated application remains untrusted. The gateway selects a
+connector-owned runtime posture that the application cannot broaden and reports
+its effective properties and evidence. The runtime adapter implements the
+filesystem, network, persistence, credential, and sandbox mechanics. The
+default reference profile exposes only the approved application tool snapshot
+in an empty isolated workspace, removes ambient integrations, and denies local
+escalation and tool network access. Application result events and connector
+approval events use separate protocols and credentials. See the
+[control-plane/runtime decision](../decisions/0008-control-plane-and-runtime-confinement-boundary.md)
+and [malicious-application threat model](../research/2026-07-14-malicious-application-runtime-threat-model.md).
 
 The deployed gateway listens only on loopback. Tailscale Serve terminates HTTPS
 and supplies authenticated identity headers; the gateway checks those headers
@@ -103,11 +111,13 @@ Firebase hosts application assets, not the gateway or the user-owned runtime.
 ### OmniGENT
 
 Owns normalized conversation state, downstream harness processes, policy,
-streaming, and the selected agent environment. OmniGENT's sandbox and policy
+streaming, and the selected agent environment for the reference connector. Its
+adapter owns the concrete sandbox, filesystem, network, persistence, native
+tool, credential, and approval integration. OmniGENT's sandbox and policy
 features are enforcement layers, not a generic guarantee: the connector must
-verify their effective configuration and separately constrain MCP subprocesses
-and harness-native capabilities. It must not delegate system-of-record
-responsibility to Codex session files.
+verify and report their effective configuration and separately account for MCP
+subprocesses and harness-native capabilities. It must not delegate
+system-of-record responsibility to Codex session files.
 
 ### Application
 
