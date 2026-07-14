@@ -44,6 +44,10 @@ An application can:
 - Add the smallest durability extension necessary for unresolved application
   actions after the browser loop works; do not claim generic exactly-once
   execution.
+- Treat an authenticated application as an adversarial principal. Default
+  remote sessions to an application-tools-only confinement profile with an
+  empty workspace, no ambient integrations or tool network, no local privilege
+  escalation, and connector-enforced resource ceilings.
 
 ## Current acceptance boundary
 
