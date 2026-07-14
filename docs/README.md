@@ -18,6 +18,7 @@
 ## Research
 
 - [Landscape snapshot, 2026-07-13](research/2026-07-13-landscape.md)
+- [Mutual runtime identity without hardware attestation, 2026-07-14](research/2026-07-14-mutual-runtime-identity.md)
 - [Original repository handoff](../USER_OWNED_AGENT_RUNTIME_HACKATHON_HANDOFF.md)
 
 Research documents record what was true when inspected. Decisions and plans may supersede their recommendations.

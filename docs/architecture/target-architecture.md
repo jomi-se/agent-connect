@@ -7,10 +7,11 @@ browser application
   @agent-connect/web
   define tools, run task, events, approve
              |
-             | Firebase HTTPS origin -> Tailscale Serve HTTPS
+             | runtime ID + authenticated encrypted session
              v
 Agent Connect gateway
-  one-time pairing + scoped application capabilities
+  enrolled connector identity key
+  request-specific pairing + key-bound application capabilities
   exact Origin (+ Tailscale identity in direct mode)
   logical -> provider session mapping and health recovery
   pending-action persistence
@@ -44,11 +45,17 @@ request-scoped tool-schema injection, normalized events, and durable pending
 application actions. Its provider interface contains no browser-facing
 OmniGENT types.
 
-The gateway prints a one-time pairing code to its local operator channel. A
-browser proves possession once and receives an expiring signed capability. The
-capability is audience-bound to the requesting Origin, application id, opaque
-Agent Connect session id, and canonical tool snapshot. Origin and CORS checks
-are defense in depth, not proof of the user.
+The implemented prototype prints a one-time pairing code to its local operator
+channel. The target design replaces that generic code with request-specific,
+mutually authenticated enrollment. A connector identity key is independently
+enrolled to the user through an account-backed device flow, Tailscale identity,
+or direct QR/fingerprint transfer. The application addresses a runtime ID and
+accepts a destination only after it proves possession of the enrolled connector
+key. The connector separately approves the browser Origin, app-instance key,
+application id, tool snapshot, and requested scopes.
+
+Direct URLs and relay addresses are transport hints, not runtime identity. See
+the [mutual runtime identity investigation](../research/2026-07-14-mutual-runtime-identity.md).
 
 The gateway provisions a provider session on first use. A healthy provider
 session with the same origin, application id, and tool hash is reused. A
