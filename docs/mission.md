@@ -28,6 +28,9 @@ An application can:
   `action_required` calls in the application and return correlated results.
 - Keep OmniGENT wire types behind a browser-safe adapter so ACP-over-WebSocket,
   MCP-over-ACP, or another conductor can implement the same public API later.
+- Model remote connectivity as named transport trust profiles. Implement
+  Tailscale Serve first, bind its selected endpoint to an enrolled connector
+  key, and keep hostname recognition out of the trust decision.
 - Add the smallest durability extension necessary for unresolved application
   actions after the browser loop works; do not claim generic exactly-once
   execution.
@@ -57,3 +60,4 @@ surface changes.
 - replaying every streamed token;
 - generic exactly-once side effects;
 - production identity federation, account recovery, or a public relay.
+- arbitrary custom URLs treated as verified user-owned runtimes.

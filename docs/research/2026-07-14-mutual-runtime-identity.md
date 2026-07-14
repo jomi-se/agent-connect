@@ -171,18 +171,49 @@ the user, through a trusted surface, which origin and tool set will consume it.
 
 ## Deployment profiles
 
-### Managed identity profile (recommended default)
+### What Tailscale exposes to each side
+
+Tailscale gives the network stack stronger evidence than it gives ordinary web
+page JavaScript. A Tailscale connection authenticates node keys through
+WireGuard, so the client device's Tailscale daemon knows which destination node
+it reached. On the server, LocalAPI can resolve a source IP to its node and user
+or tags. Tailscale Serve additionally strips spoofed identity headers and
+injects the requesting user's identity into the loopback backend request. See
+[Tailscale identity](https://tailscale.com/docs/concepts/tailscale-identity) and
+[Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve).
+
+However, a standard hosted page cannot call the local Tailscale daemon and is
+not handed the destination node key, node owner, or LocalAPI result. TLS and the
+`.ts.net` hostname are not a portable proof that the node belongs to the same
+human as the browser user. Serve's identity header authenticates the requester
+to the connector; it does not send a provider-signed destination-owner claim
+back to page JavaScript.
+
+Therefore Tailscale is a strong bootstrap profile, not a complete browser API.
+The user must deliberately select or approve the Serve endpoint and bind it to
+the connector key. Subsequent Agent Connect handshakes verify that pinned key.
+The connector should inspect local Tailscale posture, while the SDK reports
+which properties are provider-backed, connector-verified, or merely
+self-reported. [tsidp](https://tailscale.com/docs/features/tsidp) may later give
+applications signed OIDC tokens for user login, but it does not eliminate the
+need to enroll the connector endpoint.
+
+### Tailscale profile (first supported remote profile)
+
+- Tailscale cryptographically authenticates tailnet nodes and HTTPS protects
+  the Serve hostname.
+- Serve authenticates the requesting Tailscale user to the loopback connector.
+- User-approved enrollment pins the Agent Connect connector key and expected
+  endpoint/owner context.
+- This is suitable for the current personal demo and a credible first release,
+  but does not become a generic custom-URL proof.
+
+### Managed identity profile (eventual portable default)
 
 - Agent Connect or a configured OIDC service enrolls connector keys.
 - A coordinator/directory issues and revokes runtime certificates.
 - A public relay may route end-to-end encrypted envelopes.
 - This gives the cleanest consumer UX and cross-device recovery.
-
-### Tailscale profile
-
-- Tailnet node identity and HTTPS authenticate the destination network endpoint.
-- Agent Connect still pins its connector key and scopes application grants.
-- This is suitable for the current personal demo but not required for all users.
 
 ### Accountless profile
 
@@ -220,23 +251,28 @@ It does not prove:
 
 ## Recommended implementation sequence
 
-1. Replace the arbitrary-URL product model with `runtimeId + transport hints`.
-2. Add connector identity-key generation and protected local storage.
-3. Prototype accountless QR enrollment to validate the cryptographic handshake
-   without requiring a hosted identity service.
-4. Add OAuth device authorization and key registration for the managed profile.
-5. Issue short-lived signed runtime certificates and provide device
-   list/revocation UX.
-6. Bind application capabilities to browser and connector keys using
+1. Introduce named transport profiles and replace naked URL trust with
+   `runtimeId + transport hints`.
+2. Implement the Tailscale Serve profile: inspect local posture, reject Funnel,
+   require loopback, authenticate requester identity, and enroll a connector
+   key through the local operator channel.
+3. Bind application capabilities to browser and connector keys using
    DPoP-like per-request proofs.
+4. Prototype accountless QR enrollment for custom transports.
+5. Add OAuth device authorization and key registration for the eventual
+   managed profile.
+6. Issue short-lived signed runtime certificates and provide device
+   list/revocation UX.
 7. Carry authenticated encryption unchanged through the public relay.
-8. Treat Tailscale, custom OIDC, SPIFFE, and hardware/cloud attestation as
-   optional stronger enrollment profiles.
+8. Treat custom OIDC, SPIFFE, and hardware/cloud attestation as optional
+   stronger profiles.
 
 ## Open decisions
 
-- Whether the hackathon demo should stop at accountless QR enrollment or include
-  a minimal managed identity service.
+- Which Tailscale interface should be the stable oracle for Serve-versus-Funnel
+  posture and local node identity.
+- Whether the hackathon demo should stop at Tailscale plus local-transfer key
+  enrollment or include accountless QR enrollment.
 - Which account provider should anchor the managed profile.
 - Whether runtime certificates are compact signed statements or conventional
   X.509/SSH-style certificates.

@@ -86,6 +86,24 @@ live `codex-acp` runner and completed `set_page_message` using only an opaque
 Agent Connect id. Independent mobile network capture remains useful evidence,
 but raw provider session configuration is no longer part of the demo UX.
 
+## Milestone 3.5: Tailscale transport identity
+
+Turn the working tailnet deployment into an explicit trust profile. Tailscale
+authenticates node transport and the requesting user, while Agent Connect binds
+the selected endpoint to a connector key and separately approves the app.
+
+Deliverables and adversarial cases are defined in the
+[Tailscale transport identity plan](tailscale-transport-identity.md).
+
+Exit criteria:
+
+- the browser verifies connector-key continuity before prompt ingress;
+- the gateway verifies private Serve posture, loopback isolation, allowed
+  Tailscale requester, exact Origin, and scoped application grant;
+- `.ts.net` suffix recognition, Funnel, a substituted connector, wrong user,
+  wrong Origin, changed tools, and replayed enrollment cannot pass as trusted;
+- the successful profile still completes the live OmniGENT/Codex tool loop.
+
 ## Milestone 4: durable pending actions
 
 Deliverables:

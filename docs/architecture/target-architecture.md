@@ -7,7 +7,8 @@ browser application
   @agent-connect/web
   define tools, run task, events, approve
              |
-             | runtime ID + authenticated encrypted session
+             | transport trust profile + runtime ID
+             | authenticated connector/app session
              v
 Agent Connect gateway
   enrolled connector identity key
@@ -55,7 +56,15 @@ key. The connector separately approves the browser Origin, app-instance key,
 application id, tool snapshot, and requested scopes.
 
 Direct URLs and relay addresses are transport hints, not runtime identity. See
-the [mutual runtime identity investigation](../research/2026-07-14-mutual-runtime-identity.md).
+the [mutual runtime identity investigation](../research/2026-07-14-mutual-runtime-identity.md)
+and [trusted transport profile decision](../decisions/0005-trusted-transport-profiles.md).
+
+The first remote profile is Tailscale Serve. Tailscale authenticates node
+transport and supplies requester identity to the loopback connector, but an
+ordinary hosted page cannot inspect the destination node key or owner directly.
+First-use enrollment therefore binds the selected Serve endpoint to an Agent
+Connect connector key; later handshakes verify that key. Recognizing a `.ts.net`
+hostname is never sufficient evidence by itself.
 
 The gateway provisions a provider session on first use. A healthy provider
 session with the same origin, application id, and tool hash is reused. A
