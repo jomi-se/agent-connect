@@ -7,6 +7,7 @@
 - [Target architecture](architecture/target-architecture.md): component boundaries and protocol translations.
 - [Narrow protocol profile](architecture/narrow-protocol-profile.md): the deliberately constrained hackathon wire behavior.
 - [Hackathon plan](plan/hackathon.md): milestones and exit criteria.
+- [Tailscale transport identity plan](plan/tailscale-transport-identity.md): first trusted remote profile and its validation cases.
 - [OpenAI Build Week submission guide](plan/openai-build-week-submission.md): category, positioning, evidence, demo, and submission checklist.
 
 ## Decisions
@@ -15,6 +16,7 @@
 - [ADR 0002: OmniGENT as conductor candidate](decisions/0002-omnigent-conductor.md)
 - [ADR 0003: Tailnet HTTPS gateway](decisions/0003-tailnet-https-gateway.md)
 - [ADR 0004: Pairing and session broker](decisions/0004-pairing-and-session-broker.md)
+- [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md)
 
 ## Research
 
