@@ -13,7 +13,8 @@ browser application
              v
 Agent Connect gateway
   enrolled connector identity key
-  request-specific pairing + key-bound application capabilities
+  one-time runtime-card export
+  connector-hosted OAuth + key-bound application capabilities
   exact Origin (+ Tailscale identity in direct mode)
   logical -> provider session mapping and health recovery
   pending-action persistence
@@ -52,13 +53,19 @@ application actions. Its provider interface contains no browser-facing
 OmniGENT types.
 
 The implemented prototype prints a one-time pairing code to its local operator
-channel. The target design replaces that generic code with request-specific,
-mutually authenticated enrollment. A connector identity key is independently
-enrolled to the user through an account-backed device flow, Tailscale identity,
-or direct QR/fingerprint transfer. The application addresses a runtime ID and
-accepts a destination only after it proves possession of the enrolled connector
-key. The connector separately approves the browser Origin, app-instance key,
-application id, tool snapshot, and requested scopes.
+channel for an application session. The target uses the operator channel only
+to export a stable, non-secret runtime card after generating the connector
+identity key. The user saves that card in a password manager and imports it into
+new applications. The application addresses the runtime ID and accepts the
+destination only after it proves possession of the enrolled connector key.
+
+Each new application then redirects to a top-level connector-owned OAuth
+authorization page. Tailscale authenticates the requesting user to that page;
+the connector shows and approves the exact browser Origin, app-instance key,
+application id, tool snapshot, requested scopes, and expiry. The connector
+returns a short-lived code protected by PKCE and issues a key-bound grant.
+Normal authorization does not require terminal access or connector restart.
+See [ADR 0007](../decisions/0007-runtime-card-and-connector-oauth.md).
 
 Direct URLs and relay addresses are transport hints, not runtime identity. See
 the [mutual runtime identity investigation](../research/2026-07-14-mutual-runtime-identity.md)

@@ -8,6 +8,7 @@
 - [Narrow protocol profile](architecture/narrow-protocol-profile.md): the deliberately constrained hackathon wire behavior.
 - [Hackathon plan](plan/hackathon.md): milestones and exit criteria.
 - [Tailscale transport identity plan](plan/tailscale-transport-identity.md): first trusted remote profile and its validation cases.
+- [Connector OAuth authorization plan](plan/connector-oauth-authorization.md): one-time runtime-card bootstrap followed by same-device per-app consent.
 - [AG-UI compatibility spike](plan/ag-ui-compatibility-spike.md): pending application-protocol comparison against the passing OmniGENT path.
 - [OpenAI Build Week submission guide](plan/openai-build-week-submission.md): category, positioning, evidence, demo, and submission checklist.
 
@@ -19,6 +20,7 @@
 - [ADR 0004: Pairing and session broker](decisions/0004-pairing-and-session-broker.md)
 - [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md)
 - [ADR 0006: Explore AG-UI application boundary](decisions/0006-explore-ag-ui-application-boundary.md)
+- [ADR 0007: Runtime card and connector OAuth](decisions/0007-runtime-card-and-connector-oauth.md)
 
 ## Research
 

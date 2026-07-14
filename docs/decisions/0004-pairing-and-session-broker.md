@@ -44,3 +44,9 @@ QR/fingerprint transfer; treat URLs as routing hints; and bind later
 application capabilities to both connector and browser keys. This clarifies the
 production direction without retroactively claiming that the prototype already
 implements it.
+
+ADR 0007 replaces the per-application terminal-code target with two separate
+ceremonies: export a stable public runtime card once through the connector's
+operator channel, then authorize each new web origin through a connector-owned
+OAuth page. The generic startup code in this ADR remains only the implemented
+prototype behavior.

@@ -37,6 +37,10 @@ An application can:
 - Model remote connectivity as named transport trust profiles. Implement
   Tailscale Serve first, bind its selected endpoint to an enrolled connector
   key, and keep hostname recognition out of the trust decision.
+- Bootstrap that connector identity once with a runtime card exported through
+  the trusted operator channel. Authorize later web apps through a
+  connector-hosted OAuth/PKCE page; routine use must not require SSH, terminal
+  access, or connector restart.
 - Add the smallest durability extension necessary for unresolved application
   actions after the browser loop works; do not claim generic exactly-once
   execution.
@@ -54,6 +58,11 @@ Raw OmniGENT session identifiers are an internal provider detail. A user starts
 the connector once; normal application use must not require opening OmniGENT,
 copying a conversation id, or restarting a runner when the application tool
 surface changes.
+
+The target security UX also removes per-app terminal pairing. The terminal is
+used once to export the connector's runtime card and thereafter only for
+recovery. New apps are approved through the connector's Tailscale-hosted OAuth
+page in the user's browser.
 
 ## Non-goals for the first slice
 
