@@ -19,7 +19,7 @@ Agent Connect gateway
   logical -> provider session mapping and health recovery
   pending-action persistence
   fixed tool snapshot + provider adapter
-  requested/effective runtime posture
+  requested/configured posture + observations
   input event allowlist + resource ceilings
              |
              | OmniGENT HTTP/SSE Sessions API
@@ -94,8 +94,9 @@ matching session is replaced behind the same opaque application session.
 
 An authenticated application remains untrusted. The gateway selects a
 connector-owned runtime posture that the application cannot broaden and reports
-its effective properties and evidence. The runtime adapter implements the
-filesystem, network, persistence, credential, and sandbox mechanics. The
+its configuration, claim source, and relevant observations. The runtime adapter
+implements the filesystem, network, persistence, credential, and sandbox
+mechanics. The
 default reference profile exposes only the approved application tool snapshot
 in an empty isolated workspace, removes ambient integrations, and denies local
 escalation and tool network access. Application result events and connector
@@ -115,8 +116,10 @@ streaming, and the selected agent environment for the reference connector. Its
 adapter owns the concrete sandbox, filesystem, network, persistence, native
 tool, credential, and approval integration. OmniGENT's sandbox and policy
 features are enforcement layers, not a generic guarantee: the connector must
-verify and report their effective configuration and separately account for MCP
-subprocesses and harness-native capabilities. It must not delegate
+report their configured state and observable behavior and separately account
+for MCP subprocesses and harness-native capabilities. A direct Codex process
+running as the connector's VM user is ambient host execution, regardless of
+what the connector calls the profile. It must not delegate
 system-of-record responsibility to Codex session files.
 
 ### Application

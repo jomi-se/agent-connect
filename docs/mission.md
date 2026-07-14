@@ -47,9 +47,10 @@ An application can:
 - Treat an authenticated application as an adversarial principal. Require the
   selected runtime to enforce an application-tools-only profile by default,
   while Agent Connect prevents policy expansion, separates approvals, enforces
-  connector-level ceilings, and reports the effective posture. Keep the
-  filesystem, network, persistence, and sandbox mechanism inside the runtime
-  adapter.
+  connector-level ceilings, and reports the configured posture, evidence
+  source, and relevant observations without claiming independent verification.
+  Keep the filesystem, network, persistence, and sandbox mechanism inside the
+  runtime adapter.
 
 ## Current acceptance boundary
 
