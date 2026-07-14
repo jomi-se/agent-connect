@@ -2,6 +2,9 @@
 
 Updated: 2026-07-14
 
+Implementation commit: `6ca8629` (`feat: add secure connector enrollment and
+authorization`).
+
 This handoff supersedes the implementation-status portions of
 `USER_OWNED_AGENT_RUNTIME_HACKATHON_HANDOFF.md`. That older file remains useful
 for the original landscape research. Current architecture and policy live in
