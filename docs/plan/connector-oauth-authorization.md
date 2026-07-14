@@ -2,7 +2,7 @@
 
 Date: 2026-07-14
 
-Status: proposed security and UX target.
+Status: narrow Tailscale implementation complete; target hardening remains.
 
 ## Outcome
 
@@ -174,3 +174,16 @@ identifiers, codes, grants, and connector secrets.
 These may remove runtime-card import or provide notifications, but they do not
 change the connector's need to bind authority to a real app origin and an
 explicit user policy.
+
+## Implementation delta
+
+The current code implements the runtime key/card, generated enrollment
+passphrase and device cookie, signed challenge before schema disclosure, pushed
+request, connector-owned consent page, exact HTTPS redirect, state, S256 PKCE,
+single-use code, durable hashed grants, scope/tool bindings, and revocation.
+
+It does not yet implement re-export/rotation commands, OAuth discovery
+metadata, Rich Authorization Request objects, app-instance keys/DPoP,
+incremental consent, full audit history, passkeys, durable pending requests or
+codes, durable provider sessions, or mobile real-surface evidence. See the
+[implementation contract](secure-enrollment-implementation.md).

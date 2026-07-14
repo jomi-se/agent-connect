@@ -56,23 +56,25 @@ and task/tool types are the target application surface.
 
 ### Gateway
 
-Owns pairing, authorization, mapping application sessions to OmniGENT conversations,
+Owns enrollment, authorization, mapping application sessions to OmniGENT conversations,
 request-scoped tool-schema injection, normalized events, and durable pending
 application actions. Its provider interface contains no browser-facing
 OmniGENT types.
 
-The implemented prototype prints a one-time pairing code to its local operator
-channel for an application session. The target uses the operator channel only
-to export a stable, non-secret runtime card after generating the connector
-identity key. The user saves that card in a password manager and imports it into
-new applications. The application addresses the runtime ID and accepts the
+The enrolled profile prints one runtime card and generated high-entropy
+enrollment passphrase on first state creation. The user saves the bundle in a
+password manager, imports only the public card into applications, and enters
+the passphrase only on the connector origin. The application accepts the
 destination only after it proves possession of the enrolled connector key.
 
 Each new application then redirects to a top-level connector-owned OAuth
 authorization page. Tailscale authenticates the requesting user to that page;
-the connector shows and approves the exact browser Origin, app-instance key,
-application id, tool snapshot, requested scopes, and expiry. The connector
-returns a short-lived code protected by PKCE and issues a key-bound grant.
+the connector shows and approves the exact browser Origin, application id,
+tool metadata snapshot (name, description, and input schema), requested scopes,
+callback, and expiry. This binds declared authority, not the application-side
+handler implementation, which remains app code. The connector returns a
+short-lived code protected by PKCE and issues a revocable bearer grant. An
+app-instance key and DPoP-style sender binding remain target hardening.
 Normal authorization does not require terminal access or connector restart.
 See [ADR 0007](../decisions/0007-runtime-card-and-connector-oauth.md).
 
@@ -96,8 +98,7 @@ An authenticated application remains untrusted. The gateway selects a
 connector-owned runtime posture that the application cannot broaden and reports
 its configuration, claim source, and relevant observations. The runtime adapter
 implements the filesystem, network, persistence, credential, and sandbox
-mechanics. The
-default reference profile exposes only the approved application tool snapshot
+mechanics. The target reference profile exposes only the approved application tool snapshot
 in an empty isolated workspace, removes ambient integrations, and denies local
 escalation and tool network access. Application result events and connector
 approval events use separate protocols and credentials. See the
@@ -121,6 +122,16 @@ for MCP subprocesses and harness-native capabilities. A direct Codex process
 running as the connector's VM user is ambient host execution, regardless of
 what the connector calls the profile. It must not delegate
 system-of-record responsibility to Codex session files.
+
+The first VM-local `linux_bwrap` profile verifies its outer boundary with a
+guard, read-only workspace, dedicated writable Codex home, host sentinel,
+`NoNewPrivs`, and seccomp. Its dynamic tool loop is currently blocked by the
+OmniGENT-to-Codex MCP child startup under that boundary, so it is experimental,
+not the default demonstrated profile. It also leaves a copied Codex credential
+visible to a network-capable `agent-full-access` process; credential brokerage
+or whole-runner containment with controlled egress is required before this can
+defend against a malicious app. See the
+[sandbox spike](../research/2026-07-14-omnigent-vm-sandbox-spike.md).
 
 ### Application
 

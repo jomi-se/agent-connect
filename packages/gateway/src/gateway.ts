@@ -12,7 +12,15 @@ import {
   verifyCapability,
   type CapabilityClaims,
 } from "./capability.js";
+import {
+  authorizationRedirect,
+  ConnectorAuth,
+  ConnectorAuthError,
+  type EnrollmentBundle,
+  type PendingAuthorization,
+} from "./connector-auth.js";
 import { OmnigentRuntime } from "./omnigent-runtime.js";
+import type { OmnigentSandboxOptions } from "./omnigent-runtime.js";
 import type { AgentRuntime } from "./runtime.js";
 import {
   hashOmnigentToolEnvelope,
@@ -28,15 +36,21 @@ export interface GatewayOptions {
   readonly omnigentBaseUrl: string;
   readonly workspace?: string;
   readonly omnigentHostId?: string;
+  readonly omnigentSandbox?: OmnigentSandboxOptions;
   readonly accessToken?: string;
   readonly pairingCode?: string;
   readonly pairingCodeTtlSeconds?: number;
   readonly capabilitySigningSecret?: string;
   readonly capabilityTtlSeconds?: number;
+  readonly authStatePath?: string;
+  readonly publicEndpoint?: string;
+  readonly transportProfile?: string;
+  readonly enrollmentPassphrase?: string;
   readonly runtime?: AgentRuntime;
   readonly fetch?: typeof globalThis.fetch;
   readonly now?: () => number;
   readonly onPairingCodeGenerated?: (code: string, expiresAt: string) => void;
+  readonly onEnrollmentBundle?: (bundle: EnrollmentBundle) => void;
 }
 
 interface ManagedSession {
@@ -44,12 +58,14 @@ interface ManagedSession {
   readonly appId: string;
   readonly origin: string;
   readonly toolHash: string;
+  readonly authorizationGrantId?: string;
   providerSessionId: string;
 }
 
 const PROVIDER_SESSION_ROUTE = /^\/v1\/sessions\/([^/]+)\/(stream|events)$/;
 const MAX_EVENT_BYTES = 1024 * 1024;
 const MAX_CREATE_BYTES = 64 * 1024;
+const DEVICE_COOKIE = "agent_connect_device";
 
 export function createGateway(options: GatewayOptions) {
   if (options.allowedOrigins.size === 0) {
@@ -58,6 +74,9 @@ export function createGateway(options: GatewayOptions) {
   if (options.allowedTailscaleUsers.size === 0) {
     throw new TypeError("At least one allowed Tailscale login is required");
   }
+  const publicEndpoint = options.publicEndpoint
+    ? canonicalPublicEndpoint(options.publicEndpoint)
+    : undefined;
 
   const fetchImplementation =
     options.fetch ?? globalThis.fetch.bind(globalThis);
@@ -68,25 +87,87 @@ export function createGateway(options: GatewayOptions) {
       baseUrl: omnigentBaseUrl,
       workspace: options.workspace ?? process.cwd(),
       ...(options.omnigentHostId ? { hostId: options.omnigentHostId } : {}),
+      ...(options.omnigentSandbox ? { sandbox: options.omnigentSandbox } : {}),
       fetch: fetchImplementation,
     });
   const now = options.now ?? Date.now;
+  if (Boolean(options.authStatePath) !== Boolean(publicEndpoint)) {
+    throw new TypeError(
+      "authStatePath and publicEndpoint must be configured together",
+    );
+  }
+  const connectorAuth =
+    options.authStatePath && publicEndpoint
+      ? new ConnectorAuth({
+          statePath: options.authStatePath,
+          publicEndpoint,
+          ...(options.transportProfile
+            ? { transportProfile: options.transportProfile }
+            : {}),
+          ...(options.enrollmentPassphrase
+            ? { enrollmentPassphrase: options.enrollmentPassphrase }
+            : {}),
+          now,
+          ...(options.onEnrollmentBundle
+            ? { onEnrollmentBundle: options.onEnrollmentBundle }
+            : {}),
+        })
+      : undefined;
   const pairingTtl = options.pairingCodeTtlSeconds ?? 10 * 60;
   const capabilityTtl = options.capabilityTtlSeconds ?? 60 * 60;
   const signingSecret =
-    options.capabilitySigningSecret ?? randomBytes(32).toString("base64url");
+    options.capabilitySigningSecret ??
+    connectorAuth?.capabilitySigningSecret ??
+    randomBytes(32).toString("base64url");
   const managedSessions = new Map<string, ManagedSession>();
   const sessionsByKey = new Map<string, ManagedSession>();
   const pendingSessions = new Map<string, Promise<ManagedSession>>();
   const pendingRepairs = new Map<string, Promise<ManagedSession>>();
+  // OAuth-style grants replace the spike's terminal pairing code. Keeping both
+  // enabled would leave a consent-bypass path in an otherwise enrolled runtime.
+  const legacyPairingEnabled = connectorAuth === undefined;
   let pairing = newPairing(options.pairingCode ?? createPairingCode());
 
-  options.onPairingCodeGenerated?.(pairing.code, iso(pairing.expiresAt));
+  if (legacyPairingEnabled) {
+    options.onPairingCodeGenerated?.(pairing.code, iso(pairing.expiresAt));
+  }
 
   return createServer(async (request, response) => {
     try {
       if (request.url === "/healthz" && request.method === "GET") {
         sendJson(response, 200, { ok: true });
+        return;
+      }
+
+      const pathname = new URL(request.url ?? "/", "http://gateway.invalid")
+        .pathname;
+
+      if (
+        connectorAuth &&
+        (pathname === "/authorize" || pathname === "/v1/grants")
+      ) {
+        const tailscaleUser = requireTailscaleUser(
+          request,
+          response,
+          options.allowedTailscaleUsers,
+        );
+        if (!tailscaleUser) return;
+        if (pathname === "/authorize") {
+          await handleAuthorizationPage(
+            request,
+            response,
+            connectorAuth,
+            tailscaleUser,
+            publicEndpoint ?? "",
+          );
+        } else {
+          await handleGrantPage(
+            request,
+            response,
+            connectorAuth,
+            publicEndpoint ?? "",
+          );
+        }
         return;
       }
 
@@ -103,14 +184,74 @@ export function createGateway(options: GatewayOptions) {
         return;
       }
 
-      const tailscaleUser = header(request, "tailscale-user-login");
-      if (!tailscaleUser || !options.allowedTailscaleUsers.has(tailscaleUser)) {
-        sendJson(response, 403, { error: "tailscale_user_not_allowed" });
+      const tailscaleUser = requireTailscaleUser(
+        request,
+        response,
+        options.allowedTailscaleUsers,
+      );
+      if (!tailscaleUser) return;
+
+      if (connectorAuth && pathname === "/v1/runtime-challenges") {
+        if (request.method !== "POST") {
+          response.setHeader("Allow", "POST");
+          sendJson(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+        const value = await readJsonObject(request, MAX_CREATE_BYTES);
+        const nonce = value["nonce"];
+        if (typeof nonce !== "string") {
+          throw new InvalidRequestError("nonce is required");
+        }
+        sendJson(response, 200, { ...connectorAuth.createChallenge(nonce) });
         return;
       }
 
-      const pathname = new URL(request.url ?? "/", "http://gateway.invalid")
-        .pathname;
+      if (connectorAuth && pathname === "/v1/authorization-requests") {
+        if (request.method !== "POST") {
+          response.setHeader("Allow", "POST");
+          sendJson(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+        const value = await readJsonObject(request, MAX_CREATE_BYTES);
+        const authorization = connectorAuth.createAuthorizationRequest({
+          origin,
+          appId: requireString(value, "appId"),
+          redirectUri: requireString(value, "redirectUri"),
+          state: requireString(value, "state"),
+          codeChallenge: requireString(value, "codeChallenge"),
+          scopes: requireStringArray(value, "scopes"),
+          tools: value["tools"],
+        });
+        sendJson(response, 201, {
+          requestId: authorization.id,
+          authorizeUrl: `${publicEndpoint}/authorize?request=${encodeURIComponent(authorization.id)}`,
+          expiresAt: iso(authorization.expiresAt),
+        });
+        return;
+      }
+
+      if (connectorAuth && pathname === "/oauth/token") {
+        if (request.method !== "POST") {
+          response.setHeader("Allow", "POST");
+          sendJson(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+        const value = await readJsonObject(request, MAX_CREATE_BYTES);
+        const exchanged = connectorAuth.exchangeCode({
+          code: requireString(value, "code"),
+          codeVerifier: requireString(value, "codeVerifier"),
+          origin,
+          appId: requireString(value, "appId"),
+          redirectUri: requireString(value, "redirectUri"),
+        });
+        sendJson(response, 200, {
+          accessToken: exchanged.accessToken,
+          tokenType: "Bearer",
+          expiresAt: exchanged.grant.expiresAt,
+          grant: exchanged.grant,
+        });
+        return;
+      }
 
       if (pathname === "/v1/app-sessions") {
         if (request.method !== "POST") {
@@ -134,24 +275,49 @@ export function createGateway(options: GatewayOptions) {
             origin,
             managedSessions,
           );
-          session = await ensureHealthy(session);
-        } else {
-          const submittedCode = pairingCredential(authorization);
           if (
-            !submittedCode ||
-            pairing.expiresAt <= now() ||
-            !safeEqual(submittedCode, pairing.code)
+            session.authorizationGrantId &&
+            !connectorAuth?.isGrantActive(session.authorizationGrantId)
           ) {
-            if (pairing.expiresAt <= now()) rotatePairing();
-            response.setHeader("WWW-Authenticate", "Pairing");
-            sendJson(response, 401, { error: "invalid_pairing_code" });
+            sendJson(response, 401, { error: "grant_revoked" });
             return;
           }
+          session = await ensureHealthy(session);
+        } else {
+          const bearer = bearerCredential(authorization);
+          const grant =
+            bearer && connectorAuth
+              ? connectorAuth.verifyGrant(bearer, {
+                  origin,
+                  appId: input.appId,
+                  toolHash: input.toolHash,
+                  scopes: ["agent:prompt", "agent:result", "tools:invoke"],
+                })
+              : undefined;
+          if (grant) {
+            session = await getOrCreateSession(input, origin, grant.id);
+          } else if (legacyPairingEnabled) {
+            const submittedCode = pairingCredential(authorization);
+            if (
+              !submittedCode ||
+              pairing.expiresAt <= now() ||
+              !safeEqual(submittedCode, pairing.code)
+            ) {
+              if (pairing.expiresAt <= now()) rotatePairing();
+              response.setHeader("WWW-Authenticate", "Pairing, Bearer");
+              sendJson(response, 401, { error: "invalid_app_grant" });
+              return;
+            }
 
-          // Reserve and rotate before the asynchronous provider launch so one
-          // credential can authorize at most one exchange, even under races.
-          rotatePairing();
-          session = await getOrCreateSession(input, origin);
+            // Reserve and rotate before the asynchronous provider launch so one
+            // credential can authorize at most one exchange, even under races.
+            rotatePairing();
+            session = await getOrCreateSession(input, origin);
+          } else {
+            response.setHeader("WWW-Authenticate", "Bearer");
+            sendJson(response, 401, { error: "invalid_app_grant" });
+            return;
+          }
         }
 
         const issuedAt = Math.floor(now() / 1000);
@@ -205,7 +371,12 @@ export function createGateway(options: GatewayOptions) {
           signingSecret,
           Math.floor(now() / 1000),
         );
-        if (!claims || !claimsMatchSession(claims, managed, origin)) {
+        if (
+          !claims ||
+          !claimsMatchSession(claims, managed, origin) ||
+          (managed.authorizationGrantId !== undefined &&
+            !connectorAuth?.isGrantActive(managed.authorizationGrantId))
+        ) {
           response.setHeader("WWW-Authenticate", "Bearer");
           sendJson(response, 401, { error: "invalid_session_capability" });
           return;
@@ -272,6 +443,8 @@ export function createGateway(options: GatewayOptions) {
       }
       if (error instanceof RequestTooLargeError) {
         sendJson(response, 413, { error: "request_too_large" });
+      } else if (error instanceof ConnectorAuthError) {
+        sendJson(response, 400, { error: error.code });
       } else if (
         error instanceof InvalidRequestError ||
         error instanceof InvalidToolSnapshotError
@@ -294,14 +467,22 @@ export function createGateway(options: GatewayOptions) {
 
   function rotatePairing(): void {
     pairing = newPairing(createPairingCode());
-    options.onPairingCodeGenerated?.(pairing.code, iso(pairing.expiresAt));
+    if (legacyPairingEnabled) {
+      options.onPairingCodeGenerated?.(pairing.code, iso(pairing.expiresAt));
+    }
   }
 
   async function getOrCreateSession(
     input: CreateSessionInput,
     origin: string,
+    authorizationGrantId?: string,
   ): Promise<ManagedSession> {
-    const key = sessionKey(origin, input.appId, input.toolHash);
+    const key = sessionKey(
+      origin,
+      input.appId,
+      input.toolHash,
+      authorizationGrantId,
+    );
     const pending = pendingSessions.get(key);
     if (pending) return pending;
     const operation = (async () => {
@@ -317,6 +498,7 @@ export function createGateway(options: GatewayOptions) {
         appId: input.appId,
         origin,
         toolHash: input.toolHash,
+        ...(authorizationGrantId ? { authorizationGrantId } : {}),
         providerSessionId,
       };
       managedSessions.set(created.id, created);
@@ -425,9 +607,70 @@ function eventMatchesToolSnapshot(body: string, expectedHash: string): boolean {
   } catch {
     return false;
   }
-  if (!isRecord(event)) return false;
-  if (event["type"] !== "message") return true;
-  return hashOmnigentToolEnvelope(event["tools"]) === expectedHash;
+  if (!isRecord(event) || typeof event["type"] !== "string") return false;
+  if (event["type"] === "message") {
+    if (!hasOnlyKeys(event, ["type", "data", "tools"])) return false;
+    const data = event["data"];
+    if (!isRecord(data) || !hasOnlyKeys(data, ["role", "content"]))
+      return false;
+    const content = data["content"];
+    if (
+      data["role"] !== "user" ||
+      !Array.isArray(content) ||
+      content.length !== 1 ||
+      !isRecord(content[0]) ||
+      !hasOnlyKeys(content[0], ["type", "text"]) ||
+      content[0]["type"] !== "input_text" ||
+      typeof content[0]["text"] !== "string"
+    )
+      return false;
+    return hashOmnigentToolEnvelope(event["tools"]) === expectedHash;
+  }
+  if (event["type"] === "function_call_output") {
+    if (!hasOnlyKeys(event, ["type", "data"])) return false;
+    const data = event["data"];
+    return (
+      isRecord(data) &&
+      hasOnlyKeys(data, ["call_id", "output"]) &&
+      typeof data["call_id"] === "string" &&
+      data["call_id"].length > 0 &&
+      data["call_id"].length <= 256 &&
+      typeof data["output"] === "string"
+    );
+  }
+  return (
+    event["type"] === "interrupt" &&
+    hasOnlyKeys(event, ["type", "data"]) &&
+    isRecord(event["data"]) &&
+    Object.keys(event["data"]).length === 0
+  );
+}
+
+function hasOnlyKeys(
+  value: Readonly<Record<string, unknown>>,
+  keys: readonly string[],
+): boolean {
+  return (
+    Object.keys(value).every((key) => keys.includes(key)) &&
+    keys.every((key) => Object.hasOwn(value, key))
+  );
+}
+
+function canonicalPublicEndpoint(value: string): string {
+  const endpoint = new URL(value);
+  if (
+    endpoint.protocol !== "https:" ||
+    endpoint.username ||
+    endpoint.password ||
+    endpoint.search ||
+    endpoint.hash
+  ) {
+    throw new TypeError("publicEndpoint must be an HTTPS origin");
+  }
+  if (endpoint.pathname !== "/" && endpoint.pathname !== "") {
+    throw new TypeError("publicEndpoint must not include a path");
+  }
+  return endpoint.origin;
 }
 
 function setCors(response: ServerResponse, origin: string): void {
@@ -453,6 +696,12 @@ function isSafeSessionId(value: string): boolean {
 function pairingCredential(authorization: string): string | undefined {
   return authorization.startsWith("Pairing ")
     ? authorization.slice("Pairing ".length)
+    : undefined;
+}
+
+function bearerCredential(authorization: string): string | undefined {
+  return authorization.startsWith("Bearer ")
+    ? authorization.slice("Bearer ".length)
     : undefined;
 }
 
@@ -504,8 +753,13 @@ function sendJson(
   response.end(JSON.stringify(body));
 }
 
-function sessionKey(origin: string, appId: string, toolHash: string): string {
-  return `${origin}\n${appId}\n${toolHash}`;
+function sessionKey(
+  origin: string,
+  appId: string,
+  toolHash: string,
+  authorizationGrantId?: string,
+): string {
+  return `${origin}\n${appId}\n${toolHash}\n${authorizationGrantId ?? "pairing"}`;
 }
 
 function iso(timestamp: number): string {
@@ -519,3 +773,257 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 class RequestTooLargeError extends Error {}
 class InvalidRequestError extends Error {}
 class InvalidCapabilityError extends Error {}
+
+async function readJsonObject(
+  request: IncomingMessage,
+  limit: number,
+): Promise<Record<string, unknown>> {
+  const raw = await readBody(request, limit);
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new InvalidRequestError("request body must be JSON");
+  }
+  if (!isRecord(value))
+    throw new InvalidRequestError("request must be an object");
+  return value;
+}
+
+function requireString(
+  value: Readonly<Record<string, unknown>>,
+  name: string,
+): string {
+  const result = value[name];
+  if (typeof result !== "string" || result.length === 0) {
+    throw new InvalidRequestError(`${name} is required`);
+  }
+  return result;
+}
+
+function requireStringArray(
+  value: Readonly<Record<string, unknown>>,
+  name: string,
+): readonly string[] {
+  const result = value[name];
+  if (
+    !Array.isArray(result) ||
+    result.some((item) => typeof item !== "string")
+  ) {
+    throw new InvalidRequestError(`${name} must be an array of strings`);
+  }
+  return result as string[];
+}
+
+function requireTailscaleUser(
+  request: IncomingMessage,
+  response: ServerResponse,
+  allowed: ReadonlySet<string>,
+): string | undefined {
+  const tailscaleUser = header(request, "tailscale-user-login");
+  if (!tailscaleUser || !allowed.has(tailscaleUser)) {
+    sendJson(response, 403, { error: "tailscale_user_not_allowed" });
+    return undefined;
+  }
+  return tailscaleUser;
+}
+
+async function handleAuthorizationPage(
+  request: IncomingMessage,
+  response: ServerResponse,
+  auth: ConnectorAuth,
+  tailscaleUser: string,
+  publicEndpoint: string,
+): Promise<void> {
+  if (request.method === "GET") {
+    const id = new URL(
+      request.url ?? "/",
+      "http://gateway.invalid",
+    ).searchParams.get("request");
+    const pending = id ? auth.getPending(id) : undefined;
+    if (!pending) {
+      sendHtml(
+        response,
+        404,
+        consentErrorPage("Authorization request expired"),
+      );
+      return;
+    }
+    const enrolled = auth.isDeviceEnrolled(
+      cookie(request, DEVICE_COOKIE),
+      tailscaleUser,
+    );
+    sendHtml(response, 200, consentPage(pending, enrolled));
+    return;
+  }
+  if (request.method !== "POST") {
+    response.setHeader("Allow", "GET, POST");
+    sendJson(response, 405, { error: "method_not_allowed" });
+    return;
+  }
+  const requestOrigin = header(request, "origin");
+  if (requestOrigin !== publicEndpoint) {
+    sendJson(response, 403, { error: "authorization_origin_mismatch" });
+    return;
+  }
+  const form = new URLSearchParams(await readBody(request, MAX_CREATE_BYTES));
+  const requestId = form.get("request") ?? "";
+  const pending = auth.getPending(requestId);
+  if (!pending) {
+    sendHtml(response, 404, consentErrorPage("Authorization request expired"));
+    return;
+  }
+  if (form.get("decision") !== "approve") {
+    const denied = auth.deny(requestId);
+    redirect(
+      response,
+      authorizationRedirect(denied, { error: "access_denied" }),
+    );
+    return;
+  }
+  let deviceToken = cookie(request, DEVICE_COOKIE);
+  if (!auth.isDeviceEnrolled(deviceToken, tailscaleUser)) {
+    const passphrase = form.get("passphrase") ?? "";
+    deviceToken = auth.enrollDevice(passphrase, tailscaleUser);
+    response.setHeader(
+      "Set-Cookie",
+      `${DEVICE_COOKIE}=${encodeURIComponent(deviceToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`,
+    );
+  }
+  const approved = auth.approve(requestId);
+  redirect(
+    response,
+    authorizationRedirect(approved.request, { code: approved.code }),
+  );
+}
+
+async function handleGrantPage(
+  request: IncomingMessage,
+  response: ServerResponse,
+  auth: ConnectorAuth,
+  publicEndpoint: string,
+): Promise<void> {
+  if (request.method === "POST") {
+    if (header(request, "origin") !== publicEndpoint) {
+      sendJson(response, 403, { error: "authorization_origin_mismatch" });
+      return;
+    }
+    const form = new URLSearchParams(await readBody(request, MAX_CREATE_BYTES));
+    const id = form.get("grant") ?? "";
+    auth.revokeGrant(id);
+    redirect(response, "/v1/grants");
+    return;
+  }
+  if (request.method !== "GET") {
+    response.setHeader("Allow", "GET, POST");
+    sendJson(response, 405, { error: "method_not_allowed" });
+    return;
+  }
+  sendHtml(response, 200, grantsPage(auth.listGrants()));
+}
+
+function consentPage(
+  request: PendingAuthorization,
+  deviceEnrolled: boolean,
+): string {
+  const tools = request.tools
+    .map(
+      (tool) =>
+        `<li><strong>${escapeHtml(tool.name)}</strong> — ${escapeHtml(tool.description)}<details><summary>Input schema</summary><pre>${escapeHtml(JSON.stringify(tool.inputSchema, null, 2))}</pre></details></li>`,
+    )
+    .join("");
+  const scopes = request.scopes
+    .map((scope) => `<li>${escapeHtml(scope)}</li>`)
+    .join("");
+  return htmlPage(
+    "Authorize application",
+    `<main><p class="eyebrow">Agent Connect</p><h1>Allow this application?</h1>
+<p><strong>${escapeHtml(request.origin)}</strong> is asking to use your agent subscription.</p>
+<dl><dt>Application</dt><dd>${escapeHtml(request.appId)}</dd><dt>Return URL</dt><dd>${escapeHtml(request.redirectUri)}</dd><dt>Request expires</dt><dd>${escapeHtml(iso(request.expiresAt))}</dd><dt>Tools lent to the agent</dt><dd><ul>${tools}</ul></dd><dt>Access</dt><dd><ul>${scopes}</ul></dd></dl>
+<form method="post" action="/authorize">
+<input type="hidden" name="request" value="${escapeHtml(request.id)}">
+${
+  deviceEnrolled
+    ? '<p class="ok">This browser device is enrolled.</p>'
+    : '<label>Enrollment passphrase<input name="passphrase" type="password" autocomplete="current-password" required><small>Enter the passphrase saved when you installed this connector. It stays on this connector-owned page.</small></label>'
+}
+<div class="actions"><button name="decision" value="approve">Allow</button><button class="secondary" name="decision" value="deny">Deny</button></div>
+</form></main>`,
+  );
+}
+
+function grantsPage(
+  grants: readonly {
+    id: string;
+    origin: string;
+    appId: string;
+    toolNames: readonly string[];
+    expiresAt: string;
+    revokedAt?: string;
+  }[],
+): string {
+  const entries = grants
+    .map(
+      (grant) =>
+        `<article><h2>${escapeHtml(grant.appId)}</h2><p>${escapeHtml(grant.origin)}</p><p>Tools: ${escapeHtml(grant.toolNames.join(", ") || "none")}</p><p>${grant.revokedAt ? `Revoked ${escapeHtml(grant.revokedAt)}` : `Expires ${escapeHtml(grant.expiresAt)}`}</p>${grant.revokedAt ? "" : `<form method="post"><input type="hidden" name="grant" value="${escapeHtml(grant.id)}"><button>Revoke</button></form>`}</article>`,
+    )
+    .join("");
+  return htmlPage(
+    "Authorized applications",
+    `<main><p class="eyebrow">Agent Connect</p><h1>Authorized applications</h1>${entries || "<p>No applications authorized.</p>"}</main>`,
+  );
+}
+
+function consentErrorPage(message: string): string {
+  return htmlPage(
+    "Agent Connect",
+    `<main><h1>${escapeHtml(message)}</h1></main>`,
+  );
+}
+
+function htmlPage(title: string, body: string): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>body{font:16px/1.5 system-ui;background:#f4f1ea;color:#182019;margin:0}main{max-width:38rem;margin:8vh auto;background:white;padding:2rem;border-radius:1rem;box-shadow:0 1rem 4rem #16201620}.eyebrow{color:#42664b;text-transform:uppercase;letter-spacing:.12em;font-weight:700}h1{font-size:2rem}dt{font-weight:700;margin-top:1rem}dd{margin-left:0}label{display:grid;gap:.4rem;margin:1.5rem 0}input{font:inherit;padding:.8rem}small{color:#526057}.actions{display:flex;gap:.75rem;margin-top:1.5rem}button{font:inherit;font-weight:700;padding:.8rem 1.2rem;border:0;border-radius:.6rem;background:#245c35;color:white}.secondary{background:#dce5dd;color:#182019}.ok{padding:.8rem;background:#e4f2e7;border-radius:.5rem}article{border-top:1px solid #ddd;padding:1rem 0}</style></head><body>${body}</body></html>`;
+}
+
+function sendHtml(
+  response: ServerResponse,
+  status: number,
+  html: string,
+): void {
+  response.statusCode = status;
+  response.setHeader("Content-Type", "text/html; charset=utf-8");
+  response.setHeader("Cache-Control", "no-store");
+  response.setHeader(
+    "Content-Security-Policy",
+    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+  );
+  response.setHeader("Referrer-Policy", "no-referrer");
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response.end(html);
+}
+
+function redirect(response: ServerResponse, location: string): void {
+  response.statusCode = 303;
+  response.setHeader("Location", location);
+  response.setHeader("Cache-Control", "no-store");
+  response.end();
+}
+
+function cookie(request: IncomingMessage, name: string): string | undefined {
+  const raw = header(request, "cookie");
+  if (!raw) return undefined;
+  for (const item of raw.split(";")) {
+    const [key, ...parts] = item.trim().split("=");
+    if (key === name) return decodeURIComponent(parts.join("="));
+  }
+  return undefined;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}

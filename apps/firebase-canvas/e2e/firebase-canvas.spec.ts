@@ -8,7 +8,7 @@ test("the dynamically defined tool writes an agent message onto the page", async
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     if (pathname === "/v1/app-sessions") {
-      expect(request.headers()["authorization"]).toBe("Pairing AC-TEST-CODE");
+      expect(request.headers()["authorization"]).toBe("Bearer existing-grant");
       await route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -45,8 +45,21 @@ test("the dynamically defined tool writes an agent message onto the page", async
     await route.fulfill({ status: 202, body: "{}" });
   });
 
-  await page.goto("/?gateway=https%3A%2F%2Fgateway.example");
-  await page.locator("#pairing-code").fill("AC-TEST-CODE");
+  await page.goto("/");
+  await page.evaluate(() => {
+    sessionStorage.setItem("agent-connect.grant", "existing-grant");
+  });
+  await page.reload();
+  await page.locator("#runtime-card").fill(
+    JSON.stringify({
+      version: 1,
+      runtimeId: "sha256:test",
+      endpoint: "https://gateway.example",
+      connectorPublicKey: {},
+      transportProfile: "tailscale-serve",
+      authorizationServer: "https://gateway.example",
+    }),
+  );
   await page.getByRole("button", { name: "Run with my Codex" }).click();
 
   await expect(page.locator("body")).toHaveAttribute("data-demo", "passed");

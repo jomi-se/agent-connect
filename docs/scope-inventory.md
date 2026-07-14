@@ -5,9 +5,9 @@
 | Capability                                           | Current milestone | Observable evidence                                                                            |
 | ---------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------- |
 | Create an opaque application session                 | Session slice     | Browser receives no OmniGENT id                                                                |
-| Pair user presence through a private channel         | Session slice     | One-time terminal code exchanges for a scoped capability                                       |
-| Export reusable runtime identity once                | Identity slice    | Non-secret runtime card is saved without granting agent access                                 |
-| Authorize a new app without terminal access          | Identity slice    | Connector-owned OAuth page returns a PKCE-protected scoped grant                               |
+| Pair user presence through a private channel         | Legacy slice      | Disabled when enrolled connector authorization is configured                                   |
+| Export reusable runtime identity once                | Implemented       | Durable Ed25519 runtime card is emitted only on first state creation                           |
+| Authorize a new app without terminal access          | Implemented       | Connector-owned page returns a PKCE-protected scoped grant                                     |
 | Prevent application-driven policy expansion          | Security slice    | App cannot broaden runtime filesystem, network, integration, credential, or approval authority |
 | Report runtime posture without overstating assurance | Security slice    | SDK separates configured claims, named probe observations, and external attestation            |
 | Bound subscription and availability abuse            | Security slice    | Connector enforces per-app concurrency, time, tool, cost, and rate ceilings                    |
@@ -54,23 +54,26 @@
   user-approved binding to the connector key.
 - Mutating tools require visible approval or a preview policy.
 - The conductor authenticates and pairs applications; raw Codex app-server is never internet-exposed.
-- A pairing code is single-use and is delivered only through the connector's
-  local terminal in the current prototype. The target terminal output is a
-  stable public runtime card; per-app approval moves to connector-hosted OAuth.
+- The enrolled profile emits a public runtime card plus generated enrollment
+  passphrase once, and disables the legacy pairing exchange. The passphrase is
+  entered only on the connector-owned page; per-app consent uses PKCE grants.
 - Application capabilities are signed, expiring, and bound to origin, app id,
   logical session id, and canonical tool-snapshot hash.
 - Prompt ingress is an execution capability: an authenticated application may
   instruct the agent, but it cannot raise the agent's local sandbox or approval
   policy through Agent Connect.
-- The reference runtime's default remote-application profile uses an empty
+- The target runtime profile uses an empty
   isolated workspace and only the consented application tools. Ambient MCP
   servers, apps, plugins, skills, host paths, and tool network access are
   absent. Runtime adapters own the enforcement mechanism; Agent Connect owns
   policy selection, non-expansion, and honest posture reporting. A direct
-  same-user Codex process cannot satisfy this isolated profile.
-- Application events are explicitly allowlisted and state-checked. Unknown
-  events and approval-like events fail closed rather than being proxied to a
-  provider.
+  same-user Codex process cannot satisfy this isolated profile. The current
+  VM-local bwrap experiment proves the outer mount/seccomp boundary but not the
+  complete dynamic-tool loop; it remains experimental.
+- Application events are explicitly schema-allowlisted. Unknown and
+  approval-like events fail closed rather than being proxied to a provider.
+  Correlation of tool results to a persisted unresolved action remains part of
+  the durability milestone.
 - Stable action IDs are preserved across retries and reconnects.
 - The demo application's mutation endpoint is idempotent by action ID.
 - Loss of token deltas is acceptable; loss of an unresolved mutation request is not.
@@ -83,5 +86,6 @@
 - Persistence surface: database state before request, while pending, and after completion.
 - Downstream surface: a live Codex turn authenticated with the user's existing Codex login.
 
-The live Codex composition environment is established. A real browser against
-the browser client is the next validation gate.
+The live unsandboxed Codex composition environment is established. The next
+validation gates are the deployed mobile enrollment flow and resolving (or
+replacing) the sandboxed OmniGENT MCP child startup path.

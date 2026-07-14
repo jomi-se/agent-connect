@@ -7,11 +7,15 @@ Codex or OmniGENT in advance.
 
 The app needs:
 
-- the Tailscale Serve HTTPS URL for the Agent Connect gateway;
-- the one-time pairing code printed by the gateway at startup.
+- the public runtime card printed when the connector identity is first created;
+- a browser that can reach the connector's Tailscale Serve HTTPS URL.
 
-The gateway creates and owns the OmniGENT/Codex session. After pairing, the page
-keeps its scoped capability in `sessionStorage` for the life of the tab.
+The app verifies the card's connector key before sending its tool schema, then
+redirects to the connector-owned authorization page. The enrollment passphrase
+is entered only there, never into this application's JavaScript. The connector
+enrolls the browser device, shows the exact origin and tool set, and returns a
+PKCE-bound revocable grant. The page keeps that grant in `sessionStorage` for
+the life of the tab.
 
 Build with:
 

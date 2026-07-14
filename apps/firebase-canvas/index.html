@@ -193,17 +193,13 @@
           </p>
           <form id="task-form">
             <label>
-              Tailnet gateway
-              <input id="gateway-url" type="url" required />
-            </label>
-            <label>
-              One-time pairing code
-              <input
-                id="pairing-code"
-                type="password"
-                autocomplete="one-time-code"
-                placeholder="AC-… (first connection only)"
-              />
+              Runtime card
+              <textarea
+                id="runtime-card"
+                required
+                spellcheck="false"
+                placeholder='Paste the public "runtimeCard" object saved during connector setup'
+              ></textarea>
             </label>
             <label>
               Task for your agent

@@ -70,6 +70,9 @@ export interface AgentProvider {
 export type AgentConnectErrorCode =
   | "http_error"
   | "protocol_error"
+  | "runtime_identity_mismatch"
+  | "authorization_denied"
+  | "authorization_expired"
   | "unknown_tool"
   | "invalid_tool_arguments"
   | "tool_execution_failed";
@@ -126,6 +129,68 @@ export interface ConnectAgentOptions {
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: Readonly<Record<string, string>>;
   readonly credentials?: RequestCredentials;
+}
+
+export interface RuntimeCard {
+  readonly version: 1;
+  readonly runtimeId: string;
+  readonly endpoint: string;
+  readonly connectorPublicKey: JsonWebKey;
+  readonly transportProfile: string;
+  readonly authorizationServer: string;
+}
+
+export interface BeginAgentAuthorizationOptions {
+  readonly runtimeCard: RuntimeCard;
+  readonly appId: string;
+  readonly redirectUri: string;
+  readonly tools: readonly ApplicationTool[];
+  readonly fetch?: typeof globalThis.fetch;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly credentials?: RequestCredentials;
+}
+
+export interface AgentAuthorizationTransaction {
+  readonly version: 1;
+  readonly runtimeId: string;
+  readonly appId: string;
+  readonly redirectUri: string;
+  readonly state: string;
+  readonly codeVerifier: string;
+  readonly requestId: string;
+}
+
+export interface AgentAuthorizationStart {
+  readonly authorizeUrl: string;
+  readonly expiresAt: string;
+  readonly transaction: AgentAuthorizationTransaction;
+}
+
+export interface CompleteAgentAuthorizationOptions {
+  readonly runtimeCard: RuntimeCard;
+  readonly appId: string;
+  readonly redirectUri: string;
+  readonly transaction: AgentAuthorizationTransaction;
+  readonly callbackUrl?: string;
+  readonly fetch?: typeof globalThis.fetch;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly credentials?: RequestCredentials;
+}
+
+export interface AgentAuthorizationGrant {
+  readonly accessToken: string;
+  readonly tokenType: "Bearer";
+  readonly expiresAt: string;
+  readonly grant: {
+    readonly id: string;
+    readonly origin: string;
+    readonly appId: string;
+    readonly scopes: readonly string[];
+    readonly toolHash: string;
+    readonly toolNames: readonly string[];
+    readonly createdAt: string;
+    readonly expiresAt: string;
+  };
 }
 
 export interface AgentConnection {
