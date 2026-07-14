@@ -7,6 +7,7 @@
 - [Target architecture](architecture/target-architecture.md): component boundaries and protocol translations.
 - [Narrow protocol profile](architecture/narrow-protocol-profile.md): the deliberately constrained hackathon wire behavior.
 - [Hackathon plan](plan/hackathon.md): milestones and exit criteria.
+- [OpenAI Build Week submission guide](plan/openai-build-week-submission.md): category, positioning, evidence, demo, and submission checklist.
 
 ## Decisions
 

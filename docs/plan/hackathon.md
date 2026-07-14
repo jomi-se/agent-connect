@@ -1,5 +1,9 @@
 # Hackathon implementation plan
 
+Submission positioning, Build Week rules, primary Codex session evidence, demo
+storyboard, and the final checklist live in the
+[OpenAI Build Week submission guide](openai-build-week-submission.md).
+
 ## Guiding demo
 
 A spreadsheet web application connects to the user's runtime, exposes safe range operations, asks Codex to clean and augment a table, previews mutations, survives a deliberate disconnect with one pending write, and completes without applying the demonstrated write twice.
