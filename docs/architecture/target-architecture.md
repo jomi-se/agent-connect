@@ -5,7 +5,7 @@
 ```text
 browser application
   @agent-connect/web
-  define tools, run task, events, approve
+  define tools, run task, events, confirm app-owned mutations
              |
              | transport trust profile + runtime ID
              | authenticated connector/app session
@@ -19,6 +19,8 @@ Agent Connect gateway
   logical -> provider session mapping and health recovery
   pending-action persistence
   fixed tool snapshot + provider adapter
+  application-tools-only confinement profile
+  input event allowlist + resource ceilings
              |
              | OmniGENT HTTP/SSE Sessions API
              | request-scoped client tools
@@ -40,10 +42,12 @@ Codex
 ### Web SDK
 
 Owns browser transport setup, application tool registration and execution,
-application approval hooks, and reconnection orchestration. It does not know
-OmniGENT or Codex message shapes. AG-UI is the leading pending candidate for
-standard run, message, and frontend-tool payloads; the existing ACP/MCP browser
-prototype remains experimental until the comparison spike is decided.
+application-owned mutation confirmation, and reconnection orchestration. It
+cannot approve connector filesystem, shell, network, MCP, policy, or harness
+permission requests. It does not know OmniGENT or Codex message shapes. AG-UI is
+the leading pending candidate for standard run, message, and frontend-tool
+payloads; the existing ACP/MCP browser prototype remains experimental until the
+comparison spike is decided.
 
 ### Gateway
 
@@ -83,6 +87,14 @@ session with the same origin, application id, and tool hash is reused. A
 different tool hash creates a different downstream ACP session; an unhealthy
 matching session is replaced behind the same opaque application session.
 
+An authenticated application remains untrusted. The gateway applies a
+connector-owned confinement profile that the application cannot broaden. The
+default profile exposes only the approved application tool snapshot in an empty
+isolated workspace, removes ambient integrations, denies local escalation and
+tool network access, and enforces resource ceilings. Application result events
+and connector approval events use separate protocols and credentials. See the
+[malicious-application threat model](../research/2026-07-14-malicious-application-runtime-threat-model.md).
+
 The deployed gateway listens only on loopback. Tailscale Serve terminates HTTPS
 and supplies authenticated identity headers; the gateway checks those headers
 and an exact application Origin allowlist before accepting a session request.
@@ -90,7 +102,12 @@ Firebase hosts application assets, not the gateway or the user-owned runtime.
 
 ### OmniGENT
 
-Owns normalized conversation state, downstream harness processes, policy, streaming, and the selected agent environment. It must not delegate system-of-record responsibility to Codex session files.
+Owns normalized conversation state, downstream harness processes, policy,
+streaming, and the selected agent environment. OmniGENT's sandbox and policy
+features are enforcement layers, not a generic guarantee: the connector must
+verify their effective configuration and separately constrain MCP subprocesses
+and harness-native capabilities. It must not delegate system-of-record
+responsibility to Codex session files.
 
 ### Application
 

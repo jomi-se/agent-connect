@@ -2,30 +2,33 @@
 
 ## Application-facing web SDK
 
-| Capability                                          | Current milestone | Observable evidence                                                               |
-| --------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------- |
-| Create an opaque application session                | Session slice     | Browser receives no OmniGENT id                                                   |
-| Pair user presence through a private channel        | Session slice     | One-time terminal code exchanges for a scoped capability                          |
-| Export reusable runtime identity once               | Identity slice    | Non-secret runtime card is saved without granting agent access                    |
-| Authorize a new app without terminal access         | Identity slice    | Connector-owned OAuth page returns a PKCE-protected scoped grant                  |
-| Reach a user-owned runtime from an HTTPS web app    | Remote slice      | Tailnet-only HTTPS gateway enforces Origin and Tailscale identity                 |
-| Verify continuity with an enrolled runtime          | Identity slice    | Connector proves possession of the key bound during first-use enrollment          |
-| Report transport/runtime assurance                  | Identity slice    | SDK distinguishes Tailscale transport, connector-key proof, and unverified claims |
-| Mutate visible state from a dynamically lent tool   | Remote demo       | Firebase Canvas exposes one bounded in-memory page-write tool                     |
-| Supply a fixed request-scoped tool snapshot         | Browser slice     | First message event carries OpenAI-format dynamic tool schemas                    |
-| Stream normalized task progress                     | Browser slice     | Text, lifecycle, and tool events are observable incrementally                     |
-| Execute a typed application tool handler            | Browser slice     | `action_required` invokes the registered handler exactly once                     |
-| Return a correlated result                          | Browser slice     | `function_call_output` preserves the OmniGENT `call_id`                           |
-| Reject malformed/unknown tool calls and HTTP errors | Browser slice     | Unit tests observe stable public errors                                           |
-| Cancel an active task                               | Browser slice     | Client posts an interrupt event                                                   |
-| Connect to ACP over browser WebSocket               | Experimental      | Existing transport helper remains isolated                                        |
-| Register one application-owned MCP server           | Experimental      | Existing narrow MCP-over-ACP handler remains isolated                             |
-| Speak AG-UI between application and gateway         | Exploration       | Official client completes the live Codex frontend-tool flow                       |
-| Stream ACP session updates                          | Conductor spike   | Browser receives Codex text/tool progress                                         |
-| Surface permission requests                         | Demo slice        | Browser renders and resolves mutation approval                                    |
-| Reconnect and load an agent session                 | Reliability slice | New transport loads the stored session ID                                         |
-| Recover unresolved application action               | Reliability slice | Pending action is listed or redispatched after reconnect                          |
-| Prevent duplicate demonstrated spreadsheet mutation | Reliability slice | Stable action ID and spreadsheet deduplication produce one write                  |
+| Capability                                          | Current milestone | Observable evidence                                                                  |
+| --------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------ |
+| Create an opaque application session                | Session slice     | Browser receives no OmniGENT id                                                      |
+| Pair user presence through a private channel        | Session slice     | One-time terminal code exchanges for a scoped capability                             |
+| Export reusable runtime identity once               | Identity slice    | Non-secret runtime card is saved without granting agent access                       |
+| Authorize a new app without terminal access         | Identity slice    | Connector-owned OAuth page returns a PKCE-protected scoped grant                     |
+| Contain a malicious authorized application          | Security slice    | App-only session cannot access host data, ambient tools, local network, or approvals |
+| Bound subscription and availability abuse           | Security slice    | Connector enforces per-app concurrency, time, tool, cost, and rate ceilings          |
+| Separate app results from host approval             | Security slice    | App credentials cannot answer connector, harness, OS, MCP, or policy approvals       |
+| Reach a user-owned runtime from an HTTPS web app    | Remote slice      | Tailnet-only HTTPS gateway enforces Origin and Tailscale identity                    |
+| Verify continuity with an enrolled runtime          | Identity slice    | Connector proves possession of the key bound during first-use enrollment             |
+| Report transport/runtime assurance                  | Identity slice    | SDK distinguishes Tailscale transport, connector-key proof, and unverified claims    |
+| Mutate visible state from a dynamically lent tool   | Remote demo       | Firebase Canvas exposes one bounded in-memory page-write tool                        |
+| Supply a fixed request-scoped tool snapshot         | Browser slice     | First message event carries OpenAI-format dynamic tool schemas                       |
+| Stream normalized task progress                     | Browser slice     | Text, lifecycle, and tool events are observable incrementally                        |
+| Execute a typed application tool handler            | Browser slice     | `action_required` invokes the registered handler exactly once                        |
+| Return a correlated result                          | Browser slice     | `function_call_output` preserves the OmniGENT `call_id`                              |
+| Reject malformed/unknown tool calls and HTTP errors | Browser slice     | Unit tests observe stable public errors                                              |
+| Cancel an active task                               | Browser slice     | Client posts an interrupt event                                                      |
+| Connect to ACP over browser WebSocket               | Experimental      | Existing transport helper remains isolated                                           |
+| Register one application-owned MCP server           | Experimental      | Existing narrow MCP-over-ACP handler remains isolated                                |
+| Speak AG-UI between application and gateway         | Exploration       | Official client completes the live Codex frontend-tool flow                          |
+| Stream ACP session updates                          | Conductor spike   | Browser receives Codex text/tool progress                                            |
+| Confirm application-owned mutation                  | Demo slice        | Browser may confirm its own tool side effect, never connector or host authority      |
+| Reconnect and load an agent session                 | Reliability slice | New transport loads the stored session ID                                            |
+| Recover unresolved application action               | Reliability slice | Pending action is listed or redispatched after reconnect                             |
+| Prevent duplicate demonstrated spreadsheet mutation | Reliability slice | Stable action ID and spreadsheet deduplication produce one write                     |
 
 ## Conductor and OmniGENT provider
 
@@ -58,6 +61,12 @@
 - Prompt ingress is an execution capability: an authenticated application may
   instruct the agent, but it cannot raise the agent's local sandbox or approval
   policy through Agent Connect.
+- The default remote-application profile uses an empty isolated workspace and
+  only the consented application tools. Ambient MCP servers, apps, plugins,
+  skills, host paths, and tool network access are absent.
+- Application events are explicitly allowlisted and state-checked. Unknown
+  events and approval-like events fail closed rather than being proxied to a
+  provider.
 - Stable action IDs are preserved across retries and reconnects.
 - The demo application's mutation endpoint is idempotent by action ID.
 - Loss of token deltas is acceptable; loss of an unresolved mutation request is not.
