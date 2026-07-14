@@ -32,3 +32,15 @@ underlying harness's filesystem, shell, network, sandbox, or approval policy.
 The prototype stores session mappings and pairing state in memory. Durable
 device keys, revocation, public-relay end-to-end encryption, account recovery,
 and multi-user policy are required before production use.
+
+## Subsequent identity investigation
+
+The implemented generic startup code authenticates the application to the
+connector but does not independently authenticate an arbitrary first-contact
+destination to the application. The target mutual-identity design is recorded
+in `docs/research/2026-07-14-mutual-runtime-identity.md`: enroll the connector
+key through an account-backed device flow, Tailscale identity, or direct
+QR/fingerprint transfer; treat URLs as routing hints; and bind later
+application capabilities to both connector and browser keys. This clarifies the
+production direction without retroactively claiming that the prototype already
+implements it.
