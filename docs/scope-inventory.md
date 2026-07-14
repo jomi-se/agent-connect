@@ -18,6 +18,7 @@
 | Cancel an active task                               | Browser slice     | Client posts an interrupt event                                                   |
 | Connect to ACP over browser WebSocket               | Experimental      | Existing transport helper remains isolated                                        |
 | Register one application-owned MCP server           | Experimental      | Existing narrow MCP-over-ACP handler remains isolated                             |
+| Speak AG-UI between application and gateway         | Exploration       | Official client completes the live Codex frontend-tool flow                       |
 | Stream ACP session updates                          | Conductor spike   | Browser receives Codex text/tool progress                                         |
 | Surface permission requests                         | Demo slice        | Browser renders and resolves mutation approval                                    |
 | Reconnect and load an agent session                 | Reliability slice | New transport loads the stored session ID                                         |

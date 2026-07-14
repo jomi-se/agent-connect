@@ -148,6 +148,8 @@ Exit criteria:
 
 ## Stretch work
 
+- run the bounded AG-UI compatibility spike without replacing the passing
+  OmniGENT endpoint;
 - implement a named experimental ACP-over-WebSocket/MCP-over-ACP adapter;
 - upstream the SessionsChat request-scoped-tools API gap;
 - upstream pending-action persistence improvements to OmniGENT;

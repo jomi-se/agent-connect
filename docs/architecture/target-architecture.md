@@ -9,6 +9,7 @@ browser application
              |
              | transport trust profile + runtime ID
              | authenticated connector/app session
+             | candidate payload: AG-UI
              v
 Agent Connect gateway
   enrolled connector identity key
@@ -37,7 +38,11 @@ Codex
 
 ### Web SDK
 
-Owns browser transport setup, ACP client handlers, application tool registration, the single MCP server implementation, application approval hooks, and reconnection orchestration. It does not know OmniGENT or Codex message shapes.
+Owns browser transport setup, application tool registration and execution,
+application approval hooks, and reconnection orchestration. It does not know
+OmniGENT or Codex message shapes. AG-UI is the leading pending candidate for
+standard run, message, and frontend-tool payloads; the existing ACP/MCP browser
+prototype remains experimental until the comparison spike is decided.
 
 ### Gateway
 
@@ -111,3 +116,19 @@ pending-action broker remain unchanged.
 ACP-over-WebSocket plus MCP-over-ACP remains the preferred future standardized
 wire candidate. It implements the same gateway/application API after the first
 working browser slice; it is not required to demonstrate the hackathon product.
+
+## Pending AG-UI application adapter
+
+AG-UI appears to match the browser-facing run, streaming, and frontend-defined
+tool surface more directly than ACP. It does not replace OmniGENT orchestration
+or downstream ACP. The proposed shape is:
+
+```text
+browser -- AG-UI + Agent Connect security --> gateway
+gateway -- OmniGENT adapter --> OmniGENT -- ACP --> codex-acp --> Codex
+```
+
+The gateway retains connector enrollment, per-app authorization, opaque
+provider sessions, fixed tool policy, stable action IDs, and durable recovery.
+See the [AG-UI investigation](../research/2026-07-14-ag-ui-fit.md) and
+[compatibility spike](../plan/ag-ui-compatibility-spike.md).

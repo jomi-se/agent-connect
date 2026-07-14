@@ -4,7 +4,10 @@
 
 Build a web-first SDK and user-owned conductor that let an arbitrary application use a long-running agent as its intelligence provider while temporarily exposing typed, scoped application capabilities back to that agent.
 
-The hackathon implementation uses Codex as the demonstrated downstream agent. Its application boundary should remain compatible with other ACP agents.
+The hackathon implementation uses Codex as the demonstrated downstream agent.
+Its provider boundary should remain compatible with other agent harnesses. ACP
+is the current preferred downstream harness interface; AG-UI is now the leading
+pending candidate for the application-facing standard.
 
 ## Product promise
 
@@ -28,6 +31,9 @@ An application can:
   `action_required` calls in the application and return correlated results.
 - Keep OmniGENT wire types behind a browser-safe adapter so ACP-over-WebSocket,
   MCP-over-ACP, or another conductor can implement the same public API later.
+- Evaluate AG-UI as the standardized browser/gateway run and frontend-tool wire.
+  Keep the passing OmniGENT path until an official AG-UI client completes the
+  same live Codex tool round trip without weakening security or recovery.
 - Model remote connectivity as named transport trust profiles. Implement
   Tailscale Serve first, bind its selected endpoint to an enrolled connector
   key, and keep hostname recognition out of the trust decision.
