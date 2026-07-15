@@ -2,7 +2,7 @@
 
 Date: 2026-07-14
 
-Status: proposed next security slice.
+Status: narrow Tailscale Serve profile implemented; deployed phone validation pending.
 
 ## Outcome
 

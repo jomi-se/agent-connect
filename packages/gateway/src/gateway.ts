@@ -939,6 +939,7 @@ function consentPage(
     "Authorize application",
     `<main><p class="eyebrow">Agent Connect</p><h1>Allow this application?</h1>
 <p><strong>${escapeHtml(request.origin)}</strong> is asking to use your agent subscription.</p>
+<section class="warning"><h2>Only continue if you trust this application</h2><p>Authorization does not make an application trustworthy. A malicious application could send instructions designed to make your agent expose data available in its environment, misuse your subscription, or use the tools below in harmful ways. Continue only if you recognize and trust <strong>${escapeHtml(request.origin)}</strong>.</p></section>
 <dl><dt>Application</dt><dd>${escapeHtml(request.appId)}</dd><dt>Return URL</dt><dd>${escapeHtml(request.redirectUri)}</dd><dt>Request expires</dt><dd>${escapeHtml(iso(request.expiresAt))}</dd><dt>Tools lent to the agent</dt><dd><ul>${tools}</ul></dd><dt>Access</dt><dd><ul>${scopes}</ul></dd></dl>
 <form method="post" action="/authorize">
 <input type="hidden" name="request" value="${escapeHtml(request.id)}">
@@ -982,7 +983,7 @@ function consentErrorPage(message: string): string {
 }
 
 function htmlPage(title: string, body: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>body{font:16px/1.5 system-ui;background:#f4f1ea;color:#182019;margin:0}main{max-width:38rem;margin:8vh auto;background:white;padding:2rem;border-radius:1rem;box-shadow:0 1rem 4rem #16201620}.eyebrow{color:#42664b;text-transform:uppercase;letter-spacing:.12em;font-weight:700}h1{font-size:2rem}dt{font-weight:700;margin-top:1rem}dd{margin-left:0}label{display:grid;gap:.4rem;margin:1.5rem 0}input{font:inherit;padding:.8rem}small{color:#526057}.actions{display:flex;gap:.75rem;margin-top:1.5rem}button{font:inherit;font-weight:700;padding:.8rem 1.2rem;border:0;border-radius:.6rem;background:#245c35;color:white}.secondary{background:#dce5dd;color:#182019}.ok{padding:.8rem;background:#e4f2e7;border-radius:.5rem}article{border-top:1px solid #ddd;padding:1rem 0}</style></head><body>${body}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>body{font:16px/1.5 system-ui;background:#f4f1ea;color:#182019;margin:0}main{max-width:38rem;margin:8vh auto;background:white;padding:2rem;border-radius:1rem;box-shadow:0 1rem 4rem #16201620}.eyebrow{color:#42664b;text-transform:uppercase;letter-spacing:.12em;font-weight:700}h1{font-size:2rem}h2{font-size:1.15rem;margin:.1rem 0}.warning{padding:1rem;margin:1.5rem 0;background:#fff1df;border:2px solid #b14f18;border-radius:.6rem;color:#59280d}.warning p{margin:.35rem 0 0}dt{font-weight:700;margin-top:1rem}dd{margin-left:0}label{display:grid;gap:.4rem;margin:1.5rem 0}input{font:inherit;padding:.8rem}small{color:#526057}.actions{display:flex;gap:.75rem;margin-top:1.5rem}button{font:inherit;font-weight:700;padding:.8rem 1.2rem;border:0;border-radius:.6rem;background:#245c35;color:white}.secondary{background:#dce5dd;color:#182019}.ok{padding:.8rem;background:#e4f2e7;border-radius:.5rem}article{border-top:1px solid #ddd;padding:1rem 0}</style></head><body>${body}</body></html>`;
 }
 
 function sendHtml(

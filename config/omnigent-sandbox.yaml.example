@@ -1,0 +1,9 @@
+telemetry: false
+
+# Experimental only. The sandbox guard deliberately refuses to start unless
+# OmniGENT's outer linux_bwrap profile is active and passes all probes.
+acp:
+  agents:
+    - name: Codex ACP
+      command: /home/dev/agent-connect/scripts/omnigent-codex-sandbox-guard.sh
+      session_id_mode: server

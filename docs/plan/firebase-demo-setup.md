@@ -25,6 +25,11 @@ manual GitHub Actions workflow builds and deploys the static Canvas demo.
 
 ## Connect it to the VM
 
+For the current VM's complete OmniGENT, gateway, enrollment, and phone-test
+sequence, use the
+[private demo auth runbook](private-demo-auth-validation.md). The commands
+below are the generic deployment outline.
+
 Use the stable Firebase origin in the gateway configuration:
 
 ```sh
