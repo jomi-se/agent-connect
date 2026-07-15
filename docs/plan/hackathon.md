@@ -3,6 +3,9 @@
 Submission positioning, Build Week rules, primary Codex session evidence, demo
 storyboard, and the final checklist live in the
 [OpenAI Build Week submission guide](openai-build-week-submission.md).
+The cross-plan execution order now lives in [Current work](current-work.md),
+and the immediate deployed proof is specified by the
+[private demo auth runbook](private-demo-auth-validation.md).
 
 ## Guiding demo
 

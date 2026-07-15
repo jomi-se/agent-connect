@@ -7,6 +7,8 @@
 - [Target architecture](architecture/target-architecture.md): component boundaries and protocol translations.
 - [Narrow protocol profile](architecture/narrow-protocol-profile.md): the deliberately constrained hackathon wire behavior.
 - [Hackathon plan](plan/hackathon.md): milestones and exit criteria.
+- [Current work](plan/current-work.md): canonical pending-work order through the submission deadline.
+- [Private demo auth validation](plan/private-demo-auth-validation.md): exact VM startup and phone test runbook.
 - [Tailscale transport identity plan](plan/tailscale-transport-identity.md): first trusted remote profile and its validation cases.
 - [Connector OAuth authorization plan](plan/connector-oauth-authorization.md): one-time runtime-card bootstrap followed by same-device per-app consent.
 - [Secure enrollment implementation](plan/secure-enrollment-implementation.md): implemented credential boundaries, configuration, validation contracts, and deferred hardening.

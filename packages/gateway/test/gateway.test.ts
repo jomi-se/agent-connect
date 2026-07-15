@@ -363,6 +363,10 @@ describe("connector enrollment and app authorization", () => {
     expect(consentHtml).toContain("https://preview.example");
     expect(consentHtml).toContain("Set one visible page message");
     expect(consentHtml).toContain("Input schema");
+    expect(consentHtml).toContain(
+      "Authorization does not make an application trustworthy",
+    );
+    expect(consentHtml).toContain("expose data available in its environment");
     // The literal phrase is never rendered into the page; only a password field is.
     expect(consentHtml).not.toContain("correct enrollment phrase");
 

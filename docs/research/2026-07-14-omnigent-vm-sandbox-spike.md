@@ -31,7 +31,7 @@ visible. `scripts/omnigent-codex-sandbox-guard.sh` refuses to launch unless:
 
 The guard pins the repository's Codex ACP and native Codex binary. It also
 enables app-server diagnostics. The example OmniGENT configuration is
-`config/omnigent-demo.yaml.example`.
+`config/omnigent-sandbox.yaml.example`.
 
 ## Live evidence
 
