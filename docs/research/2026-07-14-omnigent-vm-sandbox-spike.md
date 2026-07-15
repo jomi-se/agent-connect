@@ -79,8 +79,26 @@ Codex in `agent-full-access` inside the effective outer boundary removes the
 nested turn sandbox, but the OmniGENT MCP child still closed during its
 initialize handshake in this environment. The same `serve-mcp` command and
 bridge directory answered an MCP initialize request when run outside the live
-Codex MCP launcher, narrowing the issue to the nested launch path rather than
-tool-schema delivery.
+Codex MCP launcher, establishing that tool-schema delivery and the relay itself
+worked outside the boundary.
+
+## 2026-07-15 source-level follow-up
+
+The generated profile mounted the pinned Codex ACP and native Codex paths, the
+dedicated Codex home, and writable `/tmp`, but did not mount OmniGENT's Python
+installation under `/home/dev/.local/share/uv/tools/omnigent`. OmniGENT's ACP
+bridge config tells Codex to start the relay with that installation's Python
+and `-m omnigent.claude_native_bridge`. The runtime is therefore unavailable at
+the path used by the MCP child inside the outer sandbox. This is now the leading
+cause of the closed initialization handshake, separate from the confirmed
+nested-Bubblewrap namespace denial.
+
+The causal link still needs one controlled live test: add the OmniGENT runtime
+as a read root, keep Codex in `agent-full-access`, capture the MCP child's
+stderr, and repeat the dynamic-tool loop. The earlier diagnostic did not
+capture that stderr because its zsh wrapper assigned to the reserved `status`
+parameter and exited prematurely. Until the controlled rerun passes, describe
+the missing mount as the leading diagnosis rather than a confirmed fix.
 
 ## Decision and next tests
 
@@ -104,3 +122,8 @@ home is not an acceptable production boundary.
 
 No application-supplied parameter may disable the sandbox, add mounts, or
 select the fallback. Runtime posture remains a connector/operator choice.
+
+The whole-runner option is now tracked as a broader
+[containerized connector appliance](../plan/containerized-connector-appliance.md)
+exploration, including a simple shared-container installation profile and a
+stronger per-session runner-container target.

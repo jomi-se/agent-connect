@@ -133,6 +133,16 @@ or whole-runner containment with controlled egress is required before this can
 defend against a malicious app. See the
 [sandbox spike](../research/2026-07-14-omnigent-vm-sandbox-spike.md).
 
+The leading pending deployment alternative packages the gateway, connector UI,
+OmniGENT control plane and runner, Codex adapter, and dynamic relay as an
+Internet-connectable container appliance. Its first profile uses a shared
+appliance with gateway-owned ephemeral session workspaces; the stronger target
+creates a separate runner container per downstream session. This can simplify
+installation and remove host-specific Bubblewrap composition, but it does not
+by itself solve agent-credential exfiltration or human authorization on a
+public endpoint. See the
+[containerized appliance plan](../plan/containerized-connector-appliance.md).
+
 ### Application
 
 Owns the actual side effect. It receives a stable action ID and must make consequential operations idempotent or journal their result. The conductor cannot infer whether an unacknowledged external side effect succeeded.

@@ -167,6 +167,9 @@ Exit criteria:
 
 ## Stretch work
 
+- run the containerized connector-appliance spike: reproducible image,
+  gateway-owned ephemeral workspaces, deliberate agent-auth injection, no host
+  home or Docker socket mounts, and the existing live browser tool loop;
 - run the bounded AG-UI compatibility spike without replacing the passing
   OmniGENT endpoint;
 - implement a named experimental ACP-over-WebSocket/MCP-over-ACP adapter;
