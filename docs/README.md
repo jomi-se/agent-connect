@@ -12,6 +12,7 @@
 - [Secure enrollment implementation](plan/secure-enrollment-implementation.md): implemented credential boundaries, configuration, validation contracts, and deferred hardening.
 - [AG-UI compatibility spike](plan/ag-ui-compatibility-spike.md): pending application-protocol comparison against the passing OmniGENT path.
 - [Containerized connector appliance](plan/containerized-connector-appliance.md): pending single-image, ephemeral-workspace, and per-session-container deployment track.
+- [Judge demo environment](plan/judge-demo-environment.md): submission-critical isolated connector on the existing VM through public Tailscale Funnel.
 - [OpenAI Build Week submission guide](plan/openai-build-week-submission.md): category, positioning, evidence, demo, and submission checklist.
 
 ## Decisions

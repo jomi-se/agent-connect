@@ -109,7 +109,8 @@ Before submitting, confirm all of the following against the live Devpost form:
 - the `/feedback` identifier from the primary build session;
 - installation and testing instructions specifically for the developer tool;
 - a free judge-accessible demo, sandbox, test build, or test account available
-  through the end of judging;
+  through the end of judging at **2026-08-06 00:00 UTC** (August 5 at 5:00 PM
+  Pacific Time);
 - all required team members and submission fields; and
 - a final submitted state rather than a saved draft.
 
@@ -184,8 +185,10 @@ Prioritize product completion over additional protocol generalization:
 3. Freeze the smallest coherent demo. Prefer the Canvas authorization/tool/
    revoke story if spreadsheet durability is not complete; do not show planned
    recovery as working.
-4. Provide a judge-accessible testing path that does not depend on membership in
-   the developer's tailnet and does not require rebuilding the project.
+4. Provide the isolated [judge demo environment](judge-demo-environment.md)
+   through public Tailscale Funnel. It must not depend on membership in the
+   developer's tailnet, require rebuilding, or reuse the personal connector and
+   Codex login.
 5. Make the downstream GPT-5.6 runtime choice and its role observable and
    documented; do not rely only on hidden session metadata.
 6. Add the required submission-oriented README material, supported-platform

@@ -8,7 +8,10 @@ Fetched through the Devpost Hackathons plugin on 2026-07-14 at approximately
 - Status: submissions open.
 - Submission window: 2026-07-13 16:00 UTC through 2026-07-22 00:00 UTC
   (July 21, 5:00 PM Pacific Time).
-- Judging: 2026-07-22 16:00 UTC through 2026-08-10 00:00 UTC.
+- Judging: 2026-07-22 17:00 UTC through 2026-08-06 00:00 UTC (July 22 at
+  10:00 AM through August 5 at 5:00 PM Pacific Time). Corrected against the
+  live formal rules on 2026-07-15; the earlier plugin result ended this period
+  five days too late.
 - Winners announced: 2026-08-12 21:00 UTC.
 - One announcement was available. It incorrectly called July 21 a Monday; the
   formal timestamp and overview say Tuesday. Use the timestamp.
