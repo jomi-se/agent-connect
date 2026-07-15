@@ -2,9 +2,11 @@
 
 Date: 2026-07-15
 
-Status: deployed phone validation in progress. The first consent POST exposed a
-Chromium `Origin: null` incompatibility caused by `Referrer-Policy:
-no-referrer`; the gateway now uses `same-origin`, and the retry is pending.
+Status: deployed phone validation in progress. The first consent attempt exposed
+two Chromium integration bugs: `no-referrer` produced `Origin: null`, then
+`form-action 'self'` blocked the cross-origin OAuth return redirect. The gateway
+now preserves the same-origin POST and permits only the validated application
+origin as the redirect target. The retry is pending.
 
 Operator-friendly edition: [open the self-contained HTML runbook](private-demo-auth-validation.html).
 
@@ -171,6 +173,12 @@ If consent returns `{"error":"authorization_origin_mismatch"}`, the gateway is
 still running the pre-fix build. Rebuild and restart only the gateway, return to
 Firebase, and begin authorization again. The enrollment passphrase and durable
 connector state do not change.
+
+If Allow appears to hang while the page already says the browser is enrolled,
+the gateway is running the intermediate build whose CSP blocked the redirect
+back to Firebase. Apply the latest build and restart only the gateway. Return to
+Firebase and start a fresh authorization; do not enter or rotate the enrollment
+passphrase again.
 
 Capture screenshots or a short recording of the connector origin, consent,
 return redirect, tool event, page mutation, grant list, and rejected post-

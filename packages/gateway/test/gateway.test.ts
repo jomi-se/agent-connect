@@ -360,6 +360,9 @@ describe("connector enrollment and app authorization", () => {
     );
     expect(consent.status).toBe(200);
     expect(consent.headers.get("referrer-policy")).toBe("same-origin");
+    expect(consent.headers.get("content-security-policy")).toContain(
+      "form-action 'self' https://preview.example",
+    );
     const consentHtml = await consent.text();
     expect(consentHtml).toContain("https://preview.example");
     expect(consentHtml).toContain("Set one visible page message");
