@@ -133,6 +133,13 @@ with an identity provider, a local enrolled-device credential, or another
 explicit presence mechanism. CORS and connector-key proof do not authorize a
 person to spend the user's agent subscription.
 
+For the hackathon, the concrete lowest-cost profile keeps this appliance on the
+existing VM and exposes a separate judge connector through Tailscale Funnel on
+port 10000. Funnel supplies public HTTPS but no trusted tailnet-user identity;
+the connector therefore uses a separately named `public-demo` enrollment and
+authorization profile while leaving private `tailscale-serve` enforcement
+unchanged. See the [judge demo environment plan](judge-demo-environment.md).
+
 ## Pending work
 
 ### Phase A: feasibility and image composition
