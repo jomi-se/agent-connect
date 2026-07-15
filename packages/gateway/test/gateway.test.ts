@@ -359,6 +359,7 @@ describe("connector enrollment and app authorization", () => {
       { headers: { "Tailscale-User-Login": "owner@example.com" } },
     );
     expect(consent.status).toBe(200);
+    expect(consent.headers.get("referrer-policy")).toBe("same-origin");
     const consentHtml = await consent.text();
     expect(consentHtml).toContain("https://preview.example");
     expect(consentHtml).toContain("Set one visible page message");
@@ -367,6 +368,7 @@ describe("connector enrollment and app authorization", () => {
       "Authorization does not make an application trustworthy",
     );
     expect(consentHtml).toContain("expose data available in its environment");
+    expect(consentHtml).toContain('value="deny" formnovalidate');
     // The literal phrase is never rendered into the page; only a password field is.
     expect(consentHtml).not.toContain("correct enrollment phrase");
 

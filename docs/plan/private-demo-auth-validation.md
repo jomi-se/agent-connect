@@ -2,8 +2,9 @@
 
 Date: 2026-07-15
 
-Status: ready for the first deployed phone run. The auth protocol has automated
-coverage; this run is the missing real-surface proof.
+Status: deployed phone validation in progress. The first consent POST exposed a
+Chromium `Origin: null` incompatibility caused by `Referrer-Policy:
+no-referrer`; the gateway now uses `same-origin`, and the retry is pending.
 
 Operator-friendly edition: [open the self-contained HTML runbook](private-demo-auth-validation.html).
 
@@ -165,6 +166,11 @@ has not been implemented yet.
 7. Open
    `https://artifex-box.tail246db1.ts.net:8443/v1/grants`, revoke the Canvas
    grant, then submit again. The existing capability must be rejected.
+
+If consent returns `{"error":"authorization_origin_mismatch"}`, the gateway is
+still running the pre-fix build. Rebuild and restart only the gateway, return to
+Firebase, and begin authorization again. The enrollment passphrase and durable
+connector state do not change.
 
 Capture screenshots or a short recording of the connector origin, consent,
 return redirect, tool event, page mutation, grant list, and rejected post-
