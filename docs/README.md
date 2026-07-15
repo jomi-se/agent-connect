@@ -11,6 +11,7 @@
 - [Connector OAuth authorization plan](plan/connector-oauth-authorization.md): one-time runtime-card bootstrap followed by same-device per-app consent.
 - [Secure enrollment implementation](plan/secure-enrollment-implementation.md): implemented credential boundaries, configuration, validation contracts, and deferred hardening.
 - [AG-UI compatibility spike](plan/ag-ui-compatibility-spike.md): pending application-protocol comparison against the passing OmniGENT path.
+- [Containerized connector appliance](plan/containerized-connector-appliance.md): pending single-image, ephemeral-workspace, and per-session-container deployment track.
 - [OpenAI Build Week submission guide](plan/openai-build-week-submission.md): category, positioning, evidence, demo, and submission checklist.
 
 ## Decisions
