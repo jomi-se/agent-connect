@@ -5,6 +5,8 @@ Date: 2026-07-15
 Status: ready for the first deployed phone run. The auth protocol has automated
 coverage; this run is the missing real-surface proof.
 
+Operator-friendly edition: [open the self-contained HTML runbook](private-demo-auth-validation.html).
+
 This is the canonical operator path for the current VM. It deliberately uses
 the proven, non-containerized OmniGENT profile. It does **not** enable the
 experimental bubblewrap launcher.
