@@ -853,7 +853,7 @@ async function handleAuthorizationPage(
       cookie(request, DEVICE_COOKIE),
       tailscaleUser,
     );
-    sendHtml(response, 200, consentPage(pending, enrolled));
+    sendHtml(response, 200, consentPage(pending, enrolled), pending.origin);
     return;
   }
   if (request.method !== "POST") {
@@ -990,13 +990,17 @@ function sendHtml(
   response: ServerResponse,
   status: number,
   html: string,
+  applicationRedirectOrigin?: string,
 ): void {
+  const formAction = applicationRedirectOrigin
+    ? `'self' ${cspOrigin(applicationRedirectOrigin)}`
+    : "'self'";
   response.statusCode = status;
   response.setHeader("Content-Type", "text/html; charset=utf-8");
   response.setHeader("Cache-Control", "no-store");
   response.setHeader(
     "Content-Security-Policy",
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    `default-src 'none'; style-src 'unsafe-inline'; form-action ${formAction}; frame-ancestors 'none'; base-uri 'none'`,
   );
   // Chromium serializes the Origin of a same-origin form POST as `null` when
   // the document uses `no-referrer`, which makes the strict consent/revocation
@@ -1006,6 +1010,19 @@ function sendHtml(
   response.setHeader("Referrer-Policy", "same-origin");
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.end(html);
+}
+
+function cspOrigin(value: string): string {
+  const parsed = new URL(value);
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.origin !== value ||
+    parsed.username ||
+    parsed.password
+  ) {
+    throw new TypeError("Invalid application redirect Origin for CSP");
+  }
+  return parsed.origin;
 }
 
 function redirect(response: ServerResponse, location: string): void {
