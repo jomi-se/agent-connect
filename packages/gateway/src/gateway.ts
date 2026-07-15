@@ -948,7 +948,7 @@ ${
     ? '<p class="ok">This browser device is enrolled.</p>'
     : '<label>Enrollment passphrase<input name="passphrase" type="password" autocomplete="current-password" required><small>Enter the passphrase saved when you installed this connector. It stays on this connector-owned page.</small></label>'
 }
-<div class="actions"><button name="decision" value="approve">Allow</button><button class="secondary" name="decision" value="deny">Deny</button></div>
+<div class="actions"><button name="decision" value="approve">Allow</button><button class="secondary" name="decision" value="deny" formnovalidate>Deny</button></div>
 </form></main>`,
   );
 }
@@ -998,7 +998,12 @@ function sendHtml(
     "Content-Security-Policy",
     "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   );
-  response.setHeader("Referrer-Policy", "no-referrer");
+  // Chromium serializes the Origin of a same-origin form POST as `null` when
+  // the document uses `no-referrer`, which makes the strict consent/revocation
+  // Origin check reject the connector's own form. `same-origin` preserves the
+  // connector Origin for local POSTs while still withholding the referrer on
+  // the cross-origin OAuth redirect back to the application.
+  response.setHeader("Referrer-Policy", "same-origin");
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.end(html);
 }
