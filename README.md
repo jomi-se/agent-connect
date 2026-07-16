@@ -54,6 +54,28 @@ npm run verify
 Packages and demo applications are managed with npm workspaces under
 `packages/` and `apps/`.
 
+### Testing layers
+
+`npm run verify` runs the fast connector, SDK, type, formatting, and build
+checks. Gateway behavior tests use real HTTP requests with an injected provider
+boundary; they do not require OmniGENT, Tailscale, Codex credentials, or model
+usage.
+
+The optional provider-contract layer starts a disposable real OmniGENT server
+and host with a deterministic ACP agent. It drives one complete gateway →
+OmniGENT → ACP → request-scoped MCP tool → application result round trip and
+then removes its isolated service state:
+
+```sh
+npm run test:integration:omnigent
+```
+
+This command currently requires the exact OmniGENT version recorded in
+[`config/omnigent-test-compat.json`](config/omnigent-test-compat.json). It does
+not read a Codex login or make a model request. The deployed
+OmniGENT/Codex/browser composition remains a separate manual milestone smoke
+test.
+
 ## Research provenance
 
 The original investigation is preserved in [`USER_OWNED_AGENT_RUNTIME_HACKATHON_HANDOFF.md`](USER_OWNED_AGENT_RUNTIME_HACKATHON_HANDOFF.md). Current decisions live under [`docs/decisions`](docs/decisions), so the handoff should not be treated as the final architecture.

@@ -1,6 +1,6 @@
 # Current work and experiment backlog
 
-Date: 2026-07-15
+Date: 2026-07-16
 
 This is the canonical ordering of unfinished work. Detailed design remains in
 the linked plans; when priorities conflict, this document controls execution
@@ -17,15 +17,35 @@ Implemented and proven on a real remote browser:
 - Firebase Canvas calling a dynamically supplied `set_page_message` tool
   through Codex;
 - private Tailscale Serve HTTPS transport with Origin and requester
-  allowlists.
+  allowlists;
+- durable connector identity, first-device enrollment, connector-owned consent,
+  PKCE exchange, revocable scoped grant, and post-revocation rejection through
+  the deployed phone flow.
 
-Implemented with automated coverage, but not yet proven on the deployed phone
-surface:
+Testing strategy accepted for the connector/provider boundary:
 
-- durable connector identity and signed fresh challenge;
-- generated enrollment passphrase and enrolled-device cookie;
-- connector-owned consent with S256 PKCE and single-use code;
-- durable origin/app/scope/tool-snapshot-bound grants and immediate revocation.
+1. fast connector behavior tests use real HTTP requests with an injected
+   provider and exhaust Agent Connect's authentication, authorization, session,
+   and event-policy branches;
+2. an opt-in local integration layer starts disposable real OmniGENT services
+   with a deterministic ACP agent, proving the provider contract and isolated
+   files without Codex credentials or model usage;
+3. real OmniGENT + real Codex + deployed browser remains a manual milestone
+   smoke test.
+
+Do not build permanent tailnet runner infrastructure for this phase. Connector
+tests cover how Agent Connect consumes trusted-proxy identity headers; they do
+not attempt to retest Tailscale's implementation.
+
+Implemented on 2026-07-16:
+
+- fast requester-boundary cases accept the exact configured identity and reject
+  missing, unexpected, and ambiguous identities before provider traffic;
+- `npm run test:integration:omnigent` pins OmniGENT `0.5.1`, isolates all
+  service state, and completes the real gateway/ACP/MCP action-result loop with
+  an application-generated nonce and no model credentials;
+- the integration harness proves process, port, and temporary-root cleanup on
+  both its normal path and a deliberate post-start failure.
 
 Not implemented:
 
@@ -71,6 +91,28 @@ Operator and UX gaps found during the plan audit:
 
 Exit: one sanitized mobile evidence bundle and an issue list grounded in the
 real run. Fix only failures that block the coherent auth/tool/revoke story.
+
+## P0.5 — make the connector/provider boundary repeatable (complete)
+
+Implemented [VAL-TEST-001](../../contract/VAL-TEST-001.md) and
+[VAL-TEST-002](../../contract/VAL-TEST-002.md):
+
+- cover allowed, missing, unexpected, and ambiguous Tailscale requester values
+  with zero provider calls on rejection;
+- add a deterministic standards-valid ACP test agent that connects to the
+  advertised MCP server and performs a real tools/list and tools/call;
+- add an explicit local integration command that launches isolated real
+  OmniGENT server/host processes, provisions through `OmnigentRuntime`, drives
+  one real gateway HTTP/SSE action-required/result turn, and verifies ACP/MCP
+  transcript plus filesystem state;
+- keep the real-service layer opt-in and make cleanup reliable on success or
+  failure;
+- keep Codex credentials, model calls, Tailscale, Firebase, and paid runner
+  infrastructure out of this automated layer.
+
+Exit: both fast tests and the real OmniGENT/deterministic-ACP command pass from
+documented repository commands. The existing real Codex mobile proof remains
+the layer-three composition evidence.
 
 ## P1 — freeze the submission story
 
