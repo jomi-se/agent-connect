@@ -1,0 +1,231 @@
+#!/usr/bin/env node
+
+import { appendFileSync } from "node:fs";
+import { basename } from "node:path";
+import { Readable, Writable } from "node:stream";
+import { spawn } from "node:child_process";
+
+import { agent, methods, ndJsonStream } from "@agentclientprotocol/sdk";
+
+const transcriptPath = process.env.AGENT_CONNECT_ACP_TRANSCRIPT;
+const sessions = new Map();
+
+function record(event) {
+  if (!transcriptPath) return;
+  appendFileSync(
+    transcriptPath,
+    `${JSON.stringify({ at: new Date().toISOString(), ...event })}\n`,
+    { mode: 0o600 },
+  );
+}
+
+class McpStdioClient {
+  constructor(spec) {
+    const extraEnv = Object.fromEntries(
+      (spec.env ?? []).map(({ name, value }) => [name, value]),
+    );
+    this.child = spawn(spec.command, spec.args ?? [], {
+      env: { ...process.env, ...extraEnv },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    this.nextId = 1;
+    this.pending = new Map();
+    this.buffer = "";
+    this.child.stdout.setEncoding("utf8");
+    this.child.stdout.on("data", (chunk) => this.onData(chunk));
+    this.child.stderr.setEncoding("utf8");
+    this.child.stderr.on("data", (chunk) => {
+      record({ kind: "mcp.stderr", text: String(chunk).slice(0, 500) });
+    });
+    this.child.on("exit", (code, signal) => {
+      const error = new Error(
+        `MCP server exited before response (code=${code}, signal=${signal})`,
+      );
+      for (const { reject } of this.pending.values()) reject(error);
+      this.pending.clear();
+    });
+    record({
+      kind: "mcp.spawn",
+      name: spec.name,
+      command: basename(spec.command),
+      envNames: (spec.env ?? []).map(({ name }) => name).sort(),
+    });
+  }
+
+  async initialize() {
+    const response = await this.request("initialize", {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "agent-connect-deterministic-agent", version: "1" },
+    });
+    this.notify("notifications/initialized", {});
+    record({ kind: "mcp.initialize", response });
+  }
+
+  async request(method, params) {
+    const id = this.nextId++;
+    record({ kind: "mcp.request", method, params });
+    const result = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`MCP ${method} timed out`));
+      }, 30_000);
+      this.pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timeout);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        },
+      });
+    });
+    this.write({ jsonrpc: "2.0", id, method, params });
+    return result;
+  }
+
+  notify(method, params) {
+    this.write({ jsonrpc: "2.0", method, params });
+  }
+
+  async close() {
+    if (this.child.exitCode !== null) return;
+    this.child.kill("SIGTERM");
+    await Promise.race([
+      new Promise((resolve) => this.child.once("exit", resolve)),
+      new Promise((resolve) =>
+        setTimeout(() => {
+          if (this.child.exitCode === null) this.child.kill("SIGKILL");
+          resolve(undefined);
+        }, 2_000),
+      ),
+    ]);
+  }
+
+  write(message) {
+    this.child.stdin.write(`${JSON.stringify(message)}\n`);
+  }
+
+  onData(chunk) {
+    this.buffer += chunk;
+    while (true) {
+      const newline = this.buffer.indexOf("\n");
+      if (newline < 0) return;
+      const line = this.buffer.slice(0, newline).trim();
+      this.buffer = this.buffer.slice(newline + 1);
+      if (!line) continue;
+      let message;
+      try {
+        message = JSON.parse(line);
+      } catch (error) {
+        record({ kind: "mcp.invalid_json", line: line.slice(0, 500) });
+        continue;
+      }
+      if (message.id === undefined) continue;
+      const pending = this.pending.get(message.id);
+      if (!pending) continue;
+      this.pending.delete(message.id);
+      if (message.error) {
+        pending.reject(
+          new Error(`MCP error: ${JSON.stringify(message.error)}`),
+        );
+      } else {
+        record({
+          kind: "mcp.response",
+          id: message.id,
+          result: message.result,
+        });
+        pending.resolve(message.result);
+      }
+    }
+  }
+}
+
+const app = agent({ name: "Agent Connect deterministic ACP test agent" })
+  .onRequest(methods.agent.initialize, ({ params }) => {
+    record({ kind: "acp.request", method: "initialize", params });
+    return {
+      protocolVersion: params.protocolVersion,
+      agentCapabilities: {},
+      authMethods: [],
+      agentInfo: { name: "agent-connect-deterministic", version: "1" },
+    };
+  })
+  .onRequest(methods.agent.session.new, async ({ params }) => {
+    record({
+      kind: "acp.request",
+      method: "session/new",
+      cwd: params.cwd,
+      mcpServers: params.mcpServers.map((server) => ({
+        name: server.name,
+        command: basename(server.command),
+        envNames: (server.env ?? []).map(({ name }) => name).sort(),
+      })),
+    });
+    const sessionId = `deterministic-${crypto.randomUUID()}`;
+    const session = { mcpClients: [], advertisedTools: [] };
+    for (const server of params.mcpServers) {
+      const client = new McpStdioClient(server);
+      session.mcpClients.push(client);
+      await client.initialize();
+      const listed = await client.request("tools/list", {});
+      const tools = Array.isArray(listed?.tools) ? listed.tools : [];
+      session.advertisedTools.push(...tools.map((tool) => ({ client, tool })));
+      record({
+        kind: "mcp.tools",
+        names: tools.map((tool) => tool.name),
+      });
+    }
+    sessions.set(sessionId, session);
+    return { sessionId };
+  })
+  .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
+    record({
+      kind: "acp.request",
+      method: "session/prompt",
+      sessionId: params.sessionId,
+    });
+    const session = sessions.get(params.sessionId);
+    if (!session) throw new Error(`unknown ACP session ${params.sessionId}`);
+    const selected = session.advertisedTools.find(
+      ({ tool }) => tool.name === "get_test_nonce",
+    );
+    if (!selected) {
+      throw new Error("request-scoped get_test_nonce tool was not advertised");
+    }
+    const result = await selected.client.request("tools/call", {
+      name: "get_test_nonce",
+      arguments: {},
+    });
+    record({ kind: "agent.tool_result", result });
+    const text = `deterministic-tool-result:${JSON.stringify(result)}`;
+    await client.notify(methods.client.session.update, {
+      sessionId: params.sessionId,
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text },
+      },
+    });
+    return { stopReason: "end_turn" };
+  })
+  .onNotification(methods.agent.session.cancel, async ({ params }) => {
+    record({ kind: "acp.notification", method: "session/cancel" });
+    const session = sessions.get(params.sessionId);
+    sessions.delete(params.sessionId);
+    await Promise.all(
+      (session?.mcpClients ?? []).map((client) => client.close()),
+    );
+  });
+
+const connection = app.connect(
+  ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin)),
+);
+record({ kind: "agent.started" });
+await connection.closed;
+await Promise.all(
+  [...sessions.values()].flatMap((session) =>
+    session.mcpClients.map((client) => client.close()),
+  ),
+);
+record({ kind: "agent.stopped" });

@@ -84,11 +84,31 @@
 
 ## Validation readiness
 
-- Library surface: public TypeScript imports and direct handler calls under Vitest.
-- Browser surface: a real browser against the demo and gateway, including disconnect/reconnect.
-- Protocol surface: captured OmniGENT session HTTP/SSE and tool-result traces.
+- Layer 1, connector behavior: public TypeScript imports and real HTTP requests
+  against an in-process gateway under Vitest. Provider behavior is injected so
+  authorization, capability, origin, requester-identity, session, and event
+  policy branches remain fast and deterministic.
+- Layer 2, provider contract: an opt-in disposable local OmniGENT server and
+  host drive a deterministic ACP agent over the real stdio protocol. This layer
+  must validate runner provisioning, the uploaded agent bundle, ACP
+  initialization/session/prompt traffic, request-scoped MCP tools/list and
+  tools/call, the correlated application result, OmniGENT HTTP/SSE translation,
+  and isolated on-disk state without using Codex credentials or model tokens.
+- Layer 3, live composition: a manual milestone smoke test uses the real
+  OmniGENT/Codex chain and deployed browser. It proves the final composition but
+  is intentionally excluded from routine automated tests because it consumes
+  credentials and model tokens.
+- Browser surface: add a small local real-browser suite when browser-enforced
+  CSP, CORS, cookie, redirect, or storage regressions justify it; do not require
+  a permanent tailnet CI runner.
 - Persistence surface: database state before request, while pending, and after completion.
 - Downstream surface: a live Codex turn authenticated with the user's existing Codex login.
+
+The connector tests do not attempt to prove Tailscale or WireGuard. They prove
+that Agent Connect accepts the configured trusted-proxy identity shape and
+fails closed for missing, unexpected, or ambiguous identities. The real
+OmniGENT layer exists specifically to avoid a fake provider merely reproducing
+Agent Connect's own mistaken assumptions about OmniGENT.
 
 The live unsandboxed Codex composition environment is established. The next
 validation gates are the deployed mobile enrollment flow and resolving (or

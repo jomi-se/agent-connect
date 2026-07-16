@@ -56,16 +56,46 @@ describe("gateway", () => {
     expect(upstream).not.toHaveBeenCalled();
   });
 
-  it("rejects a missing or unlisted Tailscale identity", async () => {
-    const { baseUrl } = await start();
+  it.each([
+    ["missing", undefined],
+    ["unexpected", "intruder@example.com"],
+    ["ambiguous", "owner@example.com, intruder@example.com"],
+  ])(
+    "rejects a %s Tailscale identity before proxying",
+    async (_case, tailscaleUser) => {
+      const upstream = vi.fn<typeof fetch>();
+      const { baseUrl } = await start({ fetch: upstream });
+      const response = await fetch(`${baseUrl}/v1/sessions/session-1/stream`, {
+        headers: {
+          Origin: "https://preview.example",
+          ...(tailscaleUser ? { "Tailscale-User-Login": tailscaleUser } : {}),
+        },
+      });
+
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({
+        error: "tailscale_user_not_allowed",
+      });
+      expect(upstream).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts the exact configured Tailscale identity", async () => {
+    const upstream = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response("data: [DONE]\n\n", {
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    );
+    const { baseUrl } = await start({
+      fetch: upstream,
+      accessToken: "legacy-token",
+    });
     const response = await fetch(`${baseUrl}/v1/sessions/session-1/stream`, {
-      headers: { Origin: "https://preview.example" },
+      headers: allowedHeaders({ Authorization: "Bearer legacy-token" }),
     });
 
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({
-      error: "tailscale_user_not_allowed",
-    });
+    expect(response.status).toBe(200);
+    expect(upstream).toHaveBeenCalledTimes(1);
   });
 
   it("requires the configured bearer token", async () => {

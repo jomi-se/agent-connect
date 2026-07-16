@@ -16,10 +16,12 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "npm run test --workspaces --if-present",
+    "test:integration:omnigent": "npm run test:integration:omnigent --workspace @agent-connect/gateway",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "verify": "npm run format:check && npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
+    "@agentclientprotocol/sdk": "1.2.1",
     "@agentclientprotocol/codex-acp": "1.1.2",
     "@playwright/test": "1.58.2",
     "prettier": "3.9.0",
