@@ -21,16 +21,34 @@ typed application capabilities. Firebase Canvas is the coherent implemented
 demonstration. The spreadsheet is a stronger follow-up only if its durability
 and approval behavior are actually completed.
 
+The north star is broader than the demonstrated deployment: applications
+integrate once against a harness-neutral capability-lending contract, while the
+user chooses an agent runtime and an appropriate provisioning profile. The
+current Tailscale + OmniGENT + Codex composition is the first working proof, not
+the product boundary. Future adapters may reuse standard event and agent
+vocabularies such as AG-UI and ACP where they fit, without presenting Agent
+Connect's current custom bridge as an established standard.
+
+The security ceremony is profile-dependent rather than mandatory everywhere.
+A user controlling both a private application and connector may preconfigure a
+lighter trusted profile. Cross-origin, tunneled, shared, or public deployments
+need stronger enrollment, consent, revocation, and usage controls. The demo
+shows the stronger boundary because it is the reusable product case, not
+because every personal shopping-list deployment needs OAuth-shaped ceremony.
+
 Do not position the entry as half consumer app and half developer tool. Use one
 clear hierarchy:
 
 1. **Product:** a developer tool for connecting applications to user-owned
-   agents.
+   agents through one harness-neutral application contract.
 2. **Demonstration:** Firebase Canvas lends one visible page-mutation tool to
    the user's Codex agent after connector authentication and app consent.
 3. **End-user benefit:** useful agent behavior inside an application without
    exposing raw provider session identifiers or requiring an application MCP
    server to be installed in advance.
+4. **Direction:** additional runtime adapters and provisioning profiles can
+   preserve the application integration while changing the underlying agent,
+   transport, or deployment posture.
 
 Suggested short description:
 
@@ -39,6 +57,9 @@ Suggested short description:
 > typed capabilities to the agent; the user can inspect and approve
 > consequential actions; and provider-specific sessions remain behind the
 > gateway.
+
+This is framing material, not submission-ready prose. The entrant should
+rewrite the final description in their own voice.
 
 Keep reliability claims exact. Stable action IDs and application-owned
 deduplication can prevent the demonstrated write from being applied twice;
@@ -163,8 +184,10 @@ the internal session mapping to understand the result.
 Name the first audience precisely: web-application developers who want to add
 agentic workflows backed by an agent in the user's environment. Demonstrate how
 the SDK reduces integration work and preserves explicit application ownership
-of consequential operations. Avoid unsupported market-size, privacy, security,
-or universal-protocol claims.
+of consequential operations. Make the interoperability direction explicit:
+the application should not need a bespoke integration for every agent harness
+or deployment profile. Avoid unsupported market-size, privacy, security, or
+universal-protocol claims.
 
 ### Quality of the Idea
 

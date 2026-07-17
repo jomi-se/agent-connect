@@ -8,11 +8,13 @@ Provide OpenAI Build Week judges with a free, working Agent Connect environment
 that does not require joining the developer's tailnet, rebuilding the project,
 or receiving access to the developer's personal connector or Codex login.
 
-The lowest-cost deployment reuses the existing VM and publishes a separate
-containerized judge connector through Tailscale Funnel. Firebase continues to
-host the static Canvas application. This costs no additional hosting fee on the
-current Tailscale Personal plan; model usage and the VM itself remain the only
-possible costs.
+The minimum deployment reuses the existing VM and publishes a separate judge
+connector through Tailscale Funnel. It uses the deterministic ACP agent already
+used by the real OmniGENT integration suite, not the owner's Codex subscription
+or a paid model credential. Firebase continues to host the static Canvas
+application. The real Codex composition remains the recorded and private live
+proof; the public sandbox proves that a clean judge can exercise the same SDK,
+authorization, OmniGENT, ACP, dynamic-tool, and page-mutation boundaries.
 
 The judge environment must remain available through the official end of
 judging, 2026-08-06 00:00 UTC (August 5 at 5:00 PM Pacific Time), and should be
@@ -30,8 +32,8 @@ Observed on 2026-07-15:
 - private Tailscale Serve routes already occupy HTTPS ports 443 and 8443; and
 - Funnel-supported port 10000 is unused.
 
-This is ample for the existing gateway, OmniGENT, Codex ACP, and Codex
-composition. No new VM is required for the submission.
+This is ample for the separate gateway, OmniGENT, and deterministic ACP
+composition. No new VM or model credential is required for the judge sandbox.
 
 ## Topology
 
@@ -47,12 +49,11 @@ https://artifex-box.tail246db1.ts.net:10000
           | loopback proxy only
           v
 127.0.0.1:<judge-port>
-  judge connector container boundary
+  isolated judge connector processes
     Agent Connect gateway and authorization UI
-    OmniGENT server, host, and runner
-    codex-acp, Codex, and dynamic tool relay
+    OmniGENT server, host, and deterministic ACP runner
+    request-scoped dynamic tool relay
     dedicated connector-state volume
-    dedicated disposable agent credential
     ephemeral per-session workspaces
 ```
 
@@ -71,7 +72,9 @@ evidence.
 ## Isolation from the personal connector
 
 The judge deployment must not reuse or expose the private connector currently
-served through Tailscale Serve.
+served through Tailscale Serve. Because its deterministic ACP agent has no
+model, shell, filesystem-tool, or ambient MCP authority, a container is not a
+submission prerequisite; process and state separation are still mandatory.
 
 It receives its own:
 
@@ -79,14 +82,14 @@ It receives its own:
 - enrollment passphrase and enrolled devices;
 - application grants, revocations, and audit state;
 - OmniGENT state and downstream sessions;
-- Codex authentication;
-- container filesystem and workspace root; and
+- no Codex or model authentication at all;
+- isolated process state and workspace root; and
 - logs and shutdown lifecycle.
 
-The container must not mount the host home, normal `~/.codex`, application
-repositories, SSH material, or container-runtime socket. The connector state
-and disposable agent credential are separate mounts or secret channels; neither
-belongs in an image layer or session workspace.
+The judge agent must not receive the host home, normal `~/.codex`, application
+repositories, SSH material, connector secrets, or container-runtime socket. If
+a later container profile replaces the process-isolated sandbox, those same
+resources must remain absent from image layers and mounts.
 
 ## Public-demo transport profile
 
@@ -112,24 +115,22 @@ replaced with a fabricated Tailscale identity header.
 
 ## Abuse and cost containment
 
-This environment lends a paid agent capability to an external evaluator. Apply
-limits before launching an OmniGENT/Codex session:
+This environment exposes a public execution and authorization surface to an
+external evaluator. Apply limits before launching an OmniGENT/ACP session:
 
 - one active task per enrolled judge device;
 - short task timeout and bounded prompt size;
 - bounded tasks per device and per time window;
 - fixed Firebase Origin and fixed demonstrated tool snapshot;
 - empty ephemeral workspace with no ambient plugins, MCP servers, or host data;
-- dedicated disposable API-funded Codex credential rather than the developer's
-  ChatGPT subscription login;
+- no model credential or access to the developer's ChatGPT subscription;
 - minimal required egress and no inbound service other than the gateway; and
 - operator kill switch, grant revocation, credential rotation, and automatic
   shutdown after judging.
 
-These controls limit expected loss; they do not prove that a model-influencing
-application cannot attempt to reveal a credential visible to the agent process.
-Use a low-value disposable credential and preserve that limitation in the
-reported runtime posture.
+These controls keep the public sandbox bounded. They do not turn the
+deterministic agent into evidence that the private Codex runtime is sandboxed;
+the submission and UI must label the two runtime profiles honestly.
 
 ## Implementation order
 
@@ -137,21 +138,20 @@ reported runtime posture.
    Canvas.
 2. Rerun and capture the existing private Serve enrollment, tool call, and
    revocation flow as the known-good fallback.
-3. Implement and test the `public-demo` transport profile without weakening the
-   `tailscale-serve` profile.
-4. Build the single-appliance container with separate persistent and ephemeral
-   state classes.
-5. Complete the real `set_page_message` loop through the container on loopback.
+3. Implement and test the `public-demo` transport profile and hard ceilings
+   without weakening the `tailscale-serve` profile.
+4. Run a dedicated OmniGENT server/host using the existing deterministic ACP
+   agent, with separate persistent connector state and ephemeral workspaces.
+5. Complete the real `set_page_message` loop through that stack on loopback.
 6. Enable Funnel on port 10000 and repeat the flow from a browser outside the
    tailnet.
 7. Test the exact private judge instructions from a clean browser/device.
 8. Record monitoring, restart, kill-switch, revocation, and August 5 teardown
    procedures.
 
-If the containerized loop has not passed by the infrastructure cutoff, keep the
-same public-demo authorization design but run a dedicated copy of the proven
-VM-local OmniGENT profile behind Funnel. Do not jeopardize the recorded working
-demo while debugging the appliance.
+Containerization is post-submission hardening unless the deterministic public
+sandbox reveals a concrete need for it. Do not jeopardize the recorded working
+demo while debugging an appliance.
 
 ## Validation targets
 
@@ -159,13 +159,15 @@ demo while debugging the appliance.
   reaches the connector through Funnel with valid TLS and without local-network
   permission prompts.
 - **VAL-JUDGE-002 — separated identity:** the judge runtime card, enrollment
-  passphrase, grants, Codex credential, and state are different from the
-  personal Serve connector.
+  passphrase, grants, OmniGENT state, and process environment are different
+  from the personal Serve connector, and no Codex credential is present.
 - **VAL-JUDGE-003 — authorization:** the supplied judge credential completes
   enrollment and PKCE consent, while wrong Origin, wrong passphrase, missing
   device, replayed code, substituted connector, and revoked grant fail.
-- **VAL-JUDGE-004 — real tool loop:** Firebase Canvas completes a live Codex
-  `set_page_message` request and visible page mutation through the Funnel URL.
+- **VAL-JUDGE-004 — real tool loop:** Firebase Canvas completes a live
+  deterministic-ACP `set_page_message` request and visible page mutation
+  through the Funnel URL, while the UI clearly distinguishes this sandbox from
+  the recorded Codex runtime.
 - **VAL-JUDGE-005 — host boundary:** the agent cannot see a host sentinel, host
   home, repository, Docker socket, personal connector state, or another session
   workspace.
@@ -183,6 +185,16 @@ Personal plan, but remains beta and has non-configurable bandwidth limits. Its
 
 Agent Connect must depend only on a public HTTPS endpoint plus connector-level
 identity and authorization. If Funnel pricing, limits, or availability change,
-the same judge container can move behind another HTTPS reverse tunnel, a small
+the same judge deployment can move behind another HTTPS reverse tunnel, a small
 VPS, or a managed OCI ingress without changing the browser SDK or connector
 identity.
+
+## Parked demo polish
+
+After the minimum judge path passes, the deterministic ACP agent may gain a
+small, disclosed intent parser so different prompts produce visibly different
+page mutations. Prefer a tiny allowlisted grammar or regex table over pretending
+to implement a model. Candidate actions may be curated from real successful
+Codex traces, but the UI and testing instructions must continue to call them
+deterministic or pre-recorded behaviors. This polish must not delay public
+reachability, authorization, limits, or the clean-browser proof.
