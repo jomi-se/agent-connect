@@ -45,6 +45,13 @@ into the app; enter the passphrase only on the connector-owned consent page.
 The app verifies a signed connector challenge before sending its tools and uses
 S256 PKCE to obtain a revocable origin/app/tool-bound grant.
 
+For the isolated public judge profile, use the
+[judge appliance runbook](../../deploy/judge-demo/README.md). The `public-demo`
+transport does not require or fabricate a Tailscale identity. It instead
+requires an exact configured app id, callback URI, and tool hash, and protects
+grant listing and revocation with the enrolled-device cookie. It is intentionally
+not a general anonymous deployment profile.
+
 The gateway uploads its narrow Codex ACP agent bundle, selects the one online
 OmniGENT host, launches the runner, and replaces an unhealthy runner
 automatically. Set `AGENT_CONNECT_OMNIGENT_HOST_ID` when several hosts are

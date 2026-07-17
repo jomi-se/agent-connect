@@ -1,0 +1,39 @@
+services:
+  judge-appliance:
+    build:
+      context: ../..
+      dockerfile: deploy/judge-demo/Dockerfile
+      args:
+        OMNIGENT_VERSION: "0.5.1"
+    image: agent-connect-judge:local
+    restart: unless-stopped
+    read_only: true
+    init: true
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 2g
+    cpus: 2
+    ports:
+      - "127.0.0.1:${AGENT_CONNECT_JUDGE_HOST_PORT:-10081}:8787"
+    environment:
+      AGENT_CONNECT_ALLOWED_ORIGINS: ${AGENT_CONNECT_ALLOWED_ORIGINS:?set the exact Firebase origin}
+      AGENT_CONNECT_ALLOWED_TAILSCALE_USERS: ""
+      AGENT_CONNECT_PUBLIC_ENDPOINT: ${AGENT_CONNECT_PUBLIC_ENDPOINT:?set the public Funnel endpoint}
+      AGENT_CONNECT_ENROLLMENT_PASSPHRASE: ${AGENT_CONNECT_ENROLLMENT_PASSPHRASE:?set a high-entropy judge passphrase}
+      AGENT_CONNECT_PUBLIC_DEMO_APP_ID: ${AGENT_CONNECT_PUBLIC_DEMO_APP_ID:-agent-connect-demo}
+      AGENT_CONNECT_PUBLIC_DEMO_REDIRECT_URI: ${AGENT_CONNECT_PUBLIC_DEMO_REDIRECT_URI:?set the exact Firebase callback URI}
+      AGENT_CONNECT_PUBLIC_DEMO_TOOL_HASH: ${AGENT_CONNECT_PUBLIC_DEMO_TOOL_HASH:-nxsqvzQj-C0BOpTObW5ggh30L4LZHt357N4lp0cGzx8}
+    volumes:
+      - judge-state:/var/lib/agent-connect
+    tmpfs:
+      - /run/agent-connect:rw,noexec,nosuid,size=16m,uid=1000,gid=1000,mode=0700
+      - /tmp:rw,noexec,nosuid,size=128m,uid=1000,gid=1000,mode=1777
+      - /workspace:rw,noexec,nosuid,size=64m,uid=1000,gid=1000,mode=0700
+      - /home/agentconnect:rw,noexec,nosuid,size=128m,uid=1000,gid=1000,mode=0700
+
+volumes:
+  judge-state:
