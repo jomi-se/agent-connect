@@ -123,11 +123,12 @@ container are different assurance profiles.
 The submission-critical judge profile reuses the existing VM but has separate
 connector identity, enrollment, grants, OmniGENT state, container environment,
 and workspaces. It runs the deterministic ACP contract agent with no Codex or
-model credential in a three-container gateway/server/host topology. The runner
-has no host mounts, Docker socket, direct gateway network, or Internet egress.
-Public Tailscale Funnel replaces private Serve transport only for that profile;
-enrolled-device authentication and application authorization replace the
-missing tailnet-user identity. Global resource limits bound the sandbox without
-inventing per-grant quota semantics. The personal Serve connector remains
-private and unchanged, and the recorded private composition remains the real
-Codex proof.
+model credential in one disposable appliance container. The appliance has no
+host home, repository, Docker socket, or personal connector mount, and only the
+gateway port is published on host loopback. Public Tailscale Funnel replaces
+private Serve transport only for that profile; enrolled-device authentication
+and fixed application/tool authorization replace the missing tailnet-user
+identity. Internal gateway/server/runner isolation, a coherent usage policy,
+and deeper sandbox verification are post-happy-path security work. The personal
+Serve connector remains private and unchanged, and the recorded private
+composition remains the real Codex proof.

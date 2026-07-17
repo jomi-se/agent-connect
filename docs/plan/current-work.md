@@ -154,10 +154,10 @@ of the personal connector:
 
 - separate connector state, enrollment secret, grants, OmniGENT data, and a
   deterministic ACP agent with no Codex/model credential;
-- strict Origin, fixed app/tool authority, global concurrency, prompt, time,
-  pending-state, session, and usage/rate limits;
-- a three-container gateway/server/host boundary with no host home, repository,
-  Docker socket, model credential, or runner Internet egress;
+- strict Origin, enrolled-device protection for grant management, and fixed
+  app/tool authority;
+- one disposable appliance container with no host home, repository, Docker
+  socket, or model credential, published only on host loopback;
 - public Tailscale Funnel endpoint on the reserved judge port;
 - a `public-demo` transport profile that does not pretend a Funnel request has
   the private `tailscale-user-login` guarantee;
@@ -168,10 +168,16 @@ The first judge flow may use a pre-enrolled/restricted demo application if that
 is the only safe way to meet the deadline. It must still be isolated from the
 personal connector and must not silently weaken the private Tailscale profile.
 
-Exit: a clean-context judge can follow one short instruction set, mutate the
-Canvas through the honestly labeled deterministic ACP sandbox, and cannot
-exceed the documented demo limits. The recorded private composition remains
-the real Codex/GPT-5.6 proof.
+Exit: a clean-context judge can follow one short instruction set and mutate the
+Canvas through the honestly labeled deterministic ACP fixture. The recorded
+private composition remains the real Codex/GPT-5.6 proof. A coherent usage
+policy, device-scoped grants, and deeper container/operations testing are
+security polish after this path is stable.
+
+After implementing the public-demo authorization changes, complete the
+[grant-route security retrospective](grant-route-security-retrospective.md),
+including the exact source trace, final fix, regression tests, and review
+provenance.
 
 ## P2 — time-box the container appliance
 
