@@ -20,5 +20,7 @@ deferred.
 
 ## Current status
 
-Passed automated gateway and browser-library tests on 2026-07-14. Deployed
-mobile/runtime-card evidence remains pending.
+Passed automated gateway and browser-library tests on 2026-07-14. Passed the
+deployed mobile/runtime-card flow on 2026-07-17, including a controlled gateway
+restart with unchanged runtime id, connector public key, state-file digest,
+enrolled device, and grant records.
