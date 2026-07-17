@@ -154,7 +154,10 @@ of the personal connector:
 
 - separate connector state, enrollment secret, grants, OmniGENT data, and a
   deterministic ACP agent with no Codex/model credential;
-- strict origin, concurrency, turn, time, and rate limits;
+- strict Origin, fixed app/tool authority, global concurrency, prompt, time,
+  pending-state, session, and usage/rate limits;
+- a three-container gateway/server/host boundary with no host home, repository,
+  Docker socket, model credential, or runner Internet egress;
 - public Tailscale Funnel endpoint on the reserved judge port;
 - a `public-demo` transport profile that does not pretend a Funnel request has
   the private `tailscale-user-login` guarantee;
