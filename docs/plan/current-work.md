@@ -152,8 +152,8 @@ truth for fields, judging strategy, and the storyboard.
 Implement the [judge demo environment](judge-demo-environment.md) independently
 of the personal connector:
 
-- separate connector state, enrollment secret, grants, Codex credential, and
-  OmniGENT data;
+- separate connector state, enrollment secret, grants, OmniGENT data, and a
+  deterministic ACP agent with no Codex/model credential;
 - strict origin, concurrency, turn, time, and rate limits;
 - public Tailscale Funnel endpoint on the reserved judge port;
 - a `public-demo` transport profile that does not pretend a Funnel request has
@@ -166,7 +166,9 @@ is the only safe way to meet the deadline. It must still be isolated from the
 personal connector and must not silently weaken the private Tailscale profile.
 
 Exit: a clean-context judge can follow one short instruction set, mutate the
-Canvas through Codex, and cannot exceed the documented demo limits.
+Canvas through the honestly labeled deterministic ACP sandbox, and cannot
+exceed the documented demo limits. The recorded private composition remains
+the real Codex/GPT-5.6 proof.
 
 ## P2 — time-box the container appliance
 

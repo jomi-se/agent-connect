@@ -121,8 +121,9 @@ honest runtime-posture reporting. A shared appliance and a per-session runner
 container are different assurance profiles.
 
 The submission-critical judge profile reuses the existing VM but has separate
-connector identity, enrollment, grants, Codex credential, state, container, and
-workspaces. Public Tailscale Funnel replaces private Serve transport only for
-that profile; enrolled-device and application authorization replace the missing
-tailnet-user identity. The personal Serve connector remains private and
-unchanged.
+connector identity, enrollment, grants, OmniGENT state, process environment,
+and workspaces. It runs the deterministic ACP contract agent with no Codex or
+model credential. Public Tailscale Funnel replaces private Serve transport only
+for that profile; enrolled-device and application authorization replace the
+missing tailnet-user identity. The personal Serve connector remains private and
+unchanged, and the recorded private composition remains the real Codex proof.
