@@ -1,6 +1,6 @@
 # Judge demo environment
 
-Status: implementation-ready plan; submission-critical
+Status: loopback implementation proven and independently reviewed; public Funnel/browser validation pending
 
 ## Purpose
 
@@ -49,7 +49,7 @@ https://artifex-box.tail246db1.ts.net:10000
           |
           | loopback proxy only
           v
-127.0.0.1:<judge-port>
+127.0.0.1:10081
   Agent Connect judge appliance container
       Agent Connect API and authorization UI
       dedicated connector-state volume
@@ -62,11 +62,12 @@ The eventual exposure command is expected to have this shape after the judge
 gateway passes loopback validation:
 
 ```sh
-sudo tailscale funnel --bg --https=10000 http://127.0.0.1:<judge-port>
+sudo tailscale funnel --bg --https=10000 http://127.0.0.1:10081
 ```
 
-Do not run this command until the public-demo authorization profile and full
-tool loop pass locally. `--bg` makes the Funnel configuration resume after a
+The local target is `http://127.0.0.1:10081`. Do not run this command until the
+public-demo authorization profile and full tool loop pass locally. `--bg` makes
+the Funnel configuration resume after a
 Tailscale or host restart. Capture `tailscale funnel status --json` as deployment
 evidence.
 
@@ -190,6 +191,11 @@ runtime profiles honestly.
 7. Test the exact private judge instructions from a clean browser/device.
 8. Record the start, logs, stop, Funnel kill-switch, and August 5 teardown
    commands.
+
+Steps 3–5 passed on containerized loopback on 2026-07-17. The reusable smoke
+client completed enrollment, PKCE exchange, OmniGENT provisioning, ACP startup,
+request-scoped MCP `set_page_message`, browser result, and turn completion.
+The next active gate is steps 6–7: Funnel plus a clean external browser.
 
 Time-box this narrow deterministic image rather than reviving the full Codex
 appliance. If Compose cannot reproduce the real OmniGENT/ACP/MCP tool loop, the

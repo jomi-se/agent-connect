@@ -8,7 +8,22 @@ import { spawn } from "node:child_process";
 import { agent, methods, ndJsonStream } from "@agentclientprotocol/sdk";
 
 const transcriptPath = process.env.AGENT_CONNECT_ACP_TRANSCRIPT;
+const targetToolName =
+  process.env.AGENT_CONNECT_DETERMINISTIC_TOOL_NAME ?? "get_test_nonce";
+const targetToolArguments = parseTargetArguments(
+  process.env.AGENT_CONNECT_DETERMINISTIC_TOOL_ARGUMENTS ?? "{}",
+);
 const sessions = new Map();
+
+function parseTargetArguments(value) {
+  const parsed = JSON.parse(value);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new TypeError(
+      "AGENT_CONNECT_DETERMINISTIC_TOOL_ARGUMENTS must be a JSON object",
+    );
+  }
+  return parsed;
+}
 
 function record(event) {
   if (!transcriptPath) return;
@@ -189,14 +204,16 @@ const app = agent({ name: "Agent Connect deterministic ACP test agent" })
     const session = sessions.get(params.sessionId);
     if (!session) throw new Error(`unknown ACP session ${params.sessionId}`);
     const selected = session.advertisedTools.find(
-      ({ tool }) => tool.name === "get_test_nonce",
+      ({ tool }) => tool.name === targetToolName,
     );
     if (!selected) {
-      throw new Error("request-scoped get_test_nonce tool was not advertised");
+      throw new Error(
+        `request-scoped ${targetToolName} tool was not advertised`,
+      );
     }
     const result = await selected.client.request("tools/call", {
-      name: "get_test_nonce",
-      arguments: {},
+      name: targetToolName,
+      arguments: targetToolArguments,
     });
     record({ kind: "agent.tool_result", result });
     const text = `deterministic-tool-result:${JSON.stringify(result)}`;

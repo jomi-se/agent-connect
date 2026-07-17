@@ -45,6 +45,11 @@ export interface GatewayOptions {
   readonly authStatePath?: string;
   readonly publicEndpoint?: string;
   readonly transportProfile?: string;
+  readonly publicDemoAuthority?: {
+    readonly appId: string;
+    readonly redirectUri: string;
+    readonly toolHash: string;
+  };
   readonly enrollmentPassphrase?: string;
   readonly runtime?: AgentRuntime;
   readonly fetch?: typeof globalThis.fetch;
@@ -66,13 +71,26 @@ const PROVIDER_SESSION_ROUTE = /^\/v1\/sessions\/([^/]+)\/(stream|events)$/;
 const MAX_EVENT_BYTES = 1024 * 1024;
 const MAX_CREATE_BYTES = 64 * 1024;
 const DEVICE_COOKIE = "agent_connect_device";
+const PUBLIC_DEMO_PROFILE = "public-demo";
+const PUBLIC_DEMO_PRINCIPAL = "agent-connect-public-demo";
 
 export function createGateway(options: GatewayOptions) {
   if (options.allowedOrigins.size === 0) {
     throw new TypeError("At least one allowed browser origin is required");
   }
-  if (options.allowedTailscaleUsers.size === 0) {
+  const publicDemo = options.transportProfile === PUBLIC_DEMO_PROFILE;
+  if (!publicDemo && options.allowedTailscaleUsers.size === 0) {
     throw new TypeError("At least one allowed Tailscale login is required");
+  }
+  if (publicDemo && !options.publicDemoAuthority) {
+    throw new TypeError(
+      "public-demo requires an exact configured application authority",
+    );
+  }
+  if (!publicDemo && options.publicDemoAuthority) {
+    throw new TypeError(
+      "publicDemoAuthority is valid only for the public-demo profile",
+    );
   }
   const publicEndpoint = options.publicEndpoint
     ? canonicalPublicEndpoint(options.publicEndpoint)
@@ -146,21 +164,32 @@ export function createGateway(options: GatewayOptions) {
         connectorAuth &&
         (pathname === "/authorize" || pathname === "/v1/grants")
       ) {
-        const tailscaleUser = requireTailscaleUser(
+        const principal = requireTransportPrincipal(
           request,
           response,
           options.allowedTailscaleUsers,
+          publicDemo,
         );
-        if (!tailscaleUser) return;
+        if (!principal) return;
         if (pathname === "/authorize") {
           await handleAuthorizationPage(
             request,
             response,
             connectorAuth,
-            tailscaleUser,
+            principal,
             publicEndpoint ?? "",
           );
         } else {
+          if (
+            publicDemo &&
+            !connectorAuth.isDeviceEnrolled(
+              cookie(request, DEVICE_COOKIE),
+              principal,
+            )
+          ) {
+            sendJson(response, 401, { error: "device_not_enrolled" });
+            return;
+          }
           await handleGrantPage(
             request,
             response,
@@ -184,12 +213,13 @@ export function createGateway(options: GatewayOptions) {
         return;
       }
 
-      const tailscaleUser = requireTailscaleUser(
+      const principal = requireTransportPrincipal(
         request,
         response,
         options.allowedTailscaleUsers,
+        publicDemo,
       );
-      if (!tailscaleUser) return;
+      if (!principal) return;
 
       if (connectorAuth && pathname === "/v1/runtime-challenges") {
         if (request.method !== "POST") {
@@ -213,14 +243,27 @@ export function createGateway(options: GatewayOptions) {
           return;
         }
         const value = await readJsonObject(request, MAX_CREATE_BYTES);
+        const appId = requireString(value, "appId");
+        const redirectUri = requireString(value, "redirectUri");
+        const tools = validateToolSnapshot(value["tools"]);
+        if (
+          publicDemo &&
+          !matchesPublicDemoAuthority(
+            { appId, redirectUri, toolHash: hashToolSnapshot(tools) },
+            options.publicDemoAuthority,
+          )
+        ) {
+          sendJson(response, 403, { error: "public_demo_authority_mismatch" });
+          return;
+        }
         const authorization = connectorAuth.createAuthorizationRequest({
           origin,
-          appId: requireString(value, "appId"),
-          redirectUri: requireString(value, "redirectUri"),
+          appId,
+          redirectUri,
           state: requireString(value, "state"),
           codeChallenge: requireString(value, "codeChallenge"),
           scopes: requireStringArray(value, "scopes"),
-          tools: value["tools"],
+          tools,
         });
         sendJson(response, 201, {
           requestId: authorization.id,
@@ -826,6 +869,33 @@ function requireTailscaleUser(
     return undefined;
   }
   return tailscaleUser;
+}
+
+function requireTransportPrincipal(
+  request: IncomingMessage,
+  response: ServerResponse,
+  allowedTailscaleUsers: ReadonlySet<string>,
+  publicDemo: boolean,
+): string | undefined {
+  return publicDemo
+    ? PUBLIC_DEMO_PRINCIPAL
+    : requireTailscaleUser(request, response, allowedTailscaleUsers);
+}
+
+function matchesPublicDemoAuthority(
+  requested: {
+    readonly appId: string;
+    readonly redirectUri: string;
+    readonly toolHash: string;
+  },
+  configured: GatewayOptions["publicDemoAuthority"],
+): boolean {
+  return Boolean(
+    configured &&
+    requested.appId === configured.appId &&
+    requested.redirectUri === configured.redirectUri &&
+    requested.toolHash === configured.toolHash,
+  );
 }
 
 async function handleAuthorizationPage(

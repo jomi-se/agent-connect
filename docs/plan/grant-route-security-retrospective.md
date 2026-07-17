@@ -1,6 +1,6 @@
 # Grant-route security retrospective
 
-Status: investigation captured; complete after the public-demo implementation
+Status: minimum fix implemented and covered on 2026-07-17
 
 ## Why this note exists
 
@@ -57,12 +57,37 @@ the primary agent's independent discovery. It emerged from a deliberate
 trust-substitution and route-by-route audit performed by a subagent, followed by
 primary-source confirmation and adversarial review.
 
-## Completion checklist
+## Implemented result and evidence
 
-After implementation, add:
+`packages/gateway/src/gateway.ts` now distinguishes `public-demo` from the
+unchanged private profile. Public API routes use an internal enrollment
+principal without reading or fabricating a Tailscale user. `/v1/grants`
+requires a valid connector-issued device cookie before listing or revoking
+grants. Authorization-request creation compares the submitted app id, callback,
+and canonical tool hash with explicit operator configuration before creating a
+pending consent request.
 
-- exact before/after source references;
-- the final authentication and fixed-authority decisions;
-- regression test names and outputs;
-- confirmation that the private Tailscale profile still fails closed; and
-- any accepted residual risk or newly discovered route coupling.
+`packages/gateway/src/config.ts` requires all three fixed-authority values when
+the public profile is selected. Missing authority fails gateway startup.
+
+The `public-demo transport profile` cases in
+`packages/gateway/test/gateway.test.ts` prove:
+
+- a spoofed or missing Tailscale header neither blocks nor supplies public
+  authority;
+- anonymous grant management returns `device_not_enrolled`;
+- an enrolled-device cookie reaches the grant page;
+- the real PKCE grant creates an application session without a Tailscale
+  header;
+- changed app id, callback, or tool snapshot is rejected before consent; and
+- public-demo cannot start without fixed authority configuration.
+
+The pre-existing private-profile cases continue to prove missing, unexpected,
+and ambiguous Tailscale identities fail closed. The gateway suite passed 23
+tests on 2026-07-17. The container smoke additionally completed the real
+OmniGENT/ACP/MCP tool loop under this public grant.
+
+Accepted residual risks remain device-global grant visibility for enrolled
+judges, shared-passphrase denial of service, and same-hostname cookie
+transmission between ports. These are documented security polish, not hidden
+claims of the minimum profile.

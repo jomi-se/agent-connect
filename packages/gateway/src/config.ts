@@ -9,6 +9,18 @@ export function configFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): GatewayRuntimeConfig {
   const sandbox = sandboxFromEnv(env);
+  const transportProfile = env.AGENT_CONNECT_TRANSPORT_PROFILE;
+  const publicDemoAuthority =
+    transportProfile === "public-demo"
+      ? {
+          appId: requiredEnv(env, "AGENT_CONNECT_PUBLIC_DEMO_APP_ID"),
+          redirectUri: requiredEnv(
+            env,
+            "AGENT_CONNECT_PUBLIC_DEMO_REDIRECT_URI",
+          ),
+          toolHash: requiredEnv(env, "AGENT_CONNECT_PUBLIC_DEMO_TOOL_HASH"),
+        }
+      : undefined;
   return {
     host: env.AGENT_CONNECT_HOST ?? "127.0.0.1",
     port: parsePort(env.AGENT_CONNECT_PORT ?? "8787"),
@@ -35,9 +47,8 @@ export function configFromEnv(
     ...(env.AGENT_CONNECT_PUBLIC_ENDPOINT
       ? { publicEndpoint: env.AGENT_CONNECT_PUBLIC_ENDPOINT }
       : {}),
-    ...(env.AGENT_CONNECT_TRANSPORT_PROFILE
-      ? { transportProfile: env.AGENT_CONNECT_TRANSPORT_PROFILE }
-      : {}),
+    ...(transportProfile ? { transportProfile } : {}),
+    ...(publicDemoAuthority ? { publicDemoAuthority } : {}),
     ...(env.AGENT_CONNECT_ENROLLMENT_PASSPHRASE
       ? { enrollmentPassphrase: env.AGENT_CONNECT_ENROLLMENT_PASSPHRASE }
       : {}),
