@@ -21,5 +21,7 @@ The hash does not attest to the web application's handler implementation.
 
 ## Current status
 
-Passed automated gateway and browser-library tests on 2026-07-14. Real
-Firebase-to-tailnet mobile redirect evidence remains pending.
+Passed automated gateway and browser-library tests on 2026-07-14. Passed the
+real Firebase-to-tailnet mobile enrollment, exact consent, PKCE return, tool
+execution, grant revocation/rejection, reauthorization, and post-restart grant
+reuse flow by 2026-07-17.

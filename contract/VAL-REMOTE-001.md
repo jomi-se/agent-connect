@@ -21,5 +21,8 @@ Tailscale login cannot access the session routes.
 
 ## Current status
 
-Partial. The gateway implementation and focused unit evidence exist. A grocery
-application preview URL and remote real-browser run are still required.
+The Firebase demo completed a real mobile-browser Codex/tool/page-mutation turn
+through private Tailscale Serve on 2026-07-17, including a successful turn after
+gateway restart and OmniGENT-host reconnection. Automated gateway tests cover
+the disallowed Origin and requester cases. A sanitized browser evidence bundle
+and explicit console/network capture remain submission-presentation work.

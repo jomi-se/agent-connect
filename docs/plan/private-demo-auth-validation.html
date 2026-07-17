@@ -466,8 +466,8 @@
           revocation flow from a phone.
         </p>
         <div class="badges" aria-label="Runbook metadata">
-          <span class="badge">Updated 15 July 2026</span>
-          <span class="badge">Phone validation in progress</span>
+          <span class="badge">Updated 17 July 2026</span>
+          <span class="badge">Phone validation passed</span>
           <span class="badge">Private Tailscale profile</span>
           <span class="badge">Non-containerized</span>
         </div>
@@ -492,10 +492,10 @@
         <section class="card" aria-labelledby="status-title">
           <h2 id="status-title">Current status</h2>
           <div class="callout success">
-            <strong>Ready for real-surface validation</strong>
-            The auth protocol has automated coverage. The missing proof is the
-            deployed Firebase app completing the flow through the private
-            connector on a phone.
+            <strong>Full private flow proven</strong>
+            The deployed Firebase app has completed enrollment, exact consent,
+            Codex tool execution, revocation, and a successful post-restart turn
+            through the private connector on a phone.
           </div>
           <p>
             This run deliberately uses the proven, non-containerized OmniGENT
@@ -580,6 +580,12 @@ chmod 600 .omnigent-spike/private-demo-codex-home/auth.json</code></pre>
             credential. Keep the directory owner-only. Never expose or commit
             it.
           </div>
+          <div class="callout warning">
+            <strong>Copied login is temporary demo plumbing</strong>
+            ChatGPT OAuth refresh tokens rotate. If another Codex home refreshes
+            first, refresh this private <code>auth.json</code> copy and restore
+            mode <code>0600</code>. A separate runtime login remains pending.
+          </div>
           <p>
             The example config contains this repository's current absolute path.
             If the checkout moves, update the <code>command</code> path in the
@@ -638,6 +644,24 @@ omnigent server status</code></pre>
             OmniGENT host online
           </h2>
           <p>
+            Run the host inside <code>tmux</code> or another supervisor so an
+            SSH client disconnect does not take it offline. Start a session,
+            then run the host command inside it:
+          </p>
+          <figure class="command-card">
+            <figcaption class="command-toolbar">
+              <span>Shell · persistent terminal</span>
+              <button
+                class="copy-button"
+                type="button"
+                data-copy="command-host-tmux"
+              >
+                Copy
+              </button>
+            </figcaption>
+            <pre><code id="command-host-tmux">tmux new-session -s agent-connect-runtime</code></pre>
+          </figure>
+          <p>
             Repeat the four exports from Terminal 1, replace
             <code>PORT</code> with the printed port, and leave this process
             running:
@@ -675,6 +699,11 @@ omnigent host http://127.0.0.1:PORT</code></pre>
             </figcaption>
             <pre><code id="command-host-status">omnigent host status</code></pre>
           </figure>
+          <p>
+            Detach with <kbd>Ctrl</kbd>+<kbd>b</kbd>, then <kbd>d</kbd>. Inspect
+            live logs later with
+            <code>tmux attach -t agent-connect-runtime</code>.
+          </p>
         </section>
 
         <section
@@ -717,6 +746,12 @@ export AGENT_CONNECT_ALLOWED_TAILSCALE_USERS="$(tailscale status --json | jq -r 
 
 npm run start --workspace @agent-connect/gateway</code></pre>
           </figure>
+          <div class="callout info">
+            <strong>Do not rely on an old SSH pseudo-terminal</strong>
+            Run the gateway in another tmux window or under a supervisor. On
+            this VM, a transient user service can be followed with
+            <code>journalctl --user -fu agent-connect-gateway</code>.
+          </div>
           <div class="callout warning">
             <strong>Save the first-start output</strong>
             On first creation of the state file, the gateway prints a
@@ -880,14 +915,24 @@ curl -fsS https://artifex-box.tail246db1.ts.net:8443/healthz</code></pre>
             path and revocation first, then diagnose failures one boundary at a
             time.
           </div>
+          <div class="callout success">
+            <strong>Recorded 17 July 2026</strong>
+            The connector state digest, runtime identity, enrolled device, and
+            revoked grant survived a controlled gateway restart. The gateway
+            failed closed while the OmniGENT host was offline, then the existing
+            app grant completed a Codex <code>set_page_message</code> turn after
+            the host reconnected.
+          </div>
         </section>
 
         <section class="card" id="stop" aria-labelledby="stop-title">
           <h2 id="stop-title">Stop the stack</h2>
           <p>
-            Stop the gateway and foreground host with
-            <kbd>Ctrl</kbd>+<kbd>C</kbd>. Then, using the same OmniGENT
-            config/data exports as above:
+            Attach to the tmux session and stop foreground processes with
+            <kbd>Ctrl</kbd>+<kbd>C</kbd>. If the gateway is running as the
+            transient user service, stop it with
+            <code>systemctl --user stop agent-connect-gateway</code>. Then,
+            using the same OmniGENT config/data exports as above:
           </p>
           <figure class="command-card">
             <figcaption class="command-toolbar">

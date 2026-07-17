@@ -1,12 +1,12 @@
 # Private demo startup and auth validation
 
-Date: 2026-07-15
+Date: 2026-07-17
 
-Status: deployed phone validation in progress. The first consent attempt exposed
-two Chromium integration bugs: `no-referrer` produced `Origin: null`, then
-`form-action 'self'` blocked the cross-origin OAuth return redirect. The gateway
-now preserves the same-origin POST and permits only the validated application
-origin as the redirect target. The retry is pending.
+Status: deployed phone validation passed. The live flow has now proven signed
+runtime-card verification, first-device enrollment, exact connector-owned
+consent, PKCE return, dynamic `set_page_message` execution through Codex,
+revocation, rejection after revocation, and a gateway restart with unchanged
+connector identity and revocation state.
 
 Operator-friendly edition: [open the self-contained HTML runbook](private-demo-auth-validation.html).
 
@@ -57,6 +57,12 @@ This copies the Codex login into a gitignored runtime home so Codex can write
 its own SQLite state without touching `~/.codex`. It is still a usable
 credential: keep the directory owner-only and do not expose or commit it.
 
+This copied-login arrangement is demo plumbing, not a durable credential
+lifecycle. ChatGPT OAuth refresh tokens rotate; if another Codex home refreshes
+the copied credential first, the private runtime can fail with "refresh token
+was already used." For the current demo, refresh the copy and preserve mode
+`0600`. A separate login or deliberately injected runtime credential is pending.
+
 The example config contains this repository's current absolute path. If the
 checkout moves, update the `command` path in the copied `config.yaml`.
 
@@ -82,8 +88,16 @@ runs in the background.
 
 ## Terminal 2: keep the OmniGENT host online
 
+Run this process in `tmux` or another supervisor so losing an SSH client does
+not take the execution host offline. For example, create or attach a session,
+then run the host command inside it:
+
+```sh
+tmux new-session -s agent-connect-runtime
+```
+
 Repeat the four exports from Terminal 1, replace `PORT` with the printed port,
-then leave this process running:
+then leave the process running:
 
 ```sh
 cd /home/dev/agent-connect
@@ -96,7 +110,8 @@ omnigent host http://127.0.0.1:PORT
 ```
 
 In another shell, `omnigent host status` should show exactly one online local
-host.
+host. Detach from tmux with `Ctrl-b`, then `d`; inspect the live host log later
+with `tmux attach -t agent-connect-runtime`.
 
 ## Terminal 3: start the connector gateway
 
@@ -120,6 +135,12 @@ export AGENT_CONNECT_ALLOWED_TAILSCALE_USERS="$(tailscale status --json | jq -r 
 
 npm run start --workspace @agent-connect/gateway
 ```
+
+For an operator-visible demo, this foreground command can run in a second tmux
+window. A process attached directly to an SSH pseudo-terminal is not a reliable
+service even when it happens to survive a client disconnect. The current VM may
+instead run the gateway as a transient `systemd --user` service; follow its log
+with `journalctl --user -fu agent-connect-gateway`.
 
 On first creation of that state file, the gateway prints two different items:
 
@@ -203,10 +224,34 @@ After the happy path, perform these in order:
 The first run should not be blocked on every negative case. Record the happy
 path and revocation first, then diagnose failures one boundary at a time.
 
+## Recorded live evidence — 2026-07-17
+
+The deployed Firebase application completed the full tool loop after a
+controlled gateway restart:
+
+- the connector state file remained owner-only and its full SHA-256 digest was
+  unchanged across restart;
+- runtime id `sha256:Rp8f69KVNrEZgAneQM2JrUgkdSMjtH4aPT3RfSSoyDc` and the
+  connector public-key digest were unchanged;
+- one enrolled browser device, one revoked grant, and one active reauthorized
+  grant survived;
+- when the SSH-attached OmniGENT host exited, the gateway failed closed with
+  HTTP `502 {"error":"upstream_unavailable"}`;
+- after restarting `omnigent host` in tmux, the existing application grant
+  reached Codex without repeating connector enrollment or consent;
+- Codex requested `set_page_message`, the browser returned
+  `tool.completed` with `isError:false`, and the visible page changed.
+
+This proves restart persistence and provider recovery for the current
+single-host composition. It does not yet prove durable pending requests across
+a mid-task process crash.
+
 ## Stop the stack
 
-Stop the gateway and foreground host with Ctrl-C. Then, with the same
-OmniGENT config/data exports used above:
+Attach to the tmux session and stop foreground processes with Ctrl-C. If the
+gateway is running as the transient user service, stop it with
+`systemctl --user stop agent-connect-gateway`. Then, with the same OmniGENT
+config/data exports used above:
 
 ```sh
 omnigent server stop

@@ -1,6 +1,6 @@
 # Current work and experiment backlog
 
-Date: 2026-07-16
+Date: 2026-07-17
 
 This is the canonical ordering of unfinished work. Detailed design remains in
 the linked plans; when priorities conflict, this document controls execution
@@ -20,7 +20,11 @@ Implemented and proven on a real remote browser:
   allowlists;
 - durable connector identity, first-device enrollment, connector-owned consent,
   PKCE exchange, revocable scoped grant, and post-revocation rejection through
-  the deployed phone flow.
+  the deployed phone flow;
+- gateway restart with byte-identical persisted connector state, followed by a
+  successful deployed Codex/dynamic-tool turn using the existing app grant;
+- fail-closed `upstream_unavailable` behavior when the OmniGENT host is offline,
+  followed by successful recovery after the host reconnects.
 
 Testing strategy accepted for the connector/provider boundary:
 
@@ -62,7 +66,7 @@ outer probes passed, but the dynamic MCP path failed during startup and the
 exact missing mount/runtime dependency remains unconfirmed. Do not put it on
 the submission critical path.
 
-## P0 — prove the new auth flow now
+## P0 — prove the new auth flow (functional pass)
 
 Follow the [private demo auth runbook](private-demo-auth-validation.md).
 
@@ -78,6 +82,12 @@ Required evidence:
 6. rejection of both a new request and an already issued session capability;
 7. gateway restart preserving connector identity and revoked state.
 
+All seven behaviors passed by 2026-07-17. The final post-restart turn reused
+the authorized Firebase app, streamed Codex output, completed
+`set_page_message`, and visibly updated the page. Sanitized submission
+screenshots/video and a polished evidence bundle remain P1 presentation work,
+not an auth implementation blocker.
+
 Operator and UX gaps found during the plan audit:
 
 - the explicit malicious-app warning is now present, but its legibility and
@@ -89,8 +99,8 @@ Operator and UX gaps found during the plan audit:
 - the public page to private-tailnet request can trigger Chrome's local-network
   permission prompt, which needs to be documented in demo UX.
 
-Exit: one sanitized mobile evidence bundle and an issue list grounded in the
-real run. Fix only failures that block the coherent auth/tool/revoke story.
+Exit: the coherent auth/tool/revoke/restart story is functionally proven. Carry
+the sanitized mobile evidence bundle and issue-list presentation into P1.
 
 ## P0.5 — make the connector/provider boundary repeatable (complete)
 
