@@ -1,14 +1,14 @@
-# Claude handoff: Agent Connect architecture visualization
+# Agent Connect project and architecture context for Claude
 
 Date: 2026-07-18
 
-Purpose: self-contained product, architecture, security, protocol, and visual-design brief for an external designer who does not have repository access.
+Purpose: self-contained factual overview of the Agent Connect product, current implementation, authorization model, MVP, security boundaries, and intended architecture for an external collaborator who does not have repository access.
 
-## Your assignment
+## Reader contract
 
-Design a substantial technical deep-dive section for the Agent Connect demo page. It appears after the hero, working demo applications, live tool-call choreography, browser SDK example, and gateway setup. By this point the visitor already understands the high-level promise: a web app lends tools to a user-owned coding agent through Agent Connect.
+This document supplies project context only. It deliberately does not prescribe a visual composition, information architecture, deliverable format, animation style, implementation technology, timing, or interaction model. The person using this context will receive creative direction separately.
 
-This section should now explain, in meaningful detail:
+The relevant subject matter is:
 
 1. the architecture that works today, including the SDK, gateway, Tailscale trust profile, OmniGENT conductor, ACP adapter, Codex, and request-scoped application tools;
 2. the connector bootstrap and OAuth-style application-authorization flow, including how the app and connector authenticate each other;
@@ -16,17 +16,7 @@ This section should now explain, in meaningful detail:
 4. the implementation-specific seams and security limitations that remain today;
 5. the intended future architecture in which the Agent Connect control plane stays stable while the browser protocol, provider, coding agent, deployment, and confinement profile become more standardized or interchangeable.
 
-The goal is not to repeat the simple three-actor hero diagram. It is to reward a technically curious judge with a clear “where the project is now, what is deliberately temporary, and where it is going” explanation.
-
-The output should make a technically sophisticated hackathon judge understand both the simplicity of the application integration and the seriousness of the system beneath it. It must not make unimplemented standards or security claims.
-
-Create a design that can eventually react to real application events. A self-contained HTML preview plus portable source is ideal. The actual demo is framework-light Vite, TypeScript, HTML, and CSS, so dependency-free SVG/CSS/Web Animations code is easiest to integrate. A React prototype is acceptable if the visual structure and timing are easy to port and the deliverable also contains a rendered standalone preview.
-
-## Narrative role: explain “now” and “next” without flattening them
-
-This is intentionally the technical section of the page. OmniGENT, ACP, AG-UI, PKCE, Tailscale Serve and Funnel, request-scoped MCP, opaque sessions, provider adapters, and confinement boundaries may all appear where they explain the system. The page has already demonstrated the product before asking the visitor to learn these names.
-
-The hierarchy should come from architectural status rather than from hiding detail:
+The most important distinction throughout the project is architectural status: what is proven, what is transitional, what is intended, and what is only experimental.
 
 ### Current and proven
 
@@ -60,7 +50,7 @@ The hierarchy should come from architectural status rather than from hiding deta
 - DPoP/app-instance keys and stronger message binding;
 - detailed container and posture-attestation work.
 
-These experimental items should remain visibly labeled, but they do not need to disappear. Use them to show informed direction rather than presenting them as shipped features. Low-level facts should earn their place by explaining a boundary, a current seam, or a future transition—not merely because they exist.
+These experimental items are evidence of investigated directions, not shipped features or committed standards.
 
 ## One-sentence product statement
 
@@ -91,6 +81,23 @@ The durable product value is the reusable layer above those choices:
 
 OmniGENT is important heavy lifting in the current reference implementation. It is intentionally behind the gateway's provider boundary rather than embedded in the app developer's public API.
 
+### The axes intended to become independently swappable
+
+Agent Connect is not trying to replace every layer with one protocol. Its north star separates several choices that are coupled in the MVP:
+
+| Axis                    | Current reference                                                                                  | Intended alternatives                                                                                                      | Stable Agent Connect responsibility                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Browser/application API | `@agent-connect/web` with neutral task/tool events; internal OmniGENT-shaped provider seam remains | AG-UI-compatible profile, experimental direct ACP client profile, other standard event clients                             | Connector discovery, authorization, logical sessions, application-owned tools, correlated actions              |
+| Conductor/provider      | OmniGENT HTTP/SSE                                                                                  | Direct ACP gateway adapter, OpenClaw-like conductor, another self-hosted or managed provider                               | Narrow provider contract and provider-ID hiding                                                                |
+| Coding agent            | Codex through `codex-acp`                                                                          | Claude Code or another ACP/adapter-compatible agent                                                                        | No agent-specific types in the public application API                                                          |
+| Agent-side protocol     | ACP into `codex-acp`, with OmniGENT's request-scoped MCP relay for app tools                       | Native ACP client tools, a stable future MCP-over-ACP mechanism, provider-native tool bridge                               | Fixed application-tool snapshot and correlated request/result semantics                                        |
+| Transport trust profile | Tailscale Serve for the private proof; Tailscale Funnel for the public judge fixture               | Localhost, VS Code/Microsoft Dev Tunnels, public reverse tunnels, account-backed relay/directory, custom HTTPS endpoint    | Declare what identity evidence exists and never infer trust from a hostname alone                              |
+| Deployment boundary     | Long-running personal VM; one disposable public judge container                                    | User laptop, NAS/home server, packaged container, cloud VM, ephemeral on-demand runner, managed connector                  | Runtime-card identity, authorization boundary, opaque logical sessions, posture description                    |
+| Runtime confinement     | Codex defaults in the private proof; constrained single-container deterministic public fixture     | Separate ephemeral runner container, controlled mounts/egress, credential brokerage, managed sandbox, attested environment | Prevent application authority expansion and report guarantees without pretending to enforce provider internals |
+| Human authorization     | Connector bootstrap plus connector-owned OAuth-style app consent                                   | Lighter preconfigured personal profile, managed identity-backed enrollment, QR/fingerprint transfer, enterprise policy     | Exact app authority, revocation, expiry, and separation of app consent from runtime-native approvals           |
+
+Changing one axis should not force every other layer to change. For example, replacing OmniGENT should not require redesigning application enrollment; replacing Tailscale with a public or account-backed tunnel should not change the public task/tool API; running the agent in an ephemeral cloud runner should not expose provider session IDs to the application.
+
 ## The three human roles
 
 ### Application developer
@@ -105,7 +112,38 @@ Runs or selects an Agent Connect gateway beside an agent they own. They bootstra
 
 Imports or selects their runtime, approves the application's requested authority, then uses app-native AI features. They should not install a per-app MCP server, restart OmniGENT, copy provider session IDs, or SSH into the runtime for every new application.
 
-Often the agent owner and the end user are the same person, but the architecture should not visually collapse their distinct responsibilities.
+Often the agent owner and the end user are the same person, but their responsibilities remain conceptually distinct.
+
+## MVP scope and deliberate non-goals
+
+The MVP proves one narrow but complete capability-lending loop rather than generalized agent orchestration.
+
+Current operating assumptions:
+
+- one online OmniGENT host;
+- one downstream coding agent;
+- one active task per application session;
+- one fixed tool snapshot per logical/downstream session;
+- opaque Agent Connect session IDs at the application boundary;
+- gateway-owned provisioning and replacement of unhealthy OmniGENT sessions;
+- browser-owned execution of application tools;
+- stable action IDs without a claim of generic exactly-once side effects;
+- one private real-Codex composition proof and one public deterministic judge fixture.
+
+Deliberate first-slice non-goals:
+
+- multi-agent orchestration;
+- full arbitrary MCP feature coverage;
+- a finalized universal browser/agent protocol;
+- multiple concurrent tasks per application session;
+- importing normal Codex CLI history;
+- production identity federation, billing, public relay, or account recovery;
+- treating arbitrary custom URLs as verified user-owned runtimes;
+- claiming production confinement for malicious authorized applications;
+- replaying every streamed token;
+- shipping a second provider before the existing provider boundary is stable.
+
+The MVP's distinguishing proof is that the application can define tools dynamically for a session and a remote Codex composition can call them without the user installing an application-specific MCP server in advance.
 
 ## The core capability: applications lend tools temporarily
 
@@ -249,7 +287,45 @@ The composition is:
 - Tailscale Serve supplies authenticated transport, TLS, tailnet policy, and a protected requester identity header to a loopback gateway.
 - Agent Connect supplies connector identity, runtime enrollment, its own connector-hosted OAuth-style Authorization Code + PKCE ceremony, grant storage, and revocation.
 
-These are separate layers and should be drawn separately.
+These are separate layers. The transport establishes how requests reach the connector and, for the private profile, which tailnet identity is making them. Agent Connect establishes which connector the user enrolled, which browser device may approve applications, which application authority the user approved, and whether that authority is still active.
+
+### The parties and artifacts
+
+The ceremony involves several distinct parties and artifacts that must not be collapsed into one generic “login”:
+
+- **Connector identity:** a durable Ed25519 key pair created by the gateway. Its public-key thumbprint becomes the stable runtime ID.
+- **Runtime card:** public routing and connector-identity material carried by the user from the connector to an application. It contains the endpoint and public key, but no bearer secret.
+- **Enrollment passphrase:** a high-entropy private bootstrap secret delivered through the connector's trusted operator channel. It enrolls a browser device on the connector origin; it is not an application API key and is never given to the application.
+- **Transport principal:** identity asserted by the selected transport profile. In the private Tailscale Serve profile this is the protected `Tailscale-User-Login` header. A public Funnel endpoint does not provide that identity.
+- **Enrolled-device cookie:** an `HttpOnly`, `Secure`, `SameSite=Lax` connector-origin cookie issued after passphrase verification. It lets that browser device review and manage application grants without returning to the terminal for every app.
+- **Authorization request:** an ephemeral record containing the exact app ID, Origin, callback, scopes, and canonical tool metadata the application wants the user to approve.
+- **Authorization code and PKCE verifier:** a short-lived, one-use redirect result plus proof held by the initiating browser instance. These protect the callback exchange from interception and request mix-ups.
+- **Application grant:** a revocable bearer token bound server-side to connector identity, exact Origin, app ID, scopes, canonical tool hash, and expiry.
+- **Session capability:** a narrower capability derived after session creation and bound to the exact logical session and tool snapshot.
+
+### What “two-way trust” means here
+
+There are three different trust questions:
+
+1. **The application asks whether it reached the connector the user enrolled.** The imported runtime card pins a connector public key. A fresh signed challenge proves the endpoint currently controls the matching private key before the application reveals prompts, tool schemas, or app data.
+2. **The connector asks whether the person at its authorization page may manage this user's connector.** The transport principal supplies profile-specific identity where available, and the enrollment passphrase establishes first-device user presence on the connector's own origin. The enrolled-device cookie supports later approvals.
+3. **The connector asks whether this request stays inside authority the user granted to this application.** Consent records the exact Origin, app ID, scopes, callback, tool snapshot, and expiry. Later requests must present the corresponding grant and match those bindings.
+
+The current system does **not** give every web application its own cryptographic key. An `Origin` header alone is a browser/CSRF boundary, not caller authentication, because a non-browser client can fabricate it. Current application access depends on the bearer grant plus server-side Origin/app/tool bindings. App-instance keys and DPoP-style sender-constrained grants are future hardening.
+
+### Why each protection exists
+
+| Concern                                                          | Current response                                                                                                                                          | Remaining limitation                                                                                                          |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| A malicious endpoint substitutes itself for the user's connector | User transfers a runtime card containing the connector public key; the app verifies a fresh Ed25519 challenge before disclosure                           | This proves key continuity, not host integrity or sandbox correctness                                                         |
+| A random caller consumes the user's agent subscription           | Private Serve profile checks the protected Tailscale requester; connector management requires an enrolled device; agent use requires an application grant | Public profiles need a different requester policy and connector-level usage ceilings remain limited                           |
+| An application counterfeits the consent screen                   | Consent is a top-level page on the connector's origin, not an iframe or app-owned modal                                                                   | The user must still recognize and judge whether the requesting app is trustworthy                                             |
+| An application silently broadens its authority                   | Grant binds exact Origin, app ID, scopes, canonical tool hash, and expiry; changed tools require new consent                                              | Incremental/partial grants are not implemented                                                                                |
+| An authorization redirect is intercepted or mixed up             | OAuth state, exact callback matching, short-lived single-use code, and S256 PKCE                                                                          | This is an OAuth-style connector protocol, not a claim of full generic OAuth-server conformance                               |
+| A grant is later stolen                                          | Grant hashes are stored server-side; browser token lives in `sessionStorage`; expiry and revocation are enforced                                          | The token remains bearer material until app-instance sender binding is implemented                                            |
+| Traffic is modified in transit                                   | The supported remote profiles use HTTPS/TLS                                                                                                               | Payloads are not additionally end-to-end signed; DPoP/message binding remains planned                                         |
+| An authorized app is malicious                                   | Consent names the exact app and warns about prompts, subscription use, exfiltration attempts, and ambient agent authority; tool expansion is blocked      | Authorization records user intent but does not make the app benign; runtime confinement is a separate provider responsibility |
+| The connector claims it is sandboxed                             | Runtime posture can name whether a claim is configured, self-reported, observed, or externally attested                                                   | A connector signature proves who made a claim, not that the claim is independently true                                       |
 
 ### Phase A: bootstrap the connector once
 
@@ -315,7 +391,7 @@ For a new web application:
 
 The currently implemented scopes are the complete set `agent:prompt`, `agent:result`, and `tools:invoke`; partial and incremental grants are not yet implemented. Grant tokens are hashed at rest but are bearer tokens in browser `sessionStorage`. App-instance keys and DPoP-style sender-constrained tokens are target hardening, not current behavior.
 
-Authorization proves that the user knowingly gave this Origin the displayed authority. It does not make the application trustworthy. A malicious or compromised authorized app can send adversarial prompts and tool descriptions, consume the user's subscription, try to induce data exfiltration, or exploit ambient runtime authority. The consent design must state that clearly.
+Authorization proves that the user knowingly gave this Origin the displayed authority. It does not make the application trustworthy. A malicious or compromised authorized app can send adversarial prompts and tool descriptions, consume the user's subscription, try to induce data exfiltration, or exploit ambient runtime authority. The implemented consent page therefore states this risk explicitly.
 
 ### Phase D: later use and revocation
 
@@ -351,6 +427,24 @@ Transport trust and application authorization are separate. A trusted Tailscale 
 
 Future transport profiles may use Microsoft Dev Tunnels, localhost, an account-backed Agent Connect directory, a public relay, QR/fingerprint transfer, managed connectors, or advanced custom URLs. Each must publish what identity evidence exists, what the browser can verify, and the resulting assurance level. “Custom URL” must not silently inherit the assurance of Tailscale Serve.
 
+### Transport and deployment profiles under consideration
+
+Transport reachability, destination ownership, caller identity, deployment isolation, and application authorization are separate properties. Different profiles can supply different subsets:
+
+| Profile                                           | Reachability and identity characteristics                                                                                   | Agent Connect implications                                                                                                                                                                     | Status                                             |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Localhost / same device                           | Loopback reachability strongly limits the network path; browser and connector run on one machine                            | Still needs a way to select the intended connector and authorize apps, but can support a deliberately lighter personal ceremony                                                                | Development and future personal profile            |
+| Tailscale Serve                                   | Private tailnet HTTPS, destination node identity, ACL policy, and protected requester login forwarded to loopback           | Runtime card binds the endpoint to the user's connector key; Agent Connect adds per-app consent and grants                                                                                     | Implemented private reference profile              |
+| Tailscale Funnel / public HTTPS                   | Public reachability and TLS to the node, but no private `Tailscale-User-Login` assurance                                    | Must not pretend to have a tailnet requester; relies on connector proof, device enrollment, exact frozen or approved app authority, grants, and stronger public-exposure hardening             | Implemented only for the restricted judge fixture  |
+| VS Code or Microsoft Dev Tunnel                   | Candidate account-backed tunnel with Microsoft-authenticated provisioning and a stable public URL                           | Needs investigation into which destination/caller identity assertions are available to the browser and connector; could reduce custom tunnel setup without replacing Agent Connect app consent | Planned research profile                           |
+| Generic public reverse tunnel or custom HTTPS URL | Usually proves control of a hostname/certificate, not that the endpoint belongs to this user or that callers are authorized | Runtime-card key binding and connector-hosted enrollment become essential; public abuse controls and confinement matter more                                                                   | Advanced future profile, not automatically trusted |
+| Account-backed Agent Connect directory or relay   | A service could bind a connector public key and endpoint to an authenticated user account                                   | Could improve discovery, recovery, multi-device UX, and destination-ownership evidence while leaving application grants connector-owned                                                        | North-star option, not implemented                 |
+| Packaged cloud VM or long-running container       | Internet-reachable user-owned deployment with reproducible packaging                                                        | Needs deliberate credential injection, persistent connector identity, updates, audit, and a named transport profile                                                                            | Planned appliance direction                        |
+| Ephemeral on-demand cloud runner                  | Short-lived isolated agent execution, potentially created per session or task                                               | Connector/control-plane identity may remain durable while workspaces, agent processes, and credentials are brokered into disposable runners                                                    | Longer-term confinement/deployment direction       |
+| Managed connector/runtime                         | Provider operates reachability and execution                                                                                | Can offer stronger account identity, policy, updates, and possibly attestation, but changes the trust and business boundary from purely self-hosted                                            | Possible future provisioning profile               |
+
+The common requirement is explicit assurance. Every profile must state what is known about the destination, what is known about the caller, what the browser can verify, what the connector enforces, and which claims come only from the downstream runtime.
+
 ## Public hackathon judge profile: same boundaries, different identity source
 
 The public judge demo exists so judges install nothing and do not join the owner's tailnet.
@@ -379,25 +473,24 @@ The entire public stack runs in one container as an unprivileged user with a rea
 
 The public runtime is honestly deterministic. It contains three Codex-authored recorded plans—one for a project board, one for document review, and one for product research. It still exercises the real browser SDK, authorization, gateway, OmniGENT, ACP, request-scoped MCP, browser tool, result-return, and visible-mutation path. It does not perform live model reasoning and must never be labeled as live Codex.
 
-The separate private proof completed the same composition with real Codex. A useful diagram may show these as two deployment badges over the same control/data boundaries:
+The separate private proof completed the same composition with real Codex. The two profiles share control and data boundaries but provide different runtime and transport evidence:
 
 - **Private composition proof:** real Codex through OmniGENT; personal credentials; Tailscale Serve; current runtime sandbox is transitional.
 - **Public judge fixture:** deterministic ACP; no model credential; Tailscale Funnel; disposable container; safe free judging path.
 
-## The current demo surface
+## The current demo proof
 
-The demo is both a working application and the project's primary explainer. It currently contains:
+The public demo exercises the following product behavior:
 
-1. a hero with the claim “Let Codex work inside your app”;
-2. a compact three-actor microflow: Web app → Agent Connect → Coding agent, with tool calls and responses returning;
-3. a runtime-card connection and authorization workbench;
-4. three embedded, visually independent example applications;
-5. an event-driven session activity feed and raw event disclosure;
-6. a “two pieces, two owners” SDK/gateway responsibility explanation;
-7. a browser SDK code example;
-8. an animated terminal showing the current source-based gateway startup.
-
-The architecture section you are designing should deepen the page after the working proof. Do not rebuild the live demo or duplicate the small hero microflow. The new section should answer the questions the compact hero deliberately leaves open: What is really running? Who owns what? How does trust bootstrap? Where does OAuth-style authorization happen? Why can tools travel backward? What is provider-specific today? What remains stable when the protocols change?
+1. a visitor imports the public runtime card;
+2. the SDK verifies connector identity and completes device enrollment and application authorization when required;
+3. one application grant authorizes the exact fixed nine-tool snapshot;
+4. the visitor selects a project-board, document-review, or product-research scenario and sends a prompt;
+5. the deterministic ACP fixture follows the corresponding Codex-authored recorded plan;
+6. real tool requests cross OmniGENT, the gateway, and SDK into browser-owned handlers;
+7. the selected application mutates its own state and returns correlated tool results;
+8. the task completes through the same protocol path;
+9. the connector can list and revoke the application grant, after which reuse is rejected.
 
 ### Three example applications and nine tools
 
@@ -419,15 +512,7 @@ The architecture section you are designing should deepen the page after the work
 - `add_price_comparison`
 - `add_product_alternatives`
 
-The public grant authorizes one frozen superset of all nine tools so switching tabs does not require repeated consent. The deterministic fixture selects the corresponding recorded three-tool plan. Product prices and sources are recorded, not live web research.
-
-### Existing live motion
-
-Real `tool.requested` events send one amber correlated call pill into the selected app. The app boundary illuminates, and the actual affected object animates: project cards pop/update/move using FLIP; document passages highlight/rewrite/reformat; product research panels and rows reveal. `tool.completed` changes the same pill and boundary to success or failure before the result returns.
-
-Real runtimes emit calls rapidly, so the Canvas applies a presentation clock between yielded tool request and result events. Each real correlated request and result receives a minimum readable dwell before the task stream advances. No event is invented or reordered. Reduced-motion mode uses short static state holds without spatial movement.
-
-The new architecture animation should complement this. It may reuse the same actor colors and action IDs, but should not compete with the embedded-app mutation choreography.
+The public grant authorizes one frozen superset of all nine tools so switching scenarios does not require repeated consent. The deterministic fixture selects the corresponding recorded three-tool plan. Product prices and sources are recorded, not live web research.
 
 ## Current security and confinement truth
 
@@ -452,7 +537,7 @@ It cannot remotely prove arbitrary self-hosted sandbox enforcement merely becaus
 
 ## Intended future architecture
 
-The future diagram should visually preserve the Agent Connect control plane while allowing both the application protocol and runtime adapter to change.
+The intended architecture preserves the Agent Connect control plane while allowing both the application protocol and runtime adapter to change.
 
 ```text
 web application
@@ -556,239 +641,12 @@ Target sequence:
 6. record the result before resuming the downstream agent;
 7. persist logical-to-provider mappings so an unhealthy runner can be replaced without exposing provider IDs.
 
-Do not visualize generic exactly-once magic. Visualize explicit pending, delivered, applied, acknowledged, and resumed states.
+The intended reliability model uses explicit pending, delivered, applied, acknowledged, and resumed states rather than claiming generic exactly-once execution.
 
-## Visual language already established
+## Implementation status summary
 
-### Creative north star: The Open Workbench
-
-The page should feel like a precise workbench in a bright studio: useful machinery is visible, every handoff is marked, and technical depth is progressively disclosed. It should feel effortless, trustworthy, refined, and technically compelling—not futuristic.
-
-### Actor colors
-
-Use these roles consistently:
-
-```css
---background: oklch(1 0 0);
---surface: oklch(0.972 0.006 250);
---surface-strong: oklch(0.935 0.01 250);
---ink: oklch(0.2 0.018 250);
---muted: oklch(0.46 0.018 250);
---border: oklch(0.85 0.012 250);
-
---app-coral: oklch(0.56 0.16 32.1);
---connector-teal: oklch(0.43 0.09 190);
---agent-periwinkle: oklch(0.52 0.15 275);
---signal-amber: oklch(0.79 0.14 83);
---success: oklch(0.48 0.12 150);
---danger: oklch(0.5 0.18 25);
-```
-
-- Coral always means the application or an application-owned capability.
-- Teal always means connector identity, gateway, authorization boundary, or verified trust state.
-- Periwinkle always means the coding agent or downstream runtime.
-- Amber means a request or handoff is in flight.
-- Green means completed/applied.
-- Red is only failure, revocation, or destructive warning.
-
-### Typography
-
-- Main family: Figtree Variable, falling back to `ui-sans-serif, system-ui, sans-serif`.
-- Evidence/code family: IBM Plex Mono, falling back to `ui-monospace, monospace`.
-- Prose explains; monospace proves.
-- Labels use weight and proximity, not uppercase letter-spaced eyebrows.
-- Body text should remain around 65–75 characters per line.
-
-### Shape, spacing, and elevation
-
-- Radii: 6px small, 10px controls, 14px major workbench/code surfaces.
-- Spacing vocabulary: 4, 8, 12, 16, 24, 32, 48, 64, and 96px.
-- Flat structural surfaces by default. Use dividers and tonal contrast before shadow.
-- Maximum resting lift: approximately `0 6px 8px oklch(0.2 0.018 250 / 0.08)`.
-- Do not pair decorative borders with large soft shadows.
-- Controls use familiar product affordances and a minimum 44–48px touch target.
-
-### Explicit anti-references
-
-Do not create:
-
-- a sci-fi command center;
-- neon circuitry, holograms, glowing grids, or particle fields;
-- a generic gradient-heavy AI startup page;
-- glassmorphism;
-- gradient text;
-- cream/parchment AI-editorial styling;
-- a terminal-first hacker aesthetic;
-- a dense enterprise-security dashboard;
-- endless identical cards;
-- a static “three boxes with arrows” architecture chart;
-- decorative looping motion unrelated to real states;
-- hand-drawn or sketchy SVG illustrations;
-- a diagram that implies every task always calls the same tools.
-
-The page is mostly true white and cool neutral structure. Color communicates responsibility and state rather than decoration.
-
-## Motion requirements
-
-Animation must explain causality and direction.
-
-Recommended semantic motions:
-
-- **Runtime bootstrap:** a connector key and public runtime card emerge from the user-owned boundary; the private passphrase follows a separate protected path into the user's password manager.
-- **Connector proof:** a nonce travels to the gateway; a signed response returns and locks the connector identity into a verified state.
-- **Authorization:** app metadata and tool cards travel to the connector; the view changes origin; the user reviews and approves; a one-use code returns; PKCE exchange produces a scoped grant.
-- **Prompt:** one packet moves app → gateway → conductor → adapter → agent.
-- **Tool request:** direction reverses agent → adapter → conductor → gateway → app, carrying tool name and stable action ID.
-- **App mutation:** the application surface changes itself.
-- **Tool result:** the correlated result returns app → gateway → agent and the agent continues.
-- **Provider swap / future architecture:** the Agent Connect security and control-plane frame remains fixed while the application protocol and provider tiles swap behind explicit adapter seams.
-- **Failure:** motion stops at the responsible boundary and that boundary becomes the recovery focus; do not turn the entire page red.
-
-Use 150–250ms for ordinary state transitions and roughly 300–500ms for spatial handoffs. For explanatory sequences, minimum readable dwell matters more than raw event speed. Rapid incoming events should queue, coalesce only when semantically safe, or fast-forward obsolete transit motion without dropping the final state. Never reorder correlated actions.
-
-`prefers-reduced-motion` must remove moving packets and spatial travel. Show the same state changes, labels, ordering, and results instantly or with short crossfades. Motion must never be the only source of meaning.
-
-## Suggested information architecture for the new section
-
-This is a recommendation, not a rigid wireframe. The section may use several connected views because its purpose is a deep dive, but they should feel like one “current system → trust and execution → future system” narrative.
-
-### View 1: “Reference architecture today”
-
-A layered current-system diagram with visibly different ownership and deployment zones:
-
-- third-party web application and `@agent-connect/web`;
-- transport boundary and Agent Connect gateway;
-- user-owned runtime boundary;
-- OmniGENT conductor;
-- ACP adapter;
-- Codex or the deterministic ACP fixture;
-- request-scoped MCP relay returning application tools to the browser.
-
-Let visitors switch between “Private real Codex proof” and “Public judge fixture.” Keep shared layers fixed and animate the profile-specific transport, credential, runtime, and confinement pieces. Make the deterministic-fixture disclosure clear without implying that the private Codex proof is part of the public appliance.
-
-### View 2: “Two-way trust and application authorization”
-
-Show the complete ceremony in two phases:
-
-1. **Set up the connector once:** it creates a runtime card and private enrollment passphrase; the user saves them through a trusted personal channel.
-2. **Approve an application:** the app verifies a signed connector challenge before disclosure, redirects to the connector-owned page, the connector verifies its transport principal, the user reviews the exact Origin and tools, and Authorization Code + S256 PKCE returns a revocable scoped grant.
-3. **Use it normally:** later tasks reconnect without SSH or restarting the agent until the grant expires, is revoked, or its requested authority changes.
-
-Make both trust questions legible:
-
-- connector asks, “Is this exact app allowed to use the agent?”
-- app asks, “Is this the connector the user enrolled?”
-
-Show that Tailscale provides the first trusted transport profile while Agent Connect—not Tailscale—owns connector enrollment and the application grant. Distinguish private Serve identity from public Funnel reachability.
-
-### View 3: “One task across the current stack”
-
-Animate one complete correlated turn through the components shown in View 1:
-
-1. application sends a prompt;
-2. gateway resolves an opaque logical session;
-3. OmniGENT runs the downstream ACP agent;
-4. agent requests an application tool through the request-scoped MCP relay;
-5. `tool.requested` returns to the browser with a stable action ID;
-6. the application executes and visibly mutates itself;
-7. `tool.completed` and the result return to the same downstream turn;
-8. the agent continues or completes.
-
-Allow no tools, one tool, or multiple tools. The visualization must not imply a hard-coded linear pipeline even though the public judge fixture uses recorded Codex-authored plans.
-
-### View 4: “Stable control plane, replaceable runtimes”
-
-Use a current-to-future morph. Keep the web application's tool contract and Agent Connect's trust/control-plane frame visually fixed while the internal runtime stack changes.
-
-- **Current reference:** browser SDK → Agent Connect gateway → OmniGENT → ACP adapter → Codex.
-- **Future direction:** a standardized application-facing event profile may use AG-UI; provider adapters may target OmniGENT, direct ACP, or another conductor; ACP remains the preferred downstream coding-agent boundary.
-- **Experimental only:** direct browser ACP/WebSocket and MCP-over-ACP may appear in a technical annotation, not as an equal or promised product path.
-
-The visual takeaway is not “Agent Connect supports every agent today.” It is “applications integrate against a neutral boundary, and the current OmniGENT/Codex composition proves that boundary can work.” AG-UI and ACP should be shown at their different intended layers, not grouped together as interchangeable protocol logos.
-
-### View 5: “What is proven, transitional, and proposed”
-
-Apply an assurance/status legend to the architecture rather than presenting every box as equally finished:
-
-- implemented and enforced by Agent Connect;
-- current reference implementation but provider-specific;
-- enforced by the selected transport/provider/runtime;
-- observed or self-reported;
-- experimental;
-- planned;
-- explicitly not claimed.
-
-This can be a final overlay or scrubber that recolors/annotates the preceding diagrams. It should make the honest engineering boundary memorable: authorization is real; provider neutrality exists at the public API but still has an OmniGENT seam internally; public judging is isolated and deterministic; general runtime confinement and durable recovery remain future work.
-
-## Real and proposed event hooks
-
-The task stream already emits the real `AgentTaskEvent` union shown earlier. Connection and authorization lifecycle points exist in code but are not yet published as one dedicated visualization bus.
-
-A future integration may expose:
-
-```ts
-type DemoFlowEvent =
-  | { type: "connector.checking" }
-  | { type: "connector.verified"; runtimeId: string; profile: string }
-  | {
-      type: "authorization.required";
-      appId: string;
-      origin: string;
-      toolNames: string[];
-    }
-  | { type: "authorization.approved" }
-  | { type: "authorization.revoked" }
-  | { type: "runtime.connected"; label: string }
-  | { type: "task.sent"; scenario: string; prompt: string }
-  | AgentTaskEvent;
-```
-
-Potential dispatch shape:
-
-```ts
-window.dispatchEvent(
-  new CustomEvent("agent-connect:demo-flow", { detail: event }),
-);
-```
-
-Do not describe this event bus as implemented. Design the visual state machine so it can consume it later. The current activity feed is real and the tool choreography already consumes real task events directly.
-
-## Required truth labels
-
-The final design must make these distinctions clear:
-
-- **Implemented now:** neutral public task/tool types, connector key and runtime card, signed challenge, passphrase device enrollment, connector-owned consent, PKCE, bearer grant, exact Origin/app/scope/tool bindings, revocation, opaque sessions, OmniGENT provisioning/healing, real Codex composition proof, deterministic public judge appliance, nine browser tools, live browser mutation choreography.
-- **Current implementation seam:** browser package still contains an `OmnigentProvider` and gateway-proxied OmniGENT-shaped routes.
-- **Proposed/pending:** AG-UI application-facing adapter, dynamic unknown-Origin enrollment, DPoP/app-instance keys, durable pending actions and provider mappings, audit and budgets, reproducible general connector appliance, separate ephemeral runner containers, second provider.
-- **Experimental/unstable:** direct ACP browser profile, WebSocket ACP transport, MCP-over-ACP subset, Bubblewrap dynamic-tool sandbox.
-- **Not claimed:** generic OAuth conformance, generic AG-UI conformance, stable MCP-over-ACP conformance, exactly-once side effects, verified arbitrary-host sandboxing, live model reasoning in the public judge fixture, or that authorization makes an app trustworthy.
-
-## Deliverables requested from you
-
-Please provide:
-
-1. a polished desktop architecture section;
-2. a separately composed mobile version, not merely a squeezed desktop diagram;
-3. static states for current architecture, authorization, live tool loop, and future architecture;
-4. animated transitions between those states;
-5. a reduced-motion variant;
-6. readable labels at actual page size;
-7. a self-contained preview;
-8. editable source with semantic component and event names;
-9. a short integration note describing the state machine, dimensions/viewBox, timing, and where real events plug in;
-10. any assets used, preferably none beyond CSS, fonts already listed, and inline SVG.
-
-Prioritize clarity over density. The visual should reward a technically curious judge without requiring them to read every label before understanding the main relationships.
-
-## Final design test
-
-Because this section follows the high-level product proof, it does not need to teach the product from zero. After exploring it, a technically curious viewer should understand:
-
-1. exactly how the current browser → gateway → OmniGENT → ACP → Codex composition works;
-2. how dynamically supplied application tools return through MCP without advance per-app installation;
-3. how connector identity, Tailscale transport, connector-owned consent, PKCE grants, and revocation divide responsibility;
-4. why the public deterministic fixture and private real-Codex composition are related proofs but not the same deployment;
-5. which OmniGENT-specific and in-memory seams remain today;
-6. which security guarantees are implemented, provider-enforced, transitional, experimental, or not claimed;
-7. how the stable Agent Connect control plane can survive future AG-UI, ACP, provider, agent, deployment, and confinement changes;
-8. why AG-UI and ACP are candidates at different layers rather than competing names for one protocol slot.
+- **Implemented now:** neutral public task/tool types, connector key and runtime card, signed challenge, passphrase device enrollment, connector-owned consent, PKCE, bearer grant, exact Origin/app/scope/tool bindings, revocation, opaque sessions, OmniGENT provisioning and healing, real Codex composition proof, deterministic public judge appliance, nine browser tools, and live browser mutation choreography.
+- **Current provider-specific seam:** the browser package still contains an `OmnigentProvider` and uses gateway-proxied OmniGENT-shaped routes internally.
+- **Proposed or pending:** AG-UI application-facing adapter, dynamic unknown-Origin enrollment, DPoP/app-instance keys, durable pending actions and provider mappings, audit and usage ceilings, a reproducible general connector appliance, separate ephemeral runner containers, and a second provider.
+- **Experimental or unstable:** direct ACP browser profile, WebSocket ACP transport, MCP-over-ACP subset, and the Bubblewrap dynamic-tool sandbox.
+- **Not claimed:** generic OAuth conformance, generic AG-UI conformance, stable MCP-over-ACP conformance, exactly-once side effects, verified arbitrary-host sandboxing, live model reasoning in the public judge fixture, or that authorization makes an application trustworthy.
