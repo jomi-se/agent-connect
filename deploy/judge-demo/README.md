@@ -20,6 +20,13 @@ Edit `.env` and set:
 - a new high-entropy enrollment passphrase saved in the private judge
   instructions and a password manager.
 
+For local UI iteration without redeploying Firebase, expose Vite through a
+tailnet-only HTTPS Serve port and add that exact origin to
+`AGENT_CONNECT_ALLOWED_ORIGINS`. Add its exact callback to the optional
+comma-separated `AGENT_CONNECT_PUBLIC_DEMO_REDIRECT_URIS`, alongside the
+Firebase callback. Every entry remains bound to the same frozen app id and tool
+snapshot; this is not a wildcard development mode.
+
 The committed tool hash matches the current Firebase Canvas nine-tool snapshot:
 three project-board tools, three document-review tools, and three
 product-research tools. Recompute and review it whenever any definition changes.

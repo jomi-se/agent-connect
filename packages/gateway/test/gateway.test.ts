@@ -638,7 +638,7 @@ describe("public-demo transport profile", () => {
       authStatePath: join(directory, "connector.json"),
       publicEndpoint: "https://runtime.example",
       transportProfile: "public-demo",
-      publicDemoAuthority: demoAuthority(),
+      publicDemoAuthorities: [demoAuthority()],
       enrollmentPassphrase: "public demo enrollment phrase",
     });
 
@@ -738,7 +738,7 @@ describe("public-demo transport profile", () => {
       authStatePath: join(directory, "connector.json"),
       publicEndpoint: "https://runtime.example",
       transportProfile: "public-demo",
-      publicDemoAuthority: demoAuthority(),
+      publicDemoAuthorities: [demoAuthority()],
       enrollmentPassphrase: "public demo enrollment phrase",
     });
 
@@ -758,6 +758,36 @@ describe("public-demo transport profile", () => {
         transportProfile: "public-demo",
       }),
     ).toThrow("public-demo requires an exact configured application authority");
+  });
+
+  it("accepts a second explicitly configured preview callback", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "agent-connect-public-demo-"));
+    temporaryDirectories.push(directory);
+    const { baseUrl } = await start({
+      allowedOrigins: new Set([
+        "https://preview.example",
+        "https://second-preview.example",
+      ]),
+      allowedTailscaleUsers: new Set(),
+      authStatePath: join(directory, "connector.json"),
+      publicEndpoint: "https://runtime.example",
+      transportProfile: "public-demo",
+      publicDemoAuthorities: [
+        demoAuthority(),
+        {
+          ...demoAuthority(),
+          redirectUri: "https://second-preview.example/",
+        },
+      ],
+      enrollmentPassphrase: "public demo enrollment phrase",
+    });
+
+    const response = await pushPublicDemoAuthorization(
+      baseUrl,
+      { redirectUri: "https://second-preview.example/" },
+      "https://second-preview.example",
+    );
+    expect(response.status).toBe(201);
   });
 });
 
@@ -891,11 +921,12 @@ async function pushAuthorization(
 async function pushPublicDemoAuthorization(
   baseUrl: string,
   overrides: Record<string, unknown> = {},
+  origin = "https://preview.example",
 ) {
   return fetch(`${baseUrl}/v1/authorization-requests`, {
     method: "POST",
     headers: {
-      Origin: "https://preview.example",
+      Origin: origin,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

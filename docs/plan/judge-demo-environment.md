@@ -117,7 +117,9 @@ user. The current `tailscale-serve` profile requires the trusted
 
 Add a separately named `public-demo` profile whose authorization requires:
 
-- the exact Firebase Canvas Origin and callback;
+- an explicit allowlist containing the Firebase Canvas Origin and callback;
+  a tailnet-only HTTPS development preview may be added as a second exact
+  authority without weakening this to a wildcard;
 - proof of the connector key from the imported judge runtime card;
 - a high-entropy judge enrollment passphrase entered only on the connector
   origin;

@@ -10,16 +10,16 @@ export function configFromEnv(
 ): GatewayRuntimeConfig {
   const sandbox = sandboxFromEnv(env);
   const transportProfile = env.AGENT_CONNECT_TRANSPORT_PROFILE;
-  const publicDemoAuthority =
+  const publicDemoAuthorities =
     transportProfile === "public-demo"
-      ? {
+      ? csvValues(
+          env.AGENT_CONNECT_PUBLIC_DEMO_REDIRECT_URIS ||
+            requiredEnv(env, "AGENT_CONNECT_PUBLIC_DEMO_REDIRECT_URI"),
+        ).map((redirectUri) => ({
           appId: requiredEnv(env, "AGENT_CONNECT_PUBLIC_DEMO_APP_ID"),
-          redirectUri: requiredEnv(
-            env,
-            "AGENT_CONNECT_PUBLIC_DEMO_REDIRECT_URI",
-          ),
+          redirectUri,
           toolHash: requiredEnv(env, "AGENT_CONNECT_PUBLIC_DEMO_TOOL_HASH"),
-        }
+        }))
       : undefined;
   return {
     host: env.AGENT_CONNECT_HOST ?? "127.0.0.1",
@@ -48,7 +48,7 @@ export function configFromEnv(
       ? { publicEndpoint: env.AGENT_CONNECT_PUBLIC_ENDPOINT }
       : {}),
     ...(transportProfile ? { transportProfile } : {}),
-    ...(publicDemoAuthority ? { publicDemoAuthority } : {}),
+    ...(publicDemoAuthorities ? { publicDemoAuthorities } : {}),
     ...(env.AGENT_CONNECT_ENROLLMENT_PASSPHRASE
       ? { enrollmentPassphrase: env.AGENT_CONNECT_ENROLLMENT_PASSPHRASE }
       : {}),
@@ -91,12 +91,14 @@ function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
 }
 
 function csvSet(value: string | undefined): ReadonlySet<string> {
-  return new Set(
-    (value ?? "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean),
-  );
+  return new Set(csvValues(value ?? ""));
+}
+
+function csvValues(value: string): readonly string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function parsePort(value: string): number {
