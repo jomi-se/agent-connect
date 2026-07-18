@@ -551,10 +551,6 @@ body[data-layout="desktop"] {
   fill: none;
 }
 
-.micro-flow-mover {
-  opacity: 0;
-}
-
 .micro-flow-mover-signal {
   fill: oklch(0.6 0.13 83);
 }

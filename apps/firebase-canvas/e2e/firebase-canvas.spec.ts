@@ -265,6 +265,19 @@ test("mobile and desktop mount different compositions", async ({ page }) => {
   await expect(page.locator("[data-micro-flow] svg")).toBeVisible();
   await expect(page.locator("[data-micro-ring]")).toHaveCount(3);
   await expect(page.locator("[data-micro-mover]")).toHaveCount(5);
+  await expect
+    .poll(
+      () =>
+        page
+          .locator("[data-micro-mover]")
+          .evaluateAll((movers) =>
+            movers.some(
+              (mover) => Number(getComputedStyle(mover).opacity) > 0.1,
+            ),
+          ),
+      { timeout: 2_500 },
+    )
+    .toBe(true);
   const boardTab = page.getByRole("tab", { name: "Project board" });
   await boardTab.focus();
   await boardTab.press("ArrowRight");
