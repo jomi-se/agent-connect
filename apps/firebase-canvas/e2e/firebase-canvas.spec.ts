@@ -60,7 +60,7 @@ test("the dynamically defined tool writes an agent message onto the page", async
       authorizationServer: "https://gateway.example",
     }),
   );
-  await page.getByRole("button", { name: "Run with my Codex" }).click();
+  await page.getByRole("button", { name: "Run with connected agent" }).click();
 
   await expect(page.locator("body")).toHaveAttribute("data-demo", "passed");
   await expect(page.locator("#canvas-message")).toHaveText(
@@ -69,6 +69,22 @@ test("the dynamically defined tool writes an agent message onto the page", async
   await expect(page.locator("#canvas-message")).toHaveAttribute(
     "data-agent-writes",
     "1",
+  );
+  await expect(page.locator("#flow-connector")).toHaveAttribute(
+    "data-state",
+    "complete",
+  );
+  await expect(page.locator("#flow-agent")).toHaveAttribute(
+    "data-state",
+    "complete",
+  );
+  await expect(page.locator("#flow-tool")).toHaveAttribute(
+    "data-state",
+    "complete",
+  );
+  await expect(page.locator("#flow-result")).toHaveAttribute(
+    "data-state",
+    "complete",
   );
   expect(postedEvents).toEqual(
     expect.arrayContaining([
@@ -128,9 +144,9 @@ test("a revoked grant is cleared so the user can authorize again", async ({
   );
 
   await expect(
-    page.getByRole("button", { name: "Disconnect agent" }),
+    page.getByRole("button", { name: "Disconnect and revoke access" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Run with my Codex" }).click();
+  await page.getByRole("button", { name: "Run with connected agent" }).click();
 
   await expect(page.locator("body")).toHaveAttribute(
     "data-demo",
@@ -140,13 +156,13 @@ test("a revoked grant is cleared so the user can authorize again", async ({
     "Authorization was revoked or expired. Run again to reconnect.",
   );
   await expect(
-    page.getByRole("button", { name: "Disconnect agent" }),
+    page.getByRole("button", { name: "Disconnect and revoke access" }),
   ).toBeHidden();
   expect(
     await page.evaluate(() => sessionStorage.getItem("agent-connect.grant")),
   ).toBeNull();
 
-  await page.getByRole("button", { name: "Run with my Codex" }).click();
+  await page.getByRole("button", { name: "Run with connected agent" }).click();
   await expect.poll(() => challengeRequests).toBe(1);
 });
 
@@ -179,7 +195,9 @@ test("disconnect clears the local grant", async ({ page }) => {
   });
   await page.reload();
 
-  await page.getByRole("button", { name: "Disconnect agent" }).click();
+  await page
+    .getByRole("button", { name: "Disconnect and revoke access" })
+    .click();
 
   await expect(page.locator("body")).toHaveAttribute(
     "data-demo",
@@ -192,6 +210,48 @@ test("disconnect clears the local grant", async ({ page }) => {
     await page.evaluate(() => sessionStorage.getItem("agent-connect.grant")),
   ).toBeNull();
   expect(revoked).toBe(true);
+});
+
+test("an invalid runtime card fails visibly without trapping the run button", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator("#runtime-card").fill("not json");
+  await page.getByRole("button", { name: "Run with connected agent" }).click();
+
+  await expect(page.locator("body")).toHaveAttribute("data-demo", "failed");
+  await expect(page.locator("#status")).toHaveText(
+    "Paste a valid Agent Connect runtime card",
+  );
+  await expect(
+    page.getByRole("button", { name: "Run with connected agent" }),
+  ).toBeEnabled();
+  await expect(page.locator("#flow-connector")).toHaveAttribute(
+    "data-state",
+    "error",
+  );
+});
+
+test("the flagship explanation remains usable on a phone viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("heading", {
+      name: "Your app. Their agent. One safe connection.",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Live execution trace" }),
+  ).toBeVisible();
+  await expect(page.locator("#runtime-card")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
 });
 
 function sse(event: unknown): string {
