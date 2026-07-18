@@ -222,7 +222,23 @@ test("disconnect revokes and clears the local grant", async ({ page }) => {
   }, runtimeCard);
   await page.reload();
 
-  await page.getByRole("button", { name: "Disconnect & revoke" }).click();
+  const connect = page.getByRole("button", { name: "Connect runtime" });
+  const disconnect = page.getByRole("button", { name: "Disconnect & revoke" });
+  const [connectBox, disconnectBox] = await Promise.all([
+    connect.boundingBox(),
+    disconnect.boundingBox(),
+  ]);
+  expect(connectBox).not.toBeNull();
+  expect(disconnectBox).not.toBeNull();
+  expect(
+    Math.abs(
+      (disconnectBox?.x ?? 0) -
+        ((connectBox?.x ?? 0) + (connectBox?.width ?? 0)) -
+        8,
+    ),
+  ).toBeLessThan(1);
+
+  await disconnect.click();
 
   await expect(page.locator("body")).toHaveAttribute(
     "data-demo",

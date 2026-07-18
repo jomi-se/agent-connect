@@ -182,7 +182,7 @@ The system is flat by default and structural when layered. Borders and tonal con
 - **Primary:** Workbench Ink with white text and a 48px touch target.
 - **Hover / Focus:** A small contrast shift, visible outline, and no scale animation.
 - **Secondary:** White surface with a structural border; destructive actions use text and explicit copy rather than an alarming filled control.
-- **Action placement:** Connection and prompt forms use the same footer action row. Desktop actions are 180px wide and right-aligned beneath their field; mobile actions are full-width. Only the action available for the current connection state is shown—never leave a disabled Connect control beside Disconnect.
+- **Action placement:** Connection and prompt forms use the same footer action row. Runtime state remains on the left while connection actions form one right-aligned group. Desktop actions are 180px wide; mobile actions are full-width. Only the action available for the current connection state is shown—never leave a disabled Connect control beside Disconnect.
 
 ### Chips
 

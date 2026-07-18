@@ -1065,6 +1065,12 @@ body[data-layout="desktop"] {
   justify-content: space-between;
 }
 
+.action-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .form-actions .button {
   width: 180px;
   flex: 0 0 180px;
@@ -1573,6 +1579,11 @@ body[data-layout="mobile"] {
 
 .mobile-form .form-actions {
   flex-direction: column;
+}
+
+.mobile-form .action-buttons {
+  width: 100%;
+  display: grid;
 }
 
 .mobile-form .button {
