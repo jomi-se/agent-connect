@@ -206,7 +206,7 @@ The compact header keeps the product name, demo status, and a direct path to int
 
 ### Live Flow
 
-The signature component is a five-stage execution trace: app, connector, agent, borrowed tool, and browser result. It begins visible in a neutral state. Real authorization and task events update stage text, status, and connecting paths without moving the layout.
+The signature runtime component is an event-driven activity feed. It begins empty, then appends real connection, task, tool-request, tool-result, completion, and failure events. It must not imply that every task follows a predetermined tool path: a runtime may call no tools, one tool, or many tools.
 
 ## Do's and Don'ts
 

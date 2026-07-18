@@ -31,7 +31,6 @@
           <a href="#how">How it works</a>
           <a href="#code">Code</a>
         </nav>
-        <span class="demo-badge"><i aria-hidden="true"></i> Live demo</span>
       </header>
 
       <main id="top" class="desktop-page">
@@ -43,12 +42,20 @@
               agent—without installing an MCP first.
             </p>
           </div>
-          <div class="boundary-line" aria-label="Application connection flow">
-            <span class="boundary-app">Web app</span>
-            <i aria-hidden="true">→</i>
-            <span class="boundary-connector">Agent Connect</span>
-            <i aria-hidden="true">→</i>
-            <span class="boundary-agent">Coding agent</span>
+          <div
+            class="boundary-line"
+            aria-label="Tasks travel from the web app through Agent Connect to the coding agent. Tool calls and responses return to the web app."
+          >
+            <div class="boundary-forward">
+              <span class="boundary-app">Web app</span>
+              <i aria-hidden="true">→</i>
+              <span class="boundary-connector">Agent Connect</span>
+              <i aria-hidden="true">→</i>
+              <span class="boundary-agent">Coding agent</span>
+            </div>
+            <div class="boundary-return" aria-hidden="true">
+              <span>←</span><strong>Tool calls + responses</strong>
+            </div>
           </div>
         </section>
 
@@ -92,8 +99,10 @@
 
           <div class="scenario-controls">
             <div class="scenario-heading">
-              <h2>Try an app feature</h2>
-              <p>The connected runtime sees nine tools owned by this page.</p>
+              <h2>Example demo apps</h2>
+              <button class="tool-info-button" id="show-tools" type="button">
+                View app tools
+              </button>
             </div>
             <div
               class="scenario-tabs"
@@ -277,33 +286,19 @@
             </section>
           </div>
 
-          <section class="trace-panel" aria-labelledby="trace-title">
+          <section
+            class="trace-panel activity-panel"
+            aria-labelledby="trace-title"
+          >
             <div class="trace-heading">
-              <h3 id="trace-title">Live request path</h3>
-              <span id="trace-summary">Waiting for a task</span>
+              <h3 id="trace-title">Session activity</h3>
+              <span id="trace-summary">No events yet</span>
             </div>
-            <ol class="trace-steps">
-              <li id="flow-app" data-state="ready">
-                <span class="trace-marker" aria-hidden="true"></span>
-                <strong>App</strong><span>Defines tools</span>
-              </li>
-              <li id="flow-connector" data-state="idle">
-                <span class="trace-marker" aria-hidden="true"></span>
-                <strong>Connector</strong><span>Checks grant</span>
-              </li>
-              <li id="flow-agent" data-state="idle">
-                <span class="trace-marker" aria-hidden="true"></span>
-                <strong>Runtime</strong><span>Runs task</span>
-              </li>
-              <li id="flow-tool" data-state="idle">
-                <span class="trace-marker" aria-hidden="true"></span>
-                <strong>Tool</strong><span>Changes app</span>
-              </li>
-              <li id="flow-result" data-state="idle">
-                <span class="trace-marker" aria-hidden="true"></span>
-                <strong>Result</strong><span>Returns to runtime</span>
-              </li>
-            </ol>
+            <ol
+              id="activity-feed"
+              class="activity-feed"
+              aria-live="polite"
+            ></ol>
             <details class="event-details">
               <summary>Raw events</summary>
               <pre
@@ -471,6 +466,12 @@ for await (const event of connection.session.streamTask(prompt)) {
           </div>
 
           <div class="mobile-scenarios">
+            <div class="mobile-scenario-heading">
+              <h2>Example demo apps</h2>
+              <button class="tool-info-button" id="show-tools" type="button">
+                View tools
+              </button>
+            </div>
             <div
               class="scenario-tabs"
               role="tablist"
@@ -657,33 +658,19 @@ for await (const event of connection.session.streamTask(prompt)) {
             </section>
           </div>
 
-          <section class="mobile-trace" aria-labelledby="mobile-trace-title">
+          <section
+            class="mobile-trace activity-panel"
+            aria-labelledby="mobile-trace-title"
+          >
             <div class="trace-heading">
-              <h2 id="mobile-trace-title">Live path</h2>
-              <span id="trace-summary">Waiting for a task</span>
+              <h2 id="mobile-trace-title">Session activity</h2>
+              <span id="trace-summary">No events yet</span>
             </div>
-            <ol class="trace-steps">
-              <li id="flow-app" data-state="ready">
-                <span class="trace-marker" aria-hidden="true"></span>
-                <strong>App defines nine tools</strong>
-              </li>
-              <li id="flow-connector" data-state="idle">
-                <span class="trace-marker" aria-hidden="true"></span>
-                <strong>Connector checks access</strong>
-              </li>
-              <li id="flow-agent" data-state="idle">
-                <span class="trace-marker" aria-hidden="true"></span>
-                <strong>Runtime runs the task</strong>
-              </li>
-              <li id="flow-tool" data-state="idle">
-                <span class="trace-marker" aria-hidden="true"></span>
-                <strong>Tool changes the app</strong>
-              </li>
-              <li id="flow-result" data-state="idle">
-                <span class="trace-marker" aria-hidden="true"></span>
-                <strong>Result returns to the runtime</strong>
-              </li>
-            </ol>
+            <ol
+              id="activity-feed"
+              class="activity-feed"
+              aria-live="polite"
+            ></ol>
             <details class="event-details">
               <summary>Raw events</summary>
               <pre
@@ -759,6 +746,29 @@ const connection = await connectAgent({
         </p>
       </main>
     </template>
+
+    <dialog
+      id="tool-dialog"
+      class="tool-dialog"
+      aria-labelledby="tool-dialog-title"
+    >
+      <div class="tool-dialog-heading">
+        <div>
+          <span>Declared by the web app</span>
+          <h2 id="tool-dialog-title">Project board tools</h2>
+        </div>
+        <form method="dialog">
+          <button type="submit" aria-label="Close tool definitions">
+            Close
+          </button>
+        </form>
+      </div>
+      <p id="tool-dialog-copy">
+        These three tools belong to this example. For one-time consent, the
+        public demo authorizes all nine together.
+      </p>
+      <div id="tool-list" class="tool-definition-list"></div>
+    </dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

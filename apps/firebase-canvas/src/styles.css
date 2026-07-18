@@ -331,46 +331,6 @@ body[data-demo="passed"] .status-line {
   text-align: right;
 }
 
-.trace-steps {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.trace-steps li {
-  position: relative;
-}
-
-.trace-marker {
-  position: absolute;
-  z-index: 1;
-  width: 9px;
-  height: 9px;
-  border: 2px solid var(--surface);
-  border-radius: 50%;
-  background: var(--border-strong);
-  transition:
-    background-color var(--duration) var(--ease-out),
-    box-shadow var(--duration) var(--ease-out);
-}
-
-.trace-steps li[data-state="active"] .trace-marker {
-  box-shadow: 0 0 0 4px var(--signal-soft);
-  background: var(--signal);
-}
-
-.trace-steps li[data-state="complete"] .trace-marker {
-  background: var(--success);
-}
-
-.trace-steps li[data-state="error"] .trace-marker {
-  background: var(--danger);
-}
-
-#flow-app[data-state="ready"] .trace-marker {
-  background: var(--app);
-}
-
 .event-details {
   border-top: 1px solid var(--border);
 }
@@ -484,27 +444,6 @@ body[data-layout="desktop"] {
   color: var(--ink);
 }
 
-.demo-badge {
-  justify-self: end;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  color: var(--connector-ink);
-  background: var(--connector-soft);
-  font-size: 0.75rem;
-  font-weight: 680;
-}
-
-.demo-badge i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--connector);
-}
-
 .desktop-intro {
   min-height: 330px;
   display: grid;
@@ -533,9 +472,8 @@ body[data-layout="desktop"] {
 }
 
 .boundary-line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  gap: 9px;
   padding: 18px 0;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -544,9 +482,38 @@ body[data-layout="desktop"] {
   white-space: nowrap;
 }
 
-.boundary-line i {
+.boundary-forward {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.boundary-forward i {
   color: var(--border-strong);
   font-style: normal;
+}
+
+.boundary-return {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+  color: var(--app-ink);
+  font-size: 0.7rem;
+}
+
+.boundary-return strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 620;
+}
+
+.boundary-return strong::after {
+  content: "";
+  width: 100%;
+  height: 1px;
+  background: var(--app);
 }
 
 .boundary-app {
@@ -667,49 +634,6 @@ body[data-layout="desktop"] {
 .trace-panel {
   border-top: 1px solid var(--border);
   background: var(--surface);
-}
-
-.trace-panel .trace-steps {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  padding: 0 20px 22px;
-}
-
-.trace-panel .trace-steps li {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-  padding: 20px 14px 8px 0;
-  border-top: 1px solid var(--border);
-}
-
-.trace-panel .trace-steps li:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  top: -2px;
-  left: 10px;
-  width: calc(100% - 10px);
-  height: 3px;
-  background: transparent;
-  transition: background-color var(--duration) var(--ease-out);
-}
-
-.trace-panel .trace-steps li[data-state="complete"]:not(:last-child)::after {
-  background: var(--success);
-}
-
-.trace-panel .trace-marker {
-  top: -5px;
-  left: 0;
-}
-
-.trace-panel .trace-steps strong {
-  font-size: 0.8rem;
-}
-
-.trace-panel .trace-steps li > span:last-child {
-  color: var(--muted);
-  font-size: 0.7rem;
 }
 
 .desktop-explanation {
@@ -915,7 +839,28 @@ body[data-layout="desktop"] {
 }
 
 .scenario-heading {
+  align-content: start;
+  display: grid;
+  justify-items: start;
+  gap: 12px;
   grid-row: 1 / span 2;
+}
+
+.tool-info-button {
+  min-height: 36px;
+  border: 0;
+  padding: 0;
+  color: var(--connector-ink);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.tool-info-button:hover {
+  color: var(--ink);
 }
 
 .scenario-tabs {
@@ -1415,42 +1360,6 @@ body[data-layout="mobile"] {
   text-align: left;
 }
 
-.mobile-trace .trace-steps {
-  padding: 0 20px 18px 28px;
-}
-
-.mobile-trace .trace-steps li {
-  min-height: 48px;
-  display: flex;
-  align-items: flex-start;
-  padding: 6px 0 14px 22px;
-  border-left: 1px solid var(--border);
-}
-
-.mobile-trace .trace-steps li:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  top: 11px;
-  bottom: -5px;
-  left: -2px;
-  width: 3px;
-  background: transparent;
-}
-
-.mobile-trace .trace-steps li[data-state="complete"]:not(:last-child)::after {
-  background: var(--success);
-}
-
-.mobile-trace .trace-marker {
-  top: 8px;
-  left: -5px;
-}
-
-.mobile-trace .trace-steps strong {
-  font-size: 0.82rem;
-  line-height: 1.4;
-}
-
 .mobile-explanation {
   padding: 72px 0 30px;
 }
@@ -1663,6 +1572,240 @@ body[data-layout="mobile"] .product-layout aside {
 
 body[data-layout="mobile"] .mobile-trace {
   margin-top: 0;
+}
+
+/* Runtime events are appended from the live session; no path is pre-rendered. */
+
+.activity-panel .trace-heading {
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-feed {
+  max-height: 280px;
+  margin: 0;
+  overflow-y: auto;
+  padding: 8px 20px 16px;
+  list-style: none;
+  scrollbar-gutter: stable;
+}
+
+.activity-feed:empty::before {
+  content: "Connection and task events will appear here.";
+  display: block;
+  padding: 16px 0 10px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.activity-feed li {
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-feed li:last-child {
+  border-bottom: 0;
+}
+
+.activity-marker {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border: 2px solid var(--background);
+  border-radius: 50%;
+  background: var(--border-strong);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.activity-feed li[data-kind="connector"] .activity-marker {
+  background: var(--connector);
+}
+
+.activity-feed li[data-kind="runtime"] .activity-marker {
+  background: var(--agent);
+}
+
+.activity-feed li[data-kind="tool"] .activity-marker {
+  background: var(--app);
+}
+
+.activity-feed li[data-kind="result"] .activity-marker {
+  background: var(--success);
+}
+
+.activity-feed li[data-state="active"] .activity-marker {
+  box-shadow: 0 0 0 4px var(--signal-soft);
+  animation: activity-pulse 1.4s var(--ease-out) infinite;
+}
+
+.activity-feed li[data-state="error"] .activity-marker {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px var(--danger-soft);
+}
+
+.activity-feed li > div {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.55fr) minmax(0, 1.45fr);
+  gap: 18px;
+}
+
+.activity-feed strong {
+  overflow-wrap: anywhere;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.activity-feed li > div > span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.mobile-scenario-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 16px 4px;
+}
+
+.mobile-scenario-heading h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.tool-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(760px, calc(100dvh - 48px));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 0;
+  color: var(--ink);
+  background: var(--background);
+  box-shadow: 0 20px 60px oklch(0.2 0.018 250 / 0.2);
+}
+
+.tool-dialog::backdrop {
+  background: oklch(0.2 0.018 250 / 0.48);
+}
+
+.tool-dialog-heading {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+}
+
+.tool-dialog-heading span,
+.tool-dialog > p {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.tool-dialog-heading h2 {
+  margin: 3px 0 0;
+  font-size: 1.25rem;
+}
+
+.tool-dialog-heading button {
+  min-height: 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 14px;
+  color: var(--ink);
+  background: var(--background);
+  cursor: pointer;
+  font-weight: 680;
+}
+
+.tool-dialog > p {
+  margin: 0;
+  padding: 18px 22px 0;
+  line-height: 1.5;
+}
+
+.tool-definition-list {
+  display: grid;
+  gap: 0;
+  padding: 8px 22px 24px;
+}
+
+.tool-definition-list details {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-definition-list details:last-child {
+  border-bottom: 0;
+}
+
+.tool-definition-list summary {
+  cursor: pointer;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.9rem;
+  font-weight: 680;
+}
+
+.tool-definition-list p {
+  margin: 7px 0 12px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.tool-definition-list pre {
+  margin: 0;
+  overflow: auto;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  color: oklch(0.9 0.012 250);
+  background: var(--ink);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+@keyframes activity-pulse {
+  50% {
+    box-shadow: 0 0 0 7px var(--signal-soft);
+  }
+}
+
+@media (max-width: 640px) {
+  .activity-feed {
+    max-height: 360px;
+    padding-inline: 16px;
+  }
+
+  .activity-feed li > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .tool-dialog-heading {
+    padding: 16px;
+  }
+
+  .tool-dialog > p,
+  .tool-definition-list {
+    padding-inline: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-feed li[data-state="active"] .activity-marker {
+    animation: none;
+  }
 }
 
 @media (max-width: 1060px) {

@@ -12,6 +12,26 @@ export const DEFAULT_PROMPTS: Readonly<Record<DemoScenario, string>> = {
     "Is this a sensible pair of headphones for an eight-year-old? Check safety, whether the price is fair, and show better alternatives.",
 };
 
+export const SCENARIO_TOOL_NAMES: Readonly<
+  Record<DemoScenario, readonly string[]>
+> = {
+  "project-board": [
+    "create_project_tasks",
+    "update_project_tasks",
+    "move_project_tasks",
+  ],
+  "document-review": [
+    "add_document_comments",
+    "replace_document_text",
+    "format_document_blocks",
+  ],
+  "product-research": [
+    "add_product_assessment",
+    "add_price_comparison",
+    "add_product_alternatives",
+  ],
+};
+
 export function createDemoTools(): readonly ApplicationTool[] {
   return [
     defineTool({
@@ -400,16 +420,21 @@ function setTaskPriority(task: HTMLElement, priority: string): void {
 }
 
 function findQuote(quote: string): HTMLElement {
+  const normalizedQuote = normalizeWhitespace(quote);
   const match = [
     ...document.querySelectorAll<HTMLElement>("[data-review-quote]"),
   ].find(
     (element) =>
-      element.textContent?.trim() === quote ||
+      normalizeWhitespace(element.textContent ?? "") === normalizedQuote ||
       element.dataset["originalQuote"] === quote,
   );
   if (!match) throw new Error(`Quoted text is no longer present: ${quote}`);
   match.dataset["originalQuote"] ??= quote;
   return match;
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function revealProductResearch(): void {
