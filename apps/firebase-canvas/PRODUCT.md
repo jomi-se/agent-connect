@@ -16,13 +16,13 @@ The longer-term audience represented by the demo is a web developer who wants to
 
 ## Product Purpose
 
-The demo is both a working application and an explanation of Agent Connect. A visitor authorizes the page, sends a task to a remote user-owned agent, and watches that agent invoke a tool defined live by the web application. The surrounding interface makes the authorization, prompt delivery, tool request, local execution, and result return visible as they happen.
+The demo is both a working application and an explanation of Agent Connect. A visitor authorizes the page once, chooses a project-board, document-review, or product-research feature, and watches a connected runtime invoke tools defined live by the web application. The surrounding interface makes the authorization, prompt delivery, tool requests, local execution, and result return visible as they happen.
 
-After the live proof, practical code and terminal examples show how a developer would declare application tools, connect through the browser SDK, operate the gateway, and expose the connector through a supported transport. Success means a judge can experience the result, understand the architecture and security boundaries, and see how little application code is required.
+The mobile and desktop versions are separate compositions over the same demo behavior. Mobile presents a linear touch-first connection and task flow, then progressively discloses technical detail. Desktop keeps the scenarios, execution path, responsibility boundary, and browser code visible together. Success means a judge can experience three credible app-native features, understand the SDK/gateway split and security boundary, and see how little application code is required.
 
 ## Positioning
 
-Any web app can safely lend temporary tools to a user-owned agent, without installing those tools into the agent beforehand.
+Web developers can build AI features powered by coding agents their users already own. The app defines the actions; the user-owned gateway controls access to Codex, Claude Code, or another compatible runtime.
 
 ## Brand Personality
 
@@ -39,6 +39,7 @@ Do not resemble a futuristic science-fiction AI interface, a generic gradient-he
 3. Keep simple things simple and serious things legible. Show the tiny browser integration first, then progressively reveal the connector, transport, orchestration, and security boundaries behind it.
 4. Explain with real artifacts. Prefer the actual runtime state, tool events, SDK snippets, and operator commands over abstract claims.
 5. Treat mobile as a first-class demonstration surface. The complete flow must remain understandable and operable from a phone.
+6. Share behavior, not layout. Mobile and desktop use the same authorization and tool controller but may use different hierarchy, copy density, and disclosure patterns.
 
 ## Accessibility & Inclusion
 

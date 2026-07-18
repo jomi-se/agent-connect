@@ -1,11 +1,11 @@
 # Firebase Canvas demo
 
-A static web application that lends a connected user-owned agent one
-request-scoped tool: `set_page_message`. When the agent calls it, the page's
-large canvas message changes immediately. The tool is defined by the loaded
-page and is not installed into Codex or OmniGENT in advance. The same SDK path
-has been proven with Codex through OmniGENT and with the deterministic public
-judge runtime.
+A static web application that lends a connected user-owned agent a nine-tool
+snapshot spanning a project board, document review, and product research. When
+the runtime calls those tools, the loaded page mutates immediately. The tools
+are defined by the page and are not installed into Codex or OmniGENT in
+advance. The same SDK path has been proven with Codex through OmniGENT and with
+the deterministic public judge runtime.
 
 The Build Week surface is also a self-explaining product demo. Real task and
 tool events drive a five-stage execution trace, while the architecture and

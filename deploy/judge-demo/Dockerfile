@@ -46,8 +46,7 @@ ENV HOME=/home/agentconnect \
     AGENT_CONNECT_STATE_PATH=/var/lib/agent-connect/connector.json \
     AGENT_CONNECT_TRANSPORT_PROFILE=public-demo \
     AGENT_CONNECT_ACP_TRANSCRIPT=/tmp/agent-connect-acp-transcript.jsonl \
-    AGENT_CONNECT_DETERMINISTIC_TOOL_NAME=set_page_message \
-    AGENT_CONNECT_DETERMINISTIC_TOOL_ARGUMENTS='{"message":"Welcome—this page was updated through the deterministic Agent Connect judge runtime."}'
+    AGENT_CONNECT_DETERMINISTIC_SCENARIOS=1
 
 USER node
 EXPOSE 8787

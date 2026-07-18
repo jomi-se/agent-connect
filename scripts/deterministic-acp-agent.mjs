@@ -13,7 +13,167 @@ const targetToolName =
 const targetToolArguments = parseTargetArguments(
   process.env.AGENT_CONNECT_DETERMINISTIC_TOOL_ARGUMENTS ?? "{}",
 );
+const scenarioMode = process.env.AGENT_CONNECT_DETERMINISTIC_SCENARIOS === "1";
 const sessions = new Map();
+
+const scenarioPlans = {
+  "project-board": [
+    {
+      name: "create_project_tasks",
+      arguments: {
+        tasks: [
+          {
+            id: "analytics",
+            title: "Add launch analytics and alerts",
+            priority: "high",
+            status: "backlog",
+          },
+          {
+            id: "support",
+            title: "Prepare the launch support playbook",
+            priority: "medium",
+            status: "backlog",
+          },
+        ],
+      },
+    },
+    {
+      name: "update_project_tasks",
+      arguments: {
+        changes: [
+          {
+            id: "pricing",
+            title: "Confirm launch pricing and upgrade path",
+            priority: "high",
+          },
+          {
+            id: "docs",
+            title: "Publish setup and migration docs",
+            priority: "high",
+          },
+        ],
+      },
+    },
+    {
+      name: "move_project_tasks",
+      arguments: {
+        moves: [
+          { id: "pricing", status: "doing" },
+          { id: "docs", status: "doing" },
+          { id: "checkout", status: "done" },
+        ],
+      },
+    },
+  ],
+  "document-review": [
+    {
+      name: "add_document_comments",
+      arguments: {
+        comments: [
+          {
+            quote:
+              "Our new workspace makes every team exactly twice as productive.",
+            kind: "fact",
+            comment:
+              "Unsupported causal claim. Replace it with a concrete product benefit.",
+          },
+          {
+            quote: "The first graphical web browser was released in 1989.",
+            kind: "fact",
+            comment:
+              "This compresses a disputed history into a precise but unreliable date.",
+          },
+          {
+            quote:
+              "Basically, we really think this is perhaps the best way for everyone to work better.",
+            kind: "clarity",
+            comment:
+              "Hedged and universal. State the intended outcome without claiming it fits everyone.",
+          },
+        ],
+      },
+    },
+    {
+      name: "replace_document_text",
+      arguments: {
+        replacements: [
+          {
+            quote:
+              "Our new workspace makes every team exactly twice as productive.",
+            replacement:
+              "Our new workspace keeps tasks, decisions, and notes in one shared view.",
+          },
+          {
+            quote: "The first graphical web browser was released in 1989.",
+            replacement:
+              "Graphical browsers brought the web to a wider audience in the early 1990s.",
+          },
+          {
+            quote:
+              "Basically, we really think this is perhaps the best way for everyone to work better.",
+            replacement:
+              "We designed it to reduce coordination work without dictating how every team operates.",
+          },
+        ],
+      },
+    },
+    {
+      name: "format_document_blocks",
+      arguments: {
+        blocks: [
+          { blockId: "intro", format: "callout" },
+          { blockId: "history", format: "paragraph" },
+          { blockId: "close", format: "paragraph" },
+        ],
+      },
+    },
+  ],
+  "product-research": [
+    {
+      name: "add_product_assessment",
+      arguments: {
+        kidFit: "poor",
+        verdict:
+          "These are adult headphones, not a strong choice for an eight-year-old.",
+        concerns: [
+          "No child-specific volume limit is listed.",
+          "The adult headband may fit poorly on a smaller head.",
+          "Noise cancellation can reduce awareness outdoors.",
+        ],
+      },
+    },
+    {
+      name: "add_price_comparison",
+      arguments: {
+        listedPrice: 129,
+        fairLow: 85,
+        fairHigh: 110,
+        verdict:
+          "The listed price is above this recorded comparison range. This demo does not fetch live prices.",
+      },
+    },
+    {
+      name: "add_product_alternatives",
+      arguments: {
+        alternatives: [
+          {
+            name: "JBL Junior 320BT",
+            price: 50,
+            reason: "Designed for children with an 85 dB volume limit.",
+            url: "https://www.jbl.com/kids-headphones/",
+          },
+          {
+            name: "PuroQuiet",
+            price: 99,
+            reason:
+              "Child-sized fit, volume limiting, and active noise cancellation.",
+            url: "https://purosound.com/",
+          },
+        ],
+      },
+    },
+  ],
+};
 
 function parseTargetArguments(value) {
   const parsed = JSON.parse(value);
@@ -203,20 +363,25 @@ const app = agent({ name: "Agent Connect deterministic ACP test agent" })
     });
     const session = sessions.get(params.sessionId);
     if (!session) throw new Error(`unknown ACP session ${params.sessionId}`);
-    const selected = session.advertisedTools.find(
-      ({ tool }) => tool.name === targetToolName,
-    );
-    if (!selected) {
-      throw new Error(
-        `request-scoped ${targetToolName} tool was not advertised`,
+    const plan = scenarioMode
+      ? selectScenarioPlan(extractPromptText(params.prompt))
+      : [{ name: targetToolName, arguments: targetToolArguments }];
+    const results = [];
+    for (const step of plan) {
+      const selected = session.advertisedTools.find(
+        ({ tool }) => tool.name === step.name,
       );
+      if (!selected) {
+        throw new Error(`request-scoped ${step.name} tool was not advertised`);
+      }
+      const result = await selected.client.request("tools/call", {
+        name: step.name,
+        arguments: step.arguments,
+      });
+      record({ kind: "agent.tool_result", toolName: step.name, result });
+      results.push({ toolName: step.name, result });
     }
-    const result = await selected.client.request("tools/call", {
-      name: targetToolName,
-      arguments: targetToolArguments,
-    });
-    record({ kind: "agent.tool_result", result });
-    const text = `deterministic-tool-result:${JSON.stringify(result)}`;
+    const text = `recorded-codex-plan:${JSON.stringify(results)}`;
     await client.notify(methods.client.session.update, {
       sessionId: params.sessionId,
       update: {
@@ -246,3 +411,20 @@ await Promise.all(
   ),
 );
 record({ kind: "agent.stopped" });
+
+function extractPromptText(prompt) {
+  if (!Array.isArray(prompt)) return "";
+  return prompt
+    .filter((block) => block?.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n");
+}
+
+function selectScenarioPlan(prompt) {
+  const match =
+    /\[Agent Connect demo scenario: (project-board|document-review|product-research)\]/.exec(
+      prompt,
+    );
+  if (!match) throw new Error("deterministic demo scenario marker is missing");
+  return scenarioPlans[match[1]];
+}

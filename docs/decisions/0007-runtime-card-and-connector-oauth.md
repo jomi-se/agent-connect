@@ -120,6 +120,17 @@ spike. Dynamic registration, URL-based client metadata, or an Agent Connect
 profile may be required. The project must state any profile extensions plainly
 and must not claim generic OAuth conformance before interoperability tests pass.
 
+The target does not require an operator to pre-register each application in
+gateway environment variables. An unknown HTTPS Origin can initiate a bounded
+authorization request, but cannot create sessions or exchange application data
+until the connector user approves it. Approval persists a revocable grant
+bound to the exact Origin, redirect URI, application id, scopes, and canonical
+tool snapshot. This is dynamic application enrollment, not global host trust:
+approving one grant must not authorize other applications, redirects, tools,
+or privileges on the same host. The current static Origin allowlist remains an
+implementation constraint and an intentional additional restriction in the
+shared public-demo profile.
+
 ## Security boundary
 
 - The runtime card authenticates the connector key because the user obtained

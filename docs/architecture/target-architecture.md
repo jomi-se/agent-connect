@@ -78,6 +78,17 @@ app-instance key and DPoP-style sender binding remain target hardening.
 Normal authorization does not require terminal access or connector restart.
 See [ADR 0007](../decisions/0007-runtime-card-and-connector-oauth.md).
 
+An application Origin does not need to be configured when the connector
+starts. A previously unknown HTTPS Origin may initiate only the bounded
+authorization bootstrap. Approval creates a durable, scoped application grant
+binding that exact Origin, redirect URI, application id, scopes, and tool
+snapshot; it does not add the host to a global trust list. Session, prompt,
+result, and tool traffic remain unavailable until that grant exists. Dynamic
+CORS decisions follow the same boundary: bootstrap endpoints may reflect the
+validated initiating Origin, while protected endpoints require an active grant
+bound to that Origin. The current environment-based Origin allowlist is a
+narrow implementation restriction, not the target application-onboarding UX.
+
 Direct URLs and relay addresses are transport hints, not runtime identity. See
 the [mutual runtime identity investigation](../research/2026-07-14-mutual-runtime-identity.md)
 and [trusted transport profile decision](../decisions/0005-trusted-transport-profiles.md).
@@ -106,9 +117,11 @@ approval events use separate protocols and credentials. See the
 and [malicious-application threat model](../research/2026-07-14-malicious-application-runtime-threat-model.md).
 
 The deployed gateway listens only on loopback. Tailscale Serve terminates HTTPS
-and supplies authenticated identity headers; the gateway checks those headers
-and an exact application Origin allowlist before accepting a session request.
-Firebase hosts application assets, not the gateway or the user-owned runtime.
+and supplies authenticated identity headers. The gateway checks those headers
+and requires an exact Origin-bound application grant before accepting a session
+request. The hardened public judge profile may additionally retain a static
+Origin allowlist. Firebase hosts application assets, not the gateway or the
+user-owned runtime.
 
 ### OmniGENT
 

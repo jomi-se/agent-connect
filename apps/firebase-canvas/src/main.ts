@@ -3,30 +3,40 @@ import {
   AgentConnectError,
   completeAgentAuthorization,
   connectAgent,
-  defineTool,
   parseAuthorizationTransaction,
   revokeAgentAuthorization,
   serializeAuthorizationTransaction,
+  type AgentConnection,
   type AgentTaskEvent,
-  type ApplicationTool,
   type RuntimeCard,
 } from "@agent-connect/web";
+import {
+  createDemoTools,
+  DEFAULT_PROMPTS,
+  type DemoScenario,
+} from "./demo-tools.js";
+import { mountDemoLayout } from "./layout.js";
 
-const form = requireElement<HTMLFormElement>("task-form");
+mountDemoLayout();
+
+const connectForm = requireElement<HTMLFormElement>("connect-form");
+const taskForm = requireElement<HTMLFormElement>("task-form");
 const runtimeCardInput = requireElement<HTMLTextAreaElement>("runtime-card");
 const promptInput = requireElement<HTMLTextAreaElement>("prompt");
+const connectButton = requireElement<HTMLButtonElement>("connect");
 const runButton = requireElement<HTMLButtonElement>("run");
 const disconnectButton = requireElement<HTMLButtonElement>("disconnect");
-const canvasMessage = requireElement<HTMLParagraphElement>("canvas-message");
 const status = requireElement<HTMLOutputElement>("status");
 const eventLog = requireElement<HTMLPreElement>("events");
-const canvasState = requireElement<HTMLSpanElement>("canvas-state");
-const connectionState = requireElement<HTMLSpanElement>("connection-state");
+const connectionState = requireElement<HTMLElement>("connection-state");
 const traceSummary = requireElement<HTMLSpanElement>("trace-summary");
 const runtimeSummary = requireElement<HTMLDivElement>("runtime-summary");
 const runtimeProfile = requireElement<HTMLElement>("runtime-profile");
 const runtimeEndpoint = requireElement<HTMLElement>("runtime-endpoint");
-const buttonLabel = runButton.querySelector<HTMLElement>(".button-label");
+const connectButtonLabel = connectButton.querySelector<HTMLElement>(
+  ".connect-button-label",
+);
+const runButtonLabel = runButton.querySelector<HTMLElement>(".button-label");
 
 const flowStages = {
   app: requireElement<HTMLLIElement>("flow-app"),
@@ -42,92 +52,73 @@ type FlowState = "idle" | "ready" | "active" | "complete" | "error";
 const STORED_CARD = "agent-connect.runtime-card";
 const STORED_GRANT = "agent-connect.grant";
 const STORED_TRANSACTION = "agent-connect.authorization-transaction";
-const STORED_PROMPT = "agent-connect.pending-prompt";
+const tools = createDemoTools();
+
+let selectedScenario: DemoScenario = "project-board";
+let connection: AgentConnection | undefined;
+let taskRunning = false;
 
 runtimeCardInput.value = localStorage.getItem(STORED_CARD) ?? "";
+selectScenario(selectedScenario);
 syncAuthorizationControls();
 updateRuntimeSummary();
 
-form.addEventListener("submit", (event) => {
+connectForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  void run();
+  void connectRuntime();
 });
 
-disconnectButton.addEventListener("click", () => {
-  void disconnect();
+taskForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void runTask();
 });
 
+disconnectButton.addEventListener("click", () => void disconnect());
 runtimeCardInput.addEventListener("input", updateRuntimeSummary);
+
+const scenarioTabs = [
+  ...document.querySelectorAll<HTMLButtonElement>("[data-scenario-tab]"),
+];
+
+for (const tab of scenarioTabs) {
+  const scenario = tab.dataset["scenarioTab"];
+  if (isDemoScenario(scenario)) {
+    tab.id = `scenario-tab-${scenario}`;
+    tab.setAttribute("aria-controls", `scenario-${scenario}`);
+    const panel = requireElement(`scenario-${scenario}`);
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", tab.id);
+  }
+  tab.addEventListener("click", () => {
+    const nextScenario = tab.dataset["scenarioTab"];
+    if (isDemoScenario(nextScenario) && !taskRunning)
+      selectScenario(nextScenario);
+  });
+  tab.addEventListener("keydown", (event) => moveScenarioFocus(event, tab));
+}
 
 for (const copyButton of document.querySelectorAll<HTMLButtonElement>(
   "[data-copy-target]",
 )) {
-  copyButton.addEventListener("click", () => {
-    void copySnippet(copyButton);
-  });
+  copyButton.addEventListener("click", () => void copySnippet(copyButton));
 }
 
 void resumeAuthorization();
 
-async function run(): Promise<void> {
-  runButton.disabled = true;
-  if (buttonLabel) buttonLabel.textContent = "Connecting…";
-  eventLog.textContent = "";
+async function connectRuntime(): Promise<void> {
+  setConnectBusy(true);
   resetTrace();
-  setFlowStage("app", "complete");
   setFlowStage("connector", "active");
-  traceSummary.textContent = "Verifying the connector and application grant";
-  status.textContent = "Connecting to your agent…";
-  canvasState.textContent = "Connecting";
-  connectionState.textContent = "Checking access";
+  status.textContent = "Checking the connector and application grant…";
+  connectionState.textContent = "Connecting";
   document.body.dataset["demo"] = "running";
-
-  let writes = 0;
-  const tools: readonly ApplicationTool[] = [
-    defineTool({
-      name: "set_page_message",
-      description: "Replace the large visible message on the user's web page.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          message: {
-            type: "string",
-            minLength: 1,
-            maxLength: 180,
-            description: "The complete message to show on the page.",
-          },
-        },
-        required: ["message"],
-        additionalProperties: false,
-      },
-      execute: ({ message }) => {
-        if (typeof message !== "string") {
-          throw new TypeError("message must be a string");
-        }
-        writes += 1;
-        setFlowStage("tool", "complete");
-        setFlowStage("result", "active");
-        traceSummary.textContent =
-          "The browser is applying the requested tool result";
-        canvasMessage.textContent = message;
-        canvasMessage.dataset["agentWrites"] = String(writes);
-        canvasState.textContent = "Updated by the agent";
-        setFlowStage("result", "complete");
-        return {
-          content: [{ type: "text", text: "The page message was updated." }],
-          structuredContent: { displayed: true, message, writes },
-        };
-      },
-    }),
-  ];
 
   try {
     const runtimeCard = parseRuntimeCard(runtimeCardInput.value);
     localStorage.setItem(STORED_CARD, JSON.stringify(runtimeCard));
     showRuntimeSummary(runtimeCard);
-    const storedToken = sessionStorage.getItem(STORED_GRANT);
-    if (!storedToken) {
-      sessionStorage.setItem(STORED_PROMPT, promptInput.value);
+    const grant = sessionStorage.getItem(STORED_GRANT);
+    if (!grant) {
       const authorization = await beginAgentAuthorization({
         runtimeCard,
         appId: "agent-connect-demo",
@@ -138,83 +129,94 @@ async function run(): Promise<void> {
         STORED_TRANSACTION,
         serializeAuthorizationTransaction(authorization.transaction),
       );
-      status.textContent = "Opening your connector for approval…";
+      status.textContent = "Opening the connector for approval…";
       connectionState.textContent = "Approval required";
-      traceSummary.textContent =
-        "Continuing on the connector-owned consent page";
       location.assign(authorization.authorizeUrl);
       return;
     }
-    syncAuthorizationControls();
-    const connection = await connectAgent({
-      baseUrl: runtimeCard.endpoint,
-      appId: "agent-connect-demo",
-      tools,
-      accessToken: storedToken,
-    });
-    setFlowStage("connector", "complete");
-    setFlowStage("agent", "active");
-    connectionState.textContent = "Connected";
-    traceSummary.textContent =
-      "The agent runtime received the task and tool schema";
-    // Keep the durable authorization grant. The connection token is a
-    // short-lived session capability and must not replace the credential that
-    // can mint a fresh capability after a restart or expiry.
-    for await (const taskEvent of connection.session.streamTask(
-      promptInput.value,
-    )) {
+    await establishConnection(runtimeCard, grant);
+  } catch (error) {
+    handleConnectionError(error);
+  } finally {
+    setConnectBusy(false);
+  }
+}
+
+async function establishConnection(
+  runtimeCard: RuntimeCard,
+  accessToken: string,
+): Promise<void> {
+  connection = await connectAgent({
+    baseUrl: runtimeCard.endpoint,
+    appId: "agent-connect-demo",
+    tools,
+    accessToken,
+  });
+  setFlowStage("connector", "complete");
+  connectionState.textContent = runtimeLabel(runtimeCard);
+  status.textContent = "Runtime connected. Choose a feature and run a task.";
+  traceSummary.textContent = "Connector verified and session ready";
+  document.body.dataset["demo"] = "connected";
+  syncAuthorizationControls();
+}
+
+async function runTask(): Promise<void> {
+  if (!connection) {
+    status.textContent = "Connect a runtime before running a task.";
+    connectButton.focus();
+    return;
+  }
+  taskRunning = true;
+  setRunBusy(true);
+  eventLog.textContent = "";
+  resetTaskTrace();
+  setFlowStage("agent", "active");
+  traceSummary.textContent =
+    "The runtime received the task and nine-tool snapshot";
+  status.textContent = "The connected runtime is working…";
+  document.body.dataset["demo"] = "running";
+  const surface = requireElement(`scenario-${selectedScenario}`);
+  delete surface.dataset["changed"];
+
+  try {
+    const prompt = `[Agent Connect demo scenario: ${selectedScenario}]\n${promptInput.value}`;
+    for await (const taskEvent of connection.session.streamTask(prompt)) {
       appendEvent(taskEvent);
       if (taskEvent.type === "task.completed") {
-        if (writes === 0) {
-          throw new Error("The agent finished without writing to the page");
+        if (surface.dataset["changed"] !== "true") {
+          throw new Error(
+            "The runtime finished without changing the selected app",
+          );
         }
-        status.textContent = taskEvent.text || "Page updated.";
-        connectionState.textContent = "Task complete";
+        status.textContent = "The app was updated through its own tools.";
         traceSummary.textContent =
-          "Tool result returned and the task completed";
+          "Tool results returned and the task completed";
         document.body.dataset["demo"] = "passed";
       } else if (taskEvent.type === "task.failed") {
         throw new Error(taskEvent.error.message);
       }
     }
   } catch (error) {
-    if (
-      error instanceof AgentConnectError &&
-      error.code === "invalid_app_grant"
-    ) {
-      clearLocalAuthorization();
-      status.textContent =
-        "Authorization was revoked or expired. Run again to reconnect.";
-      connectionState.textContent = "Authorization expired";
-      setCurrentFlowError();
-      document.body.dataset["demo"] = "reauthorize";
-    } else {
-      status.textContent =
-        error instanceof Error ? error.message : "Task failed";
-      connectionState.textContent = "Connection failed";
-      setCurrentFlowError();
-      document.body.dataset["demo"] = "failed";
-    }
+    status.textContent = error instanceof Error ? error.message : "Task failed";
+    setCurrentFlowError();
+    document.body.dataset["demo"] = "failed";
   } finally {
-    runButton.disabled = false;
-    if (buttonLabel) buttonLabel.textContent = "Run with connected agent";
+    taskRunning = false;
+    setRunBusy(false);
   }
 }
 
 async function resumeAuthorization(): Promise<void> {
   const callback = new URL(location.href);
-  if (
-    !callback.searchParams.has("code") &&
-    !callback.searchParams.has("error")
-  ) {
+  if (!callback.searchParams.has("code") && !callback.searchParams.has("error"))
     return;
-  }
   const serialized = sessionStorage.getItem(STORED_TRANSACTION);
   const serializedCard = localStorage.getItem(STORED_CARD);
   if (!serialized || !serializedCard) {
     status.textContent = "The saved authorization transaction is missing.";
     return;
   }
+  setConnectBusy(true);
   try {
     const runtimeCard = parseRuntimeCard(serializedCard);
     const grant = await completeAgentAuthorization({
@@ -225,28 +227,39 @@ async function resumeAuthorization(): Promise<void> {
       callbackUrl: location.href,
     });
     sessionStorage.setItem(STORED_GRANT, grant.accessToken);
-    syncAuthorizationControls();
     sessionStorage.removeItem(STORED_TRANSACTION);
-    const pendingPrompt = sessionStorage.getItem(STORED_PROMPT);
-    sessionStorage.removeItem(STORED_PROMPT);
     history.replaceState({}, "", callback.pathname);
-    status.textContent = "Authorized. Starting your task…";
-    connectionState.textContent = "Authorized";
-    if (pendingPrompt) promptInput.value = pendingPrompt;
-    await run();
+    await establishConnection(runtimeCard, grant.accessToken);
   } catch (error) {
+    handleConnectionError(error);
+  } finally {
+    setConnectBusy(false);
+  }
+}
+
+function handleConnectionError(error: unknown): void {
+  if (
+    error instanceof AgentConnectError &&
+    error.code === "invalid_app_grant"
+  ) {
+    clearLocalAuthorization();
+    status.textContent = "Authorization expired or was revoked. Connect again.";
+    connectionState.textContent = "Authorization expired";
+    document.body.dataset["demo"] = "reauthorize";
+  } else {
     status.textContent =
-      error instanceof Error ? error.message : "Authorization failed";
-    connectionState.textContent = "Authorization failed";
-    setFlowStage("connector", "error");
+      error instanceof Error ? error.message : "Connection failed";
+    connectionState.textContent = "Connection failed";
     document.body.dataset["demo"] = "failed";
   }
+  setFlowStage("connector", "error");
+  setCurrentFlowError();
 }
 
 function clearLocalAuthorization(): void {
   sessionStorage.removeItem(STORED_GRANT);
   sessionStorage.removeItem(STORED_TRANSACTION);
-  sessionStorage.removeItem(STORED_PROMPT);
+  connection = undefined;
   syncAuthorizationControls();
 }
 
@@ -265,7 +278,7 @@ async function disconnect(): Promise<void> {
       accessToken,
     });
     clearLocalAuthorization();
-    status.textContent = "Disconnected. Run again to authorize this app.";
+    status.textContent = "Disconnected. Connect again whenever you are ready.";
     connectionState.textContent = "Not connected";
     resetTrace();
     document.body.dataset["demo"] = "disconnected";
@@ -279,8 +292,128 @@ async function disconnect(): Promise<void> {
   }
 }
 
+function selectScenario(scenario: DemoScenario): void {
+  selectedScenario = scenario;
+  for (const tab of document.querySelectorAll<HTMLButtonElement>(
+    "[data-scenario-tab]",
+  )) {
+    const selected = tab.dataset["scenarioTab"] === scenario;
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  }
+  for (const panel of document.querySelectorAll<HTMLElement>(
+    "[data-scenario-panel]",
+  )) {
+    panel.hidden = panel.dataset["scenarioPanel"] !== scenario;
+  }
+  promptInput.value = DEFAULT_PROMPTS[scenario];
+}
+
+function appendEvent(event: AgentTaskEvent): void {
+  eventLog.textContent += `${JSON.stringify(event)}\n`;
+  switch (event.type) {
+    case "task.started":
+      setFlowStage("agent", "active");
+      traceSummary.textContent = "The connected runtime is working";
+      break;
+    case "tool.requested":
+      setFlowStage("agent", "complete");
+      setFlowStage("tool", "active");
+      traceSummary.textContent = `Runtime requested ${event.name}`;
+      break;
+    case "tool.completed":
+      setFlowStage("tool", event.isError ? "error" : "complete");
+      if (!event.isError) setFlowStage("result", "complete");
+      traceSummary.textContent = event.isError
+        ? "The application tool returned an error"
+        : "The application returned the correlated tool result";
+      break;
+    case "task.completed":
+      setFlowStage("agent", "complete");
+      break;
+    case "task.failed":
+      setCurrentFlowError();
+      break;
+  }
+}
+
+function resetTrace(): void {
+  for (const [stage, element] of Object.entries(flowStages)) {
+    element.dataset["state"] = stage === "app" ? "ready" : "idle";
+  }
+  traceSummary.textContent = "Waiting for a connection";
+}
+
+function resetTaskTrace(): void {
+  setFlowStage("app", "complete");
+  setFlowStage("connector", "complete");
+  setFlowStage("agent", "active");
+  setFlowStage("tool", "idle");
+  setFlowStage("result", "idle");
+}
+
+function setFlowStage(stage: FlowStage, state: FlowState): void {
+  flowStages[stage].dataset["state"] = state;
+}
+
+function setCurrentFlowError(): void {
+  const active = Object.values(flowStages).find(
+    (element) => element.dataset["state"] === "active",
+  );
+  if (active) active.dataset["state"] = "error";
+  traceSummary.textContent = "The flow stopped at the highlighted boundary";
+}
+
 function syncAuthorizationControls(): void {
-  disconnectButton.hidden = !sessionStorage.getItem(STORED_GRANT);
+  const authorized = sessionStorage.getItem(STORED_GRANT) !== null;
+  disconnectButton.hidden = !authorized;
+  runButton.disabled = !connection;
+  connectButton.disabled = connection !== undefined;
+  if (connectButtonLabel)
+    connectButtonLabel.textContent = connection
+      ? "Runtime connected"
+      : "Connect runtime";
+}
+
+function setConnectBusy(busy: boolean): void {
+  connectButton.disabled = busy || connection !== undefined;
+  if (connectButtonLabel)
+    connectButtonLabel.textContent = busy
+      ? "Connecting…"
+      : connection
+        ? "Runtime connected"
+        : "Connect runtime";
+}
+
+function setRunBusy(busy: boolean): void {
+  runButton.disabled = busy || !connection;
+  for (const tab of scenarioTabs) tab.disabled = busy;
+  if (runButtonLabel)
+    runButtonLabel.textContent = busy ? "Running task…" : "Run task";
+}
+
+function moveScenarioFocus(
+  event: KeyboardEvent,
+  current: HTMLButtonElement,
+): void {
+  const currentIndex = scenarioTabs.indexOf(current);
+  let nextIndex: number | undefined;
+  if (event.key === "ArrowRight") {
+    nextIndex = (currentIndex + 1) % scenarioTabs.length;
+  } else if (event.key === "ArrowLeft") {
+    nextIndex = (currentIndex - 1 + scenarioTabs.length) % scenarioTabs.length;
+  } else if (event.key === "Home") {
+    nextIndex = 0;
+  } else if (event.key === "End") {
+    nextIndex = scenarioTabs.length - 1;
+  }
+  if (nextIndex === undefined) return;
+  event.preventDefault();
+  const next = scenarioTabs[nextIndex];
+  const scenario = next?.dataset["scenarioTab"];
+  if (!next || !isDemoScenario(scenario)) return;
+  selectScenario(scenario);
+  next.focus();
 }
 
 function callbackUri(): string {
@@ -309,63 +442,6 @@ function parseRuntimeCard(value: string): RuntimeCard {
   return candidate as RuntimeCard;
 }
 
-function appendEvent(event: AgentTaskEvent): void {
-  eventLog.textContent += `${JSON.stringify(event)}\n`;
-  switch (event.type) {
-    case "task.started":
-      setFlowStage("connector", "complete");
-      setFlowStage("agent", "active");
-      traceSummary.textContent = "The connected agent is working";
-      canvasState.textContent = "Agent working";
-      break;
-    case "tool.requested":
-      setFlowStage("agent", "complete");
-      setFlowStage("tool", "active");
-      traceSummary.textContent = `The agent requested ${event.name}`;
-      canvasState.textContent = "Tool requested";
-      break;
-    case "tool.completed":
-      setFlowStage("tool", event.isError ? "error" : "complete");
-      if (!event.isError) setFlowStage("result", "complete");
-      traceSummary.textContent = event.isError
-        ? "The application tool returned an error"
-        : "The application returned the correlated tool result";
-      break;
-    case "task.completed":
-      setFlowStage("agent", "complete");
-      if (canvasMessage.dataset["agentWrites"]) {
-        setFlowStage("tool", "complete");
-        setFlowStage("result", "complete");
-      }
-      break;
-    case "task.failed":
-      setCurrentFlowError();
-      break;
-  }
-}
-
-function resetTrace(): void {
-  for (const [stage, element] of Object.entries(flowStages)) {
-    element.dataset["state"] = stage === "app" ? "ready" : "idle";
-  }
-  traceSummary.textContent = "Waiting for a task";
-  canvasState.textContent = "Ready";
-}
-
-function setFlowStage(stage: FlowStage, state: FlowState): void {
-  flowStages[stage].dataset["state"] = state;
-}
-
-function setCurrentFlowError(): void {
-  const active = Object.values(flowStages).find(
-    (element) => element.dataset["state"] === "active",
-  );
-  if (active) active.dataset["state"] = "error";
-  traceSummary.textContent =
-    "The flow stopped safely. Review the status to recover.";
-  canvasState.textContent = "Needs attention";
-}
-
 function updateRuntimeSummary(): void {
   if (!runtimeCardInput.value.trim()) {
     runtimeSummary.hidden = true;
@@ -380,8 +456,14 @@ function updateRuntimeSummary(): void {
 
 function showRuntimeSummary(runtimeCard: RuntimeCard): void {
   runtimeSummary.hidden = false;
-  runtimeProfile.textContent = runtimeCard.transportProfile;
+  runtimeProfile.textContent = runtimeLabel(runtimeCard);
   runtimeEndpoint.textContent = runtimeCard.endpoint;
+}
+
+function runtimeLabel(runtimeCard: RuntimeCard): string {
+  return runtimeCard.transportProfile === "public-demo"
+    ? "Recorded Codex plan · deterministic ACP"
+    : "Codex through OmniGENT";
 }
 
 async function copySnippet(button: HTMLButtonElement): Promise<void> {
@@ -396,12 +478,18 @@ async function copySnippet(button: HTMLButtonElement): Promise<void> {
   } catch {
     button.textContent = "Select text";
   }
-  window.setTimeout(() => {
-    button.textContent = original;
-  }, 1600);
+  window.setTimeout(() => (button.textContent = original), 1600);
 }
 
-function requireElement<T extends HTMLElement>(id: string): T {
+function isDemoScenario(value: string | undefined): value is DemoScenario {
+  return (
+    value === "project-board" ||
+    value === "document-review" ||
+    value === "product-research"
+  );
+}
+
+function requireElement<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`Missing #${id}`);
   return element as T;
