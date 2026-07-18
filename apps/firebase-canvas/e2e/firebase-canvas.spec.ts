@@ -94,14 +94,16 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
       "data-changed",
       "true",
     );
-    await expect(page.locator("#flow-tool")).toHaveAttribute(
-      "data-state",
-      "complete",
-    );
-    await expect(page.locator("#flow-result")).toHaveAttribute(
-      "data-state",
-      "complete",
-    );
+    await expect(
+      page.locator(
+        '#activity-feed li[data-kind="tool"][data-state="complete"]',
+      ),
+    ).toHaveCount(3);
+    await expect(
+      page.locator(
+        '#activity-feed li[data-kind="result"][data-state="complete"]',
+      ),
+    ).toHaveCount(3);
     const submittedNames = postedEvents
       .filter(isFunctionOutput)
       .map((event) => event.data.call_id);
@@ -234,10 +236,11 @@ test("an invalid runtime card fails visibly", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Connect runtime" }),
   ).toBeEnabled();
-  await expect(page.locator("#flow-connector")).toHaveAttribute(
-    "data-state",
-    "error",
-  );
+  await expect(
+    page.locator(
+      '#activity-feed li[data-kind="connector"][data-state="error"]',
+    ),
+  ).toHaveCount(1);
 });
 
 test("mobile and desktop mount different compositions", async ({ page }) => {
@@ -248,13 +251,13 @@ test("mobile and desktop mount different compositions", async ({ page }) => {
     page.getByRole("heading", { name: "Let Codex work inside your app." }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Live request path" }),
-  ).toHaveCount(0);
+    page.getByRole("heading", { name: "Session activity" }),
+  ).toBeVisible();
 
   await page.goto("/?view=desktop");
   await expect(page.locator("body")).toHaveAttribute("data-layout", "desktop");
   await expect(
-    page.getByRole("heading", { name: "Live request path" }),
+    page.getByRole("heading", { name: "Session activity" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Two pieces, two owners." }),
@@ -266,6 +269,14 @@ test("mobile and desktop mount different compositions", async ({ page }) => {
     page.getByRole("tab", { name: "Document review" }),
   ).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#scenario-document-review")).toBeVisible();
+  await page.getByRole("button", { name: "View app tools" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Document review tools" }),
+  ).toBeVisible();
+  await expect(page.locator("#tool-list details")).toHaveCount(3);
+  await expect(
+    page.getByText("add_document_comments", { exact: true }),
+  ).toBeVisible();
 });
 
 async function openAndConnect(

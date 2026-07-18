@@ -7,11 +7,12 @@ are defined by the page and are not installed into Codex or OmniGENT in
 advance. The same SDK path has been proven with Codex through OmniGENT and with
 the deterministic public judge runtime.
 
-The Build Week surface is also a self-explaining product demo. Real task and
-tool events drive a five-stage execution trace, while the architecture and
-integration sections explain the application, connector, runtime, and security
-boundaries. The public judge runtime is labeled as deterministic; the page does
-not present that capability-limited environment as a live Codex session.
+The Build Week surface is also a self-explaining product demo. Real connection,
+task, tool-call, result, and completion events append to a live activity feed;
+there is no predefined execution path. The architecture and integration
+sections explain the application, connector, runtime, and security boundaries.
+The public judge runtime is labeled as deterministic; the page does not present
+that capability-limited environment as a live Codex session.
 
 Product and visual direction are scoped to this application in
 [`PRODUCT.md`](PRODUCT.md) and [`DESIGN.md`](DESIGN.md). Impeccable live-mode
