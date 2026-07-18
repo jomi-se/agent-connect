@@ -153,13 +153,27 @@
               class="scenario-surface board-surface"
               data-scenario-panel="project-board"
             >
-              <header>
-                <div>
-                  <span>Northstar launch</span>
-                  <h3>Project board</h3>
+              <header class="third-party-header">
+                <div class="third-party-brand">
+                  <span class="third-party-logo" aria-hidden="true">N</span>
+                  <div>
+                    <strong>Northstar</strong>
+                    <small>Product workspace</small>
+                  </div>
                 </div>
-                <span class="surface-badge">3 app tools</span>
+                <nav aria-label="Northstar sections">
+                  <span>Overview</span><strong>Board</strong
+                  ><span>Timeline</span>
+                </nav>
+                <span class="integration-badge">Agent Connect · 3 tools</span>
               </header>
+              <div class="third-party-context">
+                <div>
+                  <span>Launch plan</span>
+                  <h3>Q3 launch</h3>
+                </div>
+                <button type="button" disabled>New task</button>
+              </div>
               <div class="board-columns">
                 <section>
                   <h4>Backlog</h4>
@@ -201,13 +215,26 @@
               data-scenario-panel="document-review"
               hidden
             >
-              <header>
+              <header class="third-party-header">
+                <div class="third-party-brand">
+                  <span class="third-party-logo" aria-hidden="true">F</span>
+                  <div>
+                    <strong>Fieldnotes</strong>
+                    <small>Editorial workspace</small>
+                  </div>
+                </div>
+                <nav aria-label="Fieldnotes sections">
+                  <span>Drafts</span><strong>Review</strong><span>Publish</span>
+                </nav>
+                <span class="integration-badge">Agent Connect · 3 tools</span>
+              </header>
+              <div class="third-party-context">
                 <div>
-                  <span>Draft · product announcement</span>
+                  <span>Product announcement</span>
                   <h3>A quieter way to work</h3>
                 </div>
-                <span class="surface-badge">3 app tools</span>
-              </header>
+                <span class="document-state">Editing</span>
+              </div>
               <div class="editor-layout">
                 <article class="document-page">
                   <p id="document-block-intro" data-format="paragraph">
@@ -246,13 +273,25 @@
               data-scenario-panel="product-research"
               hidden
             >
-              <header>
+              <header class="third-party-header">
+                <div class="third-party-brand">
+                  <span class="third-party-logo" aria-hidden="true">E</span>
+                  <div>
+                    <strong>Everyday</strong>
+                    <small>Online market</small>
+                  </div>
+                </div>
+                <div class="market-search" aria-hidden="true">
+                  Search products
+                </div>
+                <span class="integration-badge">Agent Connect · 3 tools</span>
+              </header>
+              <div class="third-party-context product-context">
                 <div>
-                  <span>Everyday Market</span>
+                  <span>Audio › Headphones</span>
                   <h3>Wireless noise-cancelling headphones</h3>
                 </div>
-                <span class="surface-badge">3 app tools</span>
-              </header>
+              </div>
               <div class="product-layout">
                 <div class="product-visual" aria-hidden="true">
                   <span></span>
@@ -527,13 +566,26 @@ for await (const event of connection.session.streamTask(prompt)) {
               class="scenario-surface board-surface"
               data-scenario-panel="project-board"
             >
-              <header>
-                <div>
-                  <span>Northstar launch</span>
-                  <h3>Project board</h3>
+              <header class="third-party-header">
+                <div class="third-party-brand">
+                  <span class="third-party-logo" aria-hidden="true">N</span>
+                  <div>
+                    <strong>Northstar</strong>
+                    <small>Product workspace</small>
+                  </div>
                 </div>
-                <span class="surface-badge">3 tools</span>
+                <nav aria-label="Northstar sections">
+                  <strong>Board</strong><span>Timeline</span>
+                </nav>
+                <span class="integration-badge">Agent Connect</span>
               </header>
+              <div class="third-party-context">
+                <div>
+                  <span>Launch plan</span>
+                  <h3>Q3 launch</h3>
+                </div>
+                <button type="button" disabled>New task</button>
+              </div>
               <div class="board-columns">
                 <section>
                   <h4>Backlog</h4>
@@ -574,13 +626,26 @@ for await (const event of connection.session.streamTask(prompt)) {
               data-scenario-panel="document-review"
               hidden
             >
-              <header>
+              <header class="third-party-header">
+                <div class="third-party-brand">
+                  <span class="third-party-logo" aria-hidden="true">F</span>
+                  <div>
+                    <strong>Fieldnotes</strong
+                    ><small>Editorial workspace</small>
+                  </div>
+                </div>
+                <nav aria-label="Fieldnotes sections">
+                  <strong>Review</strong><span>Publish</span>
+                </nav>
+                <span class="integration-badge">Agent Connect</span>
+              </header>
+              <div class="third-party-context">
                 <div>
-                  <span>Draft</span>
+                  <span>Product announcement</span>
                   <h3>A quieter way to work</h3>
                 </div>
-                <span class="surface-badge">3 tools</span>
-              </header>
+                <span class="document-state">Editing</span>
+              </div>
               <div class="editor-layout">
                 <article class="document-page">
                   <p id="document-block-intro" data-format="paragraph">
@@ -618,13 +683,24 @@ for await (const event of connection.session.streamTask(prompt)) {
               data-scenario-panel="product-research"
               hidden
             >
-              <header>
-                <div>
-                  <span>Everyday Market</span>
-                  <h3>Wireless headphones</h3>
+              <header class="third-party-header">
+                <div class="third-party-brand">
+                  <span class="third-party-logo" aria-hidden="true">E</span>
+                  <div>
+                    <strong>Everyday</strong><small>Online market</small>
+                  </div>
                 </div>
-                <span class="surface-badge">3 tools</span>
+                <div class="market-search" aria-hidden="true">
+                  Search products
+                </div>
+                <span class="integration-badge">Agent Connect</span>
               </header>
+              <div class="third-party-context product-context">
+                <div>
+                  <span>Audio › Headphones</span>
+                  <h3>Wireless noise-cancelling headphones</h3>
+                </div>
+              </div>
               <div class="product-layout">
                 <div class="product-visual" aria-hidden="true">
                   <span></span>
