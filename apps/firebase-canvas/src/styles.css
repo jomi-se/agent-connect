@@ -37,6 +37,8 @@
   --radius-lg: 14px;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --duration: 200ms;
+  --font-ui: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 * {
@@ -447,7 +449,7 @@ body[data-layout="desktop"] {
 .desktop-intro {
   min-height: 330px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 640px);
   align-items: center;
   gap: 64px;
   padding: 64px 0;
@@ -471,61 +473,94 @@ body[data-layout="desktop"] {
   line-height: 1.55;
 }
 
-.boundary-line {
-  display: grid;
-  gap: 9px;
-  padding: 18px 0;
+.micro-flow {
+  width: 100%;
+  padding: 28px 0;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  font-size: 0.78rem;
-  font-weight: 680;
-  white-space: nowrap;
 }
 
-.boundary-forward {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.boundary-forward i {
-  color: var(--border-strong);
-  font-style: normal;
-}
-
-.boundary-return {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 8px;
-  color: var(--app-ink);
-  font-size: 0.7rem;
-}
-
-.boundary-return strong {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 620;
-}
-
-.boundary-return strong::after {
-  content: "";
+.micro-flow svg {
   width: 100%;
-  height: 1px;
-  background: var(--app);
+  display: block;
+  overflow: visible;
 }
 
-.boundary-app {
-  color: var(--app-ink);
+.micro-flow-bracket,
+.micro-flow-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.2;
 }
 
-.boundary-connector {
-  color: var(--connector-ink);
+.micro-flow-track {
+  stroke-dasharray: 2 5;
 }
 
-.boundary-agent {
-  color: var(--agent-ink);
+.micro-flow-territory,
+.micro-flow-label,
+.micro-flow-sublabel {
+  text-anchor: middle;
+}
+
+.micro-flow-territory,
+.micro-flow-sublabel {
+  fill: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.micro-flow-territory {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+
+.micro-flow-label {
+  fill: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.micro-flow-sublabel {
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.micro-flow-node > circle:first-child {
+  fill: none;
+  stroke-width: 1.5;
+}
+
+.micro-flow-node-app > circle {
+  fill: var(--app);
+  stroke: var(--app);
+}
+
+.micro-flow-node-connector > circle {
+  fill: var(--connector);
+  stroke: var(--connector);
+}
+
+.micro-flow-node-agent > circle {
+  fill: var(--agent);
+  stroke: var(--agent);
+}
+
+.micro-flow-node > circle:first-child {
+  fill: none;
+}
+
+.micro-flow-mover {
+  opacity: 0;
+}
+
+.micro-flow-mover-signal {
+  fill: oklch(0.6 0.13 83);
+}
+
+.micro-flow-mover-result {
+  fill: var(--success);
 }
 
 .desktop-demo {
@@ -2403,8 +2438,8 @@ body[data-layout="mobile"] .third-party-context {
     font-size: 4rem;
   }
 
-  .boundary-line {
-    width: fit-content;
+  .micro-flow {
+    width: min(640px, 100%);
   }
 
   .desktop-workbench {

@@ -55,6 +55,7 @@ const GATEWAY_TERMINAL_STEPS: readonly GatewayTerminalStep[] = [
 
 mountGatewayTerminals();
 highlightTypescriptSnippets();
+mountMicroFlow();
 
 const connectForm = requireElement<HTMLFormElement>("connect-form");
 const taskForm = requireElement<HTMLFormElement>("task-form");
@@ -626,6 +627,176 @@ function scenarioTitle(scenario: DemoScenario): string {
 
 function reducedMotion(): boolean {
   return matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+type MicroFlowMover = {
+  element: SVGCircleElement;
+  from: number;
+  to: number;
+  start: number;
+  end: number;
+  offsetY: number;
+};
+
+function mountMicroFlow(): void {
+  const host = document.querySelector<HTMLElement>("[data-micro-flow]");
+  if (!host) return;
+
+  const mover = (name: string): SVGCircleElement | undefined =>
+    host.querySelector<SVGCircleElement>(`[data-micro-mover="${name}"]`) ??
+    undefined;
+  const task = mover("task");
+  const callOne = mover("call-1");
+  const resultOne = mover("result-1");
+  const callTwo = mover("call-2");
+  const resultTwo = mover("result-2");
+  if (!task || !callOne || !resultOne || !callTwo || !resultTwo) return;
+
+  const movers: readonly MicroFlowMover[] = [
+    { element: task, from: 40, to: 600, start: 0.3, end: 2, offsetY: 0 },
+    {
+      element: callOne,
+      from: 600,
+      to: 40,
+      start: 2.5,
+      end: 3.8,
+      offsetY: -7,
+    },
+    {
+      element: resultOne,
+      from: 40,
+      to: 600,
+      start: 4.1,
+      end: 5.4,
+      offsetY: 7,
+    },
+    {
+      element: callTwo,
+      from: 600,
+      to: 40,
+      start: 5.7,
+      end: 7,
+      offsetY: -7,
+    },
+    {
+      element: resultTwo,
+      from: 40,
+      to: 600,
+      start: 7.3,
+      end: 8.6,
+      offsetY: 7,
+    },
+  ];
+  const appRing = host.querySelector<SVGCircleElement>(
+    '[data-micro-ring="app"]',
+  );
+  const connectorRing = host.querySelector<SVGCircleElement>(
+    '[data-micro-ring="connector"]',
+  );
+  const agentRing = host.querySelector<SVGCircleElement>(
+    '[data-micro-ring="agent"]',
+  );
+  if (!appRing || !connectorRing || !agentRing) return;
+  const rings = {
+    app: appRing,
+    connector: connectorRing,
+    agent: agentRing,
+  };
+
+  updateMicroFlow(0, movers, rings);
+  if (reducedMotion()) return;
+
+  const startedAt = performance.now();
+  let animationFrame: number | undefined;
+  let visible = false;
+  const tick = (now: number) => {
+    if (!visible) return;
+    updateMicroFlow(((now - startedAt) / 1000) % 10, movers, rings);
+    animationFrame = requestAnimationFrame(tick);
+  };
+  const setVisible = (nextVisible: boolean) => {
+    visible = nextVisible;
+    if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
+    animationFrame = nextVisible ? requestAnimationFrame(tick) : undefined;
+  };
+
+  if (!("IntersectionObserver" in window)) {
+    setVisible(true);
+    return;
+  }
+  const observer = new IntersectionObserver(
+    ([entry]) => setVisible(entry?.isIntersecting === true),
+    { threshold: 0.1 },
+  );
+  observer.observe(host);
+}
+
+function updateMicroFlow(
+  time: number,
+  movers: readonly MicroFlowMover[],
+  rings: Readonly<Record<"app" | "connector" | "agent", SVGCircleElement>>,
+): void {
+  for (const mover of movers) {
+    const progress = microSegment(time, mover.start, mover.end);
+    mover.element.setAttribute(
+      "cx",
+      String(mover.from + (mover.to - mover.from) * progress),
+    );
+    mover.element.setAttribute("cy", String(40 + mover.offsetY));
+    mover.element.setAttribute(
+      "opacity",
+      String(
+        progress <= 0.005 || progress >= 0.995
+          ? 0
+          : Math.min(1, progress / 0.1, (1 - progress) / 0.1),
+      ),
+    );
+  }
+
+  updateMicroFlowRing(
+    rings.app,
+    microClamp(microBell(time, 3.5, 4.6) + microBell(time, 6.7, 7.8), 0, 1),
+  );
+  updateMicroFlowRing(
+    rings.connector,
+    microClamp(
+      microBell(time, 0.8, 1.6) +
+        microBell(time, 2.9, 3.6) +
+        microBell(time, 4.6, 5.3) +
+        microBell(time, 6.1, 6.8) +
+        microBell(time, 7.8, 8.5),
+      0,
+      1,
+    ),
+  );
+  updateMicroFlowRing(
+    rings.agent,
+    microClamp(
+      microBell(time, 1.6, 2.8) +
+        microBell(time, 5.1, 6) +
+        microBell(time, 8.3, 9.4),
+      0,
+      1,
+    ),
+  );
+}
+
+function updateMicroFlowRing(ring: SVGCircleElement, heat: number): void {
+  ring.setAttribute("r", String(9 + 2.5 * heat));
+  ring.setAttribute("opacity", String(0.25 + 0.5 * heat));
+}
+
+function microSegment(time: number, start: number, end: number): number {
+  const progress = microClamp((time - start) / (end - start), 0, 1);
+  return 1 - Math.pow(1 - progress, 3);
+}
+
+function microBell(time: number, start: number, end: number): number {
+  return Math.sin(microClamp((time - start) / (end - start), 0, 1) * Math.PI);
+}
+
+function microClamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 const terminalRuns = new WeakMap<HTMLElement, number>();
