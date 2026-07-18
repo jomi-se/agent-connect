@@ -1059,6 +1059,7 @@ function escapeCode(value: string): string {
 function syncAuthorizationControls(): void {
   const authorized = sessionStorage.getItem(STORED_GRANT) !== null;
   disconnectButton.hidden = !authorized;
+  connectButton.hidden = connection !== undefined;
   runButton.disabled = !connection;
   connectButton.disabled = connection !== undefined;
   if (connectButtonLabel)

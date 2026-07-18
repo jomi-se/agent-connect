@@ -139,7 +139,7 @@ pre {
 .button {
   min-height: 48px;
   border-radius: var(--radius-md);
-  padding: 13px 18px;
+  padding: 12px 16px;
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 700;
@@ -1014,7 +1014,7 @@ body[data-layout="desktop"] {
   display: grid;
   grid-template-columns: minmax(210px, 0.48fr) minmax(0, 1.52fr);
   align-items: start;
-  gap: 12px 40px;
+  gap: 12px 32px;
   padding: 24px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
@@ -1029,7 +1029,7 @@ body[data-layout="desktop"] {
 
 .connection-copy p,
 .scenario-heading p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.5;
@@ -1037,15 +1037,15 @@ body[data-layout="desktop"] {
 
 .connect-form {
   grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-row: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 198px;
-  align-items: end;
-  gap: 8px 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
 }
 
 .connect-form label,
-.connect-form .runtime-summary {
+.connect-form .runtime-summary,
+.connect-form .form-actions {
   grid-column: 1 / -1;
 }
 
@@ -1054,20 +1054,26 @@ body[data-layout="desktop"] {
   max-height: 120px;
 }
 
-.connect-form .button {
-  width: 100%;
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-.connect-form .button-secondary {
-  grid-column: 2;
+.connect-form .form-actions {
+  justify-content: space-between;
+}
+
+.form-actions .button {
+  width: 180px;
+  flex: 0 0 180px;
 }
 
 .connection-status {
-  grid-column: 1;
-  grid-row: 2;
-  display: grid;
-  gap: 5px;
-  padding-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .connection-status span {
@@ -1084,8 +1090,8 @@ body[data-layout="desktop"] {
 .scenario-controls {
   display: grid;
   grid-template-columns: minmax(210px, 0.48fr) minmax(0, 1.52fr);
-  gap: 20px 40px;
-  padding: 28px 24px 24px;
+  gap: 16px 32px;
+  padding: 24px;
 }
 
 .scenario-heading {
@@ -1141,17 +1147,12 @@ body[data-layout="desktop"] {
 
 .scenario-prompt {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 198px;
-  align-items: stretch;
-  gap: 8px 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
 }
 
 .scenario-prompt textarea {
   min-height: 112px;
-}
-
-.scenario-prompt .button {
-  width: 100%;
 }
 
 .scenario-controls > .status-line {
@@ -1546,8 +1547,8 @@ body[data-layout="mobile"] {
 
 .mobile-form {
   display: grid;
-  gap: 18px;
-  padding: 22px 16px;
+  gap: 16px;
+  padding: 24px 16px;
   border-top: 1px solid var(--border);
   background: var(--surface);
 }
@@ -1565,14 +1566,17 @@ body[data-layout="mobile"] {
   min-height: 104px;
 }
 
+.mobile-form .form-actions,
 .mobile-form .button {
   width: 100%;
 }
 
-.mobile-run {
-  position: sticky;
-  z-index: 5;
-  bottom: max(12px, env(safe-area-inset-bottom));
+.mobile-form .form-actions {
+  flex-direction: column;
+}
+
+.mobile-form .button {
+  flex-basis: auto;
 }
 
 .mobile-connection-row {
@@ -1802,10 +1806,6 @@ body[data-layout="mobile"] .scenario-prompt {
 
 body[data-layout="mobile"] .scenario-prompt textarea {
   min-height: 132px;
-}
-
-body[data-layout="mobile"] .scenario-prompt .button {
-  width: 100%;
 }
 
 body[data-layout="mobile"] .scenario-surface {
@@ -2616,14 +2616,8 @@ body[data-layout="mobile"] .tool-flight {
     grid-template-columns: 1fr;
   }
 
-  .connect-form,
-  .connection-status {
+  .connect-form {
     grid-column: 1;
-    grid-row: auto;
-  }
-
-  .connection-status {
-    padding-top: 0;
   }
 }
 

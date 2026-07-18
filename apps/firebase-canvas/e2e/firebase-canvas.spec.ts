@@ -193,7 +193,7 @@ test("a revoked grant is cleared so the user can authorize again", async ({
     "Authorization expired or was revoked. Connect again.",
   );
   await expect(
-    page.getByRole("button", { name: "Disconnect and revoke access" }),
+    page.getByRole("button", { name: "Disconnect & revoke" }),
   ).toBeHidden();
   expect(
     await page.evaluate(() => sessionStorage.getItem("agent-connect.grant")),
@@ -222,9 +222,7 @@ test("disconnect revokes and clears the local grant", async ({ page }) => {
   }, runtimeCard);
   await page.reload();
 
-  await page
-    .getByRole("button", { name: "Disconnect and revoke access" })
-    .click();
+  await page.getByRole("button", { name: "Disconnect & revoke" }).click();
 
   await expect(page.locator("body")).toHaveAttribute(
     "data-demo",
@@ -334,6 +332,37 @@ async function openAndConnect(
   await expect(page.locator("#connection-state")).toContainText(
     "Recorded Codex plan",
   );
+  await expect(
+    page.getByRole("button", { name: "Connect runtime" }),
+  ).toBeHidden();
+  await expectAlignedActions(page, view);
+}
+
+async function expectAlignedActions(
+  page: Page,
+  view: "desktop" | "mobile",
+): Promise<void> {
+  const disconnect = page.getByRole("button", { name: "Disconnect & revoke" });
+  const send = page.getByRole("button", { name: "Send prompt" });
+  await expect(disconnect).toBeVisible();
+  const [disconnectBox, sendBox] = await Promise.all([
+    disconnect.boundingBox(),
+    send.boundingBox(),
+  ]);
+  expect(disconnectBox).not.toBeNull();
+  expect(sendBox).not.toBeNull();
+  expect(
+    Math.abs((disconnectBox?.height ?? 0) - (sendBox?.height ?? 0)),
+  ).toBeLessThan(1);
+  expect(
+    Math.abs((disconnectBox?.width ?? 0) - (sendBox?.width ?? 0)),
+  ).toBeLessThan(1);
+  if (view === "desktop") {
+    const disconnectRight =
+      (disconnectBox?.x ?? 0) + (disconnectBox?.width ?? 0);
+    const sendRight = (sendBox?.x ?? 0) + (sendBox?.width ?? 0);
+    expect(Math.abs(disconnectRight - sendRight)).toBeLessThan(1);
+  }
 }
 
 async function mockConnectedRuntime(
