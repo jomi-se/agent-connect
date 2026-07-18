@@ -1,6 +1,6 @@
 # Current work and experiment backlog
 
-Date: 2026-07-17
+Date: 2026-07-18
 
 This is the canonical ordering of unfinished work. Detailed design remains in
 the linked plans; when priorities conflict, this document controls execution
@@ -24,7 +24,17 @@ Implemented and proven on a real remote browser:
 - gateway restart with byte-identical persisted connector state, followed by a
   successful deployed Codex/dynamic-tool turn using the existing app grant;
 - fail-closed `upstream_unavailable` behavior when the OmniGENT host is offline,
-  followed by successful recovery after the host reconnects.
+  followed by successful recovery after the host reconnects;
+- reboot-resistant public judge profile with a frozen Firebase application and
+  tool authority, deterministic ACP runtime, containerized gateway stack, and
+  Tailscale Funnel exposure;
+- a nine-tool public Canvas snapshot covering project-board edits, document
+  review, and recorded product research, with one connection step separated
+  from repeatable task execution and three Codex-authored deterministic plans;
+- an isolated rebuild of the judge appliance completed the real
+  authorization, OmniGENT, ACP, request-scoped MCP, three-tool project-board
+  plan, result-return, revocation, and rejected-reuse smoke on 2026-07-18. The
+  live Funnel profile has not yet been replaced with this new snapshot.
 
 Testing strategy accepted for the connector/provider boundary:
 
@@ -53,7 +63,9 @@ Implemented on 2026-07-16:
 
 Not implemented:
 
-- public judge transport/profile and isolated judge credentials;
+- dynamic application enrollment for previously unknown HTTPS Origins; the
+  normal profile still requires `AGENT_CONNECT_ALLOWED_ORIGINS` at startup,
+  while the frozen public judge profile intentionally remains allowlisted;
 - connector-card/passphrase recovery, export, and key rotation commands;
 - durable pending authorization requests, codes, provider mappings, or
   unresolved application tool calls;

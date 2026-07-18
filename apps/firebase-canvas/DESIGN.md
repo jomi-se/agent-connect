@@ -91,7 +91,7 @@ components:
 
 Agent Connect Canvas is a precise workbench in a bright studio: the useful machinery is visible, every handoff is marked, and nothing important is hidden behind decorative spectacle. The interface begins as a focused product tool, then opens outward into a live explanation of the system carrying the task.
 
-The neutral foundation keeps the application calm while a functional palette identifies the web app, connector, agent, in-flight work, and outcome. Density increases only when the visitor asks for technical depth. The system explicitly rejects futuristic science-fiction AI interfaces, generic gradient-heavy AI startup landing pages, terminal-first hacker demos, and dense enterprise-security dashboards.
+The neutral foundation keeps the application calm while a functional palette identifies the web app, connector, agent, in-flight work, and outcome. Density increases only when the visitor asks for technical depth. Mobile and desktop are independently composed over the same behavior: mobile is linear and disclosure-led; desktop keeps the workbench and supporting evidence visible together. The system explicitly rejects futuristic science-fiction AI interfaces, generic gradient-heavy AI startup landing pages, terminal-first hacker demos, and dense enterprise-security dashboards.
 
 **Key Characteristics:**
 
@@ -100,6 +100,7 @@ The neutral foundation keeps the application calm while a functional palette ide
 - Familiar controls and code artifacts that make the integration credible.
 - Crisp structure, compact radii, and purposeful state motion.
 - Desktop clarity with a complete touch-first mobile path.
+- Separate mobile and desktop compositions with a shared behavioral contract.
 
 ## Colors
 

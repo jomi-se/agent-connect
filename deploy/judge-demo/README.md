@@ -20,9 +20,14 @@ Edit `.env` and set:
 - a new high-entropy enrollment passphrase saved in the private judge
   instructions and a password manager.
 
-The committed tool hash matches the current Firebase Canvas
-`set_page_message` definition. Recompute and review it whenever that definition
-changes.
+The committed tool hash matches the current Firebase Canvas nine-tool snapshot:
+three project-board tools, three document-review tools, and three
+product-research tools. Recompute and review it whenever any definition changes.
+
+The appliance runs a deterministic ACP runtime which selects a three-tool,
+Codex-authored plan from the scenario marker in the prompt. It still exercises
+the real OmniGENT, ACP, request-scoped MCP, gateway, SDK, and browser-tool path;
+it does not claim that live model reasoning occurs in the public fixture.
 
 ## Build and validate on loopback
 

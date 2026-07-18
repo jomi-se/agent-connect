@@ -2,169 +2,78 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <meta name="color-scheme" content="light" />
     <meta
       name="description"
-      content="A live Agent Connect demo: lend a browser-owned tool to a user-owned agent without installing it in advance."
+      content="Connect a web app to a user-owned agent and lend it live application tools."
     />
-    <title>Agent Connect | Lend tools to a user-owned agent</title>
+    <title>Agent Connect</title>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body data-demo="idle">
-    <a class="skip-link" href="#live-demo">Skip to the live demo</a>
+    <div id="app"></div>
 
-    <header class="site-header">
-      <a class="wordmark" href="#top" aria-label="Agent Connect home">
-        <span class="wordmark-mark" aria-hidden="true">
-          <span></span><span></span><span></span>
-        </span>
-        Agent Connect
-      </a>
-      <nav aria-label="Primary navigation">
-        <a href="#live-demo">Live demo</a>
-        <a href="#how-it-works">How it works</a>
-        <a href="#integrate">Integrate</a>
-      </nav>
-      <span class="demo-badge"
-        ><span aria-hidden="true"></span> Build Week demo</span
-      >
-    </header>
+    <template id="desktop-layout">
+      <a class="skip-link" href="#demo">Skip to demo</a>
+      <header class="site-header desktop-header">
+        <a class="wordmark" href="#top" aria-label="Agent Connect home">
+          <span class="wordmark-mark" aria-hidden="true"
+            ><span></span><span></span><span></span
+          ></span>
+          Agent Connect
+        </a>
+        <nav aria-label="Primary navigation">
+          <a href="#demo">Demo</a>
+          <a href="#how">How it works</a>
+          <a href="#code">Code</a>
+        </nav>
+        <span class="demo-badge"><i aria-hidden="true"></i> Live demo</span>
+      </header>
 
-    <main id="top">
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <p class="context-line">Application tools · User-owned agents</p>
-          <h1 id="hero-title">Your app. Their agent. One safe connection.</h1>
-          <p class="hero-lede">
-            Any web app can lend temporary tools to a user-owned agent without
-            installing those tools into the agent beforehand.
-          </p>
-          <div class="hero-actions">
-            <a class="button button-primary" href="#live-demo"
-              >Try the live proof</a
-            >
-            <a class="text-link" href="#integrate"
-              >See the application code <span aria-hidden="true">↓</span></a
-            >
-          </div>
-        </div>
-
-        <div class="hero-system" aria-label="Agent Connect system actors">
-          <div class="hero-system-label">
-            One task crosses three ownership boundaries
-          </div>
-          <div class="actor-row">
-            <div class="actor actor-app">
-              <strong>Web app</strong>
-              <span>owns the tool</span>
-            </div>
-            <span class="actor-arrow" aria-hidden="true">→</span>
-            <div class="actor actor-connector">
-              <strong>Connector</strong>
-              <span>owns trust</span>
-            </div>
-            <span class="actor-arrow" aria-hidden="true">→</span>
-            <div class="actor actor-agent">
-              <strong>Your agent</strong>
-              <span>owns reasoning</span>
-            </div>
-          </div>
-          <p>
-            The application never receives an OmniGENT session ID. The agent
-            never receives a permanent application capability.
-          </p>
-        </div>
-      </section>
-
-      <section class="proof-band" aria-label="Demonstrated properties">
-        <span>Typed tool snapshot</span>
-        <span>Connector-owned consent</span>
-        <span>Revocable grant</span>
-        <span>Live browser execution</span>
-      </section>
-
-      <section id="live-demo" class="demo-section" aria-labelledby="demo-title">
-        <div class="section-heading">
+      <main id="top" class="desktop-page">
+        <section class="desktop-intro" aria-labelledby="desktop-title">
           <div>
-            <p class="section-number">The live proof</p>
-            <h2 id="demo-title">Watch this page lend one tool.</h2>
-          </div>
-          <p>
-            The tool is created by this loaded page. Follow the real request
-            from authorization through the agent and back into the browser.
-          </p>
-        </div>
-
-        <div class="workbench">
-          <section class="canvas" aria-labelledby="canvas-title">
-            <div class="panel-topline">
-              <div>
-                <span class="panel-dot panel-dot-app" aria-hidden="true"></span>
-                <span id="canvas-title">Browser-owned surface</span>
-              </div>
-              <span class="panel-state" id="canvas-state">Ready</span>
-            </div>
-            <div class="canvas-content">
-              <p class="canvas-prompt">The connected agent can write here.</p>
-              <p id="canvas-message">Your agent can write here.</p>
-            </div>
-            <output id="status" class="status-line" aria-live="polite">
-              Paste a runtime card and send the task when you are ready.
-            </output>
-          </section>
-
-          <aside class="controls" aria-labelledby="controls-title">
-            <div class="panel-topline">
-              <div>
-                <span
-                  class="panel-dot panel-dot-connector"
-                  aria-hidden="true"
-                ></span>
-                <span id="controls-title">Connection</span>
-              </div>
-              <span class="connection-state" id="connection-state"
-                >Not connected</span
-              >
-            </div>
-
-            <p class="control-intro">
-              Give the connected agent one request-scoped capability:
-              <code>set_page_message</code>.
+            <h1 id="desktop-title">Let Codex work inside your app.</h1>
+            <p>
+              Expose app-native tools to Codex, Claude Code, or another coding
+              agent—without installing an MCP first.
             </p>
+          </div>
+          <div class="boundary-line" aria-label="Application connection flow">
+            <span class="boundary-app">Web app</span>
+            <i aria-hidden="true">→</i>
+            <span class="boundary-connector">Agent Connect</span>
+            <i aria-hidden="true">→</i>
+            <span class="boundary-agent">Coding agent</span>
+          </div>
+        </section>
 
-            <form id="task-form">
-              <label for="runtime-card">
-                <span>Public runtime card</span>
-                <span class="label-hint">Identifies the connector</span>
-              </label>
+        <section id="demo" class="desktop-demo" aria-labelledby="demo-title">
+          <div class="connection-panel">
+            <div class="connection-copy">
+              <h2 id="demo-title">Connect a coding agent</h2>
+              <p>Authorize once. Run as many app tasks as you like.</p>
+            </div>
+            <form id="connect-form" class="connect-form">
+              <label for="runtime-card">Runtime card</label>
               <textarea
                 id="runtime-card"
                 required
                 spellcheck="false"
                 autocomplete="off"
-                placeholder='Paste the public "runtimeCard" object'
+                placeholder="Paste the public runtime card"
               ></textarea>
-
               <div class="runtime-summary" id="runtime-summary" hidden>
-                <span><strong id="runtime-profile">Runtime</strong></span>
-                <span id="runtime-endpoint"
-                  >Endpoint verified after connection</span
-                >
+                <strong id="runtime-profile">Runtime</strong
+                ><span id="runtime-endpoint">Endpoint</span>
               </div>
-
-              <label for="prompt">
-                <span>Task for the agent</span>
-                <span class="label-hint"
-                  >The app keeps tool execution local</span
-                >
-              </label>
-              <textarea id="prompt" required>
-Write a short, surprising welcome message directly onto this page. You must use set_page_message once.</textarea>
-
-              <button id="run" class="button button-primary" type="submit">
-                <span class="button-label">Run with connected agent</span>
-                <span class="button-progress" aria-hidden="true"></span>
+              <button id="connect" class="button button-primary" type="submit">
+                <span class="connect-button-label">Connect runtime</span
+                ><span class="button-progress" aria-hidden="true"></span>
               </button>
               <button
                 id="disconnect"
@@ -175,91 +84,228 @@ Write a short, surprising welcome message directly onto this page. You must use 
                 Disconnect and revoke access
               </button>
             </form>
+            <div class="connection-status">
+              <span>Runtime</span
+              ><strong id="connection-state">Not connected</strong>
+            </div>
+          </div>
 
-            <p class="public-runtime-note">
-              Judge access uses a deterministic, capability-limited runtime. The
-              same SDK flow has also been proven against Codex through OmniGENT.
-            </p>
-          </aside>
+          <div class="scenario-controls">
+            <div class="scenario-heading">
+              <h2>Try an app feature</h2>
+              <p>The connected runtime sees nine tools owned by this page.</p>
+            </div>
+            <div
+              class="scenario-tabs"
+              role="tablist"
+              aria-label="Demo applications"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected="true"
+                data-scenario-tab="project-board"
+              >
+                Project board
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected="false"
+                data-scenario-tab="document-review"
+              >
+                Document review
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected="false"
+                data-scenario-tab="product-research"
+              >
+                Product research
+              </button>
+            </div>
+            <form id="task-form" class="scenario-prompt">
+              <label for="prompt">Task for the connected runtime</label>
+              <textarea id="prompt" required></textarea>
+              <button id="run" class="button button-primary" type="submit">
+                <span class="button-label">Run task</span
+                ><span class="button-progress" aria-hidden="true"></span>
+              </button>
+            </form>
+            <output id="status" class="status-line" aria-live="polite"
+              >Connect a runtime before running a task.</output
+            >
+          </div>
 
-          <section class="live-trace" aria-labelledby="trace-title">
-            <div class="trace-heading">
-              <div>
-                <span class="live-indicator" aria-hidden="true"></span>
-                <h3 id="trace-title">Live execution trace</h3>
+          <div class="scenario-stage">
+            <section
+              id="scenario-project-board"
+              class="scenario-surface board-surface"
+              data-scenario-panel="project-board"
+            >
+              <header>
+                <div>
+                  <span>Northstar launch</span>
+                  <h3>Project board</h3>
+                </div>
+                <span class="surface-badge">3 app tools</span>
+              </header>
+              <div class="board-columns">
+                <section>
+                  <h4>Backlog</h4>
+                  <ul id="task-list-backlog">
+                    <li data-task-id="pricing">
+                      <span data-task-title>Decide launch pricing</span
+                      ><small data-task-priority="medium">medium</small>
+                    </li>
+                    <li data-task-id="docs">
+                      <span data-task-title>Write docs sometime</span
+                      ><small data-task-priority="low">low</small>
+                    </li>
+                  </ul>
+                </section>
+                <section>
+                  <h4>Doing</h4>
+                  <ul id="task-list-doing">
+                    <li data-task-id="checkout">
+                      <span data-task-title>Fix checkout edge cases</span
+                      ><small data-task-priority="high">high</small>
+                    </li>
+                  </ul>
+                </section>
+                <section>
+                  <h4>Done</h4>
+                  <ul id="task-list-done">
+                    <li data-task-id="domain">
+                      <span data-task-title>Buy launch domain</span
+                      ><small data-task-priority="low">low</small>
+                    </li>
+                  </ul>
+                </section>
               </div>
+            </section>
+
+            <section
+              id="scenario-document-review"
+              class="scenario-surface editor-surface"
+              data-scenario-panel="document-review"
+              hidden
+            >
+              <header>
+                <div>
+                  <span>Draft · product announcement</span>
+                  <h3>A quieter way to work</h3>
+                </div>
+                <span class="surface-badge">3 app tools</span>
+              </header>
+              <div class="editor-layout">
+                <article class="document-page">
+                  <p id="document-block-intro" data-format="paragraph">
+                    <span data-review-quote
+                      >Our new workspace makes every team exactly twice as
+                      productive.</span
+                    >
+                    It brings tasks, decisions, and notes into a single place.
+                  </p>
+                  <p id="document-block-history" data-format="paragraph">
+                    <span data-review-quote
+                      >The first graphical web browser was released in
+                      1989.</span
+                    >
+                    Since then, software has steadily become more collaborative.
+                  </p>
+                  <p id="document-block-close" data-format="paragraph">
+                    <span data-review-quote
+                      >Basically, we really think this is perhaps the best way
+                      for everyone to work better.</span
+                    >
+                  </p>
+                </article>
+                <aside>
+                  <h4>Review</h4>
+                  <ul id="review-comments">
+                    <li class="empty-review">No comments yet.</li>
+                  </ul>
+                </aside>
+              </div>
+            </section>
+
+            <section
+              id="scenario-product-research"
+              class="scenario-surface product-surface"
+              data-scenario-panel="product-research"
+              hidden
+            >
+              <header>
+                <div>
+                  <span>Everyday Market</span>
+                  <h3>Wireless noise-cancelling headphones</h3>
+                </div>
+                <span class="surface-badge">3 app tools</span>
+              </header>
+              <div class="product-layout">
+                <div class="product-visual" aria-hidden="true">
+                  <span></span>
+                </div>
+                <div class="product-details">
+                  <div class="rating">4.3 ★ <span>1,284 reviews</span></div>
+                  <p class="product-price" id="product-listed-price">€129</p>
+                  <p>
+                    Over-ear Bluetooth headphones · 35-hour battery · active
+                    noise cancellation.
+                  </p>
+                  <button type="button" disabled>Add to basket</button>
+                </div>
+                <aside id="product-research-results" hidden>
+                  <div class="research-heading">
+                    <span>Recorded research</span
+                    ><strong id="product-kid-fit">mixed</strong>
+                  </div>
+                  <p id="product-verdict"></p>
+                  <h4>Watch for</h4>
+                  <ul id="product-concerns"></ul>
+                  <div class="price-check">
+                    <span>Fair price range</span
+                    ><strong id="product-price-range"></strong>
+                    <p id="product-price-note"></p>
+                  </div>
+                  <h4>Alternatives</h4>
+                  <ul id="product-alternatives"></ul>
+                </aside>
+              </div>
+            </section>
+          </div>
+
+          <section class="trace-panel" aria-labelledby="trace-title">
+            <div class="trace-heading">
+              <h3 id="trace-title">Live request path</h3>
               <span id="trace-summary">Waiting for a task</span>
             </div>
-
             <ol class="trace-steps">
-              <li id="flow-app" class="trace-step trace-app" data-state="ready">
+              <li id="flow-app" data-state="ready">
                 <span class="trace-marker" aria-hidden="true"></span>
-                <div>
-                  <span class="trace-owner">Web app</span>
-                  <strong>Packages the tool</strong>
-                  <span class="trace-detail">Fixed schema for this task</span>
-                </div>
+                <strong>App</strong><span>Defines tools</span>
               </li>
-              <li
-                id="flow-connector"
-                class="trace-step trace-connector"
-                data-state="idle"
-              >
+              <li id="flow-connector" data-state="idle">
                 <span class="trace-marker" aria-hidden="true"></span>
-                <div>
-                  <span class="trace-owner">Connector</span>
-                  <strong>Verifies permission</strong>
-                  <span class="trace-detail"
-                    >Pinned identity + scoped grant</span
-                  >
-                </div>
+                <strong>Connector</strong><span>Checks grant</span>
               </li>
-              <li
-                id="flow-agent"
-                class="trace-step trace-agent"
-                data-state="idle"
-              >
+              <li id="flow-agent" data-state="idle">
                 <span class="trace-marker" aria-hidden="true"></span>
-                <div>
-                  <span class="trace-owner">Agent runtime</span>
-                  <strong>Receives the task</strong>
-                  <span class="trace-detail"
-                    >Behind a provider-neutral session</span
-                  >
-                </div>
+                <strong>Runtime</strong><span>Runs task</span>
               </li>
-              <li
-                id="flow-tool"
-                class="trace-step trace-tool"
-                data-state="idle"
-              >
+              <li id="flow-tool" data-state="idle">
                 <span class="trace-marker" aria-hidden="true"></span>
-                <div>
-                  <span class="trace-owner">Borrowed tool</span>
-                  <strong>Requests a page write</strong>
-                  <span class="trace-detail"
-                    >Stable action ID, local execution</span
-                  >
-                </div>
+                <strong>Tool</strong><span>Changes app</span>
               </li>
-              <li
-                id="flow-result"
-                class="trace-step trace-result"
-                data-state="idle"
-              >
+              <li id="flow-result" data-state="idle">
                 <span class="trace-marker" aria-hidden="true"></span>
-                <div>
-                  <span class="trace-owner">Browser</span>
-                  <strong>Applies the result</strong>
-                  <span class="trace-detail"
-                    >Visible mutation, correlated reply</span
-                  >
-                </div>
+                <strong>Result</strong><span>Returns to runtime</span>
               </li>
             </ol>
-
             <details class="event-details">
-              <summary>Inspect raw session events</summary>
+              <summary>Raw events</summary>
               <pre
                 id="events"
                 tabindex="0"
@@ -267,115 +313,58 @@ Write a short, surprising welcome message directly onto this page. You must use 
               ></pre>
             </details>
           </section>
-        </div>
-      </section>
+        </section>
 
-      <section
-        id="how-it-works"
-        class="explanation-section"
-        aria-labelledby="architecture-title"
-      >
-        <div class="section-heading">
-          <div>
-            <p class="section-number">The architecture</p>
-            <h2 id="architecture-title">
-              Simple at the edge. Serious in the middle.
-            </h2>
+        <section
+          id="how"
+          class="desktop-explanation"
+          aria-labelledby="how-title"
+        >
+          <div class="explanation-copy">
+            <h2 id="how-title">Two pieces, two owners.</h2>
+            <p>
+              App developers integrate the SDK. Agent owners run the gateway
+              inside their own boundary.
+            </p>
           </div>
-          <p>
-            Agent Connect keeps the application API small while the connector
-            owns identity, consent, grants, and the adapter to the user's agent
-            environment.
-          </p>
-        </div>
-
-        <div class="architecture-map" aria-label="Agent Connect architecture">
-          <section class="architecture-zone zone-app">
-            <div class="zone-heading">
-              <span>Application boundary</span>
-              <strong>Your web app</strong>
-            </div>
-            <div class="zone-content">
-              <code>defineTool()</code>
-              <code>connectAgent()</code>
-              <p>Owns UI, data, and every consequential tool implementation.</p>
-            </div>
-          </section>
-
-          <div class="architecture-handoff" aria-hidden="true">
-            <span>HTTPS + scoped capability</span>
-            <i></i>
+          <div class="responsibility-list persona-list">
+            <article>
+              <span class="persona-label">For app developers</span>
+              <h3>Agent Connect SDK</h3>
+              <p>
+                Define scoped, app-native actions in the browser. The public API
+                does not depend on Codex, OmniGENT, or another harness.
+              </p>
+              <strong>Tools execute in the app.</strong>
+            </article>
+            <article>
+              <span class="persona-label">For agent owners</span>
+              <h3>Agent Connect Gateway</h3>
+              <p>
+                Run it beside Codex or another coding agent on a laptop, VM, or
+                isolated runner. It owns identity, consent, grants, and provider
+                adapters.
+              </p>
+              <strong>The agent stays user-owned.</strong>
+            </article>
           </div>
-
-          <section class="architecture-zone zone-connector">
-            <div class="zone-heading">
-              <span>Trust boundary</span>
-              <strong>Agent Connect</strong>
-            </div>
-            <div class="zone-content">
-              <ul>
-                <li>Pinned connector identity</li>
-                <li>Enrollment and explicit consent</li>
-                <li>Origin-, tool-, and scope-bound grants</li>
-                <li>Opaque application sessions</li>
-              </ul>
-            </div>
-          </section>
-
-          <div class="architecture-handoff" aria-hidden="true">
-            <span>Internal adapter</span>
-            <i></i>
+          <div class="security-note">
+            <strong>Consent is not a trust guarantee.</strong>
+            <span
+              >The connector shows the exact app origin and requested tools so
+              the user can decide—and revoke access later.</span
+            >
           </div>
+        </section>
 
-          <section class="architecture-zone zone-agent">
-            <div class="zone-heading">
-              <span>User-owned environment</span>
-              <strong>Agent runtime</strong>
-            </div>
-            <div class="zone-content runtime-stack">
-              <span>OmniGENT</span>
-              <span>ACP</span>
-              <span>Codex or another harness</span>
-              <p>Provider details stay behind the connector boundary.</p>
-            </div>
-          </section>
-        </div>
-
-        <div class="security-line">
-          <h3>Authorization is explicit. Connectivity alone is not consent.</h3>
-          <p>
-            The browser pins the connector key before disclosing tool schemas.
-            The connector shows the exact app origin and tools before issuing a
-            revocable PKCE-bound grant. Authentication still does not make an
-            application trustworthy; consent must say what a malicious app could
-            do.
-          </p>
-        </div>
-      </section>
-
-      <section
-        id="integrate"
-        class="integration-section"
-        aria-labelledby="integration-title"
-      >
-        <div class="section-heading">
-          <div>
-            <p class="section-number">The integration</p>
-            <h2 id="integration-title">The application stays small.</h2>
+        <section id="code" class="desktop-code" aria-labelledby="code-title">
+          <div class="code-intro">
+            <h2 id="code-title">The browser side</h2>
+            <p>Ordinary functions become request-scoped tools.</p>
           </div>
-          <p>
-            The app declares what the agent may ask for. The connector handles
-            how that task reaches a user-owned runtime.
-          </p>
-        </div>
-
-        <div class="code-layout">
           <article class="code-example">
             <div class="code-heading">
-              <div>
-                <span>Web application</span>
-                <strong>Declare and connect</strong>
-              </div>
+              <span>app.ts</span>
               <button
                 class="copy-button"
                 type="button"
@@ -384,76 +373,392 @@ Write a short, surprising welcome message directly onto this page. You must use 
                 Copy
               </button>
             </div>
-            <pre
-              id="sdk-snippet"
-            ><code><span class="code-keyword">const</span> setPageMessage = <span class="code-call">defineTool</span>({
-  name: <span class="code-string">"set_page_message"</span>,
-  inputSchema: {
-    type: <span class="code-string">"object"</span>,
-    properties: { message: { type: <span class="code-string">"string"</span> } },
-    required: [<span class="code-string">"message"</span>]
-  },
-  execute: ({ message }) =&gt; {
-    pageMessage.textContent = message
+            <pre id="sdk-snippet"><code>const moveTasks = defineTool({
+  name: "move_project_tasks",
+  inputSchema: moveTasksSchema,
+  execute: ({ moves }) =&gt; {
+    board.moveAll(moves)
   }
 })
 
-<span class="code-keyword">const</span> agent = <span class="code-keyword">await</span> <span class="code-call">connectAgent</span>({
-  runtimeCard,
-  tools: [setPageMessage]
-})</code></pre>
-          </article>
+const connection = await connectAgent({
+  baseUrl: runtimeCard.endpoint,
+  tools: [createTasks, updateTasks, moveTasks],
+  accessToken
+})
 
-          <article class="code-example">
-            <div class="code-heading">
-              <div>
-                <span>User-owned environment</span>
-                <strong>Run the connector</strong>
+for await (const event of connection.session.streamTask(prompt)) {
+  render(event)
+}</code></pre>
+          </article>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <span>Agent Connect</span>
+        <span>Application tools for user-owned agents.</span>
+        <a href="https://github.com/jomi-se/agent-connect">Source</a>
+      </footer>
+    </template>
+
+    <template id="mobile-layout">
+      <a class="skip-link" href="#mobile-demo">Skip to demo</a>
+      <header class="mobile-header">
+        <a class="wordmark" href="#mobile-top" aria-label="Agent Connect home">
+          <span class="wordmark-mark" aria-hidden="true"
+            ><span></span><span></span><span></span
+          ></span>
+          Agent Connect
+        </a>
+        <a class="source-link" href="https://github.com/jomi-se/agent-connect"
+          >Source</a
+        >
+      </header>
+
+      <main id="mobile-top" class="mobile-page">
+        <section class="mobile-intro" aria-labelledby="mobile-title">
+          <h1 id="mobile-title">Let Codex work inside your app.</h1>
+          <p>
+            Expose app-native tools to Codex or Claude Code without installing
+            an MCP first.
+          </p>
+        </section>
+
+        <section
+          id="mobile-demo"
+          class="mobile-demo"
+          aria-labelledby="mobile-demo-title"
+        >
+          <div class="mobile-connection">
+            <div>
+              <h2 id="mobile-demo-title">Connect a coding agent</h2>
+              <p>Authorize the app once.</p>
+            </div>
+            <form id="connect-form" class="mobile-form">
+              <div class="mobile-field">
+                <label for="runtime-card">Runtime card</label>
+                <textarea
+                  id="runtime-card"
+                  required
+                  spellcheck="false"
+                  autocomplete="off"
+                  placeholder="Public runtime card"
+                ></textarea>
+                <div class="runtime-summary" id="runtime-summary" hidden>
+                  <strong id="runtime-profile">Runtime</strong>
+                  <span id="runtime-endpoint">Endpoint</span>
+                </div>
               </div>
+              <button id="connect" class="button button-primary" type="submit">
+                <span class="connect-button-label">Connect runtime</span
+                ><span class="button-progress" aria-hidden="true"></span>
+              </button>
+              <button
+                id="disconnect"
+                class="button button-secondary"
+                type="button"
+                hidden
+              >
+                Disconnect and revoke access
+              </button>
+            </form>
+            <div class="mobile-connection-row">
+              <span>Runtime</span
+              ><strong class="connection-state" id="connection-state"
+                >Not connected</strong
+              >
+            </div>
+          </div>
+
+          <div class="mobile-scenarios">
+            <div
+              class="scenario-tabs"
+              role="tablist"
+              aria-label="Demo applications"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected="true"
+                data-scenario-tab="project-board"
+              >
+                Board
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected="false"
+                data-scenario-tab="document-review"
+              >
+                Review
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected="false"
+                data-scenario-tab="product-research"
+              >
+                Research
+              </button>
+            </div>
+            <form id="task-form" class="mobile-form scenario-prompt">
+              <div class="mobile-field">
+                <label for="prompt">Task for the connected runtime</label>
+                <textarea id="prompt" required></textarea>
+              </div>
+              <button
+                id="run"
+                class="button button-primary mobile-run"
+                type="submit"
+              >
+                <span class="button-label">Run task</span
+                ><span class="button-progress" aria-hidden="true"></span>
+              </button>
+            </form>
+            <output id="status" class="status-line" aria-live="polite"
+              >Connect a runtime before running a task.</output
+            >
+          </div>
+
+          <div class="scenario-stage">
+            <section
+              id="scenario-project-board"
+              class="scenario-surface board-surface"
+              data-scenario-panel="project-board"
+            >
+              <header>
+                <div>
+                  <span>Northstar launch</span>
+                  <h3>Project board</h3>
+                </div>
+                <span class="surface-badge">3 tools</span>
+              </header>
+              <div class="board-columns">
+                <section>
+                  <h4>Backlog</h4>
+                  <ul id="task-list-backlog">
+                    <li data-task-id="pricing">
+                      <span data-task-title>Decide launch pricing</span
+                      ><small data-task-priority="medium">medium</small>
+                    </li>
+                    <li data-task-id="docs">
+                      <span data-task-title>Write docs sometime</span
+                      ><small data-task-priority="low">low</small>
+                    </li>
+                  </ul>
+                </section>
+                <section>
+                  <h4>Doing</h4>
+                  <ul id="task-list-doing">
+                    <li data-task-id="checkout">
+                      <span data-task-title>Fix checkout edge cases</span
+                      ><small data-task-priority="high">high</small>
+                    </li>
+                  </ul>
+                </section>
+                <section>
+                  <h4>Done</h4>
+                  <ul id="task-list-done">
+                    <li data-task-id="domain">
+                      <span data-task-title>Buy launch domain</span
+                      ><small data-task-priority="low">low</small>
+                    </li>
+                  </ul>
+                </section>
+              </div>
+            </section>
+            <section
+              id="scenario-document-review"
+              class="scenario-surface editor-surface"
+              data-scenario-panel="document-review"
+              hidden
+            >
+              <header>
+                <div>
+                  <span>Draft</span>
+                  <h3>A quieter way to work</h3>
+                </div>
+                <span class="surface-badge">3 tools</span>
+              </header>
+              <div class="editor-layout">
+                <article class="document-page">
+                  <p id="document-block-intro" data-format="paragraph">
+                    <span data-review-quote
+                      >Our new workspace makes every team exactly twice as
+                      productive.</span
+                    >
+                    It brings tasks, decisions, and notes into a single place.
+                  </p>
+                  <p id="document-block-history" data-format="paragraph">
+                    <span data-review-quote
+                      >The first graphical web browser was released in
+                      1989.</span
+                    >
+                    Since then, software has steadily become more collaborative.
+                  </p>
+                  <p id="document-block-close" data-format="paragraph">
+                    <span data-review-quote
+                      >Basically, we really think this is perhaps the best way
+                      for everyone to work better.</span
+                    >
+                  </p>
+                </article>
+                <aside>
+                  <h4>Review</h4>
+                  <ul id="review-comments">
+                    <li class="empty-review">No comments yet.</li>
+                  </ul>
+                </aside>
+              </div>
+            </section>
+            <section
+              id="scenario-product-research"
+              class="scenario-surface product-surface"
+              data-scenario-panel="product-research"
+              hidden
+            >
+              <header>
+                <div>
+                  <span>Everyday Market</span>
+                  <h3>Wireless headphones</h3>
+                </div>
+                <span class="surface-badge">3 tools</span>
+              </header>
+              <div class="product-layout">
+                <div class="product-visual" aria-hidden="true">
+                  <span></span>
+                </div>
+                <div class="product-details">
+                  <div class="rating">4.3 ★ <span>1,284 reviews</span></div>
+                  <p class="product-price" id="product-listed-price">€129</p>
+                  <p>
+                    Over-ear Bluetooth headphones · 35-hour battery · active
+                    noise cancellation.
+                  </p>
+                  <button type="button" disabled>Add to basket</button>
+                </div>
+                <aside id="product-research-results" hidden>
+                  <div class="research-heading">
+                    <span>Recorded research</span
+                    ><strong id="product-kid-fit">mixed</strong>
+                  </div>
+                  <p id="product-verdict"></p>
+                  <h4>Watch for</h4>
+                  <ul id="product-concerns"></ul>
+                  <div class="price-check">
+                    <span>Fair price range</span
+                    ><strong id="product-price-range"></strong>
+                    <p id="product-price-note"></p>
+                  </div>
+                  <h4>Alternatives</h4>
+                  <ul id="product-alternatives"></ul>
+                </aside>
+              </div>
+            </section>
+          </div>
+
+          <section class="mobile-trace" aria-labelledby="mobile-trace-title">
+            <div class="trace-heading">
+              <h2 id="mobile-trace-title">Live path</h2>
+              <span id="trace-summary">Waiting for a task</span>
+            </div>
+            <ol class="trace-steps">
+              <li id="flow-app" data-state="ready">
+                <span class="trace-marker" aria-hidden="true"></span>
+                <strong>App defines nine tools</strong>
+              </li>
+              <li id="flow-connector" data-state="idle">
+                <span class="trace-marker" aria-hidden="true"></span>
+                <strong>Connector checks access</strong>
+              </li>
+              <li id="flow-agent" data-state="idle">
+                <span class="trace-marker" aria-hidden="true"></span>
+                <strong>Runtime runs the task</strong>
+              </li>
+              <li id="flow-tool" data-state="idle">
+                <span class="trace-marker" aria-hidden="true"></span>
+                <strong>Tool changes the app</strong>
+              </li>
+              <li id="flow-result" data-state="idle">
+                <span class="trace-marker" aria-hidden="true"></span>
+                <strong>Result returns to the runtime</strong>
+              </li>
+            </ol>
+            <details class="event-details">
+              <summary>Raw events</summary>
+              <pre
+                id="events"
+                tabindex="0"
+                aria-label="Raw session events"
+              ></pre>
+            </details>
+          </section>
+        </section>
+
+        <section class="mobile-explanation" aria-labelledby="mobile-how-title">
+          <h2 id="mobile-how-title">Two pieces, two owners</h2>
+          <div class="mobile-boundaries">
+            <p>
+              <strong>SDK</strong
+              ><span>App developers define and run browser tools.</span>
+            </p>
+            <p>
+              <strong>Gateway</strong
+              ><span
+                >Agent owners connect their coding runtime and approve
+                apps.</span
+              >
+            </p>
+          </div>
+
+          <details>
+            <summary>Why the connector exists</summary>
+            <p>
+              It keeps Codex, OmniGENT, and other provider details behind one
+              browser API. Users approve or revoke each app from the gateway.
+            </p>
+          </details>
+          <details>
+            <summary>What the user is trusting</summary>
+            <p>
+              Approval lets this app send tasks and expose the listed tools. The
+              connector shows the real origin before access is granted.
+            </p>
+          </details>
+          <details class="mobile-code-details">
+            <summary>Show the browser code</summary>
+            <div class="code-heading">
+              <span>app.ts</span>
               <button
                 class="copy-button"
                 type="button"
-                data-copy-target="gateway-snippet"
+                data-copy-target="sdk-snippet"
               >
                 Copy
               </button>
             </div>
-            <pre
-              id="gateway-snippet"
-            ><code><span class="code-comment"># Keep the gateway on loopback</span>
-export AGENT_CONNECT_STATE_PATH=./agent-connect.json
-export AGENT_CONNECT_PUBLIC_ENDPOINT=https://machine.example
-export AGENT_CONNECT_ALLOWED_ORIGINS=https://your-app.example
+            <pre id="sdk-snippet"><code>const moveTasks = defineTool({
+  name: "move_project_tasks",
+  inputSchema: moveTasksSchema,
+  execute: ({ moves }) =&gt; {
+    board.moveAll(moves)
+  }
+})
 
-npm run build --workspace @agent-connect/gateway
-npm run start --workspace @agent-connect/gateway
+const connection = await connectAgent({
+  baseUrl: runtimeCard.endpoint,
+  tools: [createTasks, updateTasks, moveTasks],
+  accessToken
+})</code></pre>
+          </details>
+        </section>
 
-<span class="code-comment"># Publish through a trusted transport profile</span>
-tailscale serve --bg --https=443 http://127.0.0.1:8787</code></pre>
-          </article>
-        </div>
-
-        <div class="north-star">
-          <p>Today</p>
-          <strong>Browser SDK → Agent Connect → OmniGENT → ACP → Codex</strong>
-          <span>
-            The north star is a harness-neutral connection layer with additional
-            provider adapters and deployment profiles behind the same
-            application API.
-          </span>
-        </div>
-      </section>
-    </main>
-
-    <footer>
-      <a class="wordmark" href="#top">Agent Connect</a>
-      <p>Application-owned tools for user-owned agents.</p>
-      <a
-        href="https://github.com/jomi-se/agent-connect"
-        aria-label="Agent Connect source repository"
-        >Source</a
-      >
-    </footer>
+        <p class="mobile-runtime-note">
+          Public demo: a deterministic ACP runtime replays Codex-authored tool
+          plans. The same path has been tested live with Codex through OmniGENT.
+        </p>
+      </main>
+    </template>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
