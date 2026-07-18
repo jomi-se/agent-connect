@@ -1,6 +1,6 @@
 # Judge demo environment
 
-Status: loopback implementation proven and independently reviewed; public Funnel/browser validation pending
+Status: public Funnel/browser happy path proven; revocation and final judge-instruction rehearsal pending
 
 ## Purpose
 
@@ -195,7 +195,14 @@ runtime profiles honestly.
 Steps 3–5 passed on containerized loopback on 2026-07-17. The reusable smoke
 client completed enrollment, PKCE exchange, OmniGENT provisioning, ACP startup,
 request-scoped MCP `set_page_message`, browser result, and turn completion.
-The next active gate is steps 6–7: Funnel plus a clean external browser.
+Step 6 and the happy-path portion of step 7 passed on 2026-07-18 from a clean
+external mobile browser. The public Firebase Canvas verified the connector,
+redirected to the Funnel-hosted consent page, completed enrollment and PKCE,
+created an OmniGENT session, executed `set_page_message` exactly once, returned
+the correlated browser-tool result, and visibly replaced the page message. No
+local-network permission prompt was required. The remaining rehearsal work is
+the grant-list/revocation path and a final pass over the exact private judge
+instructions.
 
 Time-box this narrow deterministic image rather than reviving the full Codex
 appliance. If Compose cannot reproduce the real OmniGENT/ACP/MCP tool loop, the
@@ -228,6 +235,24 @@ fixture for a malicious shell action and observing its fixed tool call would
 not prove shell isolation; it would be a misleading test. Use a short manual
 `docker inspect` and mount/environment checklist before exposure, then invest
 in deeper security tests only after the public happy path is reliable.
+
+## Public validation evidence — 2026-07-18
+
+- Tailscale Funnel reported HTTPS port `10000`, the loopback proxy to
+  `127.0.0.1:10081`, and `AllowFunnel: true`.
+- The public TLS health endpoint returned `{"ok":true}`.
+- A public-origin protocol probe returned the exact Firebase CORS origin and
+  rejected a missing challenge nonce with `400 invalid_request`.
+- The container remained healthy and created a fresh OmniGENT runner/session
+  for the external browser task.
+- The external mobile browser displayed the configured deterministic message
+  and a tool result reporting `displayed: true` and `writes: 1`.
+
+This proves VAL-JUDGE-001 and VAL-JUDGE-004 for the deterministic public profile
+and exercises the positive path of VAL-JUDGE-003. The negative authorization
+cases remain covered by the gateway behavior suite. It does not prove the
+private Codex runtime has the same sandbox posture or that Funnel itself is an
+Agent Connect security boundary.
 
 ## Tailscale dependency and fallback
 
