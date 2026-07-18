@@ -301,6 +301,10 @@ body[data-demo="passed"] #canvas-message {
   line-height: 1.45;
 }
 
+.status-line:empty {
+  display: none;
+}
+
 body[data-demo="failed"] .status-line,
 body[data-demo="reauthorize"] .status-line {
   color: var(--danger);
@@ -1138,16 +1142,12 @@ body[data-layout="desktop"] {
 .scenario-prompt {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 198px;
-  align-items: end;
+  align-items: stretch;
   gap: 8px 10px;
 }
 
-.scenario-prompt label {
-  grid-column: 1 / -1;
-}
-
 .scenario-prompt textarea {
-  min-height: 78px;
+  min-height: 112px;
 }
 
 .scenario-prompt .button {
@@ -1800,8 +1800,8 @@ body[data-layout="mobile"] .scenario-prompt {
   grid-template-columns: 1fr;
 }
 
-body[data-layout="mobile"] .scenario-prompt label {
-  grid-column: 1;
+body[data-layout="mobile"] .scenario-prompt textarea {
+  min-height: 132px;
 }
 
 body[data-layout="mobile"] .scenario-prompt .button {

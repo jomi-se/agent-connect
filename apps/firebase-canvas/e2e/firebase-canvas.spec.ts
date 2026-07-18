@@ -87,12 +87,11 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
     const postedEvents = await mockConnectedRuntime(page, plans[scenario]);
     await openAndConnect(page, "desktop");
     await page.getByRole("tab", { name: scenarioTabName(scenario) }).click();
-    await page.getByRole("button", { name: "Run task" }).click();
+    await page.getByRole("button", { name: "Send prompt" }).click();
 
-    await expect(page.locator("body")).toHaveAttribute("data-demo", "passed");
     await expect(
       page.locator(`#scenario-${scenario} .tool-flight`),
-    ).toHaveCount(1);
+    ).toBeVisible();
     await expect
       .poll(() =>
         page
@@ -104,6 +103,8 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
           ),
       )
       .toBe(true);
+
+    await expect(page.locator("body")).toHaveAttribute("data-demo", "passed");
     await expect(page.locator(`#scenario-${scenario}`)).toHaveAttribute(
       "data-changed",
       "true",
@@ -124,7 +125,7 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
     expect(submittedNames).toEqual(["call-1", "call-2", "call-3"]);
 
     if (scenario === "document-review") {
-      await page.getByRole("button", { name: "Run task" }).click();
+      await page.getByRole("button", { name: "Send prompt" }).click();
       await expect(page.locator("body")).toHaveAttribute("data-demo", "passed");
     }
   });
@@ -138,8 +139,8 @@ test("the mobile page completes the connection before a task can run", async ({
   await openAndConnect(page, "mobile");
 
   await expect(page.locator("body")).toHaveAttribute("data-layout", "mobile");
-  await expect(page.getByRole("button", { name: "Run task" })).toBeEnabled();
-  await page.getByRole("button", { name: "Run task" }).click();
+  await expect(page.getByRole("button", { name: "Send prompt" })).toBeEnabled();
+  await page.getByRole("button", { name: "Send prompt" }).click();
   await expect(page.locator("body")).toHaveAttribute("data-demo", "passed");
   await expect(
     page.locator('[data-task-title=""]', {
@@ -326,7 +327,9 @@ async function openAndConnect(
   });
   await page.reload();
   await page.locator("#runtime-card").fill(JSON.stringify(runtimeCard));
-  await expect(page.getByRole("button", { name: "Run task" })).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Send prompt" }),
+  ).toBeDisabled();
   await page.getByRole("button", { name: "Connect runtime" }).click();
   await expect(page.locator("#connection-state")).toContainText(
     "Recorded Codex plan",

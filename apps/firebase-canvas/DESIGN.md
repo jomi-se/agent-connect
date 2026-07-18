@@ -224,7 +224,7 @@ This boundary is part of the product explanation: application developers keep ow
 
 Real `tool.requested` events send one amber, correlated call pill into the selected app and briefly illuminate its boundary. The application then animates the actual affected object: project cards pop, update, and move with FLIP; document passages highlight, rewrite, and reformat; product research panels and rows reveal in place. `tool.completed` changes the same pill and boundary to success or failure before returning it toward the runtime. Only one transient pill occupies the app surface; the event feed remains the durable multi-call history.
 
-These effects are driven by the real task stream and real browser-tool implementations, not a scripted timeline. They must preserve instant, readable mutations under reduced motion and must never imply that the coding agent executes inside the application.
+These effects are driven by the real task stream and real browser-tool implementations, not a scripted timeline. Because real runtimes may emit several calls too quickly to read, the Canvas applies a presentation clock between yielded request and result events. Each correlated request and result receives a minimum dwell before the task stream advances; no event is invented, reordered, or detached from its action ID. Reduced-motion visitors receive short state holds without spatial choreography. The visualization must never imply that the coding agent executes inside the application.
 
 ### Gateway Setup Terminal
 
