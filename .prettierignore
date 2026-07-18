@@ -4,4 +4,5 @@ package-lock.json
 .agents
 .codex
 .gemini/skills
+.impeccable/hook.cache.json
 .playwright-mcp

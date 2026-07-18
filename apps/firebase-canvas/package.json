@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@agent-connect/web": "0.0.0"
+    "@agent-connect/web": "0.0.0",
+    "@fontsource-variable/figtree": "^5.2.10",
+    "@fontsource/ibm-plex-mono": "^5.2.7"
   },
   "devDependencies": {
     "@types/node": "24.0.14",

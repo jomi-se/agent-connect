@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-18T08:26:41Z",
+  "title": "Design System: Agent Connect Canvas",
+  "extensions": {
+    "colorMeta": {
+      "app-coral": {
+        "role": "primary",
+        "displayName": "Application Coral",
+        "canonical": "oklch(0.56 0.16 32.1)",
+        "tonalRamp": [
+          "oklch(0.2 0.08 32.1)",
+          "oklch(0.3 0.11 32.1)",
+          "oklch(0.42 0.14 32.1)",
+          "oklch(0.56 0.16 32.1)",
+          "oklch(0.68 0.13 32.1)",
+          "oklch(0.78 0.09 32.1)",
+          "oklch(0.88 0.05 32.1)",
+          "oklch(0.96 0.02 32.1)"
+        ]
+      },
+      "connector-teal": {
+        "role": "secondary",
+        "displayName": "Connector Teal",
+        "canonical": "oklch(0.43 0.09 190)",
+        "tonalRamp": [
+          "oklch(0.18 0.04 190)",
+          "oklch(0.28 0.06 190)",
+          "oklch(0.38 0.08 190)",
+          "oklch(0.48 0.09 190)",
+          "oklch(0.6 0.08 190)",
+          "oklch(0.72 0.06 190)",
+          "oklch(0.84 0.04 190)",
+          "oklch(0.95 0.015 190)"
+        ]
+      },
+      "agent-periwinkle": {
+        "role": "secondary",
+        "displayName": "Agent Periwinkle",
+        "canonical": "oklch(0.52 0.15 275)",
+        "tonalRamp": [
+          "oklch(0.18 0.06 275)",
+          "oklch(0.28 0.09 275)",
+          "oklch(0.4 0.13 275)",
+          "oklch(0.52 0.15 275)",
+          "oklch(0.64 0.12 275)",
+          "oklch(0.75 0.09 275)",
+          "oklch(0.86 0.05 275)",
+          "oklch(0.96 0.018 275)"
+        ]
+      },
+      "signal-amber": {
+        "role": "tertiary",
+        "displayName": "Signal Amber",
+        "canonical": "oklch(0.79 0.14 83)",
+        "tonalRamp": [
+          "oklch(0.18 0.05 83)",
+          "oklch(0.3 0.08 83)",
+          "oklch(0.44 0.11 83)",
+          "oklch(0.58 0.14 83)",
+          "oklch(0.7 0.15 83)",
+          "oklch(0.79 0.14 83)",
+          "oklch(0.88 0.08 83)",
+          "oklch(0.96 0.025 83)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The central product claim only."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Product explanation and guidance."
+      },
+      "code": {
+        "displayName": "Evidence",
+        "purpose": "Code, commands, identifiers, and event payloads."
+      }
+    },
+    "shadows": [
+      {
+        "name": "workbench-lift",
+        "value": "0 6px 8px oklch(0.2 0.018 250 / 0.08)",
+        "purpose": "Maximum resting elevation for the live workbench."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-change",
+        "value": "200ms cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Flow-stage and control feedback."
+      }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "780px" },
+      { "name": "wide", "value": "1080px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single dominant action in a working region.",
+      "html": "<button class=\"ds-button-primary\">Run with connected agent</button>",
+      "css": ".ds-button-primary { min-height: 48px; border: 0; border-radius: 10px; padding: 14px 18px; background: oklch(0.2 0.018 250); color: white; font: 650 13px/1.3 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background 200ms cubic-bezier(0.22,1,0.36,1); } .ds-button-primary:hover { background: oklch(0.28 0.025 250); } .ds-button-primary:focus-visible { outline: 2px solid oklch(0.52 0.15 275); outline-offset: 3px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A reversible or supporting action.",
+      "html": "<button class=\"ds-button-secondary\">Disconnect</button>",
+      "css": ".ds-button-secondary { min-height: 48px; border: 1px solid oklch(0.85 0.012 250); border-radius: 10px; padding: 13px 18px; background: white; color: oklch(0.2 0.018 250); font: 650 13px/1.3 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; cursor: pointer; } .ds-button-secondary:hover { background: oklch(0.972 0.006 250); } .ds-button-secondary:focus-visible { outline: 2px solid oklch(0.52 0.15 275); outline-offset: 3px; }"
+    },
+    {
+      "name": "Runtime Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "A clear multiline field for runtime cards and tasks.",
+      "html": "<label class=\"ds-field-label\">Runtime card<textarea class=\"ds-field\" placeholder=\"Paste the public runtime card\"></textarea></label>",
+      "css": ".ds-field-label { display: grid; gap: 8px; color: oklch(0.2 0.018 250); font: 650 13px/1.3 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; } .ds-field { min-height: 96px; border: 1px solid oklch(0.85 0.012 250); border-radius: 10px; padding: 12px 14px; background: white; color: oklch(0.2 0.018 250); font: 450 15px/1.5 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; } .ds-field:focus-visible { outline: 2px solid oklch(0.52 0.15 275); outline-offset: 2px; }"
+    },
+    {
+      "name": "Actor Chip",
+      "kind": "chip",
+      "description": "A stable identity marker for one system actor.",
+      "html": "<span class=\"ds-actor-chip\"><span class=\"ds-actor-dot\"></span>Connector</span>",
+      "css": ".ds-actor-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; border-radius: 999px; padding: 6px 10px; background: oklch(0.95 0.015 190); color: oklch(0.32 0.07 190); font: 650 13px/1.3 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; } .ds-actor-dot { width: 8px; height: 8px; border-radius: 999px; background: oklch(0.43 0.09 190); }"
+    },
+    {
+      "name": "Code Panel",
+      "kind": "custom",
+      "refersTo": "code-panel",
+      "description": "Implementation evidence with copyable code.",
+      "html": "<pre class=\"ds-code\"><code>defineTool({ name: 'set_page_message' })</code></pre>",
+      "css": ".ds-code { overflow: auto; border-radius: 14px; padding: 24px; background: oklch(0.2 0.018 250); color: white; font: 450 13px/1.6 'IBM Plex Mono', ui-monospace, monospace; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Open Workbench",
+    "overview": "Agent Connect Canvas is a precise workbench in a bright studio: the useful machinery is visible, every handoff is marked, and nothing important is hidden behind decorative spectacle. The neutral foundation keeps the application calm while a functional palette identifies the web app, connector, agent, in-flight work, and outcome.",
+    "keyCharacteristics": [
+      "Neutral-first product surfaces with color reserved for actors and state.",
+      "A real execution trace, not a decorative architecture illustration.",
+      "Familiar controls and code artifacts that make the integration credible.",
+      "Crisp structure, compact radii, and purposeful state motion.",
+      "Desktop clarity with a complete touch-first mobile path."
+    ],
+    "rules": [
+      {
+        "name": "The Actor Color Rule",
+        "body": "Coral means app, teal means connector, and periwinkle means agent everywhere. Never reuse them as generic decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Evidence Voice Rule",
+        "body": "Prose explains; monospace proves. Never use monospace to make ordinary marketing copy look technical.",
+        "section": "typography"
+      },
+      {
+        "name": "The Structural-First Rule",
+        "body": "Use spacing, dividers, and surface contrast before adding shadow. Never pair a decorative wide shadow with a decorative border.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do lead with the working interaction and let architecture unfold from real events.",
+      "Do keep actor colors stable across diagrams, status messages, and code annotations.",
+      "Do show runtime cards, scopes, tool schemas, and event payloads as real evidence behind progressive disclosure."
+    ],
+    "donts": [
+      "Don't create a futuristic science-fiction AI interface.",
+      "Don't create a generic gradient-heavy AI startup landing page.",
+      "Don't turn the experience into a terminal-first hacker demo that excludes web developers.",
+      "Don't create a dense enterprise-security dashboard that makes the integration feel intimidating."
+    ]
+  }
+}

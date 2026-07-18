@@ -4,226 +4,457 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light" />
-    <title>Agent Connect Canvas</title>
-    <style>
-      :root {
-        font-family:
-          Inter,
-          ui-sans-serif,
-          system-ui,
-          -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          sans-serif;
-        color: #15221c;
-        background: #e8efe9;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background:
-          radial-gradient(circle at 15% 15%, #fff7cf 0 12%, transparent 34%),
-          radial-gradient(circle at 85% 5%, #cce9dc 0 10%, transparent 31%),
-          #e8efe9;
-      }
-      main {
-        width: min(1080px, calc(100vw - 32px));
-        margin: 0 auto;
-        padding: 42px 0 64px;
-      }
-      header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 24px;
-        margin-bottom: 36px;
-      }
-      .brand {
-        font-weight: 850;
-        letter-spacing: -0.04em;
-        font-size: 1.25rem;
-      }
-      .pill {
-        padding: 7px 12px;
-        border: 1px solid #94aa9c;
-        border-radius: 999px;
-        font-size: 0.78rem;
-        font-weight: 750;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-      }
-      .layout {
-        display: grid;
-        grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
-        gap: 22px;
-      }
-      .canvas,
-      .controls {
-        border: 1px solid #aebeb3;
-        border-radius: 24px;
-        box-shadow: 0 24px 70px #2945351a;
-      }
-      .canvas {
-        min-height: 570px;
-        padding: clamp(28px, 6vw, 72px);
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        background: #fffdf5;
-      }
-      .eyebrow {
-        margin: 0;
-        color: #53685c;
-        font-size: 0.78rem;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-      }
-      #canvas-message {
-        margin: 50px 0;
-        font-family: Georgia, "Times New Roman", serif;
-        font-size: clamp(2.6rem, 7vw, 5.8rem);
-        line-height: 0.98;
-        letter-spacing: -0.055em;
-        overflow-wrap: anywhere;
-      }
-      #status {
-        display: block;
-        min-height: 3em;
-        color: #53685c;
-        line-height: 1.45;
-      }
-      .controls {
-        padding: 24px;
-        background: #183f2d;
-        color: #f6fff8;
-      }
-      .controls h1 {
-        margin: 0 0 8px;
-        font-size: 1.55rem;
-        letter-spacing: -0.03em;
-      }
-      .controls > p {
-        color: #c8dbcf;
-        line-height: 1.5;
-      }
-      label {
-        display: grid;
-        gap: 6px;
-        margin: 15px 0;
-        font-size: 0.8rem;
-        font-weight: 750;
-      }
-      input,
-      textarea,
-      button {
-        font: inherit;
-      }
-      input,
-      textarea {
-        width: 100%;
-        border: 1px solid #527562;
-        border-radius: 10px;
-        padding: 10px 11px;
-        color: #f6fff8;
-        background: #0f3022;
-      }
-      textarea {
-        min-height: 92px;
-        resize: vertical;
-      }
-      button {
-        width: 100%;
-        border: 0;
-        border-radius: 10px;
-        padding: 12px 16px;
-        color: #173726;
-        background: #f4dd76;
-        cursor: pointer;
-        font-weight: 850;
-      }
-      button:disabled {
-        cursor: wait;
-        opacity: 0.55;
-      }
-      .disconnect {
-        margin-top: 10px;
-        border: 1px solid #789584;
-        color: #e4f2e8;
-        background: transparent;
-      }
-      details {
-        margin-top: 20px;
-        color: #c8dbcf;
-        font-size: 0.8rem;
-      }
-      pre {
-        max-height: 180px;
-        overflow: auto;
-        white-space: pre-wrap;
-        font-size: 0.7rem;
-      }
-      @media (max-width: 780px) {
-        main {
-          padding-top: 24px;
-        }
-        .layout {
-          grid-template-columns: 1fr;
-        }
-        .canvas {
-          min-height: 430px;
-        }
-      }
-    </style>
+    <meta
+      name="description"
+      content="A live Agent Connect demo: lend a browser-owned tool to a user-owned agent without installing it in advance."
+    />
+    <title>Agent Connect | Lend tools to a user-owned agent</title>
+    <link rel="stylesheet" href="/src/styles.css" />
   </head>
-  <body>
-    <main>
-      <header>
-        <div class="brand">Agent Connect</div>
-        <div class="pill">Your agent · this page</div>
-      </header>
-      <div class="layout">
-        <section class="canvas" aria-label="Agent-writable canvas">
-          <p class="eyebrow">A web page with one borrowed tool</p>
-          <p id="canvas-message">Your agent can write here.</p>
-          <output id="status">Waiting for a task.</output>
-        </section>
-        <aside class="controls">
-          <h1>Give the page to Codex</h1>
-          <p>
-            This app defines <code>set_page_message</code> for one agent task.
-            Nothing was installed into Codex in advance.
+  <body data-demo="idle">
+    <a class="skip-link" href="#live-demo">Skip to the live demo</a>
+
+    <header class="site-header">
+      <a class="wordmark" href="#top" aria-label="Agent Connect home">
+        <span class="wordmark-mark" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </span>
+        Agent Connect
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#live-demo">Live demo</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#integrate">Integrate</a>
+      </nav>
+      <span class="demo-badge"
+        ><span aria-hidden="true"></span> Build Week demo</span
+      >
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="context-line">Application tools · User-owned agents</p>
+          <h1 id="hero-title">Your app. Their agent. One safe connection.</h1>
+          <p class="hero-lede">
+            Any web app can lend temporary tools to a user-owned agent without
+            installing those tools into the agent beforehand.
           </p>
-          <form id="task-form">
-            <label>
-              Runtime card
+          <div class="hero-actions">
+            <a class="button button-primary" href="#live-demo"
+              >Try the live proof</a
+            >
+            <a class="text-link" href="#integrate"
+              >See the application code <span aria-hidden="true">↓</span></a
+            >
+          </div>
+        </div>
+
+        <div class="hero-system" aria-label="Agent Connect system actors">
+          <div class="hero-system-label">
+            One task crosses three ownership boundaries
+          </div>
+          <div class="actor-row">
+            <div class="actor actor-app">
+              <strong>Web app</strong>
+              <span>owns the tool</span>
+            </div>
+            <span class="actor-arrow" aria-hidden="true">→</span>
+            <div class="actor actor-connector">
+              <strong>Connector</strong>
+              <span>owns trust</span>
+            </div>
+            <span class="actor-arrow" aria-hidden="true">→</span>
+            <div class="actor actor-agent">
+              <strong>Your agent</strong>
+              <span>owns reasoning</span>
+            </div>
+          </div>
+          <p>
+            The application never receives an OmniGENT session ID. The agent
+            never receives a permanent application capability.
+          </p>
+        </div>
+      </section>
+
+      <section class="proof-band" aria-label="Demonstrated properties">
+        <span>Typed tool snapshot</span>
+        <span>Connector-owned consent</span>
+        <span>Revocable grant</span>
+        <span>Live browser execution</span>
+      </section>
+
+      <section id="live-demo" class="demo-section" aria-labelledby="demo-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-number">The live proof</p>
+            <h2 id="demo-title">Watch this page lend one tool.</h2>
+          </div>
+          <p>
+            The tool is created by this loaded page. Follow the real request
+            from authorization through the agent and back into the browser.
+          </p>
+        </div>
+
+        <div class="workbench">
+          <section class="canvas" aria-labelledby="canvas-title">
+            <div class="panel-topline">
+              <div>
+                <span class="panel-dot panel-dot-app" aria-hidden="true"></span>
+                <span id="canvas-title">Browser-owned surface</span>
+              </div>
+              <span class="panel-state" id="canvas-state">Ready</span>
+            </div>
+            <div class="canvas-content">
+              <p class="canvas-prompt">The connected agent can write here.</p>
+              <p id="canvas-message">Your agent can write here.</p>
+            </div>
+            <output id="status" class="status-line" aria-live="polite">
+              Paste a runtime card and send the task when you are ready.
+            </output>
+          </section>
+
+          <aside class="controls" aria-labelledby="controls-title">
+            <div class="panel-topline">
+              <div>
+                <span
+                  class="panel-dot panel-dot-connector"
+                  aria-hidden="true"
+                ></span>
+                <span id="controls-title">Connection</span>
+              </div>
+              <span class="connection-state" id="connection-state"
+                >Not connected</span
+              >
+            </div>
+
+            <p class="control-intro">
+              Give the connected agent one request-scoped capability:
+              <code>set_page_message</code>.
+            </p>
+
+            <form id="task-form">
+              <label for="runtime-card">
+                <span>Public runtime card</span>
+                <span class="label-hint">Identifies the connector</span>
+              </label>
               <textarea
                 id="runtime-card"
                 required
                 spellcheck="false"
-                placeholder='Paste the public "runtimeCard" object saved during connector setup'
+                autocomplete="off"
+                placeholder='Paste the public "runtimeCard" object'
               ></textarea>
-            </label>
-            <label>
-              Task for your agent
+
+              <div class="runtime-summary" id="runtime-summary" hidden>
+                <span><strong id="runtime-profile">Runtime</strong></span>
+                <span id="runtime-endpoint"
+                  >Endpoint verified after connection</span
+                >
+              </div>
+
+              <label for="prompt">
+                <span>Task for the agent</span>
+                <span class="label-hint"
+                  >The app keeps tool execution local</span
+                >
+              </label>
               <textarea id="prompt" required>
 Write a short, surprising welcome message directly onto this page. You must use set_page_message once.</textarea>
-            </label>
-            <button id="run" type="submit">Run with my Codex</button>
-            <button id="disconnect" class="disconnect" type="button" hidden>
-              Disconnect agent
-            </button>
-          </form>
-          <details>
-            <summary>Session events</summary>
-            <pre id="events"></pre>
-          </details>
-        </aside>
-      </div>
+
+              <button id="run" class="button button-primary" type="submit">
+                <span class="button-label">Run with connected agent</span>
+                <span class="button-progress" aria-hidden="true"></span>
+              </button>
+              <button
+                id="disconnect"
+                class="button button-secondary"
+                type="button"
+                hidden
+              >
+                Disconnect and revoke access
+              </button>
+            </form>
+
+            <p class="public-runtime-note">
+              Judge access uses a deterministic, capability-limited runtime. The
+              same SDK flow has also been proven against Codex through OmniGENT.
+            </p>
+          </aside>
+
+          <section class="live-trace" aria-labelledby="trace-title">
+            <div class="trace-heading">
+              <div>
+                <span class="live-indicator" aria-hidden="true"></span>
+                <h3 id="trace-title">Live execution trace</h3>
+              </div>
+              <span id="trace-summary">Waiting for a task</span>
+            </div>
+
+            <ol class="trace-steps">
+              <li id="flow-app" class="trace-step trace-app" data-state="ready">
+                <span class="trace-marker" aria-hidden="true"></span>
+                <div>
+                  <span class="trace-owner">Web app</span>
+                  <strong>Packages the tool</strong>
+                  <span class="trace-detail">Fixed schema for this task</span>
+                </div>
+              </li>
+              <li
+                id="flow-connector"
+                class="trace-step trace-connector"
+                data-state="idle"
+              >
+                <span class="trace-marker" aria-hidden="true"></span>
+                <div>
+                  <span class="trace-owner">Connector</span>
+                  <strong>Verifies permission</strong>
+                  <span class="trace-detail"
+                    >Pinned identity + scoped grant</span
+                  >
+                </div>
+              </li>
+              <li
+                id="flow-agent"
+                class="trace-step trace-agent"
+                data-state="idle"
+              >
+                <span class="trace-marker" aria-hidden="true"></span>
+                <div>
+                  <span class="trace-owner">Agent runtime</span>
+                  <strong>Receives the task</strong>
+                  <span class="trace-detail"
+                    >Behind a provider-neutral session</span
+                  >
+                </div>
+              </li>
+              <li
+                id="flow-tool"
+                class="trace-step trace-tool"
+                data-state="idle"
+              >
+                <span class="trace-marker" aria-hidden="true"></span>
+                <div>
+                  <span class="trace-owner">Borrowed tool</span>
+                  <strong>Requests a page write</strong>
+                  <span class="trace-detail"
+                    >Stable action ID, local execution</span
+                  >
+                </div>
+              </li>
+              <li
+                id="flow-result"
+                class="trace-step trace-result"
+                data-state="idle"
+              >
+                <span class="trace-marker" aria-hidden="true"></span>
+                <div>
+                  <span class="trace-owner">Browser</span>
+                  <strong>Applies the result</strong>
+                  <span class="trace-detail"
+                    >Visible mutation, correlated reply</span
+                  >
+                </div>
+              </li>
+            </ol>
+
+            <details class="event-details">
+              <summary>Inspect raw session events</summary>
+              <pre
+                id="events"
+                tabindex="0"
+                aria-label="Raw session events"
+              ></pre>
+            </details>
+          </section>
+        </div>
+      </section>
+
+      <section
+        id="how-it-works"
+        class="explanation-section"
+        aria-labelledby="architecture-title"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="section-number">The architecture</p>
+            <h2 id="architecture-title">
+              Simple at the edge. Serious in the middle.
+            </h2>
+          </div>
+          <p>
+            Agent Connect keeps the application API small while the connector
+            owns identity, consent, grants, and the adapter to the user's agent
+            environment.
+          </p>
+        </div>
+
+        <div class="architecture-map" aria-label="Agent Connect architecture">
+          <section class="architecture-zone zone-app">
+            <div class="zone-heading">
+              <span>Application boundary</span>
+              <strong>Your web app</strong>
+            </div>
+            <div class="zone-content">
+              <code>defineTool()</code>
+              <code>connectAgent()</code>
+              <p>Owns UI, data, and every consequential tool implementation.</p>
+            </div>
+          </section>
+
+          <div class="architecture-handoff" aria-hidden="true">
+            <span>HTTPS + scoped capability</span>
+            <i></i>
+          </div>
+
+          <section class="architecture-zone zone-connector">
+            <div class="zone-heading">
+              <span>Trust boundary</span>
+              <strong>Agent Connect</strong>
+            </div>
+            <div class="zone-content">
+              <ul>
+                <li>Pinned connector identity</li>
+                <li>Enrollment and explicit consent</li>
+                <li>Origin-, tool-, and scope-bound grants</li>
+                <li>Opaque application sessions</li>
+              </ul>
+            </div>
+          </section>
+
+          <div class="architecture-handoff" aria-hidden="true">
+            <span>Internal adapter</span>
+            <i></i>
+          </div>
+
+          <section class="architecture-zone zone-agent">
+            <div class="zone-heading">
+              <span>User-owned environment</span>
+              <strong>Agent runtime</strong>
+            </div>
+            <div class="zone-content runtime-stack">
+              <span>OmniGENT</span>
+              <span>ACP</span>
+              <span>Codex or another harness</span>
+              <p>Provider details stay behind the connector boundary.</p>
+            </div>
+          </section>
+        </div>
+
+        <div class="security-line">
+          <h3>Authorization is explicit. Connectivity alone is not consent.</h3>
+          <p>
+            The browser pins the connector key before disclosing tool schemas.
+            The connector shows the exact app origin and tools before issuing a
+            revocable PKCE-bound grant. Authentication still does not make an
+            application trustworthy; consent must say what a malicious app could
+            do.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="integrate"
+        class="integration-section"
+        aria-labelledby="integration-title"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="section-number">The integration</p>
+            <h2 id="integration-title">The application stays small.</h2>
+          </div>
+          <p>
+            The app declares what the agent may ask for. The connector handles
+            how that task reaches a user-owned runtime.
+          </p>
+        </div>
+
+        <div class="code-layout">
+          <article class="code-example">
+            <div class="code-heading">
+              <div>
+                <span>Web application</span>
+                <strong>Declare and connect</strong>
+              </div>
+              <button
+                class="copy-button"
+                type="button"
+                data-copy-target="sdk-snippet"
+              >
+                Copy
+              </button>
+            </div>
+            <pre
+              id="sdk-snippet"
+            ><code><span class="code-keyword">const</span> setPageMessage = <span class="code-call">defineTool</span>({
+  name: <span class="code-string">"set_page_message"</span>,
+  inputSchema: {
+    type: <span class="code-string">"object"</span>,
+    properties: { message: { type: <span class="code-string">"string"</span> } },
+    required: [<span class="code-string">"message"</span>]
+  },
+  execute: ({ message }) =&gt; {
+    pageMessage.textContent = message
+  }
+})
+
+<span class="code-keyword">const</span> agent = <span class="code-keyword">await</span> <span class="code-call">connectAgent</span>({
+  runtimeCard,
+  tools: [setPageMessage]
+})</code></pre>
+          </article>
+
+          <article class="code-example">
+            <div class="code-heading">
+              <div>
+                <span>User-owned environment</span>
+                <strong>Run the connector</strong>
+              </div>
+              <button
+                class="copy-button"
+                type="button"
+                data-copy-target="gateway-snippet"
+              >
+                Copy
+              </button>
+            </div>
+            <pre
+              id="gateway-snippet"
+            ><code><span class="code-comment"># Keep the gateway on loopback</span>
+export AGENT_CONNECT_STATE_PATH=./agent-connect.json
+export AGENT_CONNECT_PUBLIC_ENDPOINT=https://machine.example
+export AGENT_CONNECT_ALLOWED_ORIGINS=https://your-app.example
+
+npm run build --workspace @agent-connect/gateway
+npm run start --workspace @agent-connect/gateway
+
+<span class="code-comment"># Publish through a trusted transport profile</span>
+tailscale serve --bg --https=443 http://127.0.0.1:8787</code></pre>
+          </article>
+        </div>
+
+        <div class="north-star">
+          <p>Today</p>
+          <strong>Browser SDK → Agent Connect → OmniGENT → ACP → Codex</strong>
+          <span>
+            The north star is a harness-neutral connection layer with additional
+            provider adapters and deployment profiles behind the same
+            application API.
+          </span>
+        </div>
+      </section>
     </main>
+
+    <footer>
+      <a class="wordmark" href="#top">Agent Connect</a>
+      <p>Application-owned tools for user-owned agents.</p>
+      <a
+        href="https://github.com/jomi-se/agent-connect"
+        aria-label="Agent Connect source repository"
+        >Source</a
+      >
+    </footer>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
