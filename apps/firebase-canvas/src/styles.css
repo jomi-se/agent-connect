@@ -2085,6 +2085,106 @@ body[data-layout="mobile"] .third-party-context {
   padding-inline: 14px;
 }
 
+/* Real task events animate the selected third-party app, not a staged timeline. */
+
+.scenario-surface {
+  position: relative;
+}
+
+.scenario-surface::after {
+  position: absolute;
+  z-index: 24;
+  inset: 0;
+  border: 2px solid transparent;
+  border-radius: inherit;
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+}
+
+.scenario-surface[data-agent-motion="request"]::after {
+  border-color: oklch(0.6 0.13 83);
+  animation: app-request-boundary 760ms var(--ease-out) both;
+}
+
+.scenario-surface[data-agent-motion="result"]::after {
+  border-color: var(--success);
+  animation: app-result-boundary 820ms var(--ease-out) both;
+}
+
+.scenario-surface[data-agent-motion="error"]::after {
+  border-color: var(--danger);
+  animation: app-result-boundary 820ms var(--ease-out) both;
+}
+
+.tool-flight-stack {
+  position: absolute;
+  z-index: 30;
+  top: 76px;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.tool-flight {
+  max-width: min(390px, calc(100vw - 64px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid oklch(0.6 0.13 83);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--signal-soft);
+  box-shadow: 0 6px 14px oklch(0.2 0.018 250 / 0.14);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  animation: tool-request-arrive 480ms var(--ease-out) both;
+}
+
+.tool-flight span {
+  flex: none;
+  color: oklch(0.47 0.11 83);
+  font-weight: 600;
+}
+
+.tool-flight strong {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-flight[data-phase="result"] {
+  border-color: var(--success);
+  color: var(--success);
+  background: var(--success-soft);
+  animation: tool-result-leave 1.1s var(--ease-out) both;
+}
+
+.tool-flight[data-phase="error"] {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+  animation: tool-result-leave 1.1s var(--ease-out) both;
+}
+
+body[data-layout="mobile"] .tool-flight-stack {
+  top: auto;
+  bottom: 12px;
+  right: 12px;
+  left: 12px;
+  transform: none;
+}
+
+body[data-layout="mobile"] .tool-flight {
+  max-width: 100%;
+}
+
 /* Runtime events are appended from the live session; no path is pre-rendered. */
 
 .activity-panel .trace-heading {
@@ -2379,6 +2479,58 @@ body[data-layout="mobile"] .third-party-context {
   }
 }
 
+@keyframes app-request-boundary {
+  0% {
+    opacity: 0;
+    box-shadow: inset 0 0 0 0 oklch(0.79 0.14 83 / 0);
+  }
+  40% {
+    opacity: 0.9;
+    box-shadow: inset 0 0 0 5px oklch(0.79 0.14 83 / 0.16);
+  }
+  100% {
+    opacity: 0.28;
+    box-shadow: inset 0 0 0 1px oklch(0.79 0.14 83 / 0.08);
+  }
+}
+
+@keyframes app-result-boundary {
+  0% {
+    opacity: 0.9;
+    box-shadow: inset 0 0 0 5px oklch(0.48 0.12 150 / 0.16);
+  }
+  100% {
+    opacity: 0;
+    box-shadow: inset 0 0 0 0 oklch(0.48 0.12 150 / 0);
+  }
+}
+
+@keyframes tool-request-arrive {
+  0% {
+    opacity: 0;
+    transform: translateX(32px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes tool-result-leave {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  55% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(32px) scale(0.94);
+  }
+}
+
 @media (max-width: 640px) {
   .activity-feed {
     max-height: 360px;
@@ -2414,7 +2566,9 @@ body[data-layout="mobile"] .third-party-context {
   }
 
   .terminal-line,
-  .terminal-command-typed::after {
+  .terminal-command-typed::after,
+  .scenario-surface::after,
+  .tool-flight {
     animation: none !important;
     transition: none !important;
   }

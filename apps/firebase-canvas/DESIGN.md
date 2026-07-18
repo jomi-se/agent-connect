@@ -220,6 +220,12 @@ The example project board, editor, and storefront are visually independent produ
 
 This boundary is part of the product explanation: application developers keep ownership of their interface and tools while Agent Connect supplies the user-owned-agent connection. Mobile may simplify each app's navigation, but it must preserve the independent brand and recognizable application structure.
 
+### Live Tool Choreography
+
+Real `tool.requested` events send one amber, correlated call pill into the selected app and briefly illuminate its boundary. The application then animates the actual affected object: project cards pop, update, and move with FLIP; document passages highlight, rewrite, and reformat; product research panels and rows reveal in place. `tool.completed` changes the same pill and boundary to success or failure before returning it toward the runtime. Only one transient pill occupies the app surface; the event feed remains the durable multi-call history.
+
+These effects are driven by the real task stream and real browser-tool implementations, not a scripted timeline. They must preserve instant, readable mutations under reduced motion and must never imply that the coding agent executes inside the application.
+
 ### Gateway Setup Terminal
 
 The gateway setup is the page's single scroll-triggered explanatory animation. It replays the current source-based install, build, and start sequence when the terminal enters the viewport. Pending lines remain faintly legible so the content never depends on animation; reduced-motion visitors receive the completed terminal immediately. The command sequence lives in one typed data structure in `src/main.ts` because the installation story will change as the gateway is packaged more ergonomically.
