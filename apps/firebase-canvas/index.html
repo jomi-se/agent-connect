@@ -134,23 +134,29 @@
                 <strong id="runtime-profile">Runtime</strong
                 ><span id="runtime-endpoint">Endpoint</span>
               </div>
-              <button id="connect" class="button button-primary" type="submit">
-                <span class="connect-button-label">Connect runtime</span
-                ><span class="button-progress" aria-hidden="true"></span>
-              </button>
-              <button
-                id="disconnect"
-                class="button button-secondary"
-                type="button"
-                hidden
-              >
-                Disconnect and revoke access
-              </button>
+              <div class="form-actions">
+                <div class="connection-status">
+                  <span>Runtime</span
+                  ><strong id="connection-state">Not connected</strong>
+                </div>
+                <button
+                  id="connect"
+                  class="button button-primary"
+                  type="submit"
+                >
+                  <span class="connect-button-label">Connect runtime</span
+                  ><span class="button-progress" aria-hidden="true"></span>
+                </button>
+                <button
+                  id="disconnect"
+                  class="button button-secondary"
+                  type="button"
+                  hidden
+                >
+                  Disconnect &amp; revoke
+                </button>
+              </div>
             </form>
-            <div class="connection-status">
-              <span>Runtime</span
-              ><strong id="connection-state">Not connected</strong>
-            </div>
           </div>
 
           <div class="scenario-controls">
@@ -192,10 +198,12 @@
             </div>
             <form id="task-form" class="scenario-prompt">
               <textarea id="prompt" aria-label="Prompt" required></textarea>
-              <button id="run" class="button button-primary" type="submit">
-                <span class="button-label">Send prompt</span
-                ><span class="button-progress" aria-hidden="true"></span>
-              </button>
+              <div class="form-actions">
+                <button id="run" class="button button-primary" type="submit">
+                  <span class="button-label">Send prompt</span
+                  ><span class="button-progress" aria-hidden="true"></span>
+                </button>
+              </div>
             </form>
             <output id="status" class="status-line" aria-live="polite"></output>
           </div>
@@ -551,18 +559,24 @@ for await (const event of connection.session.streamTask(prompt)) {
                   <span id="runtime-endpoint">Endpoint</span>
                 </div>
               </div>
-              <button id="connect" class="button button-primary" type="submit">
-                <span class="connect-button-label">Connect runtime</span
-                ><span class="button-progress" aria-hidden="true"></span>
-              </button>
-              <button
-                id="disconnect"
-                class="button button-secondary"
-                type="button"
-                hidden
-              >
-                Disconnect and revoke access
-              </button>
+              <div class="form-actions">
+                <button
+                  id="connect"
+                  class="button button-primary"
+                  type="submit"
+                >
+                  <span class="connect-button-label">Connect runtime</span
+                  ><span class="button-progress" aria-hidden="true"></span>
+                </button>
+                <button
+                  id="disconnect"
+                  class="button button-secondary"
+                  type="button"
+                  hidden
+                >
+                  Disconnect &amp; revoke
+                </button>
+              </div>
             </form>
             <div class="mobile-connection-row">
               <span>Runtime</span
@@ -613,14 +627,12 @@ for await (const event of connection.session.streamTask(prompt)) {
               <div class="mobile-field">
                 <textarea id="prompt" aria-label="Prompt" required></textarea>
               </div>
-              <button
-                id="run"
-                class="button button-primary mobile-run"
-                type="submit"
-              >
-                <span class="button-label">Send prompt</span
-                ><span class="button-progress" aria-hidden="true"></span>
-              </button>
+              <div class="form-actions">
+                <button id="run" class="button button-primary" type="submit">
+                  <span class="button-label">Send prompt</span
+                  ><span class="button-progress" aria-hidden="true"></span>
+                </button>
+              </div>
             </form>
             <output id="status" class="status-line" aria-live="polite"></output>
           </div>
