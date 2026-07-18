@@ -200,18 +200,19 @@ claiming those approaches are always wrong.
 
 Prioritize product completion over additional protocol generalization:
 
-1. Deploy and validate the runtime-card/passphrase/PKCE flow from the real
-   Firebase origin on a phone. Capture the app origin, connector origin,
-   consent, redirect, tool request, page mutation, grant list, and revocation.
+1. Capture the already-proven public phone flow for the demo video, then finish
+   the grant-list and revocation rehearsal. Runtime-card verification,
+   passphrase enrollment, consent, PKCE redirect, tool request, correlated
+   result, and visible page mutation passed through Funnel on 2026-07-18.
 2. Use the proven OmniGENT runtime for the recorded demo unless the experimental
    bwrap MCP startup gap is fixed and revalidated end to end.
 3. Freeze the smallest coherent demo. Prefer the Canvas authorization/tool/
    revoke story if spreadsheet durability is not complete; do not show planned
    recovery as working.
-4. Provide the isolated [judge demo environment](judge-demo-environment.md)
-   through public Tailscale Funnel. It must not depend on membership in the
-   developer's tailnet, require rebuilding, or reuse the personal connector and
-   Codex login.
+4. Keep the proven isolated [judge demo environment](judge-demo-environment.md)
+   healthy through judging, rehearse its private instructions, and verify the
+   shutdown/teardown procedure. Its public Funnel happy path passed without
+   tailnet membership, a model credential, or the personal connector.
 5. Make the downstream GPT-5.6 runtime choice and its role observable and
    documented; do not rely only on hidden session metadata.
 6. Add the required submission-oriented README material, supported-platform
