@@ -64,13 +64,13 @@ export function createDemoTools(): readonly ApplicationTool[] {
           const id = requireString(task, "id");
           if (document.querySelector(`[data-task-id="${cssEscape(id)}"]`))
             continue;
-          taskList(requireStatus(task["status"])).append(
-            renderTask(
-              id,
-              requireString(task, "title"),
-              requirePriority(task["priority"]),
-            ),
+          const renderedTask = renderTask(
+            id,
+            requireString(task, "title"),
+            requirePriority(task["priority"]),
           );
+          taskList(requireStatus(task["status"])).append(renderedTask);
+          animateAppMutation(renderedTask, "pop");
         }
         markSurfaceChanged("project-board");
         return toolResult("Project tasks added.", {
@@ -112,6 +112,7 @@ export function createDemoTools(): readonly ApplicationTool[] {
           if (change["priority"] !== undefined) {
             setTaskPriority(task, requirePriority(change["priority"]));
           }
+          animateAppMutation(task, "update");
         }
         markSurfaceChanged("project-board");
         return toolResult("Project tasks updated.", {
@@ -144,9 +145,10 @@ export function createDemoTools(): readonly ApplicationTool[] {
       execute: ({ moves }) => {
         const parsedMoves = requireObjectArray(moves, "moves");
         for (const move of parsedMoves) {
-          taskList(requireStatus(move["status"])).append(
-            requireTask(requireString(move, "id")),
-          );
+          const task = requireTask(requireString(move, "id"));
+          const previousPosition = task.getBoundingClientRect();
+          taskList(requireStatus(move["status"])).append(task);
+          animateMovedElement(task, previousPosition);
         }
         markSurfaceChanged("project-board");
         return toolResult("Project tasks moved.", {
@@ -186,6 +188,7 @@ export function createDemoTools(): readonly ApplicationTool[] {
           const quote = requireString(comment, "quote");
           const target = findQuote(quote);
           target.dataset["reviewKind"] = requireReviewKind(comment["kind"]);
+          animateAppMutation(target, "review");
           const item = document.createElement("li");
           const strong = document.createElement("strong");
           strong.textContent = requireReviewKind(comment["kind"]);
@@ -193,6 +196,7 @@ export function createDemoTools(): readonly ApplicationTool[] {
           text.textContent = requireString(comment, "comment");
           item.append(strong, text);
           list.append(item);
+          animateAppMutation(item, "pop");
         }
         markSurfaceChanged("document-review");
         return toolResult("Review comments added.", {
@@ -231,6 +235,7 @@ export function createDemoTools(): readonly ApplicationTool[] {
           const target = findQuote(requireString(replacement, "quote"));
           target.textContent = requireString(replacement, "replacement");
           delete target.dataset["reviewKind"];
+          animateAppMutation(target, "rewrite");
         }
         markSurfaceChanged("document-review");
         return toolResult("Document text replaced.", {
@@ -267,6 +272,7 @@ export function createDemoTools(): readonly ApplicationTool[] {
             `document-block-${requireString(block, "blockId")}`,
           );
           element.dataset["format"] = requireBlockFormat(block["format"]);
+          animateAppMutation(element, "format");
         }
         markSurfaceChanged("document-review");
         return toolResult("Document formatting applied.", {
@@ -298,6 +304,9 @@ export function createDemoTools(): readonly ApplicationTool[] {
         fit.dataset["fit"] = requireKidFit(kidFit);
         renderStringList("product-concerns", concerns, "concerns");
         revealProductResearch();
+        animateAppMutation(requireElement("product-verdict"), "reveal");
+        animateAppMutation(fit, "pop", 90);
+        animateListChildren(requireElement("product-concerns"), 130);
         return toolResult("Product assessment added.", { kidFit });
       },
     }),
@@ -326,6 +335,13 @@ export function createDemoTools(): readonly ApplicationTool[] {
         requireElement("product-listed-price").textContent =
           `€${requireNumber(listedPrice)}`;
         revealProductResearch();
+        animateAppMutation(requireElement("product-price-range"), "pop");
+        animateAppMutation(requireElement("product-price-note"), "reveal", 80);
+        animateAppMutation(
+          requireElement("product-listed-price"),
+          "update",
+          120,
+        );
         return toolResult("Price comparison added.", { fairLow, fairHigh });
       },
     }),
@@ -376,6 +392,7 @@ export function createDemoTools(): readonly ApplicationTool[] {
           list.append(item);
         }
         revealProductResearch();
+        animateListChildren(list, 40);
         return toolResult("Product alternatives added.", {
           alternatives: parsedAlternatives.length,
         });
@@ -438,7 +455,10 @@ function normalizeWhitespace(value: string): string {
 }
 
 function revealProductResearch(): void {
-  requireElement("product-research-results").hidden = false;
+  const results = requireElement("product-research-results");
+  const firstReveal = results.hidden;
+  results.hidden = false;
+  if (firstReveal) animateAppMutation(results, "panel");
   markSurfaceChanged("product-research");
 }
 
@@ -537,6 +557,115 @@ function requireSafeUrl(value: unknown): string {
   if (url.protocol !== "https:")
     throw new TypeError("Alternative URL must use HTTPS");
   return url.href;
+}
+
+type AppMutationKind =
+  "pop" | "update" | "review" | "rewrite" | "format" | "reveal" | "panel";
+
+function animateAppMutation(
+  element: HTMLElement,
+  kind: AppMutationKind,
+  delay = 0,
+): void {
+  if (!appMotionEnabled()) return;
+  const common: KeyframeAnimationOptions = {
+    duration: kind === "panel" ? 620 : 520,
+    delay,
+    easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+  };
+  const frames: Readonly<Record<AppMutationKind, Keyframe[]>> = {
+    pop: [
+      { opacity: 0, transform: "translateY(12px) scale(0.86)" },
+      { opacity: 1, transform: "translateY(0) scale(1)" },
+    ],
+    update: [
+      {
+        backgroundColor: "oklch(0.94 0.035 32.1)",
+        boxShadow: "0 0 0 5px oklch(0.56 0.16 32.1 / 0.18)",
+        transform: "scale(1.025)",
+      },
+      {
+        backgroundColor: "transparent",
+        boxShadow: "none",
+        transform: "scale(1)",
+      },
+    ],
+    review: [
+      {
+        boxShadow: "0 0 0 5px oklch(0.79 0.14 83 / 0.22)",
+        filter: "brightness(1.04)",
+      },
+      { boxShadow: "none", filter: "brightness(1)" },
+    ],
+    rewrite: [
+      {
+        opacity: 0.3,
+        filter: "blur(2px)",
+        backgroundColor: "oklch(0.96 0.04 83)",
+      },
+      { opacity: 1, filter: "blur(0)", backgroundColor: "transparent" },
+    ],
+    format: [
+      {
+        transform: "scale(0.985)",
+        boxShadow: "0 0 0 5px oklch(0.52 0.15 275 / 0.16)",
+      },
+      { transform: "scale(1)", boxShadow: "none" },
+    ],
+    reveal: [
+      { opacity: 0, transform: "translateY(10px)" },
+      { opacity: 1, transform: "translateY(0)" },
+    ],
+    panel: [
+      {
+        opacity: 0,
+        transform: "translateX(24px)",
+        clipPath: "inset(0 0 0 22%)",
+      },
+      { opacity: 1, transform: "translateX(0)", clipPath: "inset(0 0 0 0)" },
+    ],
+  };
+  element.animate(frames[kind], common);
+}
+
+function animateMovedElement(
+  element: HTMLElement,
+  previousPosition: DOMRect,
+): void {
+  if (!appMotionEnabled()) return;
+  const nextPosition = element.getBoundingClientRect();
+  const deltaX = previousPosition.left - nextPosition.left;
+  const deltaY = previousPosition.top - nextPosition.top;
+  element.animate(
+    [
+      {
+        transform: `translate(${deltaX}px, ${deltaY}px) scale(1.035)`,
+        boxShadow: "0 10px 20px oklch(0.2 0.018 250 / 0.18)",
+        zIndex: 4,
+      },
+      {
+        transform: "translate(0, 0) scale(1)",
+        boxShadow: "0 1px 3px oklch(0.2 0.018 250 / 0.06)",
+        zIndex: 1,
+      },
+    ],
+    {
+      duration: 680,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+    },
+  );
+}
+
+function animateListChildren(list: HTMLElement, initialDelay: number): void {
+  for (const [index, child] of [...list.children].entries()) {
+    if (child instanceof HTMLElement) {
+      animateAppMutation(child, "pop", initialDelay + index * 70);
+    }
+  }
+}
+
+function appMotionEnabled(): boolean {
+  return !matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 function requireElement<T extends HTMLElement = HTMLElement>(id: string): T {

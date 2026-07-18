@@ -91,6 +91,8 @@ let connection: AgentConnection | undefined;
 let taskRunning = false;
 let activeConnectionActivity: HTMLLIElement | undefined;
 const activeToolActivities = new Map<string, HTMLLIElement>();
+const activeToolChoreography = new Map<string, ToolChoreography>();
+let toolCallSequence = 0;
 
 runtimeCardInput.value = localStorage.getItem(STORED_CARD) ?? "";
 selectScenario(selectedScenario);
@@ -231,6 +233,7 @@ async function runTask(): Promise<void> {
   setRunBusy(true);
   eventLog.textContent = "";
   activeToolActivities.clear();
+  clearToolChoreography();
   traceSummary.textContent = "Sending task";
   status.textContent = "The connected runtime is working…";
   document.body.dataset["demo"] = "running";
@@ -398,6 +401,7 @@ function appendEvent(event: AgentTaskEvent): void {
       traceSummary.textContent = "Runtime is working";
       break;
     case "tool.requested":
+      beginToolChoreography(event.actionId, event.name);
       activeToolActivities.set(
         event.actionId,
         addActivity(
@@ -410,6 +414,7 @@ function appendEvent(event: AgentTaskEvent): void {
       traceSummary.textContent = `Runtime requested ${event.name}`;
       break;
     case "tool.completed": {
+      finishToolChoreography(event.actionId, event.name, event.isError);
       const toolActivity = activeToolActivities.get(event.actionId);
       if (toolActivity) {
         updateActivity(
@@ -445,6 +450,87 @@ function appendEvent(event: AgentTaskEvent): void {
     case "task.failed":
       setCurrentActivityError(event.error.message);
       break;
+  }
+}
+
+type ToolChoreography = {
+  badge: HTMLDivElement;
+  surface: HTMLElement;
+  startedAt: number;
+};
+
+function beginToolChoreography(actionId: string, name: string): void {
+  const surface = requireElement(`scenario-${selectedScenario}`);
+  surface.dataset["agentMotion"] = "request";
+  const stack = ensureToolFlightStack(surface);
+  stack.replaceChildren();
+  const badge = document.createElement("div");
+  badge.className = "tool-flight";
+  badge.dataset["phase"] = "request";
+  const call = document.createElement("span");
+  toolCallSequence += 1;
+  call.textContent = `call-${toolCallSequence}`;
+  const toolName = document.createElement("strong");
+  toolName.textContent = name;
+  badge.append(call, toolName);
+  stack.append(badge);
+  activeToolChoreography.set(actionId, {
+    badge,
+    surface,
+    startedAt: performance.now(),
+  });
+}
+
+function finishToolChoreography(
+  actionId: string,
+  name: string,
+  isError: boolean,
+): void {
+  const choreography = activeToolChoreography.get(actionId);
+  if (!choreography) return;
+  activeToolChoreography.delete(actionId);
+  const elapsed = performance.now() - choreography.startedAt;
+  window.setTimeout(
+    () => {
+      if (!choreography.badge.isConnected) return;
+      choreography.badge.dataset["phase"] = isError ? "error" : "result";
+      const toolName = choreography.badge.querySelector("strong");
+      if (toolName)
+        toolName.textContent = `${name} ${isError ? "failed" : "result ✓"}`;
+      choreography.surface.dataset["agentMotion"] = isError
+        ? "error"
+        : "result";
+      window.setTimeout(() => {
+        choreography.badge.remove();
+        const stack = choreography.surface.querySelector(".tool-flight-stack");
+        if (!stack?.childElementCount) {
+          stack?.remove();
+          delete choreography.surface.dataset["agentMotion"];
+        }
+      }, 1_100);
+    },
+    Math.max(0, 520 - elapsed),
+  );
+}
+
+function ensureToolFlightStack(surface: HTMLElement): HTMLDivElement {
+  const existing = surface.querySelector<HTMLDivElement>(".tool-flight-stack");
+  if (existing) return existing;
+  const stack = document.createElement("div");
+  stack.className = "tool-flight-stack";
+  stack.setAttribute("aria-hidden", "true");
+  surface.append(stack);
+  return stack;
+}
+
+function clearToolChoreography(): void {
+  activeToolChoreography.clear();
+  toolCallSequence = 0;
+  for (const surface of document.querySelectorAll<HTMLElement>(
+    ".scenario-surface",
+  )) {
+    surface.querySelector(".tool-flight-stack")?.remove();
+    delete surface.dataset["agentMotion"];
   }
 }
 

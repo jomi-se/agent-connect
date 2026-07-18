@@ -90,6 +90,20 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
     await page.getByRole("button", { name: "Run task" }).click();
 
     await expect(page.locator("body")).toHaveAttribute("data-demo", "passed");
+    await expect(
+      page.locator(`#scenario-${scenario} .tool-flight`),
+    ).toHaveCount(1);
+    await expect
+      .poll(() =>
+        page
+          .locator(mutationTarget(scenario))
+          .evaluate((element) =>
+            element
+              .getAnimations()
+              .some((animation) => animation.playState === "running"),
+          ),
+      )
+      .toBe(true);
     await expect(page.locator(`#scenario-${scenario}`)).toHaveAttribute(
       "data-changed",
       "true",
@@ -386,6 +400,12 @@ function scenarioTabName(scenario: keyof typeof plans): string {
   if (scenario === "project-board") return "Project board";
   if (scenario === "document-review") return "Document review";
   return "Product research";
+}
+
+function mutationTarget(scenario: keyof typeof plans): string {
+  if (scenario === "project-board") return '[data-task-id="pricing"]';
+  if (scenario === "document-review") return "[data-original-quote]";
+  return "#product-research-results";
 }
 
 function isFunctionOutput(
