@@ -20,6 +20,42 @@ import { mountDemoLayout } from "./layout.js";
 
 mountDemoLayout();
 
+type GatewayTerminalStep =
+  | { kind: "command"; text: string }
+  | { kind: "output"; text: string; tone?: "success" | "muted" };
+
+// Keep the installation story in one editable sequence while packaging evolves.
+const GATEWAY_TERMINAL_STEPS: readonly GatewayTerminalStep[] = [
+  {
+    kind: "output",
+    text: "# after configuring the runtime adapter and transport",
+    tone: "muted",
+  },
+  { kind: "command", text: "npm install" },
+  { kind: "output", text: "workspace dependencies installed", tone: "success" },
+  {
+    kind: "command",
+    text: "npm run build --workspace @agent-connect/gateway",
+  },
+  { kind: "output", text: "gateway build complete", tone: "success" },
+  {
+    kind: "command",
+    text: "npm run start --workspace @agent-connect/gateway",
+  },
+  {
+    kind: "output",
+    text: "listening on http://127.0.0.1:8787",
+    tone: "success",
+  },
+  {
+    kind: "output",
+    text: "runtime card ready · waiting for app authorization",
+  },
+];
+
+mountGatewayTerminals();
+highlightTypescriptSnippets();
+
 const connectForm = requireElement<HTMLFormElement>("connect-form");
 const taskForm = requireElement<HTMLFormElement>("task-form");
 const runtimeCardInput = requireElement<HTMLTextAreaElement>("runtime-card");
@@ -491,17 +527,95 @@ function showScenarioTools(): void {
   for (const name of SCENARIO_TOOL_NAMES[selectedScenario]) {
     const tool = tools.find((candidate) => candidate.name === name);
     if (!tool) continue;
-    const details = document.createElement("details");
-    const summary = document.createElement("summary");
-    summary.textContent = tool.name;
+    const contract = document.createElement("article");
+    contract.className = "tool-contract";
+    const heading = document.createElement("div");
+    heading.className = "tool-contract-heading";
+    const title = document.createElement("code");
+    title.textContent = tool.name;
+    const ownership = document.createElement("span");
+    ownership.textContent = "Runs in this app";
+    heading.append(title, ownership);
     const description = document.createElement("p");
     description.textContent = tool.description;
-    const schema = document.createElement("pre");
-    schema.textContent = JSON.stringify(tool.inputSchema, null, 2);
-    details.append(summary, description, schema);
-    toolList.append(details);
+    const inputHeading = document.createElement("h3");
+    inputHeading.textContent = "Inputs";
+    const fields = renderSchemaFields(tool.inputSchema as DisplaySchema);
+    contract.append(heading, description, inputHeading, fields);
+    toolList.append(contract);
   }
   toolDialog.showModal();
+}
+
+type DisplaySchema = {
+  type?: string;
+  enum?: readonly unknown[];
+  properties?: Readonly<Record<string, DisplaySchema>>;
+  required?: readonly string[];
+  items?: DisplaySchema;
+};
+
+function renderSchemaFields(schema: DisplaySchema): HTMLUListElement {
+  const list = document.createElement("ul");
+  list.className = "tool-field-list";
+  const required = new Set(schema.required ?? []);
+  for (const [name, fieldSchema] of Object.entries(schema.properties ?? {})) {
+    list.append(renderSchemaField(name, fieldSchema, required.has(name)));
+  }
+  return list;
+}
+
+function renderSchemaField(
+  name: string,
+  schema: DisplaySchema,
+  required: boolean,
+): HTMLLIElement {
+  const field = document.createElement("li");
+  field.className = "tool-field";
+  const heading = document.createElement("div");
+  heading.className = "tool-field-heading";
+  const fieldName = document.createElement("code");
+  fieldName.textContent = name;
+  const type = document.createElement("span");
+  type.className = "tool-field-type";
+  type.textContent = schemaTypeLabel(schema);
+  const requirement = document.createElement("span");
+  requirement.className = "tool-field-requirement";
+  requirement.dataset["required"] = String(required);
+  requirement.textContent = required ? "Required" : "Optional";
+  heading.append(fieldName, type, requirement);
+  field.append(heading);
+
+  if (schema.enum) field.append(renderEnumValues(schema.enum));
+  if (schema.type === "array" && schema.items?.type === "object") {
+    const nested = renderSchemaFields(schema.items);
+    nested.classList.add("tool-nested-fields");
+    field.append(nested);
+  }
+  return field;
+}
+
+function renderEnumValues(values: readonly unknown[]): HTMLDivElement {
+  const choices = document.createElement("div");
+  choices.className = "tool-enum-values";
+  choices.setAttribute("aria-label", "Allowed values");
+  for (const value of values) {
+    const choice = document.createElement("code");
+    choice.textContent = String(value);
+    choices.append(choice);
+  }
+  return choices;
+}
+
+function schemaTypeLabel(schema: DisplaySchema): string {
+  if (schema.enum) return "choice";
+  if (schema.type === "array") {
+    if (schema.items?.type === "object") return "list of objects";
+    if (schema.items?.type === "string") return "list of text";
+    return "list";
+  }
+  if (schema.type === "string") return "text";
+  return schema.type ?? "value";
 }
 
 function scenarioTitle(scenario: DemoScenario): string {
@@ -512,6 +626,171 @@ function scenarioTitle(scenario: DemoScenario): string {
 
 function reducedMotion(): boolean {
   return matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+const terminalRuns = new WeakMap<HTMLElement, number>();
+
+function mountGatewayTerminals(): void {
+  for (const host of document.querySelectorAll<HTMLElement>(
+    "[data-gateway-terminal]",
+  )) {
+    const terminal = document.createElement("div");
+    terminal.className = "gateway-terminal";
+    terminal.setAttribute(
+      "aria-label",
+      "Animated terminal showing the current Agent Connect gateway startup",
+    );
+
+    const toolbar = document.createElement("div");
+    toolbar.className = "terminal-toolbar";
+    const controls = document.createElement("span");
+    controls.className = "terminal-window-controls";
+    controls.setAttribute("aria-hidden", "true");
+    controls.append(
+      document.createElement("i"),
+      document.createElement("i"),
+      document.createElement("i"),
+    );
+    const title = document.createElement("span");
+    title.className = "terminal-title";
+    title.textContent = "agent-connect — zsh";
+    const replay = document.createElement("button");
+    replay.type = "button";
+    replay.className = "terminal-replay";
+    replay.textContent = "Replay";
+    toolbar.append(controls, title, replay);
+
+    const lines = document.createElement("ol");
+    lines.className = "terminal-lines";
+    for (const step of GATEWAY_TERMINAL_STEPS) {
+      const line = document.createElement("li");
+      line.className = `terminal-line terminal-line-${step.kind}`;
+      line.dataset["state"] = "pending";
+      if (step.kind === "command") {
+        const prompt = document.createElement("span");
+        prompt.className = "terminal-prompt";
+        prompt.textContent = "$";
+        prompt.setAttribute("aria-hidden", "true");
+        const command = document.createElement("span");
+        command.className = "terminal-command-copy";
+        const ghost = document.createElement("span");
+        ghost.className = "terminal-command-ghost";
+        ghost.textContent = step.text;
+        const typed = document.createElement("span");
+        typed.className = "terminal-command-typed";
+        typed.setAttribute("aria-hidden", "true");
+        command.append(ghost, typed);
+        line.append(prompt, command);
+      } else {
+        line.textContent = step.text;
+        if (step.tone) line.dataset["tone"] = step.tone;
+      }
+      lines.append(line);
+    }
+    terminal.append(toolbar, lines);
+    host.append(terminal);
+
+    replay.addEventListener("click", () => void playGatewayTerminal(terminal));
+    if (reducedMotion() || !("IntersectionObserver" in window)) {
+      completeGatewayTerminal(terminal);
+      continue;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        void playGatewayTerminal(terminal);
+      },
+      { threshold: 0.45 },
+    );
+    observer.observe(terminal);
+  }
+}
+
+async function playGatewayTerminal(terminal: HTMLElement): Promise<void> {
+  const run = (terminalRuns.get(terminal) ?? 0) + 1;
+  terminalRuns.set(terminal, run);
+  const lines = [...terminal.querySelectorAll<HTMLLIElement>(".terminal-line")];
+  for (const line of lines) {
+    line.dataset["state"] = "pending";
+    const typed = line.querySelector<HTMLElement>(".terminal-command-typed");
+    if (typed) typed.textContent = "";
+  }
+
+  await terminalDelay(180);
+  for (let index = 0; index < GATEWAY_TERMINAL_STEPS.length; index += 1) {
+    if (terminalRuns.get(terminal) !== run) return;
+    const step = GATEWAY_TERMINAL_STEPS[index];
+    const line = lines[index];
+    if (!step || !line) continue;
+    line.dataset["state"] = "current";
+    if (step.kind === "command") {
+      const typed = line.querySelector<HTMLElement>(".terminal-command-typed");
+      for (let character = 1; character <= step.text.length; character += 1) {
+        if (terminalRuns.get(terminal) !== run) return;
+        if (typed) typed.textContent = step.text.slice(0, character);
+        await terminalDelay(12);
+      }
+      await terminalDelay(180);
+    } else {
+      await terminalDelay(280);
+    }
+    line.dataset["state"] = "complete";
+    await terminalDelay(90);
+  }
+}
+
+function completeGatewayTerminal(terminal: HTMLElement): void {
+  for (const [index, line] of [
+    ...terminal.querySelectorAll<HTMLLIElement>(".terminal-line"),
+  ].entries()) {
+    line.dataset["state"] = "complete";
+    const step = GATEWAY_TERMINAL_STEPS[index];
+    const typed = line.querySelector<HTMLElement>(".terminal-command-typed");
+    if (typed && step?.kind === "command") typed.textContent = step.text;
+  }
+}
+
+function terminalDelay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function highlightTypescriptSnippets(): void {
+  for (const code of document.querySelectorAll<HTMLElement>(
+    'code[data-language="typescript"]',
+  )) {
+    code.innerHTML = highlightTypescript(code.textContent ?? "");
+  }
+}
+
+function highlightTypescript(source: string): string {
+  const tokenPattern =
+    /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b(?:const|let|var|await|async|for|of|return|if|else|throw|new|true|false|null|undefined)\b)|(\b[A-Za-z_$][\w$]*(?=\s*\())|(\b\d+(?:\.\d+)?\b)/g;
+  let highlighted = "";
+  let cursor = 0;
+  for (const match of source.matchAll(tokenPattern)) {
+    const index = match.index;
+    highlighted += escapeCode(source.slice(cursor, index));
+    const className = match[1]
+      ? "syntax-comment"
+      : match[2]
+        ? "syntax-string"
+        : match[3]
+          ? "syntax-keyword"
+          : match[4]
+            ? "syntax-function"
+            : "syntax-number";
+    highlighted += `<span class="${className}">${escapeCode(match[0])}</span>`;
+    cursor = index + match[0].length;
+  }
+  return highlighted + escapeCode(source.slice(cursor));
+}
+
+function escapeCode(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function syncAuthorizationControls(): void {

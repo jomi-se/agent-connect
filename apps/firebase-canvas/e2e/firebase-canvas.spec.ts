@@ -273,9 +273,16 @@ test("mobile and desktop mount different compositions", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Document review tools" }),
   ).toBeVisible();
-  await expect(page.locator("#tool-list details")).toHaveCount(3);
+  await expect(page.locator("#tool-list .tool-contract")).toHaveCount(3);
   await expect(
     page.getByText("add_document_comments", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("list of objects", { exact: true })).toHaveCount(
+    3,
+  );
+  await expect(page.locator("#tool-list pre")).toHaveCount(0);
+  await expect(
+    page.locator(".tool-field code", { hasText: "quote" }).first(),
   ).toBeVisible();
 });
 

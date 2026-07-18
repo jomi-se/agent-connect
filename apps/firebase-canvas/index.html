@@ -407,7 +407,9 @@
                 Copy
               </button>
             </div>
-            <pre id="sdk-snippet"><code>const moveTasks = defineTool({
+            <pre
+              id="sdk-snippet"
+            ><code data-language="typescript">const moveTasks = defineTool({
   name: "move_project_tasks",
   inputSchema: moveTasksSchema,
   execute: ({ moves }) =&gt; {
@@ -425,6 +427,19 @@ for await (const event of connection.session.streamTask(prompt)) {
   render(event)
 }</code></pre>
           </article>
+        </section>
+
+        <section class="gateway-setup" aria-labelledby="gateway-setup-title">
+          <div class="gateway-setup-copy">
+            <h2 id="gateway-setup-title">Run the gateway beside your agent.</h2>
+            <p>
+              The user runs this part on infrastructure they control. It keeps
+              coding-agent and transport details behind one connector-owned
+              boundary.
+            </p>
+            <span>Current prototype · source-based setup</span>
+          </div>
+          <div data-gateway-terminal></div>
         </section>
       </main>
 
@@ -788,8 +803,15 @@ for await (const event of connection.session.streamTask(prompt)) {
               connector shows the real origin before access is granted.
             </p>
           </details>
-          <details class="mobile-code-details">
-            <summary>Show the browser code</summary>
+        </section>
+
+        <section
+          class="mobile-implementation mobile-browser-code"
+          aria-labelledby="mobile-browser-code-title"
+        >
+          <h2 id="mobile-browser-code-title">The browser side</h2>
+          <p>Ordinary functions become request-scoped tools.</p>
+          <article class="code-example">
             <div class="code-heading">
               <span>app.ts</span>
               <button
@@ -800,7 +822,9 @@ for await (const event of connection.session.streamTask(prompt)) {
                 Copy
               </button>
             </div>
-            <pre id="sdk-snippet"><code>const moveTasks = defineTool({
+            <pre
+              id="sdk-snippet"
+            ><code data-language="typescript">const moveTasks = defineTool({
   name: "move_project_tasks",
   inputSchema: moveTasksSchema,
   execute: ({ moves }) =&gt; {
@@ -813,7 +837,21 @@ const connection = await connectAgent({
   tools: [createTasks, updateTasks, moveTasks],
   accessToken
 })</code></pre>
-          </details>
+          </article>
+        </section>
+
+        <section
+          class="mobile-implementation mobile-gateway-setup"
+          aria-labelledby="mobile-gateway-setup-title"
+        >
+          <h2 id="mobile-gateway-setup-title">
+            Run the gateway beside your agent.
+          </h2>
+          <p>
+            This part runs on infrastructure the user controls. The commands
+            below are today's source-based setup.
+          </p>
+          <div data-gateway-terminal></div>
         </section>
 
         <p class="mobile-runtime-note">
