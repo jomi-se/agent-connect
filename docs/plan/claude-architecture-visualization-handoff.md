@@ -6,17 +6,49 @@ Purpose: self-contained product, architecture, security, protocol, and visual-de
 
 ## Your assignment
 
-Design a substantial explanatory section for the Agent Connect demo page. The section should use detailed diagrams, schemas, and purposeful animation to explain:
+Design a substantial explanatory section for the Agent Connect demo page. Its visible story should explain three things in this order:
 
-1. the architecture that works today;
-2. the runtime enrollment and application-authorization flow;
-3. the live prompt and application-tool loop;
-4. which responsibilities belong to the web SDK, Agent Connect gateway, transport profile, conductor, agent adapter, coding agent, and application;
-5. the intended future architecture in which the security/control plane remains stable while application protocols and runtime providers become more standardized and interchangeable.
+1. the application lends temporary tools to a coding agent owned by the user, and remains the authority that executes them;
+2. Agent Connect supplies the trust, session, and tool-call bridge between the application and that agent;
+3. the application integration can remain stable while the underlying provider, coding agent, deployment, and protocol profile change.
+
+Use the detailed current architecture, authorization flow, and future protocol direction in this document to make those three ideas credible. Do not turn every internal component into an equally prominent box.
 
 The output should make a technically sophisticated hackathon judge understand both the simplicity of the application integration and the seriousness of the system beneath it. It must not make unimplemented standards or security claims.
 
 Create a design that can eventually react to real application events. A self-contained HTML preview plus portable source is ideal. The actual demo is framework-light Vite, TypeScript, HTML, and CSS, so dependency-free SVG/CSS/Web Animations code is easiest to integrate. A React prototype is acceptable if the visual structure and timing are easy to port and the deliverable also contains a rendered standalone preview.
+
+## Narrative priority: this is an exhaustive reference, not an exhaustive page
+
+This handoff intentionally contains more technical context than the final demo section should display. The original Build Week plan says the application experience must remain primary and that judges should not need to understand OmniGENT, ACP, MCP, SSE, PKCE, or internal session mappings to understand the product.
+
+Treat the material in three levels.
+
+### Primary: visible immediately
+
+- A normal web application defines and executes its own tools.
+- A user-owned coding agent such as Codex supplies the reasoning.
+- Agent Connect is the application-neutral trust, session, and capability bridge.
+- The prompt travels toward the coding agent; tool calls travel back to the app; correlated results return to the agent.
+- No application-specific MCP server was installed into the coding agent beforehand.
+
+### Secondary: progressively revealed
+
+- The current reference implementation uses an Agent Connect SDK and gateway, OmniGENT as conductor, ACP downstream, and Codex as the proven real agent.
+- Connector bootstrap happens once; later applications are approved through a connector-owned consent page rather than repeated terminal work.
+- The stable application contract and Agent Connect control plane can survive a provider or protocol swap.
+- AG-UI is a candidate application-facing event language and ACP is the preferred downstream harness boundary; neither is the product itself.
+
+### Tertiary: background for accuracy or optional deep inspection
+
+- Tailscale identity-header mechanics and the distinction between Serve and Funnel.
+- Authorization Code, S256 PKCE, token hashing, DPoP, and app-instance key details.
+- OmniGENT HTTP/SSE event names, `codex-acp`, Codex app-server internals, and request-scoped MCP mechanics.
+- The deterministic judge appliance topology and container constraints.
+- Bubblewrap findings, posture-evidence taxonomy, durable pending-action states, and detailed recovery semantics.
+- Direct ACP over WebSocket and the experimental MCP-over-ACP subset.
+
+These tertiary facts are valuable supporting evidence. They should not appear in the default diagram merely because they are technically interesting. Put them in a compact detail drawer, tooltip, alternate technical view, or leave them out of the rendered section. The public deterministic fixture needs an honest nearby disclosure, but it should not become the main architecture story or visually compete with the real Codex reference composition.
 
 ## One-sentence product statement
 
@@ -606,70 +638,61 @@ Use 150–250ms for ordinary state transitions and roughly 300–500ms for spati
 
 ## Suggested information architecture for the new section
 
-This is a recommendation, not a rigid wireframe. Improve it if you find a clearer structure.
+This is a recommendation, not a rigid wireframe. Keep it to three primary views. Progressive disclosure is preferable to five peer-level architecture panels.
 
-### View 1: “What runs where”
+### View 1: “Your app lends tools to your agent”
 
-A layered current-system diagram with visibly different ownership zones:
+Make the core loop the dominant visual:
 
-- third-party web app;
-- transport and connector control plane;
-- user-owned runtime boundary;
-- OmniGENT conductor;
-- ACP adapter;
-- coding agent;
-- application tool loop returning to the app.
+- a third-party web app owns its interface, data, tool definitions, and execution;
+- Agent Connect carries a prompt into the user's boundary;
+- a coding agent reasons and may request zero, one, or many offered tools;
+- each tool request reverses direction and returns to the application;
+- the application mutates itself and sends the correlated result back.
 
-Let visitors switch between “Private real Codex proof” and “Public judge fixture.” Keep the shared layers fixed and animate only the profile-specific pieces.
+The default view needs only three conceptual actors: app, Agent Connect, and user-owned coding agent. The SDK, gateway, OmniGENT, ACP adapter, and Codex internals may appear when the viewer expands “How this demo is wired.” Do not begin with seven infrastructure boxes.
 
-### View 2: “Authorize without opening a terminal every time”
+### View 2: “Connect once, approve each app”
 
-A two-ceremony timeline:
+Use a concise two-moment trust story:
 
-1. once per connector: generate key/card/passphrase and save them;
-2. once per application authority: prove connector, redirect to connector page, review exact Origin/tools, approve, PKCE exchange, receive revocable grant;
-3. later use: silent reconnection until expiry/revocation/authority change.
+1. **Set up the connector once:** it creates a runtime card and private enrollment passphrase; the user saves them through a trusted personal channel.
+2. **Approve an application:** the connector proves it is the enrolled endpoint, shows the exact app and requested tools on its own page, and issues a revocable grant after the user approves.
+3. **Use it normally:** later tasks reconnect without SSH or restarting the agent until the grant expires, is revoked, or its requested authority changes.
 
-Make the browser-origin change and out-of-app consent moment unmistakable. Show both sides of trust:
+Make both trust questions legible:
 
 - connector asks, “Is this exact app allowed to use the agent?”
-- app asks, “Is this endpoint the connector the user enrolled?”
+- app asks, “Is this the connector the user enrolled?”
 
-### View 3: “Tools travel backward”
+PKCE, requester headers, token storage, key formats, and transport-specific enforcement belong behind an optional “security details” disclosure. The primary story is user presence, exact authority, connector continuity, and revocation.
 
-A concise animated sequence that begins with a prompt moving toward the agent, then reverses direction for one or more app-owned tool calls. Include a stable action ID and application-side mutation. Allow zero, one, or many tool-call branches rather than drawing a mandatory fixed pipeline.
+### View 3: “One app contract, replaceable runtimes”
 
-### View 4: “Stable control plane, replaceable protocols”
+Use a current-to-future morph. Keep the web application's tool contract and Agent Connect's trust/control-plane frame visually fixed while the internal runtime stack changes.
 
-A current-to-future morph:
+- **Current reference:** browser SDK → Agent Connect gateway → OmniGENT → ACP adapter → Codex.
+- **Future direction:** a standardized application-facing event profile may use AG-UI; provider adapters may target OmniGENT, direct ACP, or another conductor; ACP remains the preferred downstream coding-agent boundary.
+- **Experimental only:** direct browser ACP/WebSocket and MCP-over-ACP may appear in a technical annotation, not as an equal or promised product path.
 
-- today: custom normalized SDK over gateway-proxied OmniGENT HTTP/SSE, then OmniGENT → ACP → `codex-acp` → Codex;
-- candidate future: standard AG-UI subset between browser and gateway, Agent Connect security outside AG-UI schemas, narrow provider adapters behind the gateway, ACP retained downstream;
-- experimental alternative: direct ACP/WebSocket with a narrow unstable MCP-over-ACP profile;
-- later providers or agents attach behind the same adapter boundary.
+The visual takeaway is not “Agent Connect supports every agent today.” It is “applications integrate against a neutral boundary, and the current OmniGENT/Codex composition proves that boundary can work.”
 
-Visually lock the enrollment, consent, grant, session, action-ID, recovery, and policy layers while the protocol/provider modules change. That is the north star.
+### Optional technical inspection
 
-### View 5: “Security boundary, not magic”
+If the design needs a fourth surface, make it a user-invoked detail layer rather than another chapter in the default narrative. It may show:
 
-Use a compact assurance legend rather than a wall of warnings:
+- the exact current stack and public-fixture disclosure;
+- implemented versus planned security assurances;
+- protocol labels and event mappings;
+- runtime posture and confinement caveats.
+
+Use an assurance legend only inside that view:
 
 - implemented and enforced by Agent Connect;
 - enforced by the selected transport/provider/runtime;
 - observed or self-reported;
 - planned;
 - explicitly not claimed.
-
-Examples:
-
-- connector-key proof: implemented;
-- Origin/tool-bound grant and revocation: implemented;
-- TLS in transit: transport-enforced;
-- DPoP/message-level sender binding: planned;
-- durable unresolved-action recovery: planned;
-- arbitrary self-hosted sandbox integrity: not remotely proven;
-- public judge container: implemented narrow fixture boundary;
-- private Codex arbitrary-app confinement: transitional/not claimed.
 
 ## Real and proposed event hooks
 
@@ -738,7 +761,11 @@ Within ten seconds, a viewer should understand:
 1. the app defines and executes the tools;
 2. the user's coding agent supplies the intelligence;
 3. Agent Connect is the trust/session/tool bridge between them;
-4. the user authorizes a specific application through their connector;
-5. OmniGENT and Codex are the current reference composition, not the permanent public API;
-6. AG-UI and ACP occupy different candidate layers;
-7. the future architecture swaps protocols and providers without forcing every app developer to rebuild enrollment and security.
+4. tool calls travel back into the application rather than giving the agent direct control of the app.
+
+Within thirty seconds or one deliberate interaction, a technically curious viewer should additionally understand:
+
+5. the user authorizes a specific application through their connector;
+6. OmniGENT and Codex are the current reference composition, not the permanent public API;
+7. the future architecture can swap protocols and providers without forcing every app developer to rebuild enrollment and security;
+8. AG-UI and ACP are candidates at different layers, not current universal-conformance claims.
