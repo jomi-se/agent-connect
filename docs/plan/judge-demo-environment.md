@@ -1,6 +1,6 @@
 # Judge demo environment
 
-Status: public Funnel/browser happy path proven; revocation and final judge-instruction rehearsal pending
+Status: public Funnel/browser and revocation proven; final judge-instruction rehearsal pending
 
 ## Purpose
 
@@ -200,9 +200,10 @@ external mobile browser. The public Firebase Canvas verified the connector,
 redirected to the Funnel-hosted consent page, completed enrollment and PKCE,
 created an OmniGENT session, executed `set_page_message` exactly once, returned
 the correlated browser-tool result, and visibly replaced the page message. No
-local-network permission prompt was required. The remaining rehearsal work is
-the grant-list/revocation path and a final pass over the exact private judge
-instructions.
+local-network permission prompt was required. Grant listing and revocation were
+then proven from the same external browser: retaining the revoked credential
+did not bypass the gateway. The remaining rehearsal work is a final pass over
+the exact private judge instructions.
 
 Time-box this narrow deterministic image rather than reviving the full Codex
 appliance. If Compose cannot reproduce the real OmniGENT/ACP/MCP tool loop, the
@@ -247,6 +248,9 @@ in deeper security tests only after the public happy path is reliable.
   for the external browser task.
 - The external mobile browser displayed the configured deterministic message
   and a tool result reporting `displayed: true` and `writes: 1`.
+- Revoking the external browser's grant caused its next session creation to
+  fail with `401 invalid_app_grant` even though the browser retained the old
+  credential.
 
 This proves VAL-JUDGE-001 and VAL-JUDGE-004 for the deterministic public profile
 and exercises the positive path of VAL-JUDGE-003. The negative authorization
