@@ -5,6 +5,7 @@ import {
   completeAgentAuthorization,
   defineTool,
   parseAuthorizationTransaction,
+  revokeAgentAuthorization,
   serializeAuthorizationTransaction,
   type RuntimeCard,
 } from "../src/index.js";
@@ -219,6 +220,28 @@ describe("Agent Connect enrollment and authorization", () => {
         callbackUrl: `https://attacker.example/callback?code=acc_code&state=${transaction.state}`,
       }),
     ).rejects.toMatchObject({ code: "protocol_error" });
+  });
+
+  it("revokes the current application grant with its bearer credential", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+      expect(new Headers(init?.headers).get("authorization")).toBe(
+        "Bearer acg_current",
+      );
+      expect(JSON.parse(String(init?.body))).toEqual({ appId: "demo" });
+      return new Response(null, { status: 204 });
+    });
+
+    await revokeAgentAuthorization({
+      baseUrl: "https://runtime.example",
+      appId: "demo",
+      accessToken: "acg_current",
+      fetch,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://runtime.example/oauth/revoke",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });
 

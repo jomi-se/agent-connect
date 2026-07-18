@@ -73,6 +73,7 @@ export type AgentConnectErrorCode =
   | "runtime_identity_mismatch"
   | "authorization_denied"
   | "authorization_expired"
+  | "invalid_app_grant"
   | "unknown_tool"
   | "invalid_tool_arguments"
   | "tool_execution_failed";
@@ -172,6 +173,15 @@ export interface CompleteAgentAuthorizationOptions {
   readonly redirectUri: string;
   readonly transaction: AgentAuthorizationTransaction;
   readonly callbackUrl?: string;
+  readonly fetch?: typeof globalThis.fetch;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly credentials?: RequestCredentials;
+}
+
+export interface RevokeAgentAuthorizationOptions {
+  readonly baseUrl: string;
+  readonly appId: string;
+  readonly accessToken: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: Readonly<Record<string, string>>;
   readonly credentials?: RequestCredentials;

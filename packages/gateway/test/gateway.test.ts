@@ -482,6 +482,32 @@ describe("connector enrollment and app authorization", () => {
     expect(changedSnapshot.status).toBe(401);
     expect(runtime.created).toHaveLength(1);
 
+    const selfRevoke = await fetch(`${baseUrl}/oauth/revoke`, {
+      method: "POST",
+      headers: allowedHeaders({
+        Authorization: `Bearer ${granted.accessToken as string}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app" }),
+    });
+    expect(selfRevoke.status).toBe(204);
+
+    const revokedGrant = await createAppSession(
+      baseUrl,
+      `Bearer ${granted.accessToken as string}`,
+    );
+    expect(revokedGrant.status).toBe(401);
+
+    const repeatedSelfRevoke = await fetch(`${baseUrl}/oauth/revoke`, {
+      method: "POST",
+      headers: allowedHeaders({
+        Authorization: "Bearer unknown-token",
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app" }),
+    });
+    expect(repeatedSelfRevoke.status).toBe(204);
+
     const crossSiteRevoke = await fetch(`${baseUrl}/v1/grants`, {
       method: "POST",
       redirect: "manual",

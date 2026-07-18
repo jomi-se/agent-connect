@@ -392,6 +392,23 @@ export class ConnectorAuth {
     return true;
   }
 
+  revokeGrantByToken(
+    token: string,
+    expected: { readonly origin: string; readonly appId: string },
+  ): boolean {
+    const tokenHash = sha256(token);
+    const grant = this.state.grants.find(
+      (candidate) =>
+        candidate.tokenHash === tokenHash &&
+        candidate.origin === expected.origin &&
+        candidate.appId === expected.appId,
+    );
+    if (!grant || grant.revokedAt !== undefined) return false;
+    grant.revokedAt = this.now();
+    this.persist();
+    return true;
+  }
+
   private requirePassphraseAllowed(tailscaleUser: string): void {
     const attempt = this.failedPassphrases.get(tailscaleUser);
     if (!attempt) return;

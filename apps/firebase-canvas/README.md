@@ -16,6 +16,10 @@ is entered only there, never into this application's JavaScript. The connector
 enrolls the browser device, shows the exact origin and tool set, and returns a
 PKCE-bound revocable grant. The page keeps that grant in `sessionStorage` for
 the life of the tab.
+The **Disconnect agent** action revokes that grant at the connector before
+clearing the browser copy. If access was already revoked elsewhere, Canvas
+discards the rejected local credential and lets the next Run begin a fresh
+authorization flow.
 
 Build with:
 

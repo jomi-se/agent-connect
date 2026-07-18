@@ -296,6 +296,25 @@ export function createGateway(options: GatewayOptions) {
         return;
       }
 
+      if (connectorAuth && pathname === "/oauth/revoke") {
+        if (request.method !== "POST") {
+          response.setHeader("Allow", "POST");
+          sendJson(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+        const value = await readJsonObject(request, MAX_CREATE_BYTES);
+        const token = bearerCredential(header(request, "authorization") ?? "");
+        if (token) {
+          connectorAuth.revokeGrantByToken(token, {
+            origin,
+            appId: requireString(value, "appId"),
+          });
+        }
+        response.writeHead(204, { "Cache-Control": "no-store" });
+        response.end();
+        return;
+      }
+
       if (pathname === "/v1/app-sessions") {
         if (request.method !== "POST") {
           response.setHeader("Allow", "POST");

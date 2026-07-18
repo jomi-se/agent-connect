@@ -39,6 +39,10 @@ provisioning and pairing belong to the user-owned runtime. `connectAgent`
 exchanges a one-time code for an expiring capability and returns only an opaque
 Agent Connect session id; OmniGENT conversation ids stay internal. Reconnect
 with `accessToken: connection.accessToken` while that capability remains valid.
+`revokeAgentAuthorization` lets the application revoke its own grant with that
+bearer credential. A revoked or expired grant is surfaced as the typed
+`invalid_app_grant` error so applications can discard stale local state and
+start authorization again.
 
 The package also retains the deliberately narrow `SingleMcpServer` and
 `createBrowserAcpStream` experimental ACP/MCP-over-ACP helpers. They are not on
@@ -51,7 +55,7 @@ the first provider's critical path.
 - a fixed tool snapshot per task;
 - in-memory duplicate suppression only, not durable exactly-once execution;
 - session/capability state is in-memory and does not survive a gateway restart;
-- no durable device identity, revocation UI, public relay, or mutation approval
+- no application-owned mutation approval or durable provider-session recovery
   yet;
 - the experimental MCP-over-ACP helper still supports only one connection and
   MCP `initialize`, `notifications/initialized`, `ping`, `tools/list`, and
