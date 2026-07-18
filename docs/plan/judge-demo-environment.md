@@ -159,7 +159,7 @@ minimum profile is deliberately narrow: fixed Firebase authority, fixed tool
 snapshot, no model credential, an empty disposable workspace, no host mounts,
 one loopback-published service, and Docker CPU/memory/PID bounds. Existing API
 request-size and protocol bounds remain in force. The operator kill switch is
-`tailscale funnel off` plus stopping the appliance.
+`tailscale funnel reset` plus stopping the appliance.
 
 Do not add a matrix of rolling request, session, authorization, concurrency,
 and passphrase-verification counters before the happy path works. That logic is

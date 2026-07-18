@@ -84,17 +84,80 @@ public Funnel currently share a cookie hostname. Copy the public runtime card
 from the first-start logs into the Firebase Canvas; never copy the enrollment
 passphrase into the application.
 
+## Start automatically with Tailscale
+
+The Compose service already uses `restart: unless-stopped`, so Docker restarts
+an existing appliance after a process, daemon, or host restart. Funnel must use
+Tailscale's background configuration; a foreground Funnel kept in tmux does not
+survive a host reboot.
+
+Install the checked-in systemd reconciliation unit:
+
+```sh
+sudo install -m 0644 \
+  deploy/judge-demo/systemd/agent-connect-judge.service \
+  /etc/systemd/system/agent-connect-judge.service
+sudo systemctl daemon-reload
+```
+
+If a foreground Funnel is currently running in tmux, stop that command before
+starting the unit. For the demo VM's `tfun` session:
+
+```sh
+tmux send-keys -t tfun C-c
+sudo systemctl enable --now agent-connect-judge.service
+```
+
+The unit is wanted by and part of `tailscaled.service`. Whenever Tailscale
+starts, it idempotently brings the Compose appliance to healthy state and
+reapplies the port `10000` Funnel in `--bg` mode. It deliberately has no
+`ExecStop`: a manual unit reload must not destroy the connector state volume or
+silently remove judge access.
+
+Verify the installed path:
+
+```sh
+sudo systemctl status agent-connect-judge.service --no-pager
+sudo tailscale funnel status --json
+curl -fsS https://artifex-box.tail246db1.ts.net:10000/healthz
+```
+
+The expected result is an active `exited` oneshot, a background Funnel proxy to
+`127.0.0.1:10081`, and `{"ok":true}`. Do not use `docker compose down -v`,
+remove `judge-demo_judge-state`, or prune Docker volumes while the judge runtime
+must retain its published identity.
+
+## Credential backup
+
+The two text credentials that preserve the published connector are:
+
+- `/home/dev/agent-connect/deploy/judge-demo/.env` on the host; and
+- `/var/lib/agent-connect/connector.json` inside the appliance, backed by host
+  Docker volume `judge-demo_judge-state` (normally
+  `/var/lib/docker/volumes/judge-demo_judge-state/_data/connector.json`).
+
+`connector.json` contains the connector private key, capability-signing secret,
+passphrase verifier, enrolled-device hashes, and grant audit state. Store it as
+a sensitive password-manager attachment or encrypted secure note. Restoring an
+older copy preserves the runtime card and enrollment passphrase but loses any
+devices and grant changes made after that copy.
+
 ## Logs and shutdown
 
 ```sh
 docker compose --env-file deploy/judge-demo/.env \
   -f deploy/judge-demo/compose.yaml logs -f
 
-sudo tailscale funnel off
+sudo systemctl disable --now agent-connect-judge.service
+sudo tailscale funnel reset
 
 docker compose --env-file deploy/judge-demo/.env \
   -f deploy/judge-demo/compose.yaml down
 ```
+
+Disable the reconciliation unit before the final Funnel shutdown. Otherwise a
+later `tailscaled.service` restart will intentionally run the unit and publish
+the demo again. If the systemd unit was never installed, omit that command.
 
 Do not use `down -v` until the disposable connector identity and grants should
 be destroyed. A configured enrollment passphrase is deliberately omitted from
