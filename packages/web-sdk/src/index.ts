@@ -5,6 +5,7 @@ export {
   beginAgentAuthorization,
   completeAgentAuthorization,
   parseAuthorizationTransaction,
+  revokeAgentAuthorization,
   serializeAuthorizationTransaction,
 } from "./authorization.js";
 export { OmnigentProvider } from "./omnigent-provider.js";
@@ -37,6 +38,7 @@ export type {
   ConnectAgentOptions,
   BeginAgentAuthorizationOptions,
   CompleteAgentAuthorizationOptions,
+  RevokeAgentAuthorizationOptions,
   JsonObject,
   JsonSchema,
   JsonValue,

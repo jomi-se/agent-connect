@@ -149,6 +149,12 @@
         cursor: wait;
         opacity: 0.55;
       }
+      .disconnect {
+        margin-top: 10px;
+        border: 1px solid #789584;
+        color: #e4f2e8;
+        background: transparent;
+      }
       details {
         margin-top: 20px;
         color: #c8dbcf;
@@ -207,6 +213,9 @@
 Write a short, surprising welcome message directly onto this page. You must use set_page_message once.</textarea>
             </label>
             <button id="run" type="submit">Run with my Codex</button>
+            <button id="disconnect" class="disconnect" type="button" hidden>
+              Disconnect agent
+            </button>
           </form>
           <details>
             <summary>Session events</summary>

@@ -1,9 +1,11 @@
 import {
   beginAgentAuthorization,
+  AgentConnectError,
   completeAgentAuthorization,
   connectAgent,
   defineTool,
   parseAuthorizationTransaction,
+  revokeAgentAuthorization,
   serializeAuthorizationTransaction,
   type AgentTaskEvent,
   type ApplicationTool,
@@ -14,6 +16,7 @@ const form = requireElement<HTMLFormElement>("task-form");
 const runtimeCardInput = requireElement<HTMLTextAreaElement>("runtime-card");
 const promptInput = requireElement<HTMLTextAreaElement>("prompt");
 const runButton = requireElement<HTMLButtonElement>("run");
+const disconnectButton = requireElement<HTMLButtonElement>("disconnect");
 const canvasMessage = requireElement<HTMLParagraphElement>("canvas-message");
 const status = requireElement<HTMLOutputElement>("status");
 const eventLog = requireElement<HTMLPreElement>("events");
@@ -24,10 +27,15 @@ const STORED_TRANSACTION = "agent-connect.authorization-transaction";
 const STORED_PROMPT = "agent-connect.pending-prompt";
 
 runtimeCardInput.value = localStorage.getItem(STORED_CARD) ?? "";
+syncAuthorizationControls();
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   void run();
+});
+
+disconnectButton.addEventListener("click", () => {
+  void disconnect();
 });
 
 void resumeAuthorization();
@@ -91,6 +99,7 @@ async function run(): Promise<void> {
       location.assign(authorization.authorizeUrl);
       return;
     }
+    syncAuthorizationControls();
     const connection = await connectAgent({
       baseUrl: runtimeCard.endpoint,
       appId: "agent-connect-demo",
@@ -115,8 +124,19 @@ async function run(): Promise<void> {
       }
     }
   } catch (error) {
-    status.textContent = error instanceof Error ? error.message : "Task failed";
-    document.body.dataset["demo"] = "failed";
+    if (
+      error instanceof AgentConnectError &&
+      error.code === "invalid_app_grant"
+    ) {
+      clearLocalAuthorization();
+      status.textContent =
+        "Authorization was revoked or expired. Run again to reconnect.";
+      document.body.dataset["demo"] = "reauthorize";
+    } else {
+      status.textContent =
+        error instanceof Error ? error.message : "Task failed";
+      document.body.dataset["demo"] = "failed";
+    }
   } finally {
     runButton.disabled = false;
   }
@@ -146,6 +166,7 @@ async function resumeAuthorization(): Promise<void> {
       callbackUrl: location.href,
     });
     sessionStorage.setItem(STORED_GRANT, grant.accessToken);
+    syncAuthorizationControls();
     sessionStorage.removeItem(STORED_TRANSACTION);
     const pendingPrompt = sessionStorage.getItem(STORED_PROMPT);
     sessionStorage.removeItem(STORED_PROMPT);
@@ -158,6 +179,43 @@ async function resumeAuthorization(): Promise<void> {
       error instanceof Error ? error.message : "Authorization failed";
     document.body.dataset["demo"] = "failed";
   }
+}
+
+function clearLocalAuthorization(): void {
+  sessionStorage.removeItem(STORED_GRANT);
+  sessionStorage.removeItem(STORED_TRANSACTION);
+  sessionStorage.removeItem(STORED_PROMPT);
+  syncAuthorizationControls();
+}
+
+async function disconnect(): Promise<void> {
+  const accessToken = sessionStorage.getItem(STORED_GRANT);
+  if (!accessToken) return;
+  disconnectButton.disabled = true;
+  status.textContent = "Revoking this app's access…";
+  try {
+    const serializedCard = localStorage.getItem(STORED_CARD);
+    if (!serializedCard) throw new Error("The saved runtime card is missing.");
+    const runtimeCard = parseRuntimeCard(serializedCard);
+    await revokeAgentAuthorization({
+      baseUrl: runtimeCard.endpoint,
+      appId: "agent-connect-demo",
+      accessToken,
+    });
+    clearLocalAuthorization();
+    status.textContent = "Disconnected. Run again to authorize this app.";
+    document.body.dataset["demo"] = "disconnected";
+  } catch (error) {
+    status.textContent =
+      error instanceof Error ? error.message : "Could not disconnect";
+    document.body.dataset["demo"] = "failed";
+  } finally {
+    disconnectButton.disabled = false;
+  }
+}
+
+function syncAuthorizationControls(): void {
+  disconnectButton.hidden = !sessionStorage.getItem(STORED_GRANT);
 }
 
 function callbackUri(): string {

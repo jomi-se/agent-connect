@@ -88,6 +88,112 @@ test("the dynamically defined tool writes an agent message onto the page", async
   );
 });
 
+test("a revoked grant is cleared so the user can authorize again", async ({
+  page,
+}) => {
+  let challengeRequests = 0;
+  await page.route("https://gateway.example/v1/app-sessions", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "invalid_app_grant" }),
+    });
+  });
+  await page.route(
+    "https://gateway.example/v1/runtime-challenges",
+    async (route) => {
+      challengeRequests += 1;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "fixture_stops_after_challenge" }),
+      });
+    },
+  );
+
+  await page.goto("/");
+  await page.evaluate(() => {
+    sessionStorage.setItem("agent-connect.grant", "revoked-grant");
+  });
+  await page.reload();
+  await page.locator("#runtime-card").fill(
+    JSON.stringify({
+      version: 1,
+      runtimeId: "sha256:test",
+      endpoint: "https://gateway.example",
+      connectorPublicKey: {},
+      transportProfile: "public-demo",
+      authorizationServer: "https://gateway.example",
+    }),
+  );
+
+  await expect(
+    page.getByRole("button", { name: "Disconnect agent" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Run with my Codex" }).click();
+
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-demo",
+    "reauthorize",
+  );
+  await expect(page.locator("#status")).toHaveText(
+    "Authorization was revoked or expired. Run again to reconnect.",
+  );
+  await expect(
+    page.getByRole("button", { name: "Disconnect agent" }),
+  ).toBeHidden();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("agent-connect.grant")),
+  ).toBeNull();
+
+  await page.getByRole("button", { name: "Run with my Codex" }).click();
+  await expect.poll(() => challengeRequests).toBe(1);
+});
+
+test("disconnect clears the local grant", async ({ page }) => {
+  let revoked = false;
+  await page.route("https://gateway.example/oauth/revoke", async (route) => {
+    expect(route.request().headers()["authorization"]).toBe(
+      "Bearer existing-grant",
+    );
+    expect(route.request().postDataJSON()).toEqual({
+      appId: "agent-connect-demo",
+    });
+    revoked = true;
+    await route.fulfill({ status: 204, body: "" });
+  });
+  await page.goto("/");
+  await page.evaluate(() => {
+    sessionStorage.setItem("agent-connect.grant", "existing-grant");
+    localStorage.setItem(
+      "agent-connect.runtime-card",
+      JSON.stringify({
+        version: 1,
+        runtimeId: "sha256:test",
+        endpoint: "https://gateway.example",
+        connectorPublicKey: {},
+        transportProfile: "public-demo",
+        authorizationServer: "https://gateway.example",
+      }),
+    );
+  });
+  await page.reload();
+
+  await page.getByRole("button", { name: "Disconnect agent" }).click();
+
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-demo",
+    "disconnected",
+  );
+  await expect(page.locator("#status")).toHaveText(
+    "Disconnected. Run again to authorize this app.",
+  );
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("agent-connect.grant")),
+  ).toBeNull();
+  expect(revoked).toBe(true);
+});
+
 function sse(event: unknown): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }

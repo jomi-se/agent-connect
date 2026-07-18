@@ -116,6 +116,33 @@ describe("connectAgent", () => {
       connectAgent({ ...options, pairingCode: "code", accessToken: "token" }),
     ).rejects.toThrow("not both");
   });
+
+  it("surfaces a revoked application grant as a typed recovery error", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json({ error: "invalid_app_grant" }, { status: 401 }),
+    );
+
+    await expect(
+      connectAgent({
+        baseUrl: "https://runtime.example",
+        appId: "notes-app",
+        accessToken: "revoked-grant",
+        fetch,
+        tools: [
+          defineTool({
+            name: "read",
+            description: "Read",
+            inputSchema: { type: "object" },
+            execute: () => "ok",
+          }),
+        ],
+      }),
+    ).rejects.toMatchObject({
+      name: "AgentConnectError",
+      code: "invalid_app_grant",
+      status: 401,
+    });
+  });
 });
 
 function sse(event: unknown): string {

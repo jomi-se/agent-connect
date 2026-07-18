@@ -6,6 +6,7 @@ import type {
   BeginAgentAuthorizationOptions,
   CompleteAgentAuthorizationOptions,
   RuntimeCard,
+  RevokeAgentAuthorizationOptions,
 } from "./types.js";
 
 interface RuntimeChallengeResponse {
@@ -145,6 +146,29 @@ export async function completeAgentAuthorization(
   );
 }
 
+export async function revokeAgentAuthorization(
+  options: RevokeAgentAuthorizationOptions,
+): Promise<void> {
+  const fetchImplementation =
+    options.fetch ?? globalThis.fetch.bind(globalThis);
+  const response = await fetchImplementation(
+    `${normalizeEndpoint(options.baseUrl)}/oauth/revoke`,
+    requestOptions(options, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${options.accessToken}` },
+      body: JSON.stringify({ appId: options.appId }),
+    }),
+  );
+  if (!response.ok) {
+    const body = (await response.text()).slice(0, 500);
+    throw new AgentConnectError(
+      "http_error",
+      `Failed to revoke Agent Connect authorization: HTTP ${response.status}${body ? ` — ${body}` : ""}`,
+      { status: response.status },
+    );
+  }
+}
+
 export function serializeAuthorizationTransaction(
   transaction: AgentAuthorizationTransaction,
 ): string {
@@ -242,6 +266,7 @@ function requestOptions(
     ...init,
     headers: {
       ...options.headers,
+      ...init.headers,
       "Content-Type": "application/json",
     },
     credentials: options.credentials ?? "same-origin",

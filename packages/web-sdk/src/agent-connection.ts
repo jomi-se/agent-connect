@@ -63,8 +63,12 @@ export async function connectAgent(
   });
   if (!response.ok) {
     const body = (await response.text()).slice(0, 500);
+    const code =
+      response.status === 401 && responseError(body) === "invalid_app_grant"
+        ? "invalid_app_grant"
+        : "http_error";
     throw new AgentConnectError(
-      "http_error",
+      code,
       `Failed to create Agent Connect session: HTTP ${response.status}${body ? ` — ${body}` : ""}`,
       { status: response.status },
     );
@@ -90,6 +94,15 @@ export async function connectAgent(
     expiresAt: created.expiresAt,
     toolHash: created.toolHash,
   };
+}
+
+function responseError(body: string): string | undefined {
+  try {
+    const parsed = JSON.parse(body) as { readonly error?: unknown };
+    return typeof parsed.error === "string" ? parsed.error : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function snapshotTools(

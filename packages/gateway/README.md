@@ -44,6 +44,10 @@ secret as clearly separated outputs. Save the secret in a password manager. Impo
 into the app; enter the passphrase only on the connector-owned consent page.
 The app verifies a signed connector challenge before sending its tools and uses
 S256 PKCE to obtain a revocable origin/app/tool-bound grant.
+Applications may revoke their own grant through bearer-authenticated
+`POST /oauth/revoke`; the response deliberately does not reveal whether the
+submitted token existed. Connector-owned grant listing and administrative
+revocation remain on `/v1/grants`.
 
 For the isolated public judge profile, use the
 [judge appliance runbook](../../deploy/judge-demo/README.md). The `public-demo`
