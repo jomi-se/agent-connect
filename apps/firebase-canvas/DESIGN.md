@@ -216,6 +216,14 @@ The example project board, editor, and storefront are visually independent produ
 
 This boundary is part of the product explanation: application developers keep ownership of their interface and tools while Agent Connect supplies the user-owned-agent connection. Mobile may simplify each app's navigation, but it must preserve the independent brand and recognizable application structure.
 
+### Gateway Setup Terminal
+
+The gateway setup is the page's single scroll-triggered explanatory animation. It replays the current source-based install, build, and start sequence when the terminal enters the viewport. Pending lines remain faintly legible so the content never depends on animation; reduced-motion visitors receive the completed terminal immediately. The command sequence lives in one typed data structure in `src/main.ts` because the installation story will change as the gateway is packaged more ergonomically.
+
+### Tool Contracts
+
+The app-tools dialog translates JSON Schema into a compact human contract instead of exposing raw schema text. Every tool shows its purpose, browser ownership, top-level inputs, readable types, required or optional state, nested object fields, and allowed enum values. The presentation is derived from the actual schema used for authorization and execution; simplifying the display must never create a second hand-maintained tool definition.
+
 ## Do's and Don'ts
 
 ### Do:
