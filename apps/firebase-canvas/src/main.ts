@@ -217,7 +217,7 @@ async function establishConnection(
   }
   activeConnectionActivity = undefined;
   connectionState.textContent = runtimeLabel(runtimeCard);
-  status.textContent = "Runtime connected. Choose a feature and run a task.";
+  status.textContent = "";
   traceSummary.textContent = "Runtime connected";
   document.body.dataset["demo"] = "connected";
   syncAuthorizationControls();
@@ -244,6 +244,7 @@ async function runTask(): Promise<void> {
     const prompt = `[Agent Connect demo scenario: ${selectedScenario}]\n${promptInput.value}`;
     for await (const taskEvent of connection.session.streamTask(prompt)) {
       appendEvent(taskEvent);
+      await paceVisibleTaskEvent(taskEvent);
       if (taskEvent.type === "task.completed") {
         if (surface.dataset["changed"] !== "true") {
           throw new Error(
@@ -456,8 +457,10 @@ function appendEvent(event: AgentTaskEvent): void {
 type ToolChoreography = {
   badge: HTMLDivElement;
   surface: HTMLElement;
-  startedAt: number;
 };
+
+const TOOL_REQUEST_DWELL_MS = 650;
+const TOOL_RESULT_DWELL_MS = 900;
 
 function beginToolChoreography(actionId: string, name: string): void {
   const surface = requireElement(`scenario-${selectedScenario}`);
@@ -477,7 +480,6 @@ function beginToolChoreography(actionId: string, name: string): void {
   activeToolChoreography.set(actionId, {
     badge,
     surface,
-    startedAt: performance.now(),
   });
 }
 
@@ -489,27 +491,31 @@ function finishToolChoreography(
   const choreography = activeToolChoreography.get(actionId);
   if (!choreography) return;
   activeToolChoreography.delete(actionId);
-  const elapsed = performance.now() - choreography.startedAt;
-  window.setTimeout(
-    () => {
-      if (!choreography.badge.isConnected) return;
-      choreography.badge.dataset["phase"] = isError ? "error" : "result";
-      const toolName = choreography.badge.querySelector("strong");
-      if (toolName)
-        toolName.textContent = `${name} ${isError ? "failed" : "result ✓"}`;
-      choreography.surface.dataset["agentMotion"] = isError
-        ? "error"
-        : "result";
-      window.setTimeout(() => {
-        choreography.badge.remove();
-        const stack = choreography.surface.querySelector(".tool-flight-stack");
-        if (!stack?.childElementCount) {
-          stack?.remove();
-          delete choreography.surface.dataset["agentMotion"];
-        }
-      }, 1_100);
-    },
-    Math.max(0, 520 - elapsed),
+  choreography.badge.dataset["phase"] = isError ? "error" : "result";
+  const toolName = choreography.badge.querySelector("strong");
+  if (toolName)
+    toolName.textContent = `${name} ${isError ? "failed" : "result ✓"}`;
+  choreography.surface.dataset["agentMotion"] = isError ? "error" : "result";
+  window.setTimeout(() => {
+    if (!choreography.badge.isConnected) return;
+    choreography.badge.remove();
+    const stack = choreography.surface.querySelector(".tool-flight-stack");
+    if (!stack?.childElementCount) {
+      stack?.remove();
+      delete choreography.surface.dataset["agentMotion"];
+    }
+  }, 1_100);
+}
+
+async function paceVisibleTaskEvent(event: AgentTaskEvent): Promise<void> {
+  if (event.type !== "tool.requested" && event.type !== "tool.completed")
+    return;
+  const duration =
+    event.type === "tool.requested"
+      ? TOOL_REQUEST_DWELL_MS
+      : TOOL_RESULT_DWELL_MS;
+  await new Promise<void>((resolve) =>
+    window.setTimeout(resolve, reducedMotion() ? 120 : duration),
   );
 }
 
@@ -1075,7 +1081,7 @@ function setRunBusy(busy: boolean): void {
   runButton.disabled = busy || !connection;
   for (const tab of scenarioTabs) tab.disabled = busy;
   if (runButtonLabel)
-    runButtonLabel.textContent = busy ? "Running task…" : "Run task";
+    runButtonLabel.textContent = busy ? "Working…" : "Send prompt";
 }
 
 function moveScenarioFocus(

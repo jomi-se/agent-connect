@@ -191,16 +191,13 @@
               </button>
             </div>
             <form id="task-form" class="scenario-prompt">
-              <label for="prompt">Task for the connected runtime</label>
-              <textarea id="prompt" required></textarea>
+              <textarea id="prompt" aria-label="Prompt" required></textarea>
               <button id="run" class="button button-primary" type="submit">
-                <span class="button-label">Run task</span
+                <span class="button-label">Send prompt</span
                 ><span class="button-progress" aria-hidden="true"></span>
               </button>
             </form>
-            <output id="status" class="status-line" aria-live="polite"
-              >Connect a runtime before running a task.</output
-            >
+            <output id="status" class="status-line" aria-live="polite"></output>
           </div>
 
           <div class="scenario-stage">
@@ -614,21 +611,18 @@ for await (const event of connection.session.streamTask(prompt)) {
             </div>
             <form id="task-form" class="mobile-form scenario-prompt">
               <div class="mobile-field">
-                <label for="prompt">Task for the connected runtime</label>
-                <textarea id="prompt" required></textarea>
+                <textarea id="prompt" aria-label="Prompt" required></textarea>
               </div>
               <button
                 id="run"
                 class="button button-primary mobile-run"
                 type="submit"
               >
-                <span class="button-label">Run task</span
+                <span class="button-label">Send prompt</span
                 ><span class="button-progress" aria-hidden="true"></span>
               </button>
             </form>
-            <output id="status" class="status-line" aria-live="polite"
-              >Connect a runtime before running a task.</output
-            >
+            <output id="status" class="status-line" aria-live="polite"></output>
           </div>
 
           <div class="scenario-stage">
