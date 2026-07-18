@@ -449,9 +449,9 @@ body[data-layout="desktop"] {
 .desktop-intro {
   min-height: 330px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(420px, 640px);
+  grid-template-columns: minmax(0, 1fr) minmax(390px, 520px);
   align-items: center;
-  gap: 64px;
+  gap: clamp(36px, 4vw, 64px);
   padding: 64px 0;
 }
 
@@ -510,19 +510,19 @@ body[data-layout="desktop"] {
 }
 
 .micro-flow-territory {
-  font-size: 8px;
+  font-size: 9.5px;
   letter-spacing: 0.12em;
 }
 
 .micro-flow-label {
   fill: var(--ink);
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .micro-flow-sublabel {
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 500;
   letter-spacing: 0.04em;
 }
@@ -2426,8 +2426,8 @@ body[data-layout="mobile"] .third-party-context {
   }
 
   .desktop-intro {
-    grid-template-columns: 1fr;
-    gap: 34px;
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+    gap: 32px;
   }
 
   .desktop-intro h1 {
@@ -2435,7 +2435,7 @@ body[data-layout="mobile"] .third-party-context {
   }
 
   .micro-flow {
-    width: min(640px, 100%);
+    width: 100%;
   }
 
   .desktop-workbench {
@@ -2470,6 +2470,17 @@ body[data-layout="mobile"] .third-party-context {
 
   .connection-status {
     padding-top: 0;
+  }
+}
+
+@media (max-width: 880px) {
+  .desktop-intro {
+    grid-template-columns: 1fr;
+    gap: 34px;
+  }
+
+  .micro-flow {
+    width: min(560px, 100%);
   }
 }
 
