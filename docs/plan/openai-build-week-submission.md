@@ -200,10 +200,11 @@ claiming those approaches are always wrong.
 
 Prioritize product completion over additional protocol generalization:
 
-1. Capture the already-proven public phone flow for the demo video, then finish
-   the grant-list and revocation rehearsal. Runtime-card verification,
-   passphrase enrollment, consent, PKCE redirect, tool request, correlated
-   result, and visible page mutation passed through Funnel on 2026-07-18.
+1. Capture the already-proven public phone flow for the demo video and turn it
+   into exact private judge instructions. Runtime-card verification, passphrase
+   enrollment, consent, PKCE redirect, tool request, correlated result, visible
+   page mutation, grant listing, and revocation passed through Funnel on
+   2026-07-18.
 2. Use the proven OmniGENT runtime for the recorded demo unless the experimental
    bwrap MCP startup gap is fixed and revalidated end to end.
 3. Freeze the smallest coherent demo. Prefer the Canvas authorization/tool/

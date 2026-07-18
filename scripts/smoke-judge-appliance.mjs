@@ -74,6 +74,7 @@ const approval = await request("/authorize", {
   }),
 });
 assertStatus(approval, 303, "authorization approval");
+const deviceCookie = cookiePair(approval.headers.get("set-cookie"));
 const callback = new URL(approval.headers.get("location") ?? "");
 const code = callback.searchParams.get("code");
 if (!code) throw new Error("authorization approval returned no code");
@@ -85,6 +86,9 @@ const tokenResponse = await request("/oauth/token", {
 });
 assertStatus(tokenResponse, 200, "authorization code exchange");
 const grant = await tokenResponse.json();
+if (typeof grant.grant?.id !== "string") {
+  throw new Error("authorization code exchange returned no grant id");
+}
 
 const sessionResponse = await request("/v1/app-sessions", {
   method: "POST",
@@ -171,8 +175,31 @@ for await (const event of parseSse(stream.body)) {
 if (requestedMessage !== expectedMessage || !completed) {
   throw new Error("deterministic browser tool loop did not complete");
 }
+
+const revocation = await request("/v1/grants", {
+  method: "POST",
+  redirect: "manual",
+  headers: {
+    Origin: authorizationOrigin,
+    Cookie: deviceCookie,
+    "Content-Type": "application/x-www-form-urlencoded",
+  },
+  body: new URLSearchParams({ grant: grant.grant.id }),
+});
+assertStatus(revocation, 303, "smoke grant revocation");
+
+const revokedGrantCheck = await request("/v1/app-sessions", {
+  method: "POST",
+  headers: appHeaders({
+    Authorization: `Bearer ${grant.accessToken}`,
+    "Content-Type": "application/json",
+  }),
+  body: JSON.stringify({ appId, tools: [tool] }),
+});
+assertStatus(revokedGrantCheck, 401, "revoked smoke grant check");
+
 process.stdout.write(
-  `${JSON.stringify({ ok: true, transportProfile: "public-demo", tool: tool.name, requestedMessage })}\n`,
+  `${JSON.stringify({ ok: true, transportProfile: "public-demo", tool: tool.name, requestedMessage, grantRevoked: true })}\n`,
 );
 
 function request(path, init) {
@@ -187,6 +214,14 @@ function assertStatus(response, expected, step) {
   if (response.status !== expected) {
     throw new Error(`${step} failed: HTTP ${response.status}`);
   }
+}
+
+function cookiePair(setCookie) {
+  const pair = setCookie?.split(";", 1)[0];
+  if (!pair?.startsWith("agent_connect_device=")) {
+    throw new Error("authorization approval returned no device cookie");
+  }
+  return pair;
 }
 
 function sha256(value) {

@@ -48,6 +48,10 @@ AGENT_CONNECT_SMOKE_ENROLLMENT_PASSPHRASE='the same passphrase from .env' \
 The command prints one sanitized JSON success record. It does not print bearer
 tokens or the enrollment passphrase. It derives the connector-owned approval
 Origin from the signed runtime card rather than assuming a placeholder URL.
+After the tool loop completes, it revokes its own application grant and proves
+that the revoked credential can no longer create an application session. The
+revoked entry remains visible as intentional audit history, but it cannot be
+used as an active capability.
 
 After a successful run, the container's ephemeral
 `/tmp/agent-connect-acp-transcript.jsonl` records the sanitized ACP/MCP protocol
