@@ -45,11 +45,11 @@ export interface GatewayOptions {
   readonly authStatePath?: string;
   readonly publicEndpoint?: string;
   readonly transportProfile?: string;
-  readonly publicDemoAuthority?: {
+  readonly publicDemoAuthorities?: readonly {
     readonly appId: string;
     readonly redirectUri: string;
     readonly toolHash: string;
-  };
+  }[];
   readonly enrollmentPassphrase?: string;
   readonly runtime?: AgentRuntime;
   readonly fetch?: typeof globalThis.fetch;
@@ -82,14 +82,14 @@ export function createGateway(options: GatewayOptions) {
   if (!publicDemo && options.allowedTailscaleUsers.size === 0) {
     throw new TypeError("At least one allowed Tailscale login is required");
   }
-  if (publicDemo && !options.publicDemoAuthority) {
+  if (publicDemo && !options.publicDemoAuthorities?.length) {
     throw new TypeError(
       "public-demo requires an exact configured application authority",
     );
   }
-  if (!publicDemo && options.publicDemoAuthority) {
+  if (!publicDemo && options.publicDemoAuthorities?.length) {
     throw new TypeError(
-      "publicDemoAuthority is valid only for the public-demo profile",
+      "publicDemoAuthorities is valid only for the public-demo profile",
     );
   }
   const publicEndpoint = options.publicEndpoint
@@ -250,7 +250,7 @@ export function createGateway(options: GatewayOptions) {
           publicDemo &&
           !matchesPublicDemoAuthority(
             { appId, redirectUri, toolHash: hashToolSnapshot(tools) },
-            options.publicDemoAuthority,
+            options.publicDemoAuthorities,
           )
         ) {
           sendJson(response, 403, { error: "public_demo_authority_mismatch" });
@@ -907,13 +907,15 @@ function matchesPublicDemoAuthority(
     readonly redirectUri: string;
     readonly toolHash: string;
   },
-  configured: GatewayOptions["publicDemoAuthority"],
+  configured: GatewayOptions["publicDemoAuthorities"],
 ): boolean {
   return Boolean(
-    configured &&
-    requested.appId === configured.appId &&
-    requested.redirectUri === configured.redirectUri &&
-    requested.toolHash === configured.toolHash,
+    configured?.some(
+      (authority) =>
+        requested.appId === authority.appId &&
+        requested.redirectUri === authority.redirectUri &&
+        requested.toolHash === authority.toolHash,
+    ),
   );
 }
 
