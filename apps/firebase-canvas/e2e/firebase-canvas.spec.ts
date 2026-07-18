@@ -262,6 +262,9 @@ test("mobile and desktop mount different compositions", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Two pieces, two owners." }),
   ).toBeVisible();
+  await expect(page.locator("[data-micro-flow] svg")).toBeVisible();
+  await expect(page.locator("[data-micro-ring]")).toHaveCount(3);
+  await expect(page.locator("[data-micro-mover]")).toHaveCount(5);
   const boardTab = page.getByRole("tab", { name: "Project board" });
   await boardTab.focus();
   await boardTab.press("ArrowRight");

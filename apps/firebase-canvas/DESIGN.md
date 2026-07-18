@@ -210,6 +210,10 @@ The compact header keeps the product name, demo status, and a direct path to int
 
 The signature runtime component is an event-driven activity feed. It begins empty, then appends real connection, task, tool-request, tool-result, completion, and failure events. It must not imply that every task follows a predetermined tool path: a runtime may call no tools, one tool, or many tools.
 
+### Hero Micro Flow
+
+The compact hero diagram is a dependency-free port of the supplied `Micro flow` concept. A ten-second loop distinguishes the outbound task, agent-to-app tool calls, and app-to-agent results while the three actor nodes react in sequence. The bracket around the gateway and coding agent marks the user-owned runtime boundary. Animation pauses offscreen and becomes a legible static diagram under reduced motion. It is an explanatory overview, not a substitute for the later event-driven live visualization.
+
 ### Embedded Demo Apps
 
 The example project board, editor, and storefront are visually independent products mounted inside the Agent Connect workbench. Each owns its product name, navigation, palette, content model, and app chrome. Agent Connect appears only as a compact integration badge and in the surrounding connection controls; its actor colors and component styling do not leak into the embedded apps.
