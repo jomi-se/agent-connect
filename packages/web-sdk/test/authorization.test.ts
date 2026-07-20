@@ -18,7 +18,11 @@ describe("Agent Connect enrollment and authorization", () => {
         version: 1,
         runtimeId: "sha256:runtime",
         endpoint: "https://runtime.example",
-        connectorPublicKey: { kty: "OKP", crv: "Ed25519", x: "public" },
+        connectorPublicKey: {
+          kty: "OKP",
+          crv: "Ed25519",
+          x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        },
         transportProfile: "tailscale-serve",
         authorizationServer: "https://runtime.example",
       }),
@@ -30,6 +34,18 @@ describe("Agent Connect enrollment and authorization", () => {
     expect(() => parseRuntimeCard(JSON.stringify({ version: 1 }))).toThrow(
       "Invalid Agent Connect runtime card",
     );
+    for (const invalid of [
+      {
+        ...card,
+        connectorPublicKey: { kty: "OKP", crv: "Ed25519", x: "short" },
+      },
+      { ...card, endpoint: "https://runtime.example/path" },
+      { ...card, authorizationServer: "https://other.example" },
+    ]) {
+      expect(() => parseRuntimeCard(JSON.stringify(invalid))).toThrow(
+        "Invalid Agent Connect runtime card",
+      );
+    }
   });
 
   it("verifies the connector before pushing tools and completes PKCE", async () => {

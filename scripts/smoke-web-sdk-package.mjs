@@ -62,7 +62,11 @@ const card = parseRuntimeCard(JSON.stringify({
   version: 1,
   runtimeId: "sha256:external-consumer",
   endpoint: "https://runtime.example",
-  connectorPublicKey: { kty: "OKP", crv: "Ed25519", x: "public" },
+  connectorPublicKey: {
+    kty: "OKP",
+    crv: "Ed25519",
+    x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  },
   transportProfile: "tailscale-serve",
   authorizationServer: "https://runtime.example"
 }));

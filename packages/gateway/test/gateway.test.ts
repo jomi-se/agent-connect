@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { EnrollmentBundle } from "../src/connector-auth.js";
+import { ConnectorAuth, type EnrollmentBundle } from "../src/connector-auth.js";
+import { configFromEnv } from "../src/config.js";
 import { createGateway } from "../src/gateway.js";
 import type { AgentRuntime } from "../src/runtime.js";
 import { hashToolSnapshot } from "../src/tool-snapshot.js";
@@ -29,6 +30,17 @@ afterEach(async () => {
 });
 
 describe("gateway", () => {
+  it("rejects trusted-proxy profiles on a non-loopback listener", () => {
+    expect(() =>
+      configFromEnv({
+        AGENT_CONNECT_HOST: "0.0.0.0",
+        AGENT_CONNECT_TRANSPORT_PROFILE: "tailscale-serve",
+      }),
+    ).toThrow(
+      "tailscale-serve and dynamic enrollment require a loopback gateway host",
+    );
+  });
+
   it("answers an allowed CORS preflight without requiring identity", async () => {
     const { baseUrl } = await start();
     const response = await fetch(`${baseUrl}/v1/sessions/session-1/events`, {
@@ -329,6 +341,141 @@ describe("managed application sessions", () => {
 });
 
 describe("connector enrollment and app authorization", () => {
+  it("bounds concurrent passphrase verification without blocking the event loop", async () => {
+    const directory = mkdtempSync(
+      join(tmpdir(), "agent-connect-auth-verification-"),
+    );
+    temporaryDirectories.push(directory);
+    const auth = new ConnectorAuth({
+      statePath: join(directory, "connector.json"),
+      publicEndpoint: "https://runtime.example",
+      enrollmentPassphrase: "concurrency test phrase",
+    });
+    const input = {
+      origin: "https://app.example",
+      appId: "concurrency-test",
+      redirectUri: "https://app.example/callback",
+      state: "s".repeat(16),
+      codeChallenge: "c".repeat(43),
+      scopes: ["agent:prompt", "agent:result", "tools:invoke"],
+      tools: [tool()],
+    };
+    const requests = [
+      auth.createAuthorizationRequest(input),
+      auth.createAuthorizationRequest(input),
+      auth.createAuthorizationRequest(input),
+    ];
+
+    const attempts = await Promise.allSettled([
+      auth.enrollDevice(
+        "concurrency test phrase",
+        "owner@example.com",
+        requests[0]!.id,
+      ),
+      auth.enrollDevice(
+        "concurrency test phrase",
+        "owner@example.com",
+        requests[1]!.id,
+      ),
+      auth.enrollDevice(
+        "concurrency test phrase",
+        "owner@example.com",
+        requests[2]!.id,
+      ),
+    ]);
+
+    expect(
+      attempts.filter((attempt) => attempt.status === "fulfilled"),
+    ).toHaveLength(2);
+    expect(attempts.filter((attempt) => attempt.status === "rejected")).toEqual(
+      [
+        expect.objectContaining({
+          reason: expect.objectContaining({ code: "enrollment_busy" }),
+        }),
+      ],
+    );
+  });
+
+  it("serializes enrollment for one authorization request", async () => {
+    const directory = mkdtempSync(
+      join(tmpdir(), "agent-connect-auth-duplicate-enrollment-"),
+    );
+    temporaryDirectories.push(directory);
+    const auth = new ConnectorAuth({
+      statePath: join(directory, "connector.json"),
+      publicEndpoint: "https://runtime.example",
+      enrollmentPassphrase: "duplicate test phrase",
+    });
+    const request = auth.createAuthorizationRequest({
+      origin: "https://app.example",
+      appId: "duplicate-test",
+      redirectUri: "https://app.example/callback",
+      state: "s".repeat(16),
+      codeChallenge: "c".repeat(43),
+      scopes: ["agent:prompt", "agent:result", "tools:invoke"],
+      tools: [tool()],
+    });
+
+    const attempts = await Promise.allSettled([
+      auth.enrollDevice(
+        "duplicate test phrase",
+        "owner@example.com",
+        request.id,
+      ),
+      auth.enrollDevice(
+        "duplicate test phrase",
+        "owner@example.com",
+        request.id,
+      ),
+    ]);
+
+    expect(
+      attempts.filter((attempt) => attempt.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(attempts.filter((attempt) => attempt.status === "rejected")).toEqual(
+      [
+        expect.objectContaining({
+          reason: expect.objectContaining({ code: "enrollment_busy" }),
+        }),
+      ],
+    );
+    expect(() => auth.approve(request.id)).not.toThrow();
+    expect(() => auth.approve(request.id)).toThrow(
+      "authorization_request_expired",
+    );
+  });
+
+  it("bounds pending authorization state and prunes expired requests", () => {
+    const directory = mkdtempSync(
+      join(tmpdir(), "agent-connect-auth-capacity-"),
+    );
+    temporaryDirectories.push(directory);
+    let now = 1_000;
+    const auth = new ConnectorAuth({
+      statePath: join(directory, "connector.json"),
+      publicEndpoint: "https://runtime.example",
+      enrollmentPassphrase: "capacity test phrase",
+      now: () => now,
+    });
+    const input = {
+      origin: "https://app.example",
+      appId: "capacity-test",
+      redirectUri: "https://app.example/callback",
+      state: "s".repeat(16),
+      codeChallenge: "c".repeat(43),
+      scopes: ["agent:prompt", "agent:result", "tools:invoke"],
+      tools: [tool()],
+    };
+    for (let request = 0; request < 256; request += 1) {
+      expect(() => auth.createAuthorizationRequest(input)).not.toThrow();
+    }
+    expect(() => auth.createAuthorizationRequest(input)).toThrow(
+      "authorization_capacity",
+    );
+    now += 10 * 60 * 1000 + 1;
+    expect(() => auth.createAuthorizationRequest(input)).not.toThrow();
+  });
+
   it("enrolls on the connector origin, grants with PKCE, and revokes durably", async () => {
     const directory = mkdtempSync(join(tmpdir(), "agent-connect-auth-"));
     temporaryDirectories.push(directory);
@@ -579,21 +726,25 @@ describe("connector enrollment and app authorization", () => {
 
     const pushed = await pushAuthorization(baseUrl);
     const authorization = await pushed.json();
-    const wrongPassphrase = await fetch(`${baseUrl}/authorize`, {
-      method: "POST",
-      redirect: "manual",
-      headers: {
-        "Tailscale-User-Login": "owner@example.com",
-        Origin: "https://runtime.example",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        request: authorization.requestId as string,
-        decision: "approve",
-        passphrase: "wrong phrase",
-      }),
-    });
-    expect(wrongPassphrase.status).toBe(400);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const wrongPassphrase = await fetch(`${baseUrl}/authorize`, {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          "Tailscale-User-Login": "owner@example.com",
+          Origin: "https://runtime.example",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          request: authorization.requestId as string,
+          decision: "approve",
+          passphrase: "wrong phrase",
+        }),
+      });
+      expect(wrongPassphrase.status).toBe(400);
+    }
+
+    const independentRequest = await (await pushAuthorization(baseUrl)).json();
 
     const approval = await fetch(`${baseUrl}/authorize`, {
       method: "POST",
@@ -604,7 +755,7 @@ describe("connector enrollment and app authorization", () => {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({
-        request: authorization.requestId as string,
+        request: independentRequest.requestId as string,
         decision: "approve",
         passphrase: "correct phrase",
       }),

@@ -1,6 +1,6 @@
 import { gzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
 import type { AgentRuntime, RuntimeSessionRequest } from "./runtime.js";
@@ -59,50 +59,58 @@ export class OmnigentRuntime implements AgentRuntime {
 
   async createSession(request: RuntimeSessionRequest): Promise<string> {
     const workspace = await this.createSessionWorkspace(request);
-    const metadata = {
-      title: `Agent Connect: ${request.appId}`,
-      labels: {
-        "agent-connect.app": request.appId,
-        "agent-connect.tool-hash": request.toolHash,
-      },
-      workspace,
-    };
-    const form = new FormData();
-    form.set("metadata", JSON.stringify(metadata));
-    const bundleBytes = Uint8Array.from(this.bundle);
-    form.set(
-      "bundle",
-      new Blob([bundleBytes.buffer], { type: "application/gzip" }),
-      "agent-connect.tar.gz",
-    );
-    const created = await this.requestJson("/v1/sessions", {
-      method: "POST",
-      headers: { Origin: INTERNAL_ORIGIN },
-      body: form,
-    });
-    const sessionId = requiredString(created, "session_id");
-    const hostId = await this.selectHost();
-
-    await this.requestJson(`/v1/hosts/${encodeURIComponent(hostId)}/runners`, {
-      method: "POST",
-      headers: {
-        Origin: INTERNAL_ORIGIN,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        session_id: sessionId,
+    try {
+      const metadata = {
+        title: `Agent Connect: ${request.appId}`,
+        labels: {
+          "agent-connect.app": request.appId,
+          "agent-connect.tool-hash": request.toolHash,
+        },
         workspace,
-      }),
-    });
+      };
+      const form = new FormData();
+      form.set("metadata", JSON.stringify(metadata));
+      const bundleBytes = Uint8Array.from(this.bundle);
+      form.set(
+        "bundle",
+        new Blob([bundleBytes.buffer], { type: "application/gzip" }),
+        "agent-connect.tar.gz",
+      );
+      const created = await this.requestJson("/v1/sessions", {
+        method: "POST",
+        headers: { Origin: INTERNAL_ORIGIN },
+        body: form,
+      });
+      const sessionId = requiredString(created, "session_id");
+      const hostId = await this.selectHost();
 
-    const deadline = Date.now() + this.launchTimeoutMs;
-    while (Date.now() < deadline) {
-      if (await this.isHealthy(sessionId)) return sessionId;
-      await delay(this.pollIntervalMs);
+      await this.requestJson(
+        `/v1/hosts/${encodeURIComponent(hostId)}/runners`,
+        {
+          method: "POST",
+          headers: {
+            Origin: INTERNAL_ORIGIN,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            session_id: sessionId,
+            workspace,
+          }),
+        },
+      );
+
+      const deadline = Date.now() + this.launchTimeoutMs;
+      while (Date.now() < deadline) {
+        if (await this.isHealthy(sessionId)) return sessionId;
+        await delay(this.pollIntervalMs);
+      }
+      throw new Error(
+        `OmniGENT runner for ${sessionId} did not become healthy in time`,
+      );
+    } catch (error) {
+      await rm(workspace, { recursive: true, force: true });
+      throw error;
     }
-    throw new Error(
-      `OmniGENT runner for ${sessionId} did not become healthy in time`,
-    );
   }
 
   private async createSessionWorkspace(

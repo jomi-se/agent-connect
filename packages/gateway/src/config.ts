@@ -10,6 +10,19 @@ export function configFromEnv(
 ): GatewayRuntimeConfig {
   const sandbox = sandboxFromEnv(env);
   const transportProfile = env.AGENT_CONNECT_TRANSPORT_PROFILE;
+  const host = env.AGENT_CONNECT_HOST ?? "127.0.0.1";
+  const dynamicAppEnrollment =
+    env.AGENT_CONNECT_DYNAMIC_APP_ENROLLMENT === "1" ||
+    env.AGENT_CONNECT_DYNAMIC_APP_ENROLLMENT === "true";
+  if (
+    (transportProfile === "tailscale-serve" || dynamicAppEnrollment) &&
+    host !== "127.0.0.1" &&
+    host !== "::1"
+  ) {
+    throw new TypeError(
+      "tailscale-serve and dynamic enrollment require a loopback gateway host",
+    );
+  }
   const publicDemoAuthorities =
     transportProfile === "public-demo"
       ? csvValues(
@@ -22,7 +35,7 @@ export function configFromEnv(
         }))
       : undefined;
   return {
-    host: env.AGENT_CONNECT_HOST ?? "127.0.0.1",
+    host,
     port: parsePort(env.AGENT_CONNECT_PORT ?? "8787"),
     omnigentBaseUrl: env.OMNIGENT_URL ?? "http://127.0.0.1:6767",
     workspace: env.AGENT_CONNECT_WORKSPACE ?? process.cwd(),
@@ -31,9 +44,7 @@ export function configFromEnv(
       : {}),
     ...(sandbox ? { omnigentSandbox: sandbox } : {}),
     allowedOrigins: csvSet(env.AGENT_CONNECT_ALLOWED_ORIGINS),
-    dynamicAppEnrollment:
-      env.AGENT_CONNECT_DYNAMIC_APP_ENROLLMENT === "1" ||
-      env.AGENT_CONNECT_DYNAMIC_APP_ENROLLMENT === "true",
+    dynamicAppEnrollment,
     allowedTailscaleUsers: csvSet(env.AGENT_CONNECT_ALLOWED_TAILSCALE_USERS),
     ...(env.AGENT_CONNECT_ACCESS_TOKEN
       ? { accessToken: env.AGENT_CONNECT_ACCESS_TOKEN }

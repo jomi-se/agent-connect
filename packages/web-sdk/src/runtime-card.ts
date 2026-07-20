@@ -12,13 +12,19 @@ export function parseRuntimeCard(value: string): RuntimeCard {
     throw new TypeError("Invalid Agent Connect runtime card");
   }
   const publicKey = parsed["connectorPublicKey"];
+  const endpoint = httpsOrigin(parsed["endpoint"]);
+  const authorizationServer = httpsOrigin(parsed["authorizationServer"]);
   if (
     parsed["version"] !== 1 ||
     !nonEmptyString(parsed["runtimeId"]) ||
-    !absoluteHttpsUrl(parsed["endpoint"]) ||
+    !endpoint ||
     !isRecord(publicKey) ||
+    publicKey["kty"] !== "OKP" ||
+    publicKey["crv"] !== "Ed25519" ||
+    !isEd25519PublicKey(publicKey["x"]) ||
     !nonEmptyString(parsed["transportProfile"]) ||
-    !absoluteHttpsUrl(parsed["authorizationServer"])
+    !authorizationServer ||
+    authorizationServer !== endpoint
   ) {
     throw new TypeError("Invalid Agent Connect runtime card");
   }
@@ -34,12 +40,26 @@ function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function absoluteHttpsUrl(value: unknown): value is string {
-  if (!nonEmptyString(value)) return false;
+function httpsOrigin(value: unknown): string | undefined {
+  if (!nonEmptyString(value)) return undefined;
   try {
     const parsed = new URL(value);
-    return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      (parsed.pathname !== "/" && parsed.pathname !== "") ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      return undefined;
+    }
+    return parsed.origin;
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+function isEd25519PublicKey(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value);
 }

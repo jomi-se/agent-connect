@@ -73,6 +73,16 @@ for command_name in node npm curl omnigent codex tailscale; do
   require_command "$command_name"
 done
 
+omnigent_version=$(omnigent --version 2>&1 || true)
+case "$omnigent_version" in
+  "omnigent 0.5.1 "*) ;;
+  *)
+    echo "Agent Connect: this reference profile requires OmniGENT 0.5.1." >&2
+    echo "Detected: ${omnigent_version:-unknown}" >&2
+    exit 78
+    ;;
+esac
+
 require_absolute_directory CODEX_HOME
 require_absolute_directory AGENT_CONNECT_WORKSPACE
 
@@ -225,4 +235,20 @@ echo "Agent Connect: server and host logs are under $log_dir"
 echo "Agent Connect: keep this process running; Ctrl-C stops the complete stack"
 node "$gateway" &
 gateway_pid=$!
-wait "$gateway_pid"
+
+while
+  kill -0 "$server_pid" 2>/dev/null &&
+    kill -0 "$host_pid" 2>/dev/null &&
+    kill -0 "$gateway_pid" 2>/dev/null
+do
+  sleep 2
+done
+
+if ! kill -0 "$server_pid" 2>/dev/null; then
+  echo "Agent Connect: OmniGENT server exited; inspect $log_dir/omnigent-server.log" >&2
+elif ! kill -0 "$host_pid" 2>/dev/null; then
+  echo "Agent Connect: OmniGENT host exited; inspect $log_dir/omnigent-host.log" >&2
+else
+  echo "Agent Connect: gateway exited" >&2
+fi
+exit 1

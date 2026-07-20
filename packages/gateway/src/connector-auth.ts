@@ -3,6 +3,7 @@ import {
   createPrivateKey,
   generateKeyPairSync,
   randomBytes,
+  scrypt,
   scryptSync,
   sign,
   timingSafeEqual,
@@ -128,6 +129,10 @@ interface AuthorizationCode {
 
 const AUTHORIZATION_TTL_MS = 10 * 60 * 1000;
 const CODE_TTL_MS = 2 * 60 * 1000;
+const MAX_PENDING_AUTHORIZATIONS = 256;
+const MAX_AUTHORIZATION_CODES = 256;
+const MAX_PASSPHRASE_FAILURES = 256;
+const MAX_CONCURRENT_PASSPHRASE_VERIFICATIONS = 2;
 const ALLOWED_SCOPES = new Set([
   "agent:prompt",
   "agent:result",
@@ -148,8 +153,10 @@ export class ConnectorAuth {
   private readonly codes = new Map<string, AuthorizationCode>();
   private readonly failedPassphrases = new Map<
     string,
-    { count: number; resetAt: number }
+    { count: number; resetAt: number; requestId: string }
   >();
+  private readonly activeEnrollmentRequests = new Set<string>();
+  private activePassphraseVerifications = 0;
 
   constructor(options: ConnectorAuthOptions) {
     this.statePath = options.statePath;
@@ -193,6 +200,10 @@ export class ConnectorAuth {
   createAuthorizationRequest(
     input: AuthorizationRequestInput,
   ): PendingAuthorization {
+    this.pruneTransientState();
+    if (this.pending.size >= MAX_PENDING_AUTHORIZATIONS) {
+      throw new ConnectorAuthError("authorization_capacity");
+    }
     requireAppId(input.appId);
     requireRedirect(input.redirectUri, input.origin);
     if (!isBase64Url(input.state, 16, 256)) {
@@ -233,6 +244,7 @@ export class ConnectorAuth {
   }
 
   getPending(id: string): PendingAuthorization | undefined {
+    this.pruneTransientState();
     const request = this.pending.get(id);
     if (!request) return undefined;
     if (request.expiresAt <= this.now()) {
@@ -255,39 +267,75 @@ export class ConnectorAuth {
     );
   }
 
-  enrollDevice(passphrase: string, tailscaleUser: string): string {
-    this.requirePassphraseAllowed(tailscaleUser);
-    const actual = scryptSync(
-      passphrase.normalize("NFKC"),
-      Buffer.from(this.state.enrollmentSalt, "base64url"),
-      32,
-    );
-    const expected = Buffer.from(this.state.enrollmentVerifier, "base64url");
-    if (
-      actual.length !== expected.length ||
-      !timingSafeEqual(actual, expected)
-    ) {
-      this.recordPassphraseFailure(tailscaleUser);
-      throw new ConnectorAuthError("invalid_enrollment_passphrase");
+  async enrollDevice(
+    passphrase: string,
+    tailscaleUser: string,
+    authorizationRequestId: string,
+  ): Promise<string> {
+    this.pruneTransientState();
+    const attemptKey = `${tailscaleUser}\u0000${authorizationRequestId}`;
+    this.requirePassphraseAllowed(attemptKey);
+    if (this.activeEnrollmentRequests.has(authorizationRequestId)) {
+      throw new ConnectorAuthError("enrollment_busy");
     }
-    this.failedPassphrases.delete(tailscaleUser);
-    const token = `acd_${randomBytes(32).toString("base64url")}`;
-    const now = this.now();
-    this.state.devices.push({
-      id: `device_${randomBytes(12).toString("base64url")}`,
-      tokenHash: sha256(token),
-      tailscaleUser,
-      createdAt: now,
-      expiresAt: now + this.deviceTtlSeconds * 1000,
-    });
-    this.persist();
-    return token;
+    if (
+      this.activePassphraseVerifications >=
+      MAX_CONCURRENT_PASSPHRASE_VERIFICATIONS
+    ) {
+      throw new ConnectorAuthError("enrollment_busy");
+    }
+    const pending = this.getPending(authorizationRequestId);
+    if (!pending) {
+      throw new ConnectorAuthError("authorization_request_expired");
+    }
+    this.activeEnrollmentRequests.add(authorizationRequestId);
+    try {
+      this.activePassphraseVerifications += 1;
+      let actual: Buffer;
+      try {
+        actual = await deriveEnrollmentVerifier(
+          passphrase,
+          Buffer.from(this.state.enrollmentSalt, "base64url"),
+        );
+      } finally {
+        this.activePassphraseVerifications -= 1;
+      }
+      const expected = Buffer.from(this.state.enrollmentVerifier, "base64url");
+      if (
+        actual.length !== expected.length ||
+        !timingSafeEqual(actual, expected)
+      ) {
+        this.recordPassphraseFailure(attemptKey, authorizationRequestId);
+        throw new ConnectorAuthError("invalid_enrollment_passphrase");
+      }
+      if (this.getPending(authorizationRequestId) !== pending) {
+        throw new ConnectorAuthError("authorization_request_expired");
+      }
+      this.failedPassphrases.delete(attemptKey);
+      const token = `acd_${randomBytes(32).toString("base64url")}`;
+      const now = this.now();
+      this.state.devices.push({
+        id: `device_${randomBytes(12).toString("base64url")}`,
+        tokenHash: sha256(token),
+        tailscaleUser,
+        createdAt: now,
+        expiresAt: now + this.deviceTtlSeconds * 1000,
+      });
+      this.persist();
+      return token;
+    } finally {
+      this.activeEnrollmentRequests.delete(authorizationRequestId);
+    }
   }
 
   approve(requestId: string): { request: PendingAuthorization; code: string } {
     const request = this.getPending(requestId);
     if (!request) throw new ConnectorAuthError("authorization_request_expired");
+    if (this.codes.size >= MAX_AUTHORIZATION_CODES) {
+      throw new ConnectorAuthError("authorization_capacity");
+    }
     this.pending.delete(requestId);
+    this.clearPassphraseFailures(requestId);
     const code = `acc_${randomBytes(32).toString("base64url")}`;
     const now = this.now();
     this.codes.set(code, {
@@ -303,6 +351,7 @@ export class ConnectorAuth {
     const request = this.getPending(requestId);
     if (!request) throw new ConnectorAuthError("authorization_request_expired");
     this.pending.delete(requestId);
+    this.clearPassphraseFailures(requestId);
     return request;
   }
 
@@ -313,6 +362,7 @@ export class ConnectorAuth {
     appId: string;
     redirectUri: string;
   }): { accessToken: string; grant: GrantView } {
+    this.pruneTransientState();
     const record = this.codes.get(input.code);
     this.codes.delete(input.code);
     if (!record || record.expiresAt <= this.now()) {
@@ -409,32 +459,75 @@ export class ConnectorAuth {
     return true;
   }
 
-  private requirePassphraseAllowed(tailscaleUser: string): void {
-    const attempt = this.failedPassphrases.get(tailscaleUser);
+  private requirePassphraseAllowed(attemptKey: string): void {
+    const attempt = this.failedPassphrases.get(attemptKey);
     if (!attempt) return;
     if (attempt.resetAt <= this.now()) {
-      this.failedPassphrases.delete(tailscaleUser);
+      this.failedPassphrases.delete(attemptKey);
       return;
     }
     if (attempt.count >= 5) throw new ConnectorAuthError("enrollment_locked");
   }
 
-  private recordPassphraseFailure(tailscaleUser: string): void {
-    const current = this.failedPassphrases.get(tailscaleUser);
+  private recordPassphraseFailure(
+    attemptKey: string,
+    authorizationRequestId: string,
+  ): void {
+    const current = this.failedPassphrases.get(attemptKey);
     const now = this.now();
     if (!current || current.resetAt <= now) {
-      this.failedPassphrases.set(tailscaleUser, {
+      if (this.failedPassphrases.size >= MAX_PASSPHRASE_FAILURES) {
+        throw new ConnectorAuthError("enrollment_capacity");
+      }
+      this.failedPassphrases.set(attemptKey, {
         count: 1,
         resetAt: now + 15 * 60 * 1000,
+        requestId: authorizationRequestId,
       });
       return;
     }
     current.count += 1;
   }
 
+  private pruneTransientState(): void {
+    const now = this.now();
+    for (const [id, request] of this.pending) {
+      if (request.expiresAt <= now) {
+        this.pending.delete(id);
+        this.clearPassphraseFailures(id);
+      }
+    }
+    for (const [code, record] of this.codes) {
+      if (record.expiresAt <= now) this.codes.delete(code);
+    }
+    for (const [key, failure] of this.failedPassphrases) {
+      if (failure.resetAt <= now || !this.pending.has(failure.requestId)) {
+        this.failedPassphrases.delete(key);
+      }
+    }
+  }
+
+  private clearPassphraseFailures(requestId: string): void {
+    for (const [key, failure] of this.failedPassphrases) {
+      if (failure.requestId === requestId) this.failedPassphrases.delete(key);
+    }
+  }
+
   private persist(): void {
     persistState(this.statePath, this.state);
   }
+}
+
+function deriveEnrollmentVerifier(
+  passphrase: string,
+  salt: Buffer,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scrypt(passphrase.normalize("NFKC"), salt, 32, (error, derivedKey) => {
+      if (error) reject(error);
+      else resolve(derivedKey);
+    });
+  });
 }
 
 export class ConnectorAuthError extends Error {
