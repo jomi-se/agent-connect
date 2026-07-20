@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f4f6f8" />
+    <title>Agent Connect · 3-minute video cue card</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: #17202b;
+        background: #f4f6f8;
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+        --ink: #17202b;
+        --muted: #566373;
+        --surface: #ffffff;
+        --line: #ccd4dc;
+        --accent: #006b63;
+        --accent-soft: #dff3ef;
+        --signal: #8a5a00;
+        --signal-soft: #fff1c9;
+        --danger: #b42318;
+        --danger-soft: #ffebe8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        min-height: 100vh;
+        background: #f4f6f8;
+      }
+
+      button {
+        font: inherit;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      button:focus-visible {
+        outline: 3px solid #7257d6;
+        outline-offset: 2px;
+      }
+
+      .timer-shell {
+        position: sticky;
+        z-index: 10;
+        top: 0;
+        border-bottom: 1px solid var(--line);
+        background: rgb(244 246 248 / 96%);
+        backdrop-filter: blur(10px);
+      }
+
+      .timer-inner,
+      main {
+        width: min(100%, 42rem);
+        margin-inline: auto;
+      }
+
+      .timer-inner {
+        padding: max(0.75rem, env(safe-area-inset-top)) 1rem 0.85rem;
+      }
+
+      .timer-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .timer {
+        margin: 0;
+        font-variant-numeric: tabular-nums;
+        font-size: clamp(2.5rem, 15vw, 4.5rem);
+        font-weight: 780;
+        letter-spacing: -0.04em;
+        line-height: 0.95;
+      }
+
+      .timer[data-state="warning"] {
+        color: var(--signal);
+      }
+
+      .timer[data-state="done"] {
+        color: var(--danger);
+      }
+
+      .controls {
+        display: flex;
+        gap: 0.5rem;
+      }
+
+      .controls button {
+        min-height: 3rem;
+        border: 1px solid var(--line);
+        border-radius: 0.65rem;
+        padding: 0.65rem 0.9rem;
+        color: var(--ink);
+        background: var(--surface);
+        cursor: pointer;
+        font-weight: 720;
+      }
+
+      .controls .primary {
+        border-color: var(--ink);
+        color: white;
+        background: var(--ink);
+      }
+
+      .current-cue {
+        min-height: 1.4rem;
+        margin: 0.65rem 0 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+        font-weight: 650;
+      }
+
+      .progress-track {
+        height: 0.35rem;
+        margin-top: 0.65rem;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #dce2e7;
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--accent);
+        transform: scaleX(0);
+        transform-origin: left center;
+        transition: transform 160ms linear;
+      }
+
+      main {
+        padding: 1.25rem 1rem calc(4rem + env(safe-area-inset-bottom));
+      }
+
+      header h1 {
+        max-width: 16ch;
+        margin: 0;
+        font-size: 1.7rem;
+        line-height: 1.05;
+        letter-spacing: -0.03em;
+        text-wrap: balance;
+      }
+
+      header p {
+        margin: 0.55rem 0 0;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .preflight {
+        margin: 1.25rem 0 1.5rem;
+        border: 1px solid #dfc56c;
+        border-radius: 0.75rem;
+        padding: 0.9rem 1rem;
+        background: var(--signal-soft);
+      }
+
+      .preflight strong {
+        display: block;
+        margin-bottom: 0.35rem;
+      }
+
+      .preflight ul {
+        margin: 0;
+        padding-left: 1.2rem;
+        color: #59400a;
+        line-height: 1.45;
+      }
+
+      .cues {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .cue {
+        scroll-margin-top: 10rem;
+        border: 1px solid var(--line);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        background: var(--surface);
+        transition:
+          border-color 180ms ease-out,
+          background-color 180ms ease-out;
+      }
+
+      .cue.active {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .cue.complete {
+        opacity: 0.58;
+      }
+
+      .cue-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .cue h2 {
+        margin: 0;
+        font-size: 1.08rem;
+        line-height: 1.2;
+        letter-spacing: -0.015em;
+      }
+
+      .time-range {
+        flex: none;
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+        font-size: 0.84rem;
+        font-weight: 760;
+      }
+
+      .cue p {
+        margin: 0.65rem 0 0;
+        color: #344252;
+        font-size: 1rem;
+        line-height: 1.5;
+        text-wrap: pretty;
+      }
+
+      .cue em {
+        color: var(--ink);
+        font-style: normal;
+        font-weight: 720;
+      }
+
+      .say {
+        border-top: 1px solid rgb(0 107 99 / 22%);
+        padding-top: 0.65rem;
+      }
+
+      .footer-note {
+        margin: 1.4rem 0 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.5;
+        text-align: center;
+      }
+
+      @media (min-width: 42rem) {
+        .timer-inner,
+        main {
+          padding-inline: 1.5rem;
+        }
+
+        .cue {
+          padding: 1.1rem 1.2rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        .cue,
+        .progress-bar {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <section class="timer-shell" aria-label="Recording timer">
+      <div class="timer-inner">
+        <div class="timer-row">
+          <p class="timer" id="timer" role="timer" aria-live="off">3:00</p>
+          <div class="controls">
+            <button class="primary" id="start" type="button">Start</button>
+            <button id="reset" type="button">Reset</button>
+          </div>
+        </div>
+        <p class="current-cue" id="current-cue">Ready · Problem</p>
+        <div class="progress-track" aria-hidden="true">
+          <div class="progress-bar" id="progress"></div>
+        </div>
+      </div>
+    </section>
+
+    <main>
+      <header>
+        <h1>Agent Connect video cues</h1>
+        <p>Target 2:50. Leave ten seconds of safety before the hard limit.</p>
+      </header>
+
+      <aside class="preflight">
+        <strong>Do not forget</strong>
+        <ul>
+          <li>Use audio and stay under 3:00.</li>
+          <li>Say how Codex and GPT-5.6 were used.</li>
+          <li>Label the public demo as a deterministic ACP fixture.</li>
+        </ul>
+      </aside>
+
+      <section class="cues" aria-label="Video sections">
+        <article class="cue active" data-start="0" data-title="Problem">
+          <div class="cue-heading">
+            <h2>Problem</h2>
+            <span class="time-range">0:00–0:25</span>
+          </div>
+          <p>
+            Developer API keys make the developer pay. BYOK moves metered API
+            setup and cost onto every user. <em>Bring your own agent</em> lets
+            users power app features with a coding agent they already operate.
+          </p>
+        </article>
+
+        <article class="cue" data-start="25" data-title="Promise">
+          <div class="cue-heading">
+            <h2>Promise</h2>
+            <span class="time-range">0:25–0:40</span>
+          </div>
+          <p>
+            The app declares a narrow set of typed capabilities. The user
+            connects their coding agent once. No app-specific MCP is installed
+            into the agent beforehand.
+          </p>
+        </article>
+
+        <article class="cue" data-start="40" data-title="Working demo">
+          <div class="cue-heading">
+            <h2>Working demo</h2>
+            <span class="time-range">0:40–1:40</span>
+          </div>
+          <p>
+            Connect → briefly show exact app/tool consent → send one prepared
+            prompt → keep the live activity and visible mutations on screen.
+            Point out that the agent reads live app state before calling
+            app-owned tools.
+          </p>
+          <p class="say">
+            <em>Say:</em> “The public version uses a deterministic ACP fixture
+            with Codex-authored action plans. The same path also works with a
+            live Codex session.”
+          </p>
+        </article>
+
+        <article class="cue" data-start="100" data-title="How the MVP works">
+          <div class="cue-heading">
+            <h2>How the MVP works</h2>
+            <span class="time-range">1:40–2:20</span>
+          </div>
+          <p>
+            Browser SDK defines and executes tools. The user-owned gateway
+            handles identity, consent, grants, and sessions. Tailscale is the
+            current HTTPS path. OmniGENT reaches Codex through ACP.
+            <em>These are MVP adapters, not the public app API.</em>
+          </p>
+        </article>
+
+        <article class="cue" data-start="140" data-title="Security">
+          <div class="cue-heading">
+            <h2>Security boundary</h2>
+            <span class="time-range">2:20–2:35</span>
+          </div>
+          <p>
+            Runtime card pins gateway identity. Enrollment secret stays on the
+            gateway page. Grants bind the exact app origin and tools and can be
+            revoked. Authorization does not make an untrusted app safe.
+          </p>
+        </article>
+
+        <article class="cue" data-start="155" data-title="Built with Codex">
+          <div class="cue-heading">
+            <h2>Built with Codex</h2>
+            <span class="time-range">2:35–2:50</span>
+          </div>
+          <p>
+            Designed and implemented through Codex, primarily with GPT-5.6 Sol.
+            It researched ACP and OmniGENT, built the SDK and gateway, debugged
+            the live loop, and caught an authorization regression in the public
+            Funnel adaptation.
+          </p>
+        </article>
+
+        <article class="cue" data-start="170" data-title="Close">
+          <div class="cue-heading">
+            <h2>Close</h2>
+            <span class="time-range">2:50–2:55</span>
+          </div>
+          <p>
+            <em
+              >“Agent Connect: let developers build agent-powered features while
+              users bring the agent.”</em
+            >
+            End on the demo URL and repo.
+          </p>
+        </article>
+      </section>
+
+      <p class="footer-note">
+        If something runs long, cut protocol detail—not the mutation, security
+        boundary, or Codex/GPT-5.6 sentence.
+      </p>
+    </main>
+
+    <script>
+      const DURATION = 180;
+      const timer = document.querySelector("#timer");
+      const startButton = document.querySelector("#start");
+      const resetButton = document.querySelector("#reset");
+      const progress = document.querySelector("#progress");
+      const currentCue = document.querySelector("#current-cue");
+      const cues = [...document.querySelectorAll(".cue")];
+
+      let running = false;
+      let elapsedBeforeStart = 0;
+      let startedAt = 0;
+      let frame;
+
+      function elapsedSeconds() {
+        if (!running) return elapsedBeforeStart;
+        return Math.min(
+          DURATION,
+          elapsedBeforeStart + (performance.now() - startedAt) / 1000,
+        );
+      }
+
+      function formatTime(seconds) {
+        const remaining = Math.max(0, Math.ceil(DURATION - seconds));
+        return `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
+      }
+
+      function render() {
+        const elapsed = elapsedSeconds();
+        timer.textContent = formatTime(elapsed);
+        progress.style.transform = `scaleX(${Math.min(1, elapsed / DURATION)})`;
+        timer.dataset.state =
+          elapsed >= DURATION ? "done" : elapsed >= 170 ? "warning" : "running";
+
+        let activeIndex = 0;
+        cues.forEach((cue, index) => {
+          if (elapsed >= Number(cue.dataset.start)) activeIndex = index;
+        });
+
+        cues.forEach((cue, index) => {
+          cue.classList.toggle(
+            "active",
+            index === activeIndex && elapsed < DURATION,
+          );
+          cue.classList.toggle(
+            "complete",
+            index < activeIndex || elapsed >= DURATION,
+          );
+        });
+
+        currentCue.textContent =
+          elapsed >= DURATION
+            ? "Time · Wrap now"
+            : `${Math.floor(elapsed / 60)}:${String(Math.floor(elapsed % 60)).padStart(2, "0")} elapsed · ${cues[activeIndex].dataset.title}`;
+
+        if (running && elapsed < DURATION) {
+          frame = requestAnimationFrame(render);
+        } else if (elapsed >= DURATION) {
+          running = false;
+          elapsedBeforeStart = DURATION;
+          startButton.textContent = "Start";
+        }
+      }
+
+      startButton.addEventListener("click", () => {
+        if (elapsedBeforeStart >= DURATION) elapsedBeforeStart = 0;
+        if (running) {
+          elapsedBeforeStart = elapsedSeconds();
+          running = false;
+          cancelAnimationFrame(frame);
+          startButton.textContent = "Resume";
+        } else {
+          running = true;
+          startedAt = performance.now();
+          startButton.textContent = "Pause";
+          render();
+        }
+      });
+
+      resetButton.addEventListener("click", () => {
+        running = false;
+        elapsedBeforeStart = 0;
+        cancelAnimationFrame(frame);
+        startButton.textContent = "Start";
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>
