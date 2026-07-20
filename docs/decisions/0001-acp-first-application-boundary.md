@@ -7,7 +7,7 @@ Date: 2026-07-13
 Pending review: ADR 0006 records a compatibility spike for AG-UI as a more
 direct application-facing standard. ADR 0001 remains in force until that spike
 passes and a superseding decision is accepted. Even if AG-UI becomes the
-application boundary, ACP remains the preferred connector-to-agent adapter.
+application boundary, ACP remains the preferred gateway-to-agent adapter.
 
 ## Context
 

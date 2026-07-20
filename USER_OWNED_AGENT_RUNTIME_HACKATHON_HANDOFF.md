@@ -282,7 +282,7 @@ Possible ways to describe the project without claiming a new standard prematurel
 - **A user-owned intelligence backend for apps**
 - **A bidirectional bridge between apps and coding agents**
 - **An app capability bridge for remote personal agents**
-- **A model-agnostic agent connector with client-side tools**
+- **A model-agnostic agent gateway with client-side tools**
 
 A concise pitch:
 

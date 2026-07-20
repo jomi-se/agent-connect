@@ -121,9 +121,9 @@ and short-lived credentials. A copied long-lived login inside the agent-visible
 home is not an acceptable production boundary.
 
 No application-supplied parameter may disable the sandbox, add mounts, or
-select the fallback. Runtime posture remains a connector/operator choice.
+select the fallback. Runtime posture remains a gateway/operator choice.
 
 The whole-runner option is now tracked as a broader
-[containerized connector appliance](../plan/containerized-connector-appliance.md)
+[containerized gateway deployment](../plan/containerized-gateway-deployment.md)
 exploration, including a simple shared-container installation profile and a
 stronger per-session runner-container target.

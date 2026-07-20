@@ -1,7 +1,7 @@
 # Deploy the Firebase Canvas
 
 The Canvas is a static Firebase Hosting application. Its deployment credential
-does not need to exist on the connector host.
+does not need to exist on the gateway host.
 
 ## One-time Firebase and GitHub setup
 
@@ -24,22 +24,22 @@ does not need to exist on the connector host.
 ## Connect a runtime
 
 The hosted app is independent of the runtime profile. Paste either the
-deterministic judge appliance's public runtime card or a card from a real
-connector created with the
-[real connector guide](../../deploy/real-connector/README.md). The app verifies
-the connector key, redirects to connector-owned authorization, and stores the
+deterministic judge demo's public runtime card or a card from a real
+gateway created with the
+[real gateway guide](../../deploy/real-gateway/README.md). The app verifies
+the gateway key, redirects to gateway-owned authorization, and stores the
 resulting app grant only in the tab's `sessionStorage`.
 
 For the real Tailscale Serve profile, publish only the loopback gateway and
 make the configured public endpoint match the selected HTTPS Serve port
-exactly. Follow the current real-connector guide rather than copying ports from
+exactly. Follow the current real-gateway guide rather than copying ports from
 historical spike notes.
 
 ## Credential boundary
 
 - The Firebase service account exists only as an encrypted GitHub Actions
-  secret and is not copied to the connector VM or built page.
-- The enrollment passphrase is entered only on the connector Origin. It must
+  secret and is not copied to the gateway VM or built page.
+- The enrollment passphrase is entered only on the gateway Origin. It must
   not appear in Firebase configuration, application storage, URLs, logs, or
   source control.
 - The runtime card is public identity and routing material, not an app grant or

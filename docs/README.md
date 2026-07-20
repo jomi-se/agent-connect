@@ -1,7 +1,7 @@
 # Documentation
 
 Start with the root [README](../README.md) for the product, public demo, real
-connector, SDK example, supported platforms, and verification commands.
+gateway, SDK example, supported platforms, and verification commands.
 
 ## Current sources of truth
 
@@ -14,14 +14,14 @@ connector, SDK example, supported platforms, and verification commands.
 - [Current work](plan/current-work.md): canonical unfinished work and bounded
   experiments.
 - [Web application integration](guides/web-app-integration.md): package the SDK,
-  authorize a connector, stream a task, handle browser-owned tools, and revoke
+  authorize a gateway, stream a task, handle browser-owned tools, and revoke
   access.
-- [Real OmniGENT + Codex connector](../deploy/real-connector/README.md): install
+- [Real OmniGENT + Codex gateway](../deploy/real-gateway/README.md): install
   and operate the source reference profile.
-- [Public judge appliance](../deploy/judge-demo/README.md): build, validate,
+- [Public judge demo](../deploy/judge-demo/README.md): build, validate,
   expose, recover, and tear down the deterministic demo profile.
 - [Firebase deployment](guides/firebase-demo-deployment.md): deploy the static
-  Canvas without placing Firebase credentials on the connector.
+  Canvas without placing Firebase credentials on the gateway.
 - [Build Week submission](plan/openai-build-week-submission.md): presentation,
   judge instructions checklist, video outline, and deadline.
 
@@ -31,7 +31,7 @@ documents an unstable prototype. It is not the default browser/gateway path.
 ## Active design investigations
 
 - [AG-UI compatibility](plan/ag-ui-compatibility-spike.md)
-- [Containerized connector appliance](plan/containerized-connector-appliance.md)
+- [Containerized gateway deployment](plan/containerized-gateway-deployment.md)
 
 These are plans, not shipped capabilities.
 
@@ -43,7 +43,7 @@ These are plans, not shipped capabilities.
 - [ADR 0004: Pairing and session broker](decisions/0004-pairing-and-session-broker.md)
 - [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md)
 - [ADR 0006: Explore AG-UI application boundary](decisions/0006-explore-ag-ui-application-boundary.md)
-- [ADR 0007: Runtime card and connector OAuth](decisions/0007-runtime-card-and-connector-oauth.md)
+- [ADR 0007: Runtime card and gateway authorization](decisions/0007-runtime-card-and-gateway-authorization.md)
 - [ADR 0008: Control plane and runtime confinement boundary](decisions/0008-control-plane-and-runtime-confinement-boundary.md)
 
 ## Evidence and research

@@ -1,4 +1,4 @@
-# VAL-TEST-001: Connector policy remains fast and fail-closed
+# VAL-TEST-001: Gateway policy remains fast and fail-closed
 
 Surface: api.
 Needs: the repository's supported Node toolchain; no OmniGENT service, Codex
@@ -13,7 +13,7 @@ decided by Agent Connect is rejected before a provider call.
 Evidence: the normal gateway test command covers the listed policy families;
 focused requester-identity cases assert allowed, missing, unexpected, and
 ambiguous values and zero instrumented provider calls for rejection.
-Fail: a rejected policy case reaches the provider; an enrolled connector can
+Fail: a rejected policy case reaches the provider; an enrolled gateway can
 use the legacy pairing path; a capability or grant crosses its bound origin,
 application, session, or tool snapshot; a revoked or replayed credential is
 accepted; or a caller can use a raw provider session.

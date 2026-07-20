@@ -10,7 +10,7 @@ gateway at a configured URL. HTTPS protects the connection, and the gateway's
 pairing code authorizes the application, but neither fact alone proves that an
 arbitrary destination is the runtime the user intended to enroll.
 
-A connector key accepted on first contact improves continuity only after that
+A gateway key accepted on first contact improves continuity only after that
 first contact. A recognizable hostname is also insufficient: an attacker can
 operate a valid endpoint under the same tunnel provider.
 
@@ -28,8 +28,8 @@ Each profile must define:
 
 1. how the destination is reached;
 2. what provider-backed identity evidence is available about the destination;
-3. how the connector learns the requesting user's identity;
-4. how the user deliberately binds the endpoint to an Agent Connect connector
+3. how the gateway learns the requesting user's identity;
+4. how the user deliberately binds the endpoint to an Agent Connect gateway
    key;
 5. what the browser can independently verify;
 6. the resulting assurance level and limitations.
@@ -37,7 +37,7 @@ Each profile must define:
 The first supported remote profile will be **Tailscale Serve**. Localhost is a
 development profile. Microsoft Dev Tunnels is the next profile to investigate.
 A naked custom URL remains an advanced, unverified profile until it is paired
-through QR/fingerprint transfer or account-backed connector enrollment.
+through QR/fingerprint transfer or account-backed gateway enrollment.
 
 Hostname suffix detection may suggest a profile in the UI. It must never
 establish trust.
@@ -72,18 +72,18 @@ Therefore first-use enrollment must deliberately bind:
 ```text
 expected Tailscale Serve endpoint
 + expected Tailscale owner/login or tailnet context
-+ Agent Connect connector public key
++ Agent Connect gateway public key
 ```
 
-The initial implementation may obtain that binding from the connector's local
+The initial implementation may obtain that binding from the gateway's local
 operator channel: show the Serve endpoint, local Tailscale identity, and
-connector key fingerprint together and export them as a stable runtime card.
+gateway key fingerprint together and export them as a stable runtime card.
 The user stores and transfers that card deliberately. Each application then
-uses a separate connector-hosted OAuth flow to request exact origin/tool
+uses a separate gateway-hosted OAuth flow to request exact origin/tool
 authority. A later managed directory can replace the manual runtime-card
 bootstrap with an account-backed signed enrollment statement.
 
-The connector should inspect its local Tailscale status/LocalAPI and refuse to
+The gateway should inspect its local Tailscale status/LocalAPI and refuse to
 advertise the Tailscale profile when it cannot establish the expected Serve
 configuration. The browser must not infer Serve-versus-Funnel from the
 hostname. The protocol should return a structured assurance result without
@@ -98,7 +98,7 @@ while keeping provider details out of task and tool APIs:
 const connection = await connectAgent({
   runtime: {
     profile: "tailscale-serve",
-    runtimeId: "sha256:<connector-key-thumbprint>",
+    runtimeId: "sha256:<gateway-key-thumbprint>",
     endpoint: "https://device.tailnet.ts.net:8443",
   },
   applicationId: "example-app",
@@ -125,14 +125,14 @@ harness-neutral and must not expose OmniGENT, Codex, or ACP types.
 ## Consequences
 
 - The hackathon path can have a credible two-way authentication story without
-  first building a universal connector CA.
+  first building a universal gateway CA.
 - The Tailscale profile proves authenticated tailnet transport and requester
-  identity at the connector. It does not make destination ownership directly
+  identity at the gateway. It does not make destination ownership directly
   inspectable by arbitrary browser JavaScript.
-- The connector-key enrollment closes that browser visibility gap for future
+- The gateway-key enrollment closes that browser visibility gap for future
   connections: the address routes to a peer, while the pinned key identifies
   the enrolled Agent Connect runtime.
-- After bootstrap, per-app authorization occurs on a connector-owned browser
+- After bootstrap, per-app authorization occurs on a gateway-owned browser
   page and does not require returning to the terminal.
 - Shared nodes, shared tailnets, tagged devices, Funnel, and public custom URLs
   require explicit policy and cannot inherit the personal same-user claim.

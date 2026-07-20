@@ -36,7 +36,7 @@ Do not resemble a futuristic science-fiction AI interface, a generic gradient-he
 
 1. Lead with working proof. Let the visitor run the agent-connected interaction before asking them to absorb the architecture.
 2. Make the invisible flow visible. Reflect authorization, agent work, tool invocation, browser execution, and completion in the interface as they occur.
-3. Keep simple things simple and serious things legible. Show the tiny browser integration first, then progressively reveal the connector, transport, orchestration, and security boundaries behind it.
+3. Keep simple things simple and serious things legible. Show the tiny browser integration first, then progressively reveal the gateway, transport, orchestration, and security boundaries behind it.
 4. Explain with real artifacts. Prefer the actual runtime state, tool events, SDK snippets, and operator commands over abstract claims.
 5. Treat mobile as a first-class demonstration surface. The complete flow must remain understandable and operable from a phone.
 6. Share behavior, not layout. Mobile and desktop use the same authorization and tool controller but may use different hierarchy, copy density, and disclosure patterns.

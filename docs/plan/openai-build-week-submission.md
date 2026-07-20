@@ -30,7 +30,7 @@ vocabularies such as AG-UI and ACP where they fit, without presenting Agent
 Connect's current custom bridge as an established standard.
 
 The security ceremony is profile-dependent rather than mandatory everywhere.
-A user controlling both a private application and connector may preconfigure a
+A user controlling both a private application and gateway may preconfigure a
 lighter trusted profile. Cross-origin, tunneled, shared, or public deployments
 need stronger enrollment, consent, revocation, and usage controls. The demo
 shows the stronger boundary because it is the reusable product case, not
@@ -42,7 +42,7 @@ clear hierarchy:
 1. **Product:** a developer tool for connecting applications to user-owned
    agents through one harness-neutral application contract.
 2. **Demonstration:** Firebase Canvas lends ten read/write tools across three
-   example applications after connector authentication and app consent.
+   example applications after gateway authentication and app consent.
 3. **End-user benefit:** useful agent behavior inside an application without
    exposing raw provider session identifiers or requiring an application MCP
    server to be installed in advance.
@@ -148,10 +148,10 @@ The shortest coherent story is:
    task instead of requiring a permanent application MCP installation.
 2. **Connect once, separately from prompting.** Paste the public runtime card
    and start authorization. Explicitly point out that the runtime card is
-   public but pins the connector identity, while the enrollment passphrase is
-   entered only on the connector-owned HTTPS page and is never exposed to the
+   public but pins the gateway identity, while the enrollment passphrase is
+   entered only on the gateway-owned HTTPS page and is never exposed to the
    application.
-3. **Make consent legible.** Briefly show the connector-owned consent surface:
+3. **Make consent legible.** Briefly show the gateway-owned consent surface:
    application identity and Origin, callback, expiry, and the exact tools being
    requested. State plainly that authorization grants capability; it cannot
    make an untrusted application trustworthy.
@@ -160,7 +160,7 @@ The shortest coherent story is:
    and send its prepared prompt. Keep the live request/tool/result animation in
    frame long enough to show that the coding-agent side asks for app-owned
    operations and the page executes them visibly.
-5. **Show that authority remains controllable.** Open the connector grant list,
+5. **Show that authority remains controllable.** Open the gateway grant list,
    revoke the application, and show that the old capability can no longer
    create an agent session. This is the clearest compact proof that the gateway
    is more than a transport proxy.
@@ -172,7 +172,7 @@ The shortest coherent story is:
 
 ### Required honesty about the two proofs
 
-The public judge appliance uses a deterministic ACP agent fixture so judges can
+The public judge demo uses a deterministic ACP agent fixture so judges can
 run the full authorization, OmniGENT, ACP, request-scoped MCP, browser-tool, and
 page-mutation path without consuming a model account. Its three action plans
 were authored from real Codex interactions, but the public fixture must not be
@@ -250,18 +250,18 @@ claiming those approaches are always wrong.
 
 ## Work remaining before submission
 
-The implementation, MIT license, source-installable real connector, packaged
-SDK test path, deterministic public appliance, and `/feedback` upload are
+The implementation, MIT license, source-installable real gateway, packaged
+SDK test path, deterministic public demo, and `/feedback` upload are
 complete. The remaining work is presentation and release operation:
 
 1. Rehearse exact private judge instructions from a clean browser, including
-   the runtime card, connector-only passphrase entry, one rich Canvas task,
+   the runtime card, gateway-only passphrase entry, one rich Canvas task,
    grant revocation, logout, and reconnect.
 2. Record and publish the narrated video under three minutes. Clearly separate
    the deterministic public fixture from footage of the real Codex profile.
 3. Confirm repository access, public demo health, YouTube visibility, all live
    fields, and the submitted state before `2026-07-22T00:00:00Z`.
-4. Keep the judge appliance available through `2026-08-06T00:00:00Z`, then use
+4. Keep the judge demo available through `2026-08-06T00:00:00Z`, then use
    its documented Funnel kill switch and destroy its disposable credentials.
 
 Do not present pending-action durability, a hardened real-agent sandbox, npm

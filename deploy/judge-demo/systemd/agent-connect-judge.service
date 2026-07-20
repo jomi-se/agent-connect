@@ -1,5 +1,5 @@
 [Unit]
-Description=Agent Connect public judge appliance and Tailscale Funnel
+Description=Agent Connect public judge demo and Tailscale Funnel
 Requires=docker.service tailscaled.service
 After=network-online.target docker.service tailscaled.service
 Wants=network-online.target

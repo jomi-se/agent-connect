@@ -92,7 +92,7 @@ export function createGateway(options: GatewayOptions) {
   }
   if (dynamicAppEnrollment && !options.authStatePath) {
     throw new TypeError(
-      "dynamic app enrollment requires connector authorization state",
+      "dynamic app enrollment requires gateway authorization state",
     );
   }
   if (!publicDemo && options.allowedTailscaleUsers.size === 0) {
@@ -1090,7 +1090,7 @@ function consentPage(
 ${
   deviceEnrolled
     ? '<p class="ok">This browser device is enrolled.</p>'
-    : '<label>Enrollment passphrase<input name="passphrase" type="password" autocomplete="current-password" required><small>Enter the passphrase saved when you installed this connector. It stays on this connector-owned page.</small></label>'
+    : '<label>Enrollment passphrase<input name="passphrase" type="password" autocomplete="current-password" required><small>Enter the passphrase saved when you installed this gateway. It stays on this gateway-owned page.</small></label>'
 }
 <div class="actions"><button name="decision" value="approve">Allow</button><button class="secondary" name="decision" value="deny" formnovalidate>Deny</button></div>
 </form></main>`,

@@ -11,7 +11,7 @@ live in [`deploy/`](../../deploy/).
 
 The repository currently contains two end-to-end profiles:
 
-- a public, deterministic judge appliance exposed through Tailscale Funnel;
+- a public, deterministic judge demo exposed through Tailscale Funnel;
   it exercises enrollment, consent, PKCE, OmniGENT, ACP, request-scoped MCP,
   browser-owned tools, visible mutations, revocation, and reboot recovery
   without a model credential; and
@@ -47,14 +47,14 @@ The engineering MVP is complete. Before the Build Week deadline:
 3. Confirm the Devpost entry contains the `/feedback` identifier, public demo
    URL, private runtime card/passphrase delivery, repository access, and
    developer-tool installation/testing path.
-4. Run both verification commands above, check the public appliance after a
+4. Run both verification commands above, check the public demo after a
    restart, and confirm the submission is actually submitted rather than saved.
-5. Keep the judge appliance healthy through `2026-08-06T00:00:00Z`, then
+5. Keep the judge demo healthy through `2026-08-06T00:00:00Z`, then
    disable Funnel and destroy its disposable state.
 
 The detailed presentation checklist is in
 [the submission guide](openai-build-week-submission.md). The deployment and
-kill-switch procedure is in [the judge appliance runbook](../../deploy/judge-demo/README.md).
+kill-switch procedure is in [the judge demo runbook](../../deploy/judge-demo/README.md).
 
 ## Reliability and operator work
 
@@ -67,7 +67,7 @@ These are real product gaps, not submission blockers:
 3. Expire and remove successful session workspaces and replaced provider
    sessions; failed launches are already cleaned immediately.
 4. Add operator commands for runtime-card re-export, device management,
-   connector-key rotation, recovery, and audit history.
+   gateway-key rotation, recovery, and audit history.
 5. Add one coherent public-endpoint usage policy. Transient authorization
    state and passphrase verification are bounded today, but sustained request
    budgets and downstream-work termination on revocation are not complete.
@@ -84,7 +84,7 @@ application-owned deduplication. Do not claim generic exactly-once execution.
 
 1. Publish `@agent-connect/web` after its compatibility policy and security
    claims match the tested package.
-2. Turn the source launcher into a reproducible connector appliance with
+2. Turn the source launcher into a reproducible gateway deployment with
    deliberate credential injection and an explicit update path.
 3. Add another provider only after it proves the existing provider-neutral
    application contract. Do not add a second proprietary session protocol
@@ -96,7 +96,7 @@ application-owned deduplication. Do not claim generic exactly-once execution.
   run/event/frontend-tool vocabulary can replace the custom browser/gateway
   event language while Agent Connect retains identity, authorization, runtime
   ownership, and recovery.
-- [Containerized connector appliance](containerized-connector-appliance.md):
+- [Containerized gateway deployment](containerized-gateway-deployment.md):
   distinguish a convenient shared appliance from a stronger per-session
   runner boundary. Containerization alone is not credential confinement or
   host attestation.

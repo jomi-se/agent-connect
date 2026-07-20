@@ -67,14 +67,14 @@ unchanged.
 Prove that AG-UI begins only after Agent Connect establishes an authorized
 application session. The spike must preserve:
 
-- connector identity and runtime enrollment boundary;
+- gateway identity and runtime enrollment boundary;
 - exact Origin and requester checks;
 - app identity/key and requested scope binding;
 - fixed/canonical tool-snapshot authorization;
 - expiring, revocable session authority;
 - the future authenticated encrypted channel boundary.
 
-Do not encode pairing secrets, connector private identity, raw provider ids, or
+Do not encode pairing secrets, gateway private identity, raw provider ids, or
 bearer credentials inside AG-UI messages or shared state.
 
 ## Validation cases
