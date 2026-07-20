@@ -191,7 +191,7 @@
 
       .cue h2 {
         margin: 0;
-        font-size: clamp(2rem, 8vw, 2.5rem);
+        font-size: clamp(2.3rem, 9vw, 2.8rem);
         line-height: 1.05;
         letter-spacing: -0.03em;
         text-wrap: balance;
@@ -208,7 +208,7 @@
       .cue p {
         margin: 1rem 0 0;
         color: #344252;
-        font-size: clamp(1.65rem, 6.5vw, 2rem);
+        font-size: clamp(2rem, 8.2vw, 2.45rem);
         line-height: 1.38;
         text-wrap: pretty;
       }
@@ -217,12 +217,6 @@
         color: var(--ink);
         font-style: normal;
         font-weight: 720;
-      }
-
-      .say {
-        border-top: 1px solid rgb(0 107 99 / 22%);
-        padding-top: 0.85rem;
-        font-size: clamp(1.25rem, 5vw, 1.5rem) !important;
       }
 
       .next-preview {
@@ -244,14 +238,14 @@
 
       .next-preview strong {
         display: block;
-        font-size: 1.3rem;
+        font-size: 1.5rem;
         line-height: 1.25;
       }
 
       .next-preview p {
         margin: 0.25rem 0 0;
         color: var(--muted);
-        font-size: 1.05rem;
+        font-size: 1.18rem;
         line-height: 1.35;
       }
 
@@ -375,16 +369,28 @@
           class="cue active"
           data-start="0"
           data-title="Problem"
-          data-preview="API key vs BYOK vs bring your own agent"
+          data-preview="Developer API keys put every AI request on your bill"
         >
           <div class="cue-heading">
             <h2>Problem</h2>
-            <span class="time-range">0:00–0:25</span>
+            <span class="time-range">0:00–0:12</span>
+          </div>
+          <p>Developer API keys make the developer pay for every AI request.</p>
+        </article>
+
+        <article
+          class="cue"
+          data-start="12"
+          data-title="The alternative"
+          data-preview="BYOK shifts the cost; bring your own agent changes it"
+        >
+          <div class="cue-heading">
+            <h2>The alternative</h2>
+            <span class="time-range">0:12–0:25</span>
           </div>
           <p>
-            Developer API keys make the developer pay. BYOK moves metered API
-            setup and cost onto every user. <em>Bring your own agent</em> lets
-            users power app features with a coding agent they already operate.
+            BYOK shifts metered cost onto users. <em>Bring your own agent</em>
+            lets them use a coding agent they already operate.
           </p>
         </article>
 
@@ -399,29 +405,55 @@
             <span class="time-range">0:25–0:40</span>
           </div>
           <p>
-            The app declares a narrow set of typed capabilities. The user
-            connects their coding agent once. No app-specific MCP is installed
-            into the agent beforehand.
+            The app lends narrow, typed capabilities. The user connects once. No
+            app-specific MCP is installed beforehand.
           </p>
         </article>
 
         <article
           class="cue"
           data-start="40"
-          data-title="Working demo"
-          data-preview="Consent, one prompt, live state, visible mutations"
+          data-title="Demo: connect"
+          data-preview="Show the gateway consent screen"
         >
           <div class="cue-heading">
-            <h2>Working demo</h2>
-            <span class="time-range">0:40–1:40</span>
+            <h2>Connect</h2>
+            <span class="time-range">0:40–0:55</span>
           </div>
           <p>
-            Connect → show exact app/tool consent → send one prompt. Keep the
-            activity and visible mutations on screen. The agent reads live app
-            state, then calls app-owned tools.
+            Show the exact app origin and requested tools on the gateway’s
+            consent screen.
           </p>
-          <p class="say">
-            <em>Say:</em> “The public demo uses a deterministic ACP fixture with
+        </article>
+
+        <article
+          class="cue"
+          data-start="55"
+          data-title="Demo: mutate"
+          data-preview="One prompt, live state, visible mutations"
+        >
+          <div class="cue-heading">
+            <h2>Make it move</h2>
+            <span class="time-range">0:55–1:15</span>
+          </div>
+          <p>
+            Send one prompt. Keep the activity and visible mutations on screen.
+            The agent reads live state, then calls app-owned tools.
+          </p>
+        </article>
+
+        <article
+          class="cue"
+          data-start="75"
+          data-title="Demo: disclose the fixture"
+          data-preview="Be explicit about deterministic vs live Codex"
+        >
+          <div class="cue-heading">
+            <h2>Be explicit</h2>
+            <span class="time-range">1:15–1:40</span>
+          </div>
+          <p>
+            “The public demo uses a deterministic ACP fixture with
             Codex-authored plans. The same path works with live Codex.”
           </p>
         </article>
@@ -429,18 +461,32 @@
         <article
           class="cue"
           data-start="100"
-          data-title="How the MVP works"
-          data-preview="SDK, gateway, Tailscale, OmniGENT, ACP"
+          data-title="MVP: browser side"
+          data-preview="SDK declares and executes app-owned tools"
         >
           <div class="cue-heading">
-            <h2>How the MVP works</h2>
-            <span class="time-range">1:40–2:20</span>
+            <h2>Browser side</h2>
+            <span class="time-range">1:40–2:00</span>
           </div>
           <p>
-            Browser SDK defines and executes tools. The user-owned gateway
-            handles identity, consent, grants, and sessions. Tailscale is the
-            current HTTPS path. OmniGENT reaches Codex through ACP.
-            <em>These are MVP adapters, not the public app API.</em>
+            The SDK declares the tools, executes them in the app, and keeps the
+            public API agent-neutral.
+          </p>
+        </article>
+
+        <article
+          class="cue"
+          data-start="120"
+          data-title="MVP: gateway side"
+          data-preview="Gateway, Tailscale, OmniGENT, ACP"
+        >
+          <div class="cue-heading">
+            <h2>Gateway side</h2>
+            <span class="time-range">2:00–2:20</span>
+          </div>
+          <p>
+            The user-owned gateway handles identity and grants. Tailscale,
+            OmniGENT, and ACP are the current MVP adapters.
           </p>
         </article>
 
@@ -451,13 +497,12 @@
           data-preview="Pinned identity, scoped grants, revocation"
         >
           <div class="cue-heading">
-            <h2>Security boundary</h2>
+            <h2>Security</h2>
             <span class="time-range">2:20–2:35</span>
           </div>
           <p>
-            Runtime card pins gateway identity. Enrollment secret stays on the
-            gateway page. Grants bind the exact app origin and tools and can be
-            revoked. Authorization does not make an untrusted app safe.
+            Gateway identity is pinned. Grants bind the exact app and tools and
+            can be revoked. Authorization does not create trust.
           </p>
         </article>
 
@@ -472,10 +517,8 @@
             <span class="time-range">2:35–2:50</span>
           </div>
           <p>
-            Designed and implemented through Codex, primarily with GPT-5.6 Sol.
-            It researched ACP and OmniGENT, built the SDK and gateway, debugged
-            the live loop, and caught an authorization regression in the public
-            Funnel adaptation.
+            Built through Codex with GPT-5.6 Sol: research, SDK, gateway, live
+            debugging, and an authorization-regression catch.
           </p>
         </article>
 
@@ -487,13 +530,10 @@
         >
           <div class="cue-heading">
             <h2>Close</h2>
-            <span class="time-range">2:50–2:55</span>
+            <span class="time-range">2:50–3:00</span>
           </div>
           <p>
-            <em
-              >“Agent Connect: let developers build agent-powered features while
-              users bring the agent.”</em
-            >
+            <em>Build agent-powered features while users bring the agent.</em>
             End on the demo URL and repo.
           </p>
         </article>
@@ -502,10 +542,12 @@
       <aside class="next-preview" id="next-preview" aria-live="polite">
         <div class="next-meta">
           <span id="next-label">Coming next</span>
-          <span id="next-time">in 25s</span>
+          <span id="next-time">in 12s</span>
         </div>
-        <strong id="next-title">Promise</strong>
-        <p id="next-summary">The app lends typed tools; no preinstalled MCP</p>
+        <strong id="next-title">The alternative</strong>
+        <p id="next-summary">
+          BYOK shifts the cost; bring your own agent changes it
+        </p>
       </aside>
 
       <nav class="deck-nav" aria-label="Cue navigation">
