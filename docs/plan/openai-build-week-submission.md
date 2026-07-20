@@ -248,20 +248,124 @@ lends typed tools to the user's agent. Contrast it factually with preinstalling
 a permanent application MCP server or exposing raw provider sessions, without
 claiming those approaches are always wrong.
 
+## Project-description outline
+
+The final Devpost description should be written in the entrant's own voice.
+Use the questions and evidence below as scaffolding rather than copying them as
+submission prose.
+
+### Inspiration
+
+- What happens when a small app developer wants an AI feature today?
+- Why are both developer-funded API usage and conventional BYOK awkward for a
+  shopping list, project board, text editor, or other ordinary application?
+- What changed once coding agents became part of subscriptions people already
+  use?
+- State the personal origin honestly: this began as a way to let a remotely
+  running Codex improve the entrant's shopping-list application.
+
+### What it does
+
+- A web app declares narrow, typed operations and their browser-side handlers.
+- A user connects a gateway they run at their own boundary.
+- The user sees the exact application Origin and requested tools before
+  granting access.
+- The app can send a prompt; the coding agent reads current app state and calls
+  those app-owned tools; visible changes happen inside the page.
+- No app-specific MCP server has to be installed into the coding agent first.
+- Name the three demo surfaces: project-board editing, document review, and
+  product research.
+
+### How it was built
+
+- Browser-safe TypeScript SDK: tool declarations, runtime-card verification,
+  authorization redirect, sessions, streamed events, and correlated tool
+  results.
+- User-owned gateway: durable identity, enrollment, consent, origin- and
+  tool-bound grants, opaque sessions, revocation, and provider isolation.
+- Current real-agent composition: Tailscale Serve, Agent Connect gateway,
+  OmniGENT, ACP, `codex-acp`, Codex, and a request-scoped MCP relay back to the
+  browser.
+- Public judge composition: the same boundaries with a deterministic ACP
+  fixture replaying Codex-authored plans, clearly labelled as deterministic.
+- Separate implemented behavior from intended adapters and deployment
+  profiles.
+
+### Challenges
+
+- Dynamically lending tools to an already-running coding-agent setup without
+  preinstalling one MCP per application.
+- Distinguishing two directions of trust: the gateway must authorize the app,
+  and the app must verify that it reached the user's enrolled gateway.
+- Keeping the enrollment passphrase on the gateway-owned Origin so the app can
+  never read it.
+- Healing downstream sessions when the immutable tool snapshot changes.
+- Making the public demo reproducible without exposing or spending a personal
+  Codex subscription.
+- Finding and fixing the anonymous grant-list/revocation route when moving from
+  a private Tailscale profile to a public Funnel profile.
+
+### Accomplishments
+
+- A real browser to gateway to OmniGENT to Codex to browser-tool round trip
+  works.
+- An arbitrary web Origin can enroll through the authorization flow instead of
+  being configured in advance.
+- The judge demo survives VM restarts and needs no judge installation or paid
+  model account.
+- The browser SDK and real gateway can also be installed from source for a
+  third-party integration test.
+- Fast gateway behavior tests and an OmniGENT integration layer exercise the
+  authentication and orchestration boundaries without paying for model calls.
+
+### What Codex and GPT-5.6 contributed
+
+- Mention the primary `gpt-5.6-sol` build thread and `/feedback` identifier.
+- Give concrete examples: protocol research, boundary design, SDK and gateway
+  implementation, tests, live debugging, security review, and documentation.
+- Include the grant-route finding as one specific example of Codex improving
+  the implementation rather than merely generating boilerplate.
+- Preserve the human decisions: choosing the product problem, challenging
+  over-engineering, narrowing the demo, testing on mobile, and deciding which
+  security claims were honest.
+
+### What comes next
+
+- Keep the application contract stable while making agents, conductors,
+  transports, and deployment profiles swappable.
+- Explore standardized event and agent adapters such as AG-UI and ACP without
+  claiming the current bridge is already a universal standard.
+- Improve packaging, sandbox guidance, durability, and npm distribution.
+- Return to the original shopping-list integration after the hackathon.
+
+### Closing test
+
+After writing, verify that a judge can answer these four questions without
+reading the repository:
+
+1. Who has this problem?
+2. What visibly works today?
+3. Why is this different from an API key or a permanent MCP installation?
+4. Which parts are the current proof, and which parts are the longer-term
+   direction?
+
 ## Work remaining before submission
 
-The implementation, MIT license, source-installable real gateway, packaged
-SDK test path, deterministic public demo, and `/feedback` upload are
-complete. The remaining work is presentation and release operation:
+The implementation, MIT license, source-installable real gateway, packaged SDK
+test path, deterministic public demo, `/feedback` upload, and edited video are
+complete. The remaining work is submission packaging and release operation:
 
-1. Rehearse exact private judge instructions from a clean browser, including
-   the runtime card, gateway-only passphrase entry, one rich Canvas task,
-   grant revocation, logout, and reconnect.
-2. Record and publish the narrated video under three minutes. Clearly separate
-   the deterministic public fixture from footage of the real Codex profile.
-3. Confirm repository access, public demo health, YouTube visibility, all live
+1. Ensure the YouTube URL already stored in the Devpost draft serves the edited
+   2:54 cut: trim the existing upload in YouTube Studio or upload the edited
+   file and replace the URL. Confirm that it is public.
+2. Choose and upload the 3:2 thumbnail and gallery images, then write the
+   project description from the outline above in the entrant's own voice.
+3. Recheck the private judge instructions from a clean browser: runtime card,
+   gateway-only passphrase entry, one rich Canvas task, grant revocation,
+   logout, and reconnect.
+4. Confirm repository access, public demo health, YouTube visibility, all live
    fields, and the submitted state before `2026-07-22T00:00:00Z`.
-4. Keep the judge demo available through `2026-08-06T00:00:00Z`, then use
+5. Keep the judge demo available through `2026-08-06T00:00:00Z`, then use
    its documented Funnel kill switch and destroy its disposable credentials.
 
 Do not present pending-action durability, a hardened real-agent sandbox, npm
