@@ -10,6 +10,8 @@
 - [Current work](plan/current-work.md): canonical pending-work order through the submission deadline.
 - [Private demo auth validation](plan/private-demo-auth-validation.md): canonical VM startup and phone test runbook source.
 - [Styled private demo operator page](plan/private-demo-auth-validation.html): self-contained, mobile-friendly runbook with copyable commands.
+- [Real OmniGENT + Codex connector](../deploy/real-connector/README.md): source-installable private reference profile.
+- [Web application integration](guides/web-app-integration.md): install the SDK tarball, authorize a connector, and handle browser-owned tools.
 - [Tailscale transport identity plan](plan/tailscale-transport-identity.md): first trusted remote profile and its validation cases.
 - [Connector OAuth authorization plan](plan/connector-oauth-authorization.md): one-time runtime-card bootstrap followed by same-device per-app consent.
 - [Secure enrollment implementation](plan/secure-enrollment-implementation.md): implemented credential boundaries, configuration, validation contracts, and deferred hardening.

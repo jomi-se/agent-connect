@@ -16,8 +16,8 @@ Implemented and proven on a real remote browser:
 - gateway-owned OmniGENT session provisioning and unhealthy-runner healing;
 - Firebase Canvas calling a dynamically supplied `set_page_message` tool
   through Codex;
-- private Tailscale Serve HTTPS transport with Origin and requester
-  allowlists;
+- private Tailscale Serve HTTPS transport with requester allowlisting and
+  connector-owned enrollment for previously unknown HTTPS app Origins;
 - durable connector identity, first-device enrollment, connector-owned consent,
   PKCE exchange, revocable scoped grant, and post-revocation rejection through
   the deployed phone flow;
@@ -28,13 +28,29 @@ Implemented and proven on a real remote browser:
 - reboot-resistant public judge profile with a frozen Firebase application and
   tool authority, deterministic ACP runtime, containerized gateway stack, and
   Tailscale Funnel exposure;
-- a nine-tool public Canvas snapshot covering project-board edits, document
-  review, and recorded product research, with one connection step separated
-  from repeatable task execution and three Codex-authored deterministic plans;
+- a ten-tool public Canvas snapshot covering a shared live-state read,
+  project-board edits, document review, and recorded product research, with one
+  connection step separated from repeatable task execution and three
+  Codex-authored deterministic plans;
 - an isolated rebuild of the judge appliance completed the real
-  authorization, OmniGENT, ACP, request-scoped MCP, three-tool project-board
-  plan, result-return, revocation, and rejected-reuse smoke on 2026-07-18. The
+  authorization, OmniGENT, ACP, request-scoped MCP, live app-state retrieval,
+  three-tool project-board plan, result-return, revocation, and rejected-reuse
+  smoke on 2026-07-18. A separate loopback-only rebuild repeated that proof on
+  2026-07-20 with `get_current_app_state` followed by the three write tools. The
   live Funnel profile has not yet been replaced with this new snapshot.
+- a source-installable real connector supervisor now starts isolated OmniGENT
+  server/host state, the gateway, a narrow compatibility wrapper around the
+  pinned `codex-acp`, and real Codex from a dedicated login; on 2026-07-20 a
+  previously unknown HTTPS Origin completed signed connector proof, consent,
+  PKCE, opaque session creation, one unpredictable application tool call,
+  result return, and the same real Codex turn;
+- the real connector now derives Codex MCP policy from the authorized tool
+  snapshot: a fresh `read-only` Codex turn received exactly the ten Canvas
+  tools through `enabled_tools`, preapproved only those tools, read the live
+  project board twice, and completed three browser-owned mutations without
+  `auto_review` or a downstream approval pause;
+- `@agent-connect/web` now packs into a normal npm tarball and passes a clean
+  external-consumer install/import check; it is not yet published to npm.
 
 Testing strategy accepted for the connector/provider boundary:
 
@@ -63,15 +79,16 @@ Implemented on 2026-07-16:
 
 Not implemented:
 
-- dynamic application enrollment for previously unknown HTTPS Origins; the
-  normal profile still requires `AGENT_CONNECT_ALLOWED_ORIGINS` at startup,
-  while the frozen public judge profile intentionally remains allowlisted;
 - connector-card/passphrase recovery, export, and key rotation commands;
 - durable pending authorization requests, codes, provider mappings, or
   unresolved application tool calls;
 - a production confinement boundary for a malicious authorized application;
-- container appliance, AG-UI adapter, stable ACP browser adapter, second
-  provider, or published SDK package.
+- a first-class session/developer-context field distinct from the user's task
+  prompt; the Canvas currently composes its stable instructions into each task
+  envelope;
+- AG-UI adapter, stable ACP browser adapter, second provider, or published npm
+  SDK package. The source-installable connector, public judge appliance, and
+  clean packed-SDK consumer smoke are implemented.
 
 The VM bubblewrap experiment is evidence, not a usable security profile. Its
 outer probes passed, but the dynamic MCP path failed during startup and the
