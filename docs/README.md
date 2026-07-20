@@ -1,29 +1,44 @@
 # Documentation
 
+Start with the root [README](../README.md) for the product, public demo, real
+connector, SDK example, supported platforms, and verification commands.
+
 ## Current sources of truth
 
-- [Mission](mission.md): product objective, accepted scope, and success conditions.
-- [Scope inventory](scope-inventory.md): capabilities, risks, validation surfaces, and deferred work.
-- [Target architecture](architecture/target-architecture.md): component boundaries and protocol translations.
-- [Narrow protocol profile](architecture/narrow-protocol-profile.md): the deliberately constrained hackathon wire behavior.
-- [Hackathon plan](plan/hackathon.md): milestones and exit criteria.
-- [Current work](plan/current-work.md): canonical pending-work order through the submission deadline.
-- [Private demo auth validation](plan/private-demo-auth-validation.md): canonical VM startup and phone test runbook source.
-- [Styled private demo operator page](plan/private-demo-auth-validation.html): self-contained, mobile-friendly runbook with copyable commands.
-- [Real OmniGENT + Codex connector](../deploy/real-connector/README.md): source-installable private reference profile.
-- [Web application integration](guides/web-app-integration.md): install the SDK tarball, authorize a connector, and handle browser-owned tools.
-- [Tailscale transport identity plan](plan/tailscale-transport-identity.md): first trusted remote profile and its validation cases.
-- [Connector OAuth authorization plan](plan/connector-oauth-authorization.md): one-time runtime-card bootstrap followed by same-device per-app consent.
-- [Secure enrollment implementation](plan/secure-enrollment-implementation.md): implemented credential boundaries, configuration, validation contracts, and deferred hardening.
-- [AG-UI compatibility spike](plan/ag-ui-compatibility-spike.md): pending application-protocol comparison against the passing OmniGENT path.
-- [Containerized connector appliance](plan/containerized-connector-appliance.md): pending single-image, ephemeral-workspace, and per-session-container deployment track.
-- [Judge demo environment](plan/judge-demo-environment.md): submission-critical isolated connector on the existing VM through public Tailscale Funnel.
-- [OpenAI Build Week submission guide](plan/openai-build-week-submission.md): category, positioning, evidence, demo, and submission checklist.
+- [Mission](mission.md): product promise, current strategy, acceptance boundary,
+  and non-goals.
+- [Scope inventory](scope-inventory.md): implemented, deferred, and explicitly
+  unsupported capabilities plus their validation surfaces.
+- [Target architecture](architecture/target-architecture.md): component and
+  trust boundaries, current provider path, and future adapter seams.
+- [Current work](plan/current-work.md): canonical unfinished work and bounded
+  experiments.
+- [Web application integration](guides/web-app-integration.md): package the SDK,
+  authorize a connector, stream a task, handle browser-owned tools, and revoke
+  access.
+- [Real OmniGENT + Codex connector](../deploy/real-connector/README.md): install
+  and operate the source reference profile.
+- [Public judge appliance](../deploy/judge-demo/README.md): build, validate,
+  expose, recover, and tear down the deterministic demo profile.
+- [Firebase deployment](guides/firebase-demo-deployment.md): deploy the static
+  Canvas without placing Firebase credentials on the connector.
+- [Build Week submission](plan/openai-build-week-submission.md): presentation,
+  judge instructions checklist, video outline, and deadline.
 
-## Decisions
+The [experimental ACP/MCP-over-ACP profile](architecture/narrow-protocol-profile.md)
+documents an unstable prototype. It is not the default browser/gateway path.
+
+## Active design investigations
+
+- [AG-UI compatibility](plan/ag-ui-compatibility-spike.md)
+- [Containerized connector appliance](plan/containerized-connector-appliance.md)
+
+These are plans, not shipped capabilities.
+
+## Accepted decisions
 
 - [ADR 0001: ACP-first application boundary](decisions/0001-acp-first-application-boundary.md)
-- [ADR 0002: OmniGENT as conductor candidate](decisions/0002-omnigent-conductor.md)
+- [ADR 0002: OmniGENT as the first provider](decisions/0002-omnigent-conductor.md)
 - [ADR 0003: Tailnet HTTPS gateway](decisions/0003-tailnet-https-gateway.md)
 - [ADR 0004: Pairing and session broker](decisions/0004-pairing-and-session-broker.md)
 - [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md)
@@ -31,14 +46,19 @@
 - [ADR 0007: Runtime card and connector OAuth](decisions/0007-runtime-card-and-connector-oauth.md)
 - [ADR 0008: Control plane and runtime confinement boundary](decisions/0008-control-plane-and-runtime-confinement-boundary.md)
 
-## Research
+## Evidence and research
 
+- [Original product/runtime handoff](../USER_OWNED_AGENT_RUNTIME_HACKATHON_HANDOFF.md)
+- [OmniGENT/Codex nonce experiment](experiments/omnigent-codex-nonce.md)
+- [Grant-route security retrospective](plan/grant-route-security-retrospective.md)
 - [Landscape snapshot, 2026-07-13](research/2026-07-13-landscape.md)
-- [Mutual runtime identity without hardware attestation, 2026-07-14](research/2026-07-14-mutual-runtime-identity.md)
-- [AG-UI application-boundary fit, 2026-07-14](research/2026-07-14-ag-ui-fit.md)
-- [Malicious-application runtime threat model, 2026-07-14](research/2026-07-14-malicious-application-runtime-threat-model.md)
-- [OmniGENT VM-local sandbox spike, 2026-07-14](research/2026-07-14-omnigent-vm-sandbox-spike.md)
-- [OpenAI Build Week live requirements refresh, 2026-07-14](research/2026-07-14-openai-build-week-refresh.md)
-- [Original repository handoff](../USER_OWNED_AGENT_RUNTIME_HACKATHON_HANDOFF.md)
+- [Mutual runtime identity, 2026-07-14](research/2026-07-14-mutual-runtime-identity.md)
+- [AG-UI fit, 2026-07-14](research/2026-07-14-ag-ui-fit.md)
+- [Malicious-application threat model, 2026-07-14](research/2026-07-14-malicious-application-runtime-threat-model.md)
+- [OmniGENT sandbox spike, 2026-07-14](research/2026-07-14-omnigent-vm-sandbox-spike.md)
+- [Build Week requirements snapshot, 2026-07-14](research/2026-07-14-openai-build-week-refresh.md)
+- [Live protocol animation research, 2026-07-18](research/2026-07-18-live-protocol-animation.md)
 
-Research documents record what was true when inspected. Decisions and plans may supersede their recommendations.
+Research and handoff documents preserve dated evidence. Their recommendations
+may be superseded by the mission, accepted decisions, architecture, or current
+work.

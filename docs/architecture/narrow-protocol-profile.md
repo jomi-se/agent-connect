@@ -1,6 +1,11 @@
-# Narrow hackathon protocol profile
+# Narrow experimental ACP/MCP-over-ACP profile
 
-This profile intentionally implements an unstable subset. It is not a claim of full ACP or MCP-over-ACP conformance.
+Status: experimental and not used by the default application/gateway path.
+
+This profile records the deliberately narrow browser ACP prototype. It is not a
+claim of full ACP or MCP-over-ACP conformance. The working MVP instead uses the
+provider-neutral browser API, Agent Connect gateway, and internal OmniGENT
+adapter. Keep these draft-specific methods out of the normal application API.
 
 ## Topology
 
@@ -36,7 +41,12 @@ Resources, prompts, logging, completion, sampling, elicitation, subscriptions, p
 
 ## Reconnect boundary
 
-ACP v1 session loading does not replay in-flight transport requests. The conductor therefore persists application tool requests before dispatch. Reconnection creates a fresh physical ACP transport, loads the agent session, establishes a new MCP connection, and redispatches or lists the unresolved action with the same stable action ID.
+ACP v1 session loading does not replay in-flight transport requests. A future
+durability layer must therefore persist application tool requests before
+dispatch. The intended reconnect path creates a fresh physical transport,
+loads the agent session, establishes a new MCP connection, and redispatches or
+lists the unresolved action with the same stable action ID. This recovery path
+is not implemented in the current MVP.
 
 ## Error behavior
 

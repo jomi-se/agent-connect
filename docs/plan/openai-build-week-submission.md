@@ -1,7 +1,7 @@
 # OpenAI Build Week submission guide
 
 This document is the execution guide for presenting Agent Connect to OpenAI
-Build Week. It does not replace the [implementation plan](hackathon.md), the
+Build Week. It does not replace the [current backlog](current-work.md), the
 [mission](../mission.md), or the
 [official hackathon rules](https://openai.devpost.com/rules).
 
@@ -41,8 +41,8 @@ clear hierarchy:
 
 1. **Product:** a developer tool for connecting applications to user-owned
    agents through one harness-neutral application contract.
-2. **Demonstration:** Firebase Canvas lends one visible page-mutation tool to
-   the user's Codex agent after connector authentication and app consent.
+2. **Demonstration:** Firebase Canvas lends ten read/write tools across three
+   example applications after connector authentication and app consent.
 3. **End-user benefit:** useful agent behavior inside an application without
    exposing raw provider session identifiers or requiring an application MCP
    server to be installed in advance.
@@ -83,13 +83,8 @@ determination.
 
 ## Primary Codex build session
 
-The primary development session is:
-
-- Codex session UUID: `019f5c47-a462-73d0-a329-39013786bae4`
-- Started: `2026-07-13T16:20:26Z`
-- Last activity: `2026-07-14T06:42:48Z`
-- Recorded model: `gpt-5.6-sol` across all 35 turn contexts
-- Working directory: `/home/dev/agent-connect`
+The primary development session used `gpt-5.6-sol` and is recorded through the
+required public `/feedback` identifier below.
 
 This session contains the product and protocol investigation, architecture
 choice, monorepo creation, adversarial plan review, OmniGENT composition proof,
@@ -98,17 +93,13 @@ debugging, pairing and scoped-capability broker, and mutual-runtime-identity
 follow-up. It encompasses the large majority of the core implementation and is
 the strongest candidate for the required `/feedback` session.
 
-The raw local UUID should not be assumed to replace the hackathon's `/feedback`
-workflow. Resume the original session and run `/feedback` there:
+The required `/feedback` upload has been completed. The identifier recorded in
+the submission is:
 
-```sh
-codex resume 019f5c47-a462-73d0-a329-39013786bae4
-```
+`019f5c47-a462-73d0-a329-39013786bae4`
 
-Then enter `/feedback` in the resumed Codex session and copy the identifier it
-displays into the Devpost submission. Preserve a screenshot or note of the
-result. Do not expose the raw JSONL transcript publicly; it can contain more
-context than the submission needs.
+Do not expose the raw JSONL transcript publicly; it can contain more context
+than the submission needs.
 
 ## Required submission materials
 
@@ -135,16 +126,17 @@ Before submitting, confirm all of the following against the live Devpost form:
 - all required team members and submission fields; and
 - a final submitted state rather than a saved draft.
 
-If the repository is public, add and verify a suitable license before
-submission. At the time this guide was written, no repository license file was
-present.
+The repository includes an MIT license. If it remains private for judging,
+verify access for both judge addresses above; if it becomes public, test an
+unauthenticated clone from a clean context.
 
 ## Recommended three-minute demonstration
 
 The guiding demonstration should make the application experience primary and
 keep protocol internals in supporting narration. The current Canvas has three
-example applications and nine typed tools; do not fall back to presenting the
-original `set_page_message` spike as the product.
+example applications and ten typed tools, including a shared live-state read;
+do not fall back to presenting the original `set_page_message` spike as the
+product.
 
 ### Recording-day story
 
@@ -258,37 +250,22 @@ claiming those approaches are always wrong.
 
 ## Work remaining before submission
 
-Prioritize product completion over additional protocol generalization:
+The implementation, MIT license, source-installable real connector, packaged
+SDK test path, deterministic public appliance, and `/feedback` upload are
+complete. The remaining work is presentation and release operation:
 
-1. Capture the already-proven public phone flow for the demo video and turn it
-   into exact private judge instructions. Runtime-card verification, passphrase
-   enrollment, consent, PKCE redirect, tool request, correlated result, visible
-   page mutation, grant listing, and revocation passed through Funnel on
-   2026-07-18.
-2. Use the proven OmniGENT runtime for the recorded demo unless the experimental
-   bwrap MCP startup gap is fixed and revalidated end to end.
-3. Freeze the smallest coherent demo. Prefer the Canvas authorization/tool/
-   revoke story if spreadsheet durability is not complete; do not show planned
-   recovery as working.
-4. Keep the proven isolated [judge demo environment](judge-demo-environment.md)
-   healthy through judging, rehearse its private instructions, and verify the
-   shutdown/teardown procedure. Its public Funnel happy path passed without
-   tailnet membership, a model credential, or the personal connector.
-5. Make the downstream GPT-5.6 runtime choice and its role observable and
-   documented; do not rely only on hidden session metadata.
-6. Add the required submission-oriented README material, supported-platform
-   matrix, sanitized evidence, one-command judge test, and repository license.
-7. Run `/feedback` in the primary build session and fill live fields
-   27945–27951 as applicable.
-8. Record the public narrated demo under three minutes, re-fetch announcements
-   and requirements, and verify the submitted state before
-   2026-07-22 00:00 UTC.
+1. Rehearse exact private judge instructions from a clean browser, including
+   the runtime card, connector-only passphrase entry, one rich Canvas task,
+   grant revocation, logout, and reconnect.
+2. Record and publish the narrated video under three minutes. Clearly separate
+   the deterministic public fixture from footage of the real Codex profile.
+3. Confirm repository access, public demo health, YouTube visibility, all live
+   fields, and the submitted state before `2026-07-22T00:00:00Z`.
+4. Keep the judge appliance available through `2026-08-06T00:00:00Z`, then use
+   its documented Funnel kill switch and destroy its disposable credentials.
 
-The current Firebase Canvas and browser-to-Codex path are valid technical
-evidence, but they should not be presented as completion of the pending-action
-and spreadsheet milestones. If those milestones remain incomplete at the
-deadline, narrow the video and description to behavior that has actually
-passed.
+Do not present pending-action durability, a hardened real-agent sandbox, npm
+publication, AG-UI, or additional providers as completed behavior.
 
 ## Final verification
 
@@ -296,7 +273,8 @@ Run the repository gate immediately before recording and again before
 submission:
 
 ```sh
-npm run verify
+npm run verify:full
+npm run test:integration:omnigent
 ```
 
 Also perform a fresh real-browser run using the exact judge instructions. Check

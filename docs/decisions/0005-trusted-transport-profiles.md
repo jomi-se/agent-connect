@@ -1,6 +1,6 @@
 # 0005: Bootstrap runtime identity through trusted transport profiles
 
-- Status: accepted; narrow Tailscale Serve profile implemented, deployed phone validation pending
+- Status: accepted; narrow Tailscale Serve profile implemented and remotely validated
 - Date: 2026-07-14
 
 ## Context

@@ -11,11 +11,10 @@ It is intentionally not a general OmniGENT reverse proxy.
 
 ## Run locally
 
-For the exact current VM startup sequence, including the isolated OmniGENT
-server/host, private Codex home, established port `8788` Serve route, and the
-first auth validation, use the
-[private demo runbook](../../docs/plan/private-demo-auth-validation.md). The
-commands below are the generic gateway profile.
+For the supported OmniGENT/Codex supervisor, dedicated Codex home, current
+Tailscale Serve setup, and security boundary, use the
+[real connector guide](../../deploy/real-connector/README.md). The commands
+below show the lower-level generic gateway profile.
 
 ```sh
 export AGENT_CONNECT_ALLOWED_ORIGINS='https://PROJECT--agent-connect-HASH.web.app'

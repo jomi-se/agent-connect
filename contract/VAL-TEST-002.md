@@ -18,8 +18,7 @@ cache, runner, transcript, and workspace paths are isolated under one temporary
 root and no Codex credential is present.
 Evidence: the explicit integration command rejects a version other than the
 checked-in `0.5.1` compatibility value and reports the accepted version;
-captures
-version; captures initialize, session/new, session/prompt, MCP tools/list and
+captures initialize, session/new, session/prompt, MCP tools/list and
 tools/call in the deterministic agent transcript; proves the MCP call contained
 no nonce, generates the nonce only after observing `action_required`, submits
 one result using the emitted call ID, and captures the returned nonce at the

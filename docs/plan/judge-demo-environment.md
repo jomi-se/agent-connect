@@ -126,7 +126,7 @@ Add a separately named `public-demo` profile whose authorization requires:
 - the resulting enrolled-device credential;
 - a PKCE application grant bound to origin, app id, scopes, tool snapshot, and
   expiry;
-- the exact configured Firebase app id and `set_page_message` tool snapshot;
+- the exact configured Firebase app id and current ten-tool Canvas snapshot;
   and
 - the existing request-size and protocol bounds, plus Docker-level
   CPU/memory/PID limits.
@@ -227,9 +227,9 @@ a weaker stack merely to meet the deadline, and never expose it as the normal
   enforced, `/v1/grants` requires the enrolled-device cookie, and a small set
   of auth-focused negative API tests fail closed.
 - **VAL-JUDGE-004 — real tool loop:** Firebase Canvas completes a live
-  deterministic-ACP fixture `set_page_message` request and visible page mutation
-  through the Funnel URL, while the UI clearly distinguishes this sandbox from
-  the recorded Codex runtime.
+  deterministic ACP plan containing a state read and one or more visible page
+  mutations through the Funnel URL, while the UI clearly distinguishes this
+  fixture from the recorded real Codex runtime.
 
 The hackathon gate is these four targets. Exhaustive prompt-adversary,
 mount/capability/network/sentinel, restart-persistence, secret-layer, teardown,
@@ -259,6 +259,12 @@ and exercises the positive path of VAL-JUDGE-003. The negative authorization
 cases remain covered by the gateway behavior suite. It does not prove the
 private Codex runtime has the same sandbox posture or that Funnel itself is an
 Agent Connect security boundary.
+
+On 2026-07-20 the rebuilt public appliance repeated the loop with the current
+Canvas snapshot: `get_current_app_state` was followed by three project-board
+write tools, each correlated result returned to the deterministic ACP runtime,
+and the page visibly reflected the final state. The appliance and Funnel also
+recovered after a VM reboot with the same connector identity.
 
 ## Tailscale dependency and fallback
 

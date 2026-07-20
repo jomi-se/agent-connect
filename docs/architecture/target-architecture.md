@@ -17,7 +17,7 @@ Agent Connect gateway
   connector-hosted OAuth + key-bound application capabilities
   exact Origin (+ Tailscale identity in direct mode)
   logical -> provider session mapping and health recovery
-  pending-action persistence
+  target: durable pending-action recovery
   fixed tool snapshot + provider adapter
   requested/configured posture + observations
   input event allowlist + resource ceilings
@@ -56,10 +56,11 @@ and task/tool types are the target application surface.
 
 ### Gateway
 
-Owns enrollment, authorization, mapping application sessions to OmniGENT conversations,
-request-scoped tool-schema injection, normalized events, and durable pending
-application actions. Its provider interface contains no browser-facing
-OmniGENT types.
+Owns enrollment, authorization, mapping application sessions to OmniGENT
+conversations, request-scoped tool-schema injection, and normalized events.
+Durable pending application actions are a required next reliability layer, not
+current behavior. Its provider interface contains no browser-facing OmniGENT
+types.
 
 The enrolled profile prints one runtime card and generated high-entropy
 enrollment passphrase on first state creation. The user saves the bundle in a
@@ -86,8 +87,9 @@ snapshot; it does not add the host to a global trust list. Session, prompt,
 result, and tool traffic remain unavailable until that grant exists. Dynamic
 CORS decisions follow the same boundary: bootstrap endpoints may reflect the
 validated initiating Origin, while protected endpoints require an active grant
-bound to that Origin. The current environment-based Origin allowlist is a
-narrow implementation restriction, not the target application-onboarding UX.
+bound to that Origin. An environment-based Origin allowlist remains an
+optional stricter operator policy and is mandatory for the frozen public judge
+profile.
 
 Direct URLs and relay addresses are transport hints, not runtime identity. See
 the [mutual runtime identity investigation](../research/2026-07-14-mutual-runtime-identity.md)
@@ -178,18 +180,21 @@ Owns the actual side effect. It receives a stable action ID and must make conseq
 6. OmniGENT provider attaches the schemas to the first session message event.
 7. Codex calls a tool through OmniGENT's downstream MCP relay.
 8. OmniGENT emits action_required.
-9. Gateway persists a pending action.
-10. Gateway sends the normalized tool call to the browser.
-11. Browser executes the application-owned handler and returns its result.
-12. Gateway posts the correlated tool result to OmniGENT.
-13. Codex resumes and completes the turn.
+9. Gateway sends the normalized tool call to the browser.
+10. Browser executes the application-owned handler and returns its result.
+11. Gateway posts the correlated tool result to OmniGENT.
+12. Codex resumes and completes the turn.
 ```
+
+The target recovery layer inserts durable `pending`, `delivered`, `applied`,
+and `acknowledged` state before step 9. That layer is not implemented, so a
+disconnect can still lose an unresolved tool request.
 
 ## Fallback architecture
 
 If the proven OmniGENT path regresses or blocks the browser slice, replace the
 provider with a Codex app-server dynamic-tool adapter. The application API and
-pending-action broker remain unchanged.
+future pending-action contract remain unchanged.
 
 ## Deferred ACP adapter
 
