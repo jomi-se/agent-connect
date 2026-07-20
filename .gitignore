@@ -34,6 +34,25 @@ test-results/
 deploy/judge-demo/.env
 deploy/real-connector/.env
 
+# Secrets and operator-owned runtime state. Keep reviewed templates trackable.
+.env
+.env.*
+!.env.example
+!**/.env.example
+**/auth.json
+**/connector.json
+**/*service-account*.json
+**/*service_account*.json
+**/firebase-adminsdk-*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+
 # Agent local settings
 .antigravitycli/
 .gemini/settings.local.json
