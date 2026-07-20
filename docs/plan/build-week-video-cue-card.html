@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <meta name="theme-color" content="#f4f6f8" />
     <title>Agent Connect · 3-minute video cue card</title>
     <style>
@@ -43,6 +46,7 @@
         margin: 0;
         min-width: 320px;
         min-height: 100vh;
+        min-height: 100svh;
         background: #f4f6f8;
       }
 
@@ -72,7 +76,7 @@
       }
 
       .timer-inner {
-        padding: max(0.75rem, env(safe-area-inset-top)) 1rem 0.85rem;
+        padding: max(0.65rem, env(safe-area-inset-top)) 1rem 0.7rem;
       }
 
       .timer-row {
@@ -85,7 +89,7 @@
       .timer {
         margin: 0;
         font-variant-numeric: tabular-nums;
-        font-size: clamp(2.5rem, 15vw, 4.5rem);
+        font-size: clamp(3rem, 15vw, 4.5rem);
         font-weight: 780;
         letter-spacing: -0.04em;
         line-height: 0.95;
@@ -122,16 +126,16 @@
       }
 
       .current-cue {
-        min-height: 1.4rem;
-        margin: 0.65rem 0 0;
+        min-height: 1.35rem;
+        margin: 0.5rem 0 0;
         color: var(--muted);
-        font-size: 0.92rem;
-        font-weight: 650;
+        font-size: 1rem;
+        font-weight: 680;
       }
 
       .progress-track {
-        height: 0.35rem;
-        margin-top: 0.65rem;
+        height: 0.3rem;
+        margin-top: 0.5rem;
         overflow: hidden;
         border-radius: 999px;
         background: #dce2e7;
@@ -148,96 +152,74 @@
       }
 
       main {
-        padding: 1.25rem 1rem calc(4rem + env(safe-area-inset-bottom));
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        min-height: calc(100svh - 8.5rem);
+        padding: 0.85rem 1rem max(1rem, env(safe-area-inset-bottom));
       }
 
-      header h1 {
-        max-width: 16ch;
+      .must-cover {
         margin: 0;
-        font-size: 1.7rem;
-        line-height: 1.05;
-        letter-spacing: -0.03em;
-        text-wrap: balance;
-      }
-
-      header p {
-        margin: 0.55rem 0 0;
-        color: var(--muted);
-        line-height: 1.45;
-      }
-
-      .preflight {
-        margin: 1.25rem 0 1.5rem;
         border: 1px solid #dfc56c;
-        border-radius: 0.75rem;
-        padding: 0.9rem 1rem;
-        background: var(--signal-soft);
-      }
-
-      .preflight strong {
-        display: block;
-        margin-bottom: 0.35rem;
-      }
-
-      .preflight ul {
-        margin: 0;
-        padding-left: 1.2rem;
+        border-radius: 0.65rem;
+        padding: 0.65rem 0.75rem;
         color: #59400a;
-        line-height: 1.45;
+        background: var(--signal-soft);
+        font-size: 0.95rem;
+        line-height: 1.35;
+        text-align: center;
       }
 
       .cues {
-        display: grid;
-        gap: 0.75rem;
+        flex: 1;
+        min-height: 0;
       }
 
       .cue {
-        scroll-margin-top: 10rem;
-        border: 1px solid var(--line);
-        border-radius: 0.75rem;
-        padding: 1rem;
-        background: var(--surface);
-        transition:
-          border-color 180ms ease-out,
-          background-color 180ms ease-out;
+        display: none;
       }
 
       .cue.active {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: min(48svh, 27rem);
         border-color: var(--accent);
+        border: 2px solid var(--accent);
+        border-radius: 0.8rem;
+        padding: clamp(1.15rem, 5vw, 1.6rem);
         background: var(--accent-soft);
-      }
-
-      .cue.complete {
-        opacity: 0.58;
       }
 
       .cue-heading {
         display: flex;
-        align-items: baseline;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 1rem;
       }
 
       .cue h2 {
         margin: 0;
-        font-size: 1.08rem;
-        line-height: 1.2;
-        letter-spacing: -0.015em;
+        font-size: clamp(1.55rem, 7vw, 2rem);
+        line-height: 1.05;
+        letter-spacing: -0.03em;
+        text-wrap: balance;
       }
 
       .time-range {
         flex: none;
         color: var(--accent);
         font-variant-numeric: tabular-nums;
-        font-size: 0.84rem;
+        font-size: 1rem;
         font-weight: 760;
       }
 
       .cue p {
-        margin: 0.65rem 0 0;
+        margin: 1rem 0 0;
         color: #344252;
-        font-size: 1rem;
-        line-height: 1.5;
+        font-size: clamp(1.18rem, 5.2vw, 1.4rem);
+        line-height: 1.43;
         text-wrap: pretty;
       }
 
@@ -249,15 +231,84 @@
 
       .say {
         border-top: 1px solid rgb(0 107 99 / 22%);
-        padding-top: 0.65rem;
+        padding-top: 0.85rem;
       }
 
-      .footer-note {
-        margin: 1.4rem 0 0;
+      .next-preview {
+        border: 1px solid var(--line);
+        border-radius: 0.7rem;
+        padding: 0.8rem 0.9rem;
+        background: var(--surface);
+      }
+
+      .next-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 0.25rem;
         color: var(--muted);
         font-size: 0.9rem;
-        line-height: 1.5;
-        text-align: center;
+        font-weight: 680;
+      }
+
+      .next-preview strong {
+        display: block;
+        font-size: 1.2rem;
+        line-height: 1.25;
+      }
+
+      .next-preview p {
+        margin: 0.25rem 0 0;
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.35;
+      }
+
+      .deck-nav {
+        display: grid;
+        grid-template-columns: 3.25rem 1fr 3.25rem;
+        align-items: center;
+        gap: 0.65rem;
+      }
+
+      .deck-nav > button {
+        min-width: 3.25rem;
+        min-height: 3.25rem;
+        border: 1px solid var(--line);
+        border-radius: 0.65rem;
+        color: var(--ink);
+        background: var(--surface);
+        font-size: 1.35rem;
+        font-weight: 780;
+      }
+
+      .deck-nav > button:disabled {
+        opacity: 0.35;
+      }
+
+      .segments {
+        display: flex;
+        gap: 0.35rem;
+      }
+
+      .segment {
+        position: relative;
+        flex: 1;
+        height: 0.65rem;
+        overflow: hidden;
+        border: 0;
+        border-radius: 999px;
+        padding: 0;
+        background: #d3dbe2;
+      }
+
+      .segment-fill {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: var(--accent);
+        transform: scaleX(0);
+        transform-origin: left center;
       }
 
       @media (min-width: 42rem) {
@@ -266,8 +317,8 @@
           padding-inline: 1.5rem;
         }
 
-        .cue {
-          padding: 1.1rem 1.2rem;
+        .cue.active {
+          min-height: 25rem;
         }
       }
 
@@ -276,7 +327,6 @@
           scroll-behavior: auto;
         }
 
-        .cue,
         .progress-bar {
           transition: none;
         }
@@ -301,22 +351,18 @@
     </section>
 
     <main>
-      <header>
-        <h1>Agent Connect video cues</h1>
-        <p>Target 2:50. Leave ten seconds of safety before the hard limit.</p>
-      </header>
-
-      <aside class="preflight">
-        <strong>Do not forget</strong>
-        <ul>
-          <li>Use audio and stay under 3:00.</li>
-          <li>Say how Codex and GPT-5.6 were used.</li>
-          <li>Label the public demo as a deterministic ACP fixture.</li>
-        </ul>
-      </aside>
+      <p class="must-cover">
+        Must say: <strong>Codex + GPT-5.6</strong> · deterministic public
+        fixture
+      </p>
 
       <section class="cues" aria-label="Video sections">
-        <article class="cue active" data-start="0" data-title="Problem">
+        <article
+          class="cue active"
+          data-start="0"
+          data-title="Problem"
+          data-preview="API key vs BYOK vs bring your own agent"
+        >
           <div class="cue-heading">
             <h2>Problem</h2>
             <span class="time-range">0:00–0:25</span>
@@ -328,7 +374,12 @@
           </p>
         </article>
 
-        <article class="cue" data-start="25" data-title="Promise">
+        <article
+          class="cue"
+          data-start="25"
+          data-title="Promise"
+          data-preview="The app lends typed tools; no preinstalled MCP"
+        >
           <div class="cue-heading">
             <h2>Promise</h2>
             <span class="time-range">0:25–0:40</span>
@@ -340,25 +391,33 @@
           </p>
         </article>
 
-        <article class="cue" data-start="40" data-title="Working demo">
+        <article
+          class="cue"
+          data-start="40"
+          data-title="Working demo"
+          data-preview="Consent, one prompt, live state, visible mutations"
+        >
           <div class="cue-heading">
             <h2>Working demo</h2>
             <span class="time-range">0:40–1:40</span>
           </div>
           <p>
-            Connect → briefly show exact app/tool consent → send one prepared
-            prompt → keep the live activity and visible mutations on screen.
-            Point out that the agent reads live app state before calling
-            app-owned tools.
+            Connect → show exact app/tool consent → send one prompt. Keep the
+            activity and visible mutations on screen. The agent reads live app
+            state, then calls app-owned tools.
           </p>
           <p class="say">
-            <em>Say:</em> “The public version uses a deterministic ACP fixture
-            with Codex-authored action plans. The same path also works with a
-            live Codex session.”
+            <em>Say:</em> “The public demo uses a deterministic ACP fixture with
+            Codex-authored plans. The same path works with live Codex.”
           </p>
         </article>
 
-        <article class="cue" data-start="100" data-title="How the MVP works">
+        <article
+          class="cue"
+          data-start="100"
+          data-title="How the MVP works"
+          data-preview="SDK, gateway, Tailscale, OmniGENT, ACP"
+        >
           <div class="cue-heading">
             <h2>How the MVP works</h2>
             <span class="time-range">1:40–2:20</span>
@@ -371,7 +430,12 @@
           </p>
         </article>
 
-        <article class="cue" data-start="140" data-title="Security">
+        <article
+          class="cue"
+          data-start="140"
+          data-title="Security boundary"
+          data-preview="Pinned identity, scoped grants, revocation"
+        >
           <div class="cue-heading">
             <h2>Security boundary</h2>
             <span class="time-range">2:20–2:35</span>
@@ -383,7 +447,12 @@
           </p>
         </article>
 
-        <article class="cue" data-start="155" data-title="Built with Codex">
+        <article
+          class="cue"
+          data-start="155"
+          data-title="Built with Codex"
+          data-preview="What Codex and GPT-5.6 concretely contributed"
+        >
           <div class="cue-heading">
             <h2>Built with Codex</h2>
             <span class="time-range">2:35–2:50</span>
@@ -396,7 +465,12 @@
           </p>
         </article>
 
-        <article class="cue" data-start="170" data-title="Close">
+        <article
+          class="cue"
+          data-start="170"
+          data-title="Close"
+          data-preview="Final sentence, demo URL, repository"
+        >
           <div class="cue-heading">
             <h2>Close</h2>
             <span class="time-range">2:50–2:55</span>
@@ -411,10 +485,20 @@
         </article>
       </section>
 
-      <p class="footer-note">
-        If something runs long, cut protocol detail—not the mutation, security
-        boundary, or Codex/GPT-5.6 sentence.
-      </p>
+      <aside class="next-preview" id="next-preview" aria-live="polite">
+        <div class="next-meta">
+          <span id="next-label">Coming next</span>
+          <span id="next-time">in 25s</span>
+        </div>
+        <strong id="next-title">Promise</strong>
+        <p id="next-summary">The app lends typed tools; no preinstalled MCP</p>
+      </aside>
+
+      <nav class="deck-nav" aria-label="Cue navigation">
+        <button id="previous" type="button" aria-label="Previous cue">←</button>
+        <div class="segments" id="segments" aria-label="Cue progress"></div>
+        <button id="next" type="button" aria-label="Next cue">→</button>
+      </nav>
     </main>
 
     <script>
@@ -425,11 +509,32 @@
       const progress = document.querySelector("#progress");
       const currentCue = document.querySelector("#current-cue");
       const cues = [...document.querySelectorAll(".cue")];
+      const nextPreview = document.querySelector("#next-preview");
+      const nextLabel = document.querySelector("#next-label");
+      const nextTime = document.querySelector("#next-time");
+      const nextTitle = document.querySelector("#next-title");
+      const nextSummary = document.querySelector("#next-summary");
+      const previousButton = document.querySelector("#previous");
+      const nextButton = document.querySelector("#next");
+      const segments = document.querySelector("#segments");
 
       let running = false;
       let elapsedBeforeStart = 0;
       let startedAt = 0;
       let frame;
+
+      const segmentButtons = cues.map((cue, index) => {
+        const button = document.createElement("button");
+        const fill = document.createElement("span");
+        button.className = "segment";
+        button.type = "button";
+        button.setAttribute("aria-label", `Go to ${cue.dataset.title}`);
+        fill.className = "segment-fill";
+        button.append(fill);
+        button.addEventListener("click", () => jumpToCue(index));
+        segments.append(button);
+        return { button, fill };
+      });
 
       function elapsedSeconds() {
         if (!running) return elapsedBeforeStart;
@@ -444,6 +549,21 @@
         return `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
       }
 
+      function cueIndexAt(elapsed) {
+        let index = 0;
+        cues.forEach((cue, candidate) => {
+          if (elapsed >= Number(cue.dataset.start)) index = candidate;
+        });
+        return index;
+      }
+
+      function jumpToCue(index) {
+        const target = Math.max(0, Math.min(cues.length - 1, index));
+        elapsedBeforeStart = Number(cues[target].dataset.start);
+        if (running) startedAt = performance.now();
+        render();
+      }
+
       function render() {
         const elapsed = elapsedSeconds();
         timer.textContent = formatTime(elapsed);
@@ -451,26 +571,67 @@
         timer.dataset.state =
           elapsed >= DURATION ? "done" : elapsed >= 170 ? "warning" : "running";
 
-        let activeIndex = 0;
-        cues.forEach((cue, index) => {
-          if (elapsed >= Number(cue.dataset.start)) activeIndex = index;
-        });
+        const activeIndex = cueIndexAt(elapsed);
+        const activeStart = Number(cues[activeIndex].dataset.start);
+        const activeEnd =
+          activeIndex < cues.length - 1
+            ? Number(cues[activeIndex + 1].dataset.start)
+            : DURATION;
+        const secondsLeft = Math.max(0, Math.ceil(activeEnd - elapsed));
 
         cues.forEach((cue, index) => {
-          cue.classList.toggle(
-            "active",
-            index === activeIndex && elapsed < DURATION,
-          );
-          cue.classList.toggle(
-            "complete",
-            index < activeIndex || elapsed >= DURATION,
-          );
+          cue.classList.toggle("active", index === activeIndex);
+          cue.setAttribute("aria-hidden", String(index !== activeIndex));
         });
 
         currentCue.textContent =
           elapsed >= DURATION
             ? "Time · Wrap now"
-            : `${Math.floor(elapsed / 60)}:${String(Math.floor(elapsed % 60)).padStart(2, "0")} elapsed · ${cues[activeIndex].dataset.title}`;
+            : `${activeIndex + 1} of ${cues.length} · ${secondsLeft}s on this cue`;
+
+        segmentButtons.forEach(({ button, fill }, index) => {
+          const segmentStart = Number(cues[index].dataset.start);
+          const segmentEnd =
+            index < cues.length - 1
+              ? Number(cues[index + 1].dataset.start)
+              : DURATION;
+          const amount =
+            index < activeIndex
+              ? 1
+              : index > activeIndex
+                ? 0
+                : Math.max(
+                    0,
+                    Math.min(
+                      1,
+                      (elapsed - segmentStart) / (segmentEnd - segmentStart),
+                    ),
+                  );
+          fill.style.transform = `scaleX(${amount})`;
+          button.setAttribute(
+            "aria-current",
+            index === activeIndex ? "step" : "false",
+          );
+        });
+
+        const upcoming = cues[activeIndex + 1];
+        if (upcoming) {
+          nextPreview.hidden = false;
+          nextLabel.textContent = "Coming next";
+          nextTime.textContent = `in ${secondsLeft}s`;
+          nextTitle.textContent = upcoming.dataset.title;
+          nextSummary.textContent = upcoming.dataset.preview;
+        } else {
+          nextPreview.hidden = false;
+          nextLabel.textContent = "Finish";
+          nextTime.textContent =
+            elapsed >= DURATION ? "now" : `in ${secondsLeft}s`;
+          nextTitle.textContent = "End on the demo URL + repo";
+          nextSummary.textContent = "Stop before 3:00.";
+        }
+
+        previousButton.disabled = activeIndex === 0;
+        nextButton.disabled = activeIndex === cues.length - 1;
 
         if (running && elapsed < DURATION) {
           frame = requestAnimationFrame(render);
@@ -502,6 +663,14 @@
         cancelAnimationFrame(frame);
         startButton.textContent = "Start";
         render();
+      });
+
+      previousButton.addEventListener("click", () => {
+        jumpToCue(cueIndexAt(elapsedSeconds()) - 1);
+      });
+
+      nextButton.addEventListener("click", () => {
+        jumpToCue(cueIndexAt(elapsedSeconds()) + 1);
       });
 
       render();
