@@ -77,7 +77,7 @@
       }
 
       .timer-inner {
-        padding: max(0.65rem, env(safe-area-inset-top)) 1rem 0.7rem;
+        padding: max(0.75rem, env(safe-area-inset-top)) 1rem 0.8rem;
       }
 
       .timer-row {
@@ -90,7 +90,7 @@
       .timer {
         margin: 0;
         font-variant-numeric: tabular-nums;
-        font-size: clamp(3rem, 15vw, 4.5rem);
+        font-size: clamp(5rem, 22vw, 6.5rem);
         font-weight: 780;
         letter-spacing: -0.04em;
         line-height: 0.95;
@@ -110,14 +110,15 @@
       }
 
       .controls button {
-        min-height: 3rem;
+        min-height: 4rem;
         border: 1px solid var(--line);
         border-radius: 0.65rem;
-        padding: 0.65rem 0.9rem;
+        padding: 0.75rem 1rem;
         color: var(--ink);
         background: var(--surface);
         cursor: pointer;
-        font-weight: 720;
+        font-size: 1.25rem;
+        font-weight: 760;
       }
 
       .controls .primary {
@@ -130,7 +131,7 @@
         min-height: 1.35rem;
         margin: 0.5rem 0 0;
         color: var(--muted);
-        font-size: 1rem;
+        font-size: 1.3rem;
         font-weight: 680;
       }
 
@@ -152,12 +153,13 @@
       }
 
       main {
+        position: relative;
         display: grid;
-        grid-template-rows: minmax(0, 1fr) auto auto;
+        grid-template-rows: minmax(0, 1fr) minmax(12rem, 26svh);
         gap: 0.75rem;
         min-height: 0;
         height: 100%;
-        padding: 0.85rem 1rem max(1rem, env(safe-area-inset-bottom));
+        padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
       }
 
       .cues {
@@ -191,7 +193,7 @@
 
       .cue h2 {
         margin: 0;
-        font-size: clamp(2.3rem, 9vw, 2.8rem);
+        font-size: clamp(2.8rem, 11vw, 3.3rem);
         line-height: 1.05;
         letter-spacing: -0.03em;
         text-wrap: balance;
@@ -201,15 +203,15 @@
         flex: none;
         color: var(--accent);
         font-variant-numeric: tabular-nums;
-        font-size: 1.15rem;
+        font-size: 1.4rem;
         font-weight: 760;
       }
 
       .cue p {
         margin: 1rem 0 0;
         color: #344252;
-        font-size: clamp(2rem, 8.2vw, 2.45rem);
-        line-height: 1.38;
+        font-size: clamp(2.75rem, 11.5vw, 3.25rem);
+        line-height: 1.25;
         text-wrap: pretty;
       }
 
@@ -222,7 +224,7 @@
       .next-preview {
         border: 1px solid var(--line);
         border-radius: 0.7rem;
-        padding: 0.65rem 0.8rem;
+        padding: 0.75rem 0.9rem 4.6rem;
         background: var(--surface);
       }
 
@@ -232,24 +234,28 @@
         gap: 1rem;
         margin-bottom: 0.25rem;
         color: var(--muted);
-        font-size: 0.9rem;
+        font-size: 1.15rem;
         font-weight: 680;
       }
 
       .next-preview strong {
         display: block;
-        font-size: 1.5rem;
+        font-size: 2rem;
         line-height: 1.25;
       }
 
       .next-preview p {
         margin: 0.25rem 0 0;
         color: var(--muted);
-        font-size: 1.18rem;
-        line-height: 1.35;
+        font-size: 1.5rem;
+        line-height: 1.25;
       }
 
       .deck-nav {
+        position: absolute;
+        right: 1.75rem;
+        bottom: max(1.35rem, env(safe-area-inset-bottom));
+        left: 1.75rem;
         display: grid;
         grid-template-columns: 3.25rem 1fr 3.25rem;
         align-items: center;
@@ -257,8 +263,8 @@
       }
 
       .deck-nav > button {
-        min-width: 3.25rem;
-        min-height: 3.25rem;
+        min-width: 3.5rem;
+        min-height: 3.5rem;
         border: 1px solid var(--line);
         border-radius: 0.65rem;
         color: var(--ink);
@@ -369,172 +375,202 @@
           class="cue active"
           data-start="0"
           data-title="Problem"
-          data-preview="Developer API keys put every AI request on your bill"
+          data-preview="Developer API keys make the developer pay"
         >
           <div class="cue-heading">
             <h2>Problem</h2>
             <span class="time-range">0:00–0:12</span>
           </div>
-          <p>Developer API keys make the developer pay for every AI request.</p>
+          <p>Developer API keys make the developer pay.</p>
         </article>
 
         <article
           class="cue"
           data-start="12"
-          data-title="The alternative"
-          data-preview="BYOK shifts the cost; bring your own agent changes it"
+          data-title="BYOK"
+          data-preview="BYOK shifts metered API costs onto every user"
         >
           <div class="cue-heading">
-            <h2>The alternative</h2>
-            <span class="time-range">0:12–0:25</span>
+            <h2>BYOK</h2>
+            <span class="time-range">0:12–0:24</span>
+          </div>
+          <p>BYOK shifts metered API costs onto every user.</p>
+        </article>
+
+        <article
+          class="cue"
+          data-start="24"
+          data-title="Bring your own agent"
+          data-preview="Users power features with coding agents they operate"
+        >
+          <div class="cue-heading">
+            <h2>Your agent</h2>
+            <span class="time-range">0:24–0:38</span>
+          </div>
+          <p>Users power apps with coding agents they already operate.</p>
+        </article>
+
+        <article
+          class="cue"
+          data-start="38"
+          data-title="Typed tools"
+          data-preview="The app lends narrow tools; no preinstalled MCP"
+        >
+          <div class="cue-heading">
+            <h2>Typed tools</h2>
+            <span class="time-range">0:38–0:50</span>
           </div>
           <p>
-            BYOK shifts metered cost onto users. <em>Bring your own agent</em>
-            lets them use a coding agent they already operate.
+            The app lends narrow, typed tools. No app-specific MCP is installed.
           </p>
         </article>
 
         <article
           class="cue"
-          data-start="25"
-          data-title="Promise"
-          data-preview="The app lends typed tools; no preinstalled MCP"
-        >
-          <div class="cue-heading">
-            <h2>Promise</h2>
-            <span class="time-range">0:25–0:40</span>
-          </div>
-          <p>
-            The app lends narrow, typed capabilities. The user connects once. No
-            app-specific MCP is installed beforehand.
-          </p>
-        </article>
-
-        <article
-          class="cue"
-          data-start="40"
-          data-title="Demo: connect"
+          data-start="50"
+          data-title="Connect once"
           data-preview="Show the gateway consent screen"
         >
           <div class="cue-heading">
-            <h2>Connect</h2>
-            <span class="time-range">0:40–0:55</span>
+            <h2>Connect once</h2>
+            <span class="time-range">0:50–1:02</span>
           </div>
-          <p>
-            Show the exact app origin and requested tools on the gateway’s
-            consent screen.
-          </p>
+          <p>Show the app origin and requested tools on the gateway.</p>
         </article>
 
         <article
           class="cue"
-          data-start="55"
-          data-title="Demo: mutate"
-          data-preview="One prompt, live state, visible mutations"
+          data-start="62"
+          data-title="Run the demo"
+          data-preview="One prompt, live activity, visible mutations"
         >
           <div class="cue-heading">
-            <h2>Make it move</h2>
-            <span class="time-range">0:55–1:15</span>
+            <h2>Run it</h2>
+            <span class="time-range">1:02–1:20</span>
           </div>
-          <p>
-            Send one prompt. Keep the activity and visible mutations on screen.
-            The agent reads live state, then calls app-owned tools.
-          </p>
+          <p>Send one prompt. Keep the activity and mutations on screen.</p>
         </article>
 
         <article
           class="cue"
-          data-start="75"
-          data-title="Demo: disclose the fixture"
-          data-preview="Be explicit about deterministic vs live Codex"
+          data-start="80"
+          data-title="Read then act"
+          data-preview="The agent reads live state before calling app tools"
         >
           <div class="cue-heading">
-            <h2>Be explicit</h2>
-            <span class="time-range">1:15–1:40</span>
+            <h2>Read, then act</h2>
+            <span class="time-range">1:20–1:35</span>
           </div>
-          <p>
-            “The public demo uses a deterministic ACP fixture with
-            Codex-authored plans. The same path works with live Codex.”
-          </p>
+          <p>The agent reads live app state, then calls app-owned tools.</p>
         </article>
 
         <article
           class="cue"
-          data-start="100"
-          data-title="MVP: browser side"
-          data-preview="SDK declares and executes app-owned tools"
+          data-start="95"
+          data-title="Public fixture"
+          data-preview="Deterministic ACP with Codex-authored plans"
         >
           <div class="cue-heading">
-            <h2>Browser side</h2>
-            <span class="time-range">1:40–2:00</span>
+            <h2>Fixture</h2>
+            <span class="time-range">1:35–1:50</span>
           </div>
-          <p>
-            The SDK declares the tools, executes them in the app, and keeps the
-            public API agent-neutral.
-          </p>
+          <p>Public demo: deterministic ACP with Codex-authored plans.</p>
+        </article>
+
+        <article
+          class="cue"
+          data-start="110"
+          data-title="Live proof"
+          data-preview="The same path works with live Codex"
+        >
+          <div class="cue-heading">
+            <h2>Live proof</h2>
+            <span class="time-range">1:50–2:00</span>
+          </div>
+          <p>The same path also works with live Codex.</p>
         </article>
 
         <article
           class="cue"
           data-start="120"
-          data-title="MVP: gateway side"
-          data-preview="Gateway, Tailscale, OmniGENT, ACP"
+          data-title="Browser side"
+          data-preview="The SDK declares and executes app-owned tools"
         >
           <div class="cue-heading">
-            <h2>Gateway side</h2>
-            <span class="time-range">2:00–2:20</span>
+            <h2>Browser side</h2>
+            <span class="time-range">2:00–2:12</span>
+          </div>
+          <p>The SDK declares and executes app-owned tools.</p>
+        </article>
+
+        <article
+          class="cue"
+          data-start="132"
+          data-title="Gateway side"
+          data-preview="Identity, grants, Tailscale, OmniGENT, ACP"
+        >
+          <div class="cue-heading">
+            <h2>Gateway</h2>
+            <span class="time-range">2:12–2:25</span>
           </div>
           <p>
-            The user-owned gateway handles identity and grants. Tailscale,
-            OmniGENT, and ACP are the current MVP adapters.
+            Gateway: identity + grants. Tailscale + OmniGENT + ACP: adapters.
           </p>
         </article>
 
         <article
           class="cue"
-          data-start="140"
-          data-title="Security boundary"
-          data-preview="Pinned identity, scoped grants, revocation"
+          data-start="145"
+          data-title="Security"
+          data-preview="Pinned identity; exact app and tool grants"
         >
           <div class="cue-heading">
             <h2>Security</h2>
-            <span class="time-range">2:20–2:35</span>
+            <span class="time-range">2:25–2:38</span>
           </div>
           <p>
-            Gateway identity is pinned. Grants bind the exact app and tools and
-            can be revoked. Authorization does not create trust.
+            Gateway identity is pinned. Grants bind the exact app and tools.
           </p>
         </article>
 
         <article
           class="cue"
-          data-start="155"
+          data-start="158"
           data-title="Built with Codex"
-          data-preview="What Codex and GPT-5.6 concretely contributed"
+          data-preview="Built through Codex with GPT-5.6 Sol"
         >
           <div class="cue-heading">
-            <h2>Built with Codex</h2>
-            <span class="time-range">2:35–2:50</span>
+            <h2>Codex + GPT-5.6</h2>
+            <span class="time-range">2:38–2:46</span>
           </div>
-          <p>
-            Built through Codex with GPT-5.6 Sol: research, SDK, gateway, live
-            debugging, and an authorization-regression catch.
-          </p>
+          <p>Built through Codex with GPT-5.6 Sol.</p>
         </article>
 
         <article
           class="cue"
-          data-start="170"
+          data-start="166"
+          data-title="Codex contribution"
+          data-preview="Research, SDK, gateway, debugging, security"
+        >
+          <div class="cue-heading">
+            <h2>What it did</h2>
+            <span class="time-range">2:46–2:56</span>
+          </div>
+          <p>Research, SDK, gateway, debugging, and security review.</p>
+        </article>
+
+        <article
+          class="cue"
+          data-start="176"
           data-title="Close"
           data-preview="Final sentence, demo URL, repository"
         >
           <div class="cue-heading">
             <h2>Close</h2>
-            <span class="time-range">2:50–3:00</span>
+            <span class="time-range">2:56–3:00</span>
           </div>
           <p>
             <em>Build agent-powered features while users bring the agent.</em>
-            End on the demo URL and repo.
           </p>
         </article>
       </section>
@@ -544,10 +580,8 @@
           <span id="next-label">Coming next</span>
           <span id="next-time">in 12s</span>
         </div>
-        <strong id="next-title">The alternative</strong>
-        <p id="next-summary">
-          BYOK shifts the cost; bring your own agent changes it
-        </p>
+        <strong id="next-title">BYOK</strong>
+        <p id="next-summary">BYOK shifts metered API costs onto every user</p>
       </aside>
 
       <nav class="deck-nav" aria-label="Cue navigation">
