@@ -26,6 +26,11 @@ so anyone can test it without consuming a model account. It is not presented as
 live model reasoning. The separate reference profile below runs the same path
 with a real Codex instance and the user's own login.
 
+The same Firebase Canvas accepts either profile's runtime card: use the public
+judge connector on port `10000` for the deterministic evaluation path, or a
+user-owned connector such as the real Codex reference profile on port `9443`
+for live model reasoning.
+
 ## Run the real Codex reference profile
 
 The [real connector guide](deploy/real-connector/README.md) starts the usable
