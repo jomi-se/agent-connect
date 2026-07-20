@@ -142,26 +142,86 @@ present.
 ## Recommended three-minute demonstration
 
 The guiding demonstration should make the application experience primary and
-keep protocol internals in supporting narration.
+keep protocol internals in supporting narration. The current Canvas has three
+example applications and nine typed tools; do not fall back to presenting the
+original `set_page_message` spike as the product.
 
-1. Paste the public runtime card into Firebase Canvas; explicitly show that the
-   enrollment secret is not app input.
-2. Start authorization and show that the connector proves its pinned identity
-   before the app sends tool metadata.
-3. On the connector-owned page, show the app origin, callback, expiry, required
-   scopes, and `set_page_message` schema; enter the saved enrollment secret
-   only if this is the first device, then approve.
-4. Return through PKCE and ask Codex for a short welcome message.
-5. Show the streamed run, application tool request, and visible page mutation.
-6. Open the connector grant list, revoke Canvas, and show that the existing
-   capability can no longer reach the agent.
-7. End on the simple architecture: neutral web SDK, security gateway,
-   OmniGENT adapter, and Codex/GPT-5.6.
+### Recording-day story
 
-The video should show a real working path, not architecture slides. A brief
-closing diagram may explain that the application-facing API remains
-provider-neutral while OmniGENT and Codex are behind adapters. Cut typing,
-loading, and setup time before cutting observable product behavior.
+The shortest coherent story is:
+
+1. **Problem and promise.** Open on the product sentence: Agent Connect lets a
+   web developer add agent-powered features while the user brings a coding
+   agent such as Codex. The application lends a narrow set of typed tools for a
+   task instead of requiring a permanent application MCP installation.
+2. **Connect once, separately from prompting.** Paste the public runtime card
+   and start authorization. Explicitly point out that the runtime card is
+   public but pins the connector identity, while the enrollment passphrase is
+   entered only on the connector-owned HTTPS page and is never exposed to the
+   application.
+3. **Make consent legible.** Briefly show the connector-owned consent surface:
+   application identity and Origin, callback, expiry, and the exact tools being
+   requested. State plainly that authorization grants capability; it cannot
+   make an untrusted application trustworthy.
+4. **Show a useful application mutation.** Use one of the richer demo apps—
+   project-board bulk editing, in-place document review, or product research—
+   and send its prepared prompt. Keep the live request/tool/result animation in
+   frame long enough to show that the coding-agent side asks for app-owned
+   operations and the page executes them visibly.
+5. **Show that authority remains controllable.** Open the connector grant list,
+   revoke the application, and show that the old capability can no longer
+   create an agent session. This is the clearest compact proof that the gateway
+   is more than a transport proxy.
+6. **Close on the boundary and direction.** Web applications integrate the
+   provider-neutral SDK; users run the security gateway at their own boundary;
+   OmniGENT plus ACP is the first adapter, not the public API. The north star is
+   swappable agents, harnesses, and deployment profiles without rewriting the
+   application integration.
+
+### Required honesty about the two proofs
+
+The public judge appliance uses a deterministic ACP agent fixture so judges can
+run the full authorization, OmniGENT, ACP, request-scoped MCP, browser-tool, and
+page-mutation path without consuming a model account. Its three action plans
+were authored from real Codex interactions, but the public fixture must not be
+described as live model reasoning.
+
+Separately, the private composition proof completed the same browser-to-tool
+loop with a real Codex session behind OmniGENT. If footage or a concise capture
+of that run is available, use it to establish that the adapter works with the
+real agent; then use the deterministic public profile for the reproducible
+judge experience. Label the transition clearly rather than visually blending
+the two.
+
+### How Codex and GPT-5.6 were used
+
+Do not reduce this to “Codex generated the code.” The concrete development
+story is stronger:
+
+- the project was designed and implemented through the primary Codex build
+  thread, recorded as `gpt-5.6-sol` across its turn contexts;
+- Codex researched OmniGENT and ACP, shaped the agent-neutral boundary, created
+  the monorepo, implemented the browser SDK and gateway, wrote tests, and
+  debugged the real browser → OmniGENT → Codex → browser-tool loop;
+- during the public-Funnel design, a delegated Codex audit treated the transport
+  change as a trust-boundary substitution and discovered that `/v1/grants`
+  listing and revocation could otherwise become anonymously reachable;
+- the primary Codex pass confirmed the source path, implemented the enrolled-
+  device requirement, and added regression coverage; and
+- the human builder chose the product direction, challenged excessive scope and
+  security claims, tested the real mobile flow, and retained the final design
+  and release decisions.
+
+That route finding is a particularly good on-screen engineering artifact. Show
+the concise discovery chain or the regression test—not the generic agent skill
+files. The durable account is in
+[the grant-route security retrospective](grant-route-security-retrospective.md).
+
+The video should show a real working path, not become an architecture
+slideshow. Use the polished diagrams and terminal animation only to orient the
+viewer around observable behavior. Cut typing, loading, and setup time before
+cutting the authorization decision, tool request, visible mutation, or
+revocation result.
 
 ## Judging strategy
 
