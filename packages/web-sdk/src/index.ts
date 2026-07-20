@@ -1,6 +1,7 @@
 export { createBrowserAcpStream } from "./transport.js";
 export { AgentConnectError, AgentSession } from "./agent-session.js";
 export { connectAgent } from "./agent-connection.js";
+export { parseRuntimeCard } from "./runtime-card.js";
 export {
   beginAgentAuthorization,
   completeAgentAuthorization,

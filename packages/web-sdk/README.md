@@ -1,28 +1,58 @@
 # `@agent-connect/web`
 
-A browser-safe, harness-neutral API for lending temporary application tools to
-a user-owned agent runtime. OmniGENT is the first provider; its HTTP/SSE and
-tool-result wire shapes stay behind the provider adapter.
+Browser-safe, harness-neutral primitives for lending temporary application
+tools to a user-owned agent runtime.
+
+The package provides:
+
+- signed runtime-card verification before application disclosure;
+- connector-owned authorization with PKCE;
+- opaque Agent Connect sessions and provider-neutral task events;
+- JSON Schema validation before browser tool execution; and
+- correlated tool results returned to the same agent turn.
+
+OmniGENT is the first provider behind the gateway. Its session ids and wire
+types do not enter this API.
 
 ```ts
-import { connectAgent, defineTool } from "@agent-connect/web";
+import {
+  beginAgentAuthorization,
+  completeAgentAuthorization,
+  connectAgent,
+  defineTool,
+  parseRuntimeCard,
+} from "@agent-connect/web";
+
+const tools = [
+  defineTool({
+    name: "read_range",
+    description: "Read cells from the current spreadsheet",
+    inputSchema: {
+      type: "object",
+      properties: { range: { type: "string" } },
+      required: ["range"],
+      additionalProperties: false,
+    },
+    execute: ({ range }) => JSON.stringify(sheet.read(range)),
+  }),
+];
+
+const runtimeCard = parseRuntimeCard(cardEnteredByTheUser);
+const authorization = await beginAgentAuthorization({
+  runtimeCard,
+  appId: "my-spreadsheet",
+  redirectUri: `${location.origin}${location.pathname}`,
+  tools,
+});
+
+// Save authorization.transaction, navigate to authorization.authorizeUrl,
+// then exchange the returned code with completeAgentAuthorization().
 
 const connection = await connectAgent({
-  baseUrl: "https://my-user-runtime.example",
+  baseUrl: runtimeCard.endpoint,
   appId: "my-spreadsheet",
-  pairingCode: codeEnteredByTheUser,
-  tools: [
-    defineTool({
-      name: "read_range",
-      description: "Read cells from the current spreadsheet",
-      inputSchema: {
-        type: "object",
-        properties: { range: { type: "string" } },
-        required: ["range"],
-      },
-      execute: async ({ range }) => JSON.stringify(await sheet.read(range)),
-    }),
-  ],
+  tools,
+  accessToken: approvedGrant.accessToken,
 });
 
 for await (const event of connection.session.streamTask(
@@ -32,31 +62,18 @@ for await (const event of connection.session.streamTask(
 }
 ```
 
-`AgentSession` snapshots the tool set at task start, validates tool arguments
-against JSON Schema in the browser, suppresses repeated action IDs within that
-live task, and exposes provider-neutral task/text/tool events. Session
-provisioning and pairing belong to the user-owned runtime. `connectAgent`
-exchanges a one-time code for an expiring capability and returns only an opaque
-Agent Connect session id; OmniGENT conversation ids stay internal. Reconnect
-with `accessToken: connection.accessToken` while that capability remains valid.
-`revokeAgentAuthorization` lets the application revoke its own grant with that
-bearer credential. A revoked or expired grant is surfaced as the typed
-`invalid_app_grant` error so applications can discard stale local state and
-start authorization again.
-
-The package also retains the deliberately narrow `SingleMcpServer` and
-`createBrowserAcpStream` experimental ACP/MCP-over-ACP helpers. They are not on
-the first provider's critical path.
+See the repository's complete
+[web application integration guide](https://github.com/jomi-se/agent-connect/blob/main/docs/guides/web-app-integration.md)
+for callback handling, transaction storage, package installation, revocation,
+and the real connector setup.
 
 ## Current constraints
 
-- one online OmniGENT host, selected explicitly when more than one is online;
-- one active task per provider instance;
-- a fixed tool snapshot per task;
-- in-memory duplicate suppression only, not durable exactly-once execution;
-- session/capability state is in-memory and does not survive a gateway restart;
-- no application-owned mutation approval or durable provider-session recovery
-  yet;
-- the experimental MCP-over-ACP helper still supports only one connection and
-  MCP `initialize`, `notifications/initialized`, `ping`, `tools/list`, and
-  `tools/call`.
+- one active task per application session;
+- a fixed tool snapshot per logical/downstream session;
+- in-memory action suppression only, not generic exactly-once execution;
+- bearer app grants are not yet sender-bound with DPoP;
+- no durable unresolved-tool recovery yet; and
+- the experimental MCP-over-ACP helpers are not the default provider path.
+
+MIT licensed.

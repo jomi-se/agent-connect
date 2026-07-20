@@ -5,12 +5,33 @@ import {
   completeAgentAuthorization,
   defineTool,
   parseAuthorizationTransaction,
+  parseRuntimeCard,
   revokeAgentAuthorization,
   serializeAuthorizationTransaction,
   type RuntimeCard,
 } from "../src/index.js";
 
 describe("Agent Connect enrollment and authorization", () => {
+  it("parses a portable runtime card and rejects incomplete input", () => {
+    const card = parseRuntimeCard(
+      JSON.stringify({
+        version: 1,
+        runtimeId: "sha256:runtime",
+        endpoint: "https://runtime.example",
+        connectorPublicKey: { kty: "OKP", crv: "Ed25519", x: "public" },
+        transportProfile: "tailscale-serve",
+        authorizationServer: "https://runtime.example",
+      }),
+    );
+    expect(card.runtimeId).toBe("sha256:runtime");
+    expect(() => parseRuntimeCard("not json")).toThrow(
+      "Invalid Agent Connect runtime card",
+    );
+    expect(() => parseRuntimeCard(JSON.stringify({ version: 1 }))).toThrow(
+      "Invalid Agent Connect runtime card",
+    );
+  });
+
   it("verifies the connector before pushing tools and completes PKCE", async () => {
     const { privateKey, publicKey } = (await crypto.subtle.generateKey(
       "Ed25519",
