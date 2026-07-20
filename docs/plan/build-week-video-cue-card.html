@@ -39,14 +39,18 @@
       }
 
       html {
+        height: 100%;
         scroll-behavior: smooth;
       }
 
       body {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
         margin: 0;
         min-width: 320px;
-        min-height: 100vh;
-        min-height: 100svh;
+        height: 100vh;
+        height: 100svh;
+        overflow: hidden;
         background: #f4f6f8;
       }
 
@@ -61,12 +65,9 @@
       }
 
       .timer-shell {
-        position: sticky;
         z-index: 10;
-        top: 0;
         border-bottom: 1px solid var(--line);
         background: rgb(244 246 248 / 96%);
-        backdrop-filter: blur(10px);
       }
 
       .timer-inner,
@@ -148,32 +149,20 @@
         background: var(--accent);
         transform: scaleX(0);
         transform-origin: left center;
-        transition: transform 160ms linear;
       }
 
       main {
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto auto;
         gap: 0.75rem;
-        min-height: calc(100svh - 8.5rem);
+        min-height: 0;
+        height: 100%;
         padding: 0.85rem 1rem max(1rem, env(safe-area-inset-bottom));
       }
 
-      .must-cover {
-        margin: 0;
-        border: 1px solid #dfc56c;
-        border-radius: 0.65rem;
-        padding: 0.65rem 0.75rem;
-        color: #59400a;
-        background: var(--signal-soft);
-        font-size: 0.95rem;
-        line-height: 1.35;
-        text-align: center;
-      }
-
       .cues {
-        flex: 1;
         min-height: 0;
+        height: 100%;
       }
 
       .cue {
@@ -184,7 +173,8 @@
         display: flex;
         flex-direction: column;
         justify-content: center;
-        min-height: min(48svh, 27rem);
+        min-height: 0;
+        height: 100%;
         border-color: var(--accent);
         border: 2px solid var(--accent);
         border-radius: 0.8rem;
@@ -201,7 +191,7 @@
 
       .cue h2 {
         margin: 0;
-        font-size: clamp(1.55rem, 7vw, 2rem);
+        font-size: clamp(2rem, 8vw, 2.5rem);
         line-height: 1.05;
         letter-spacing: -0.03em;
         text-wrap: balance;
@@ -211,15 +201,15 @@
         flex: none;
         color: var(--accent);
         font-variant-numeric: tabular-nums;
-        font-size: 1rem;
+        font-size: 1.15rem;
         font-weight: 760;
       }
 
       .cue p {
         margin: 1rem 0 0;
         color: #344252;
-        font-size: clamp(1.18rem, 5.2vw, 1.4rem);
-        line-height: 1.43;
+        font-size: clamp(1.65rem, 6.5vw, 2rem);
+        line-height: 1.38;
         text-wrap: pretty;
       }
 
@@ -232,12 +222,13 @@
       .say {
         border-top: 1px solid rgb(0 107 99 / 22%);
         padding-top: 0.85rem;
+        font-size: clamp(1.25rem, 5vw, 1.5rem) !important;
       }
 
       .next-preview {
         border: 1px solid var(--line);
         border-radius: 0.7rem;
-        padding: 0.8rem 0.9rem;
+        padding: 0.65rem 0.8rem;
         background: var(--surface);
       }
 
@@ -253,14 +244,14 @@
 
       .next-preview strong {
         display: block;
-        font-size: 1.2rem;
+        font-size: 1.3rem;
         line-height: 1.25;
       }
 
       .next-preview p {
         margin: 0.25rem 0 0;
         color: var(--muted);
-        font-size: 1rem;
+        font-size: 1.05rem;
         line-height: 1.35;
       }
 
@@ -311,6 +302,31 @@
         transform-origin: left center;
       }
 
+      .tap-hint {
+        position: fixed;
+        z-index: 5;
+        top: 52%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.65rem;
+        height: 2.5rem;
+        border-radius: 0.45rem;
+        color: rgb(23 32 43 / 55%);
+        background: rgb(244 246 248 / 90%);
+        font-size: 1.3rem;
+        font-weight: 760;
+        pointer-events: none;
+      }
+
+      .tap-hint-back {
+        left: 0;
+      }
+
+      .tap-hint-next {
+        right: 0;
+      }
+
       @media (min-width: 42rem) {
         .timer-inner,
         main {
@@ -318,7 +334,7 @@
         }
 
         .cue.active {
-          min-height: 25rem;
+          padding-inline: 2rem;
         }
       }
 
@@ -350,12 +366,10 @@
       </div>
     </section>
 
-    <main>
-      <p class="must-cover">
-        Must say: <strong>Codex + GPT-5.6</strong> · deterministic public
-        fixture
-      </p>
+    <span class="tap-hint tap-hint-back" aria-hidden="true">‹</span>
+    <span class="tap-hint tap-hint-next" aria-hidden="true">›</span>
 
+    <main>
       <section class="cues" aria-label="Video sections">
         <article
           class="cue active"
@@ -671,6 +685,14 @@
 
       nextButton.addEventListener("click", () => {
         jumpToCue(cueIndexAt(elapsedSeconds()) + 1);
+      });
+
+      document.addEventListener("click", (event) => {
+        if (event.target instanceof Element && event.target.closest("button"))
+          return;
+        const activeIndex = cueIndexAt(elapsedSeconds());
+        const tappedBackZone = event.clientX <= window.innerWidth * 0.2;
+        jumpToCue(activeIndex + (tappedBackZone ? -1 : 1));
       });
 
       render();
