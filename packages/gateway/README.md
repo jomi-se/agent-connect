@@ -1,9 +1,11 @@
 # Agent Connect gateway
 
-The gateway is the narrow HTTPS-facing envelope for a browser application. It
-binds to loopback, accepts only configured browser origins and Tailscale users,
-and brokers only the application sessions and OmniGENT stream/event routes used
-by the web SDK.
+The gateway is the narrow HTTPS-facing envelope for browser applications. It
+binds to loopback, authenticates the configured Tailscale user, and brokers only
+the application sessions and OmniGENT stream/event routes used by the web SDK.
+The private reference profile can enroll previously unknown HTTPS Origins
+through connector-owned consent; a static Origin allowlist remains available
+as an operator policy.
 
 It is intentionally not a general OmniGENT reverse proxy.
 
@@ -17,6 +19,7 @@ commands below are the generic gateway profile.
 
 ```sh
 export AGENT_CONNECT_ALLOWED_ORIGINS='https://PROJECT--agent-connect-HASH.web.app'
+export AGENT_CONNECT_DYNAMIC_APP_ENROLLMENT='1'
 export AGENT_CONNECT_ALLOWED_TAILSCALE_USERS='you@example.com'
 export AGENT_CONNECT_WORKSPACE='/path/the/codex-agent-may-use'
 export AGENT_CONNECT_STATE_PATH='/owner-only/path/agent-connect.json'
@@ -44,6 +47,14 @@ secret as clearly separated outputs. Save the secret in a password manager. Impo
 into the app; enter the passphrase only on the connector-owned consent page.
 The app verifies a signed connector challenge before sending its tools and uses
 S256 PKCE to obtain a revocable origin/app/tool-bound grant.
+
+With `AGENT_CONNECT_DYNAMIC_APP_ENROLLMENT=1`, an unknown HTTPS Origin may
+reach the signed-challenge and authorization endpoints. This is not ambient
+agent access: Tailscale must authenticate the configured operator, the
+connector-owned page requires explicit consent, redirects must remain on the
+requesting Origin, and all later requests require the exact bound grant. This
+mode is accepted only with `AGENT_CONNECT_TRANSPORT_PROFILE=tailscale-serve`;
+the anonymous public-demo profile rejects it.
 Applications may revoke their own grant through bearer-authenticated
 `POST /oauth/revoke`; the response deliberately does not reveal whether the
 submitted token existed. Connector-owned grant listing and administrative

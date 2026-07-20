@@ -27,6 +27,19 @@ application schema into the top-level session message event because
 fork was required. The captured result is documented in
 [the nonce experiment](../experiments/omnigent-codex-nonce.md).
 
+On 2026-07-20, the read-only reference profile exposed a second narrow adapter
+gap. Codex correctly requested approval for the dynamically relayed MCP tools,
+but the application-facing gateway intentionally does not expose downstream
+runtime approval prompts. Codex supports per-server `enabled_tools` and
+per-tool `approval_mode`, while `codex-acp` 1.1.2 and 1.1.4 preserve only the
+ACP MCP server's transport fields. The reference launcher therefore prepares
+an auditable compatibility copy of the pinned adapter. It reads a
+gateway-written, per-session workspace manifest and configures Codex to expose
+and pre-approve only the exact grant-bound application tool names. OmniGENT
+built-ins are not approved and are excluded from that Codex MCP server. This is
+provider-specific compatibility code behind the internal adapter boundary; it
+does not change the browser API or claim to extend ACP.
+
 Use OmniGENT as the first internal provider behind the gateway. Use its existing
 HTTP/SSE surface for the hackathon; do not put an upstream ACP facade on the
 critical path.

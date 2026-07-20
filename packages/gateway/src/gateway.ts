@@ -32,6 +32,7 @@ import {
 
 export interface GatewayOptions {
   readonly allowedOrigins: ReadonlySet<string>;
+  readonly dynamicAppEnrollment?: boolean;
   readonly allowedTailscaleUsers: ReadonlySet<string>;
   readonly omnigentBaseUrl: string;
   readonly workspace?: string;
@@ -63,6 +64,7 @@ interface ManagedSession {
   readonly appId: string;
   readonly origin: string;
   readonly toolHash: string;
+  readonly approvedToolNames: readonly string[];
   readonly authorizationGrantId?: string;
   providerSessionId: string;
 }
@@ -75,10 +77,24 @@ const PUBLIC_DEMO_PROFILE = "public-demo";
 const PUBLIC_DEMO_PRINCIPAL = "agent-connect-public-demo";
 
 export function createGateway(options: GatewayOptions) {
-  if (options.allowedOrigins.size === 0) {
+  const publicDemo = options.transportProfile === PUBLIC_DEMO_PROFILE;
+  const dynamicAppEnrollment = options.dynamicAppEnrollment === true;
+  if (options.allowedOrigins.size === 0 && !dynamicAppEnrollment) {
     throw new TypeError("At least one allowed browser origin is required");
   }
-  const publicDemo = options.transportProfile === PUBLIC_DEMO_PROFILE;
+  if (
+    dynamicAppEnrollment &&
+    (publicDemo || options.transportProfile !== "tailscale-serve")
+  ) {
+    throw new TypeError(
+      "dynamic app enrollment requires the tailscale-serve transport profile",
+    );
+  }
+  if (dynamicAppEnrollment && !options.authStatePath) {
+    throw new TypeError(
+      "dynamic app enrollment requires connector authorization state",
+    );
+  }
   if (!publicDemo && options.allowedTailscaleUsers.size === 0) {
     throw new TypeError("At least one allowed Tailscale login is required");
   }
@@ -201,7 +217,11 @@ export function createGateway(options: GatewayOptions) {
       }
 
       const origin = header(request, "origin");
-      if (!origin || !options.allowedOrigins.has(origin)) {
+      if (
+        !origin ||
+        (!options.allowedOrigins.has(origin) &&
+          !(dynamicAppEnrollment && isDynamicApplicationOrigin(origin)))
+      ) {
         sendJson(response, 403, { error: "origin_not_allowed" });
         return;
       }
@@ -554,12 +574,14 @@ export function createGateway(options: GatewayOptions) {
         appId: input.appId,
         origin,
         toolHash: input.toolHash,
+        approvedToolNames: input.tools.map((tool) => tool.name),
       });
       const created: ManagedSession = {
         id: `acs_${randomUUID()}`,
         appId: input.appId,
         origin,
         toolHash: input.toolHash,
+        approvedToolNames: input.tools.map((tool) => tool.name),
         ...(authorizationGrantId ? { authorizationGrantId } : {}),
         providerSessionId,
       };
@@ -588,6 +610,7 @@ export function createGateway(options: GatewayOptions) {
         appId: session.appId,
         origin: session.origin,
         toolHash: session.toolHash,
+        approvedToolNames: session.approvedToolNames,
       });
       return session;
     })();
@@ -733,6 +756,20 @@ function canonicalPublicEndpoint(value: string): string {
     throw new TypeError("publicEndpoint must not include a path");
   }
   return endpoint.origin;
+}
+
+function isDynamicApplicationOrigin(value: string): boolean {
+  try {
+    const origin = new URL(value);
+    return (
+      origin.protocol === "https:" &&
+      origin.origin === value &&
+      !origin.username &&
+      !origin.password
+    );
+  } catch {
+    return false;
+  }
 }
 
 function setCors(response: ServerResponse, origin: string): void {

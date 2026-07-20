@@ -109,9 +109,16 @@ An authenticated application remains untrusted. The gateway selects a
 connector-owned runtime posture that the application cannot broaden and reports
 its configuration, claim source, and relevant observations. The runtime adapter
 implements the filesystem, network, persistence, credential, and sandbox
-mechanics. The target reference profile exposes only the approved application tool snapshot
-in an empty isolated workspace, removes ambient integrations, and denies local
-escalation and tool network access. Application result events and connector
+mechanics. The target hardened profile exposes only the approved application
+tool snapshot in an empty OS-isolated workspace, removes ambient integrations,
+and denies local escalation and tool network access. The current
+source-installable Codex profile uses a fresh dedicated directory per session,
+but that directory is not yet an OS confidentiality boundary. It records the
+grant-bound tool names in a mode-`0600` session manifest. An internal
+compatibility adapter converts that manifest into Codex MCP `enabled_tools`
+plus per-tool approval settings. This preapproves only the browser tools the
+user already consented to; OmniGENT's built-in MCP tools and all other MCP tools
+remain unavailable or approval-gated. Application result events and connector
 approval events use separate protocols and credentials. See the
 [control-plane/runtime decision](../decisions/0008-control-plane-and-runtime-confinement-boundary.md)
 and [malicious-application threat model](../research/2026-07-14-malicious-application-runtime-threat-model.md).
@@ -165,15 +172,17 @@ Owns the actual side effect. It receives a stable action ID and must make conseq
 ```text
 1. Browser registers a fixed tool snapshot while creating the application session.
 2. Gateway validates, canonically hashes, authorizes, and records the snapshot.
-3. Gateway provisions and binds a healthy OmniGENT runner for that snapshot.
-4. OmniGENT provider attaches the schemas to the first session message event.
-5. Codex calls a tool through OmniGENT's downstream MCP relay.
-6. OmniGENT emits action_required.
-7. Gateway persists a pending action.
-8. Gateway sends the normalized tool call to the browser.
-9. Browser approves and executes the application handler.
-10. Gateway posts the correlated tool result to OmniGENT.
-11. Codex resumes and completes the turn.
+3. Gateway writes the exact authorized tool names into a private session policy manifest.
+4. Gateway provisions and binds a healthy OmniGENT runner for that snapshot.
+5. The internal Codex adapter enables and preapproves only those granted relay tools.
+6. OmniGENT provider attaches the schemas to the first session message event.
+7. Codex calls a tool through OmniGENT's downstream MCP relay.
+8. OmniGENT emits action_required.
+9. Gateway persists a pending action.
+10. Gateway sends the normalized tool call to the browser.
+11. Browser executes the application-owned handler and returns its result.
+12. Gateway posts the correlated tool result to OmniGENT.
+13. Codex resumes and completes the turn.
 ```
 
 ## Fallback architecture

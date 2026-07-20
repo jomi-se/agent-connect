@@ -1,6 +1,7 @@
 # 0007: Bootstrap once with a runtime card, then authorize apps through the connector
 
-- Status: accepted; narrow Tailscale profile implemented, hardening deferred
+- Status: accepted; dynamic Tailscale application enrollment implemented,
+  hardening deferred
 - Date: 2026-07-14
 
 ## Context
@@ -120,16 +121,18 @@ spike. Dynamic registration, URL-based client metadata, or an Agent Connect
 profile may be required. The project must state any profile extensions plainly
 and must not claim generic OAuth conformance before interoperability tests pass.
 
-The target does not require an operator to pre-register each application in
+The reference Tailscale profile does not require an operator to pre-register each application in
 gateway environment variables. An unknown HTTPS Origin can initiate a bounded
 authorization request, but cannot create sessions or exchange application data
 until the connector user approves it. Approval persists a revocable grant
 bound to the exact Origin, redirect URI, application id, scopes, and canonical
 tool snapshot. This is dynamic application enrollment, not global host trust:
 approving one grant must not authorize other applications, redirects, tools,
-or privileges on the same host. The current static Origin allowlist remains an
-implementation constraint and an intentional additional restriction in the
-shared public-demo profile.
+or privileges on the same host. The static Origin allowlist remains available
+as an operator policy and is an intentional additional restriction in the
+shared public-demo profile. Dynamic enrollment is accepted only for the
+authenticated `tailscale-serve` profile; it cannot be enabled for the anonymous
+public-demo transport.
 
 ## Security boundary
 
