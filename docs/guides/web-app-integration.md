@@ -31,12 +31,14 @@ Codex, Tailscale, and Node gateway types do not enter the application bundle.
 
 ```ts
 import {
+  AgentConnectError,
   beginAgentAuthorization,
   completeAgentAuthorization,
   connectAgent,
   defineTool,
   parseAuthorizationTransaction,
   parseRuntimeCard,
+  revokeAgentAuthorization,
   serializeAuthorizationTransaction,
   type AgentConnection,
 } from "@agent-connect/web";
@@ -45,6 +47,7 @@ const APP_ID = "my-shopping-list";
 const REDIRECT_URI = `${location.origin}${location.pathname}`;
 const TRANSACTION_KEY = "agent-connect.authorization-transaction";
 const GRANT_KEY = "agent-connect.app-grant";
+const RUNTIME_CARD_KEY = "agent-connect.runtime-card";
 
 const tools = [
   defineTool({
@@ -85,27 +88,36 @@ contains an endpoint and public identity key, not an agent credential or bearer
 token.
 
 ```ts
-async function connectRuntime(runtimeCardText: string) {
-  const runtimeCard = parseRuntimeCard(runtimeCardText);
+async function connectRuntime(
+  runtimeCardText?: string,
+): Promise<AgentConnection | undefined> {
+  const serializedCard =
+    runtimeCardText?.trim() || sessionStorage.getItem(RUNTIME_CARD_KEY);
+  if (!serializedCard) throw new Error("No Agent Connect runtime card saved");
+  const runtimeCard = parseRuntimeCard(serializedCard);
+  sessionStorage.setItem(RUNTIME_CARD_KEY, JSON.stringify(runtimeCard));
   let accessToken = sessionStorage.getItem(GRANT_KEY);
 
   const transactionText = sessionStorage.getItem(TRANSACTION_KEY);
   const callback = new URL(location.href);
-  if (
-    transactionText &&
-    (callback.searchParams.has("code") || callback.searchParams.has("error"))
-  ) {
-    const grant = await completeAgentAuthorization({
-      runtimeCard,
-      appId: APP_ID,
-      redirectUri: REDIRECT_URI,
-      transaction: parseAuthorizationTransaction(transactionText),
-      callbackUrl: callback.toString(),
-    });
-    accessToken = grant.accessToken;
-    sessionStorage.setItem(GRANT_KEY, accessToken);
-    sessionStorage.removeItem(TRANSACTION_KEY);
-    history.replaceState({}, "", REDIRECT_URI);
+  const hasCallback =
+    callback.searchParams.has("code") || callback.searchParams.has("error");
+  if (transactionText && hasCallback) {
+    try {
+      const grant = await completeAgentAuthorization({
+        runtimeCard,
+        appId: APP_ID,
+        redirectUri: REDIRECT_URI,
+        transaction: parseAuthorizationTransaction(transactionText),
+        callbackUrl: callback.toString(),
+      });
+      accessToken = grant.accessToken;
+      sessionStorage.setItem(GRANT_KEY, accessToken);
+    } finally {
+      // A denial or malformed callback must not leave the app in a retry loop.
+      sessionStorage.removeItem(TRANSACTION_KEY);
+      history.replaceState({}, "", REDIRECT_URI);
+    }
   }
 
   if (!accessToken) {
@@ -119,17 +131,70 @@ async function connectRuntime(runtimeCardText: string) {
       TRANSACTION_KEY,
       serializeAuthorizationTransaction(authorization.transaction),
     );
+    // Persist both values before the full-page connector redirect.
+    sessionStorage.setItem(RUNTIME_CARD_KEY, JSON.stringify(runtimeCard));
     location.assign(authorization.authorizeUrl);
     return;
   }
 
-  return connectAgent({
-    baseUrl: runtimeCard.endpoint,
-    appId: APP_ID,
-    tools,
-    accessToken,
-  });
+  try {
+    return await connectAgent({
+      baseUrl: runtimeCard.endpoint,
+      appId: APP_ID,
+      tools,
+      accessToken,
+    });
+  } catch (error) {
+    if (
+      error instanceof AgentConnectError &&
+      error.code === "invalid_app_grant"
+    ) {
+      sessionStorage.removeItem(GRANT_KEY);
+      return connectRuntime(JSON.stringify(runtimeCard));
+    }
+    throw error;
+  }
 }
+
+async function resumeAuthorizationCallback() {
+  const transactionText = sessionStorage.getItem(TRANSACTION_KEY);
+  if (!transactionText) return;
+  const transaction = parseAuthorizationTransaction(transactionText);
+  const callback = new URL(location.href);
+  if (
+    !callback.searchParams.has("code") &&
+    !callback.searchParams.has("error")
+  ) {
+    return;
+  }
+  // Do not consume a callback belonging to another OAuth-style integration.
+  if (callback.searchParams.get("state") !== transaction.state) return;
+  try {
+    const connection = await connectRuntime();
+    if (connection) useConnection(connection);
+  } catch (error) {
+    showConnectionError(error);
+  }
+}
+
+async function disconnectRuntime() {
+  const serializedCard = sessionStorage.getItem(RUNTIME_CARD_KEY);
+  const accessToken = sessionStorage.getItem(GRANT_KEY);
+  try {
+    if (serializedCard && accessToken) {
+      await revokeAgentAuthorization({
+        baseUrl: parseRuntimeCard(serializedCard).endpoint,
+        appId: APP_ID,
+        accessToken,
+      });
+    }
+  } finally {
+    sessionStorage.removeItem(GRANT_KEY);
+    sessionStorage.removeItem(TRANSACTION_KEY);
+  }
+}
+
+void resumeAuthorizationCallback();
 ```
 
 `beginAgentAuthorization` first verifies a fresh connector signature against
@@ -138,9 +203,11 @@ scopes, and tool definitions. For the private Tailscale profile, a previously
 unknown HTTPS Origin may request authorization; the user approves it on the
 connector-owned page. No gateway restart or Origin pre-registration is needed.
 
-The example keeps the bearer grant in `sessionStorage`, matching the current
-demo. A production app should select storage and XSS controls appropriate to
-its threat model. DPoP/app-instance sender binding is not implemented yet.
+The example keeps the runtime card, authorization transaction, and bearer grant
+in `sessionStorage`, matching the current demo. The runtime card is public
+identity material; the transaction and grant are credentials. A production app
+should select storage and XSS controls appropriate to its threat model.
+DPoP/app-instance sender binding is not implemented yet.
 
 ## Send a task and handle the live result
 

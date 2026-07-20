@@ -32,7 +32,7 @@ The [real connector guide](deploy/real-connector/README.md) starts the usable
 MVP on a Linux machine:
 
 ```sh
-curl -fsSL https://omnigent.ai/install.sh | sh
+curl -fsSL https://omnigent.ai/install.sh | sh -s -- --version 0.5.1
 git clone https://github.com/jomi-se/agent-connect.git
 cd agent-connect
 npm install
@@ -42,6 +42,10 @@ cp deploy/real-connector/.env.example deploy/real-connector/.env
 # Configure Tailscale endpoint, user, dedicated CODEX_HOME, and workspace.
 deploy/real-connector/run.sh
 ```
+
+During Build Week the repository is private, so judges must authenticate
+GitHub with the access named in the submission before cloning. The clone is
+anonymous once the repository is public.
 
 The supervisor runs a loopback Agent Connect gateway, OmniGENT server and host,
 a narrow compatibility wrapper around the pinned `codex-acp` adapter, and a
@@ -169,6 +173,11 @@ npm run test:package:web
 # Start disposable real OmniGENT services with a deterministic ACP agent.
 npm run test:integration:omnigent
 ```
+
+`npm run verify:full` adds the clean external SDK-package consumer and Canvas
+Playwright suites to the default fast gate. It still does not consume model
+credits. The real OmniGENT provider test remains explicit because it starts
+local services.
 
 The provider-contract test exercises gateway → OmniGENT → ACP → request-scoped
 MCP → application result without using a model. The real connector guide is the

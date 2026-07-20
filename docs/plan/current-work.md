@@ -82,6 +82,13 @@ Not implemented:
 - connector-card/passphrase recovery, export, and key rotation commands;
 - durable pending authorization requests, codes, provider mappings, or
   unresolved application tool calls;
+- cleanup/expiry for successfully created per-session workspaces and replaced
+  provider sessions (failed launches are cleaned immediately);
+- provider-owned namespacing for application tools; the reference profile pins
+  OmniGENT 0.5.1 until names can no longer collide with moving built-ins;
+- coarse public-endpoint rate limiting beyond bounded transient authorization
+  state, per-request enrollment lockout, and two concurrent asynchronous
+  passphrase verifications;
 - a production confinement boundary for a malicious authorized application;
 - a first-class session/developer-context field distinct from the user's task
   prompt; the Canvas currently composes its stable instructions into each task

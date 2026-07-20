@@ -33,20 +33,20 @@
 
 ## Conductor and OmniGENT provider
 
-| Capability                                         | Current milestone | Main risk                                                            |
-| -------------------------------------------------- | ----------------- | -------------------------------------------------------------------- |
-| Use existing OmniGENT HTTP/SSE session transport   | Browser slice     | Browser CORS/auth deployment still needs real-surface proof          |
-| Pass request-scoped tools into the first turn      | Proven spike      | Live nonce composition passed on 2026-07-13                          |
-| Drive maintained `@agentclientprotocol/codex-acp`  | Proven spike      | Live Codex turn completed with published adapter 1.1.2               |
-| Round-trip `action_required` tool output           | Proven spike      | Exact-once callback and same-turn completion observed                |
-| Provision and bind runners                         | Session slice     | Gateway uploads the fixed agent bundle and selects one host          |
-| Reuse a healthy matching session                   | Session slice     | Same origin/app/tool hash resolves to one logical session            |
-| Heal an offline matching runner                    | Session slice     | Gateway transparently provisions a replacement runner                |
-| Persist pending application actions                | Reliability slice | OmniGENT currently does not persist `action_required` calls          |
-| Run the reference connector as an OCI appliance    | Exploration       | Shared container protects the host but not sessions from one another |
-| Allocate a private workspace per runtime session   | Exploration       | Gateway owns creation, mode, binding, expiry, and cleanup            |
-| Launch a fresh runner container per session        | Future security   | May require an OmniGENT host adapter or maintained fork              |
-| Publish an isolated judge connector through Funnel | Submission        | Public transport must not weaken private Serve identity enforcement  |
+| Capability                                         | Current milestone | Main risk                                                                                      |
+| -------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------- |
+| Use existing OmniGENT HTTP/SSE session transport   | Browser slice     | Browser CORS/auth deployment still needs real-surface proof                                    |
+| Pass request-scoped tools into the first turn      | Proven spike      | Live nonce composition passed on 2026-07-13                                                    |
+| Drive maintained `@agentclientprotocol/codex-acp`  | Proven spike      | Live Codex turn completed with published adapter 1.1.2                                         |
+| Round-trip `action_required` tool output           | Proven spike      | Exact-once callback and same-turn completion observed                                          |
+| Provision and bind runners                         | Session slice     | Gateway uploads the fixed agent bundle and selects one host                                    |
+| Reuse a healthy matching session                   | Session slice     | Same origin/app/tool hash resolves to one logical session                                      |
+| Heal an offline matching runner                    | Session slice     | Gateway transparently provisions a replacement runner                                          |
+| Persist pending application actions                | Reliability slice | OmniGENT currently does not persist `action_required` calls                                    |
+| Run the reference connector as an OCI appliance    | Exploration       | Shared container protects the host but not sessions from one another                           |
+| Allocate a dedicated workspace per runtime session | Session slice     | Creation and failed-launch cleanup exist; successful-session expiry and cleanup remain pending |
+| Launch a fresh runner container per session        | Future security   | May require an OmniGENT host adapter or maintained fork                                        |
+| Publish an isolated judge connector through Funnel | Submission        | Public transport must not weaken private Serve identity enforcement                            |
 
 ## Security and reliability constraints
 
