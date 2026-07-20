@@ -484,7 +484,7 @@ The public demo exercises the following product behavior:
 
 1. a visitor imports the public runtime card;
 2. the SDK verifies connector identity and completes device enrollment and application authorization when required;
-3. one application grant authorizes the exact fixed nine-tool snapshot;
+3. one application grant authorizes the exact fixed ten-tool snapshot;
 4. the visitor selects a project-board, document-review, or product-research scenario and sends a prompt;
 5. the deterministic ACP fixture follows the corresponding Codex-authored recorded plan;
 6. real tool requests cross OmniGENT, the gateway, and SDK into browser-owned handlers;
@@ -492,7 +492,10 @@ The public demo exercises the following product behavior:
 8. the task completes through the same protocol path;
 9. the connector can list and revoke the application grant, after which reuse is rejected.
 
-### Three example applications and nine tools
+### Three example applications and ten tools
+
+All three expose `get_current_app_state`, which reads the selected view at call
+time before the runtime chooses any write operation.
 
 **Northstar project board**
 
@@ -512,7 +515,7 @@ The public demo exercises the following product behavior:
 - `add_price_comparison`
 - `add_product_alternatives`
 
-The public grant authorizes one frozen superset of all nine tools so switching scenarios does not require repeated consent. The deterministic fixture selects the corresponding recorded three-tool plan. Product prices and sources are recorded, not live web research.
+The public grant authorizes one frozen superset of all ten tools so switching scenarios does not require repeated consent. The deterministic fixture reads the current view and then selects the corresponding recorded three-write-tool plan. Product prices and sources are recorded, not live web research.
 
 ## Current security and confinement truth
 
@@ -645,7 +648,7 @@ The intended reliability model uses explicit pending, delivered, applied, acknow
 
 ## Implementation status summary
 
-- **Implemented now:** neutral public task/tool types, connector key and runtime card, signed challenge, passphrase device enrollment, connector-owned consent, PKCE, bearer grant, exact Origin/app/scope/tool bindings, revocation, opaque sessions, OmniGENT provisioning and healing, real Codex composition proof, deterministic public judge appliance, nine browser tools, and live browser mutation choreography.
+- **Implemented now:** neutral public task/tool types, connector key and runtime card, signed challenge, passphrase device enrollment, connector-owned consent, PKCE, bearer grant, exact Origin/app/scope/tool bindings, revocation, opaque sessions, OmniGENT provisioning and healing, real Codex composition proof, deterministic public judge appliance, ten browser tools, and live browser read/write choreography.
 - **Current provider-specific seam:** the browser package still contains an `OmnigentProvider` and uses gateway-proxied OmniGENT-shaped routes internally.
 - **Proposed or pending:** AG-UI application-facing adapter, dynamic unknown-Origin enrollment, DPoP/app-instance keys, durable pending actions and provider mappings, audit and usage ceilings, a reproducible general connector appliance, separate ephemeral runner containers, and a second provider.
 - **Experimental or unstable:** direct ACP browser profile, WebSocket ACP transport, MCP-over-ACP subset, and the Bubblewrap dynamic-tool sandbox.

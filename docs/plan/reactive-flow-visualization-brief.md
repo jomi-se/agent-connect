@@ -83,24 +83,28 @@ direction reversal is the most important relationship to make legible.
 ## Current demo applications and tools
 
 The demo presents three visually independent third-party applications. The
-public demo authorizes one fixed superset of all nine tools so the visitor does
-not repeat consent when switching examples.
+public demo authorizes one fixed superset of all ten tools so the visitor does
+not repeat consent when switching examples. Every scenario first uses the
+shared `get_current_app_state` tool to read the selected live view.
 
 ```ts
 const toolsByScenario = {
   "project-board": [
+    "get_current_app_state",
     "create_project_tasks",
     "update_project_tasks",
     "move_project_tasks",
   ],
 
   "document-review": [
+    "get_current_app_state",
     "add_document_comments",
     "replace_document_text",
     "format_document_blocks",
   ],
 
   "product-research": [
+    "get_current_app_state",
     "add_product_assessment",
     "add_price_comparison",
     "add_product_alternatives",
@@ -387,6 +391,7 @@ const exampleSequence: DemoFlowEvent[] = [
     appId: "agent-connect-demo",
     origin: "https://agent-connect-demo.web.app",
     tools: [
+      "get_current_app_state",
       "create_project_tasks",
       "update_project_tasks",
       "move_project_tasks",

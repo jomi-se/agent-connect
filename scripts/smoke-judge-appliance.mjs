@@ -11,6 +11,12 @@ const appId = "agent-connect-demo";
 const redirectUri = `${appOrigin}/`;
 const verifier = randomBytes(48).toString("base64url");
 const tools = [
+  objectTool(
+    "get_current_app_state",
+    "Read the currently selected app view. Call this before deciding which app-specific write tools to use.",
+    {},
+    [],
+  ),
   objectArrayTool(
     "create_project_tasks",
     "Add several tasks to the project board.",
@@ -110,6 +116,7 @@ const tools = [
   ),
 ];
 const expectedToolNames = [
+  "get_current_app_state",
   "create_project_tasks",
   "update_project_tasks",
   "move_project_tasks",
