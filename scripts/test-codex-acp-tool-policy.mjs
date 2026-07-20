@@ -10,9 +10,9 @@ import { patchCodexAcpSource } from "./prepare-codex-acp-adapter.mjs";
 const workspace = await mkdtemp(join(tmpdir(), "agent-connect-policy-"));
 try {
   const transport = { command: "relay", args: [], env: {} };
-  assert.equal(
-    applyAgentConnectMcpPolicy(workspace, "omnigent", transport),
-    transport,
+  assert.throws(
+    () => applyAgentConnectMcpPolicy(workspace, "omnigent", transport),
+    /could not read/,
   );
 
   const policyDirectory = join(workspace, ".agent-connect");
@@ -38,6 +38,10 @@ try {
       },
     },
   );
+  assert.throws(
+    () => applyAgentConnectMcpPolicy(workspace, "renamed-relay", transport),
+    /expected MCP server omnigent, received renamed-relay/,
+  );
 
   await writeFile(
     join(policyDirectory, "codex-mcp-policy.json"),
@@ -53,15 +57,20 @@ try {
     /invalid tool policy/,
   );
 
-  const fixture = `#!/usr/bin/env node\nconst value = this.createMcpSeverConfig(mcp.server);\n`;
+  const fixture = `#!/usr/bin/env node\nlet serversToConfigure = requestedServers.filter((mcp) => !existingNames.has(mcp.name));\nconst value = this.createMcpSeverConfig(mcp.server);\n`;
   const patched = patchCodexAcpSource(
     fixture,
     pathToFileURL("/tmp/policy.mjs").href,
   );
   assert.match(patched, /applyAgentConnectMcpPolicy\(projectPath, mcp\.name,/);
+  assert.match(patched, /mcp\.name === "omnigent"/);
   assert.throws(
-    () => patchCodexAcpSource("#!/usr/bin/env node\n", "file:///policy.mjs"),
-    /expected one MCP configuration seam/,
+    () =>
+      patchCodexAcpSource(
+        "#!/usr/bin/env node\nconst value = this.createMcpSeverConfig(mcp.server);\n",
+        "file:///policy.mjs",
+      ),
+    /expected one MCP conflict seam/,
   );
 
   const pinnedBundle = await readFile(

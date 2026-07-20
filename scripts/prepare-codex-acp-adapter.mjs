@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const CREATE_SERVER_CONFIG = "this.createMcpSeverConfig(mcp.server)";
+const FILTER_SERVER_CONFLICTS =
+  "requestedServers.filter((mcp) => !existingNames.has(mcp.name))";
 
 export function patchCodexAcpSource(source, policyModuleUrl) {
   if (!source.startsWith("#!/usr/bin/env node\n")) {
@@ -16,12 +18,22 @@ export function patchCodexAcpSource(source, policyModuleUrl) {
       `Unsupported codex-acp bundle: expected one MCP configuration seam, found ${occurrences}`,
     );
   }
+  const conflictOccurrences = source.split(FILTER_SERVER_CONFLICTS).length - 1;
+  if (conflictOccurrences !== 1) {
+    throw new Error(
+      `Unsupported codex-acp bundle: expected one MCP conflict seam, found ${conflictOccurrences}`,
+    );
+  }
   const importLine = `import { applyAgentConnectMcpPolicy } from ${JSON.stringify(policyModuleUrl)};\n`;
   return source
     .replace("#!/usr/bin/env node\n", `#!/usr/bin/env node\n${importLine}`)
     .replace(
       CREATE_SERVER_CONFIG,
       `applyAgentConnectMcpPolicy(projectPath, mcp.name, ${CREATE_SERVER_CONFIG})`,
+    )
+    .replace(
+      FILTER_SERVER_CONFLICTS,
+      'requestedServers.filter((mcp) => mcp.name === "omnigent" || !existingNames.has(mcp.name))',
     );
 }
 

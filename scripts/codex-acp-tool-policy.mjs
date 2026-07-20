@@ -39,7 +39,6 @@ export function applyAgentConnectMcpPolicy(
   try {
     raw = readFileSync(manifestPath, "utf8");
   } catch (error) {
-    if (error?.code === "ENOENT") return transportConfig;
     throw new Error(`Agent Connect could not read ${manifestPath}`, {
       cause: error,
     });
@@ -72,7 +71,11 @@ export function applyAgentConnectMcpPolicy(
     );
   }
 
-  if (manifest.mcpServer !== serverName) return transportConfig;
+  if (manifest.mcpServer !== serverName) {
+    throw new Error(
+      `Agent Connect expected MCP server ${manifest.mcpServer}, received ${serverName}`,
+    );
+  }
 
   const approvedToolNames = [...new Set(manifest.approvedToolNames)].sort();
   process.stderr.write(

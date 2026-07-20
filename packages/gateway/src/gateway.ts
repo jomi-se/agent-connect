@@ -526,7 +526,12 @@ export function createGateway(options: GatewayOptions) {
       if (error instanceof RequestTooLargeError) {
         sendJson(response, 413, { error: "request_too_large" });
       } else if (error instanceof ConnectorAuthError) {
-        sendJson(response, 400, { error: error.code });
+        const capacityError =
+          error.code === "authorization_capacity" ||
+          error.code === "enrollment_capacity" ||
+          error.code === "enrollment_busy";
+        if (capacityError) response.setHeader("Retry-After", "1");
+        sendJson(response, capacityError ? 429 : 400, { error: error.code });
       } else if (
         error instanceof InvalidRequestError ||
         error instanceof InvalidToolSnapshotError
@@ -933,9 +938,20 @@ function requireTransportPrincipal(
   allowedTailscaleUsers: ReadonlySet<string>,
   publicDemo: boolean,
 ): string | undefined {
-  return publicDemo
-    ? PUBLIC_DEMO_PRINCIPAL
-    : requireTailscaleUser(request, response, allowedTailscaleUsers);
+  if (publicDemo) return PUBLIC_DEMO_PRINCIPAL;
+  if (!isLoopbackAddress(request.socket.localAddress)) {
+    sendJson(response, 403, { error: "trusted_proxy_required" });
+    return undefined;
+  }
+  return requireTailscaleUser(request, response, allowedTailscaleUsers);
+}
+
+function isLoopbackAddress(address: string | undefined): boolean {
+  return (
+    address === "127.0.0.1" ||
+    address === "::1" ||
+    address === "::ffff:127.0.0.1"
+  );
 }
 
 function matchesPublicDemoAuthority(
@@ -1012,7 +1028,7 @@ async function handleAuthorizationPage(
   let deviceToken = cookie(request, DEVICE_COOKIE);
   if (!auth.isDeviceEnrolled(deviceToken, tailscaleUser)) {
     const passphrase = form.get("passphrase") ?? "";
-    deviceToken = auth.enrollDevice(passphrase, tailscaleUser);
+    deviceToken = await auth.enrollDevice(passphrase, tailscaleUser, requestId);
     response.setHeader(
       "Set-Cookie",
       `${DEVICE_COOKIE}=${encodeURIComponent(deviceToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`,

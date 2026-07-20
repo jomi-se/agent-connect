@@ -1,5 +1,5 @@
 import { gunzipSync } from "node:zlib";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -174,6 +174,29 @@ describe("OmnigentRuntime sandbox profile", () => {
     expect(uploadedConfig).toContain(
       "guidance, not a host-enforced confidentiality boundary",
     );
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  it("removes the session workspace when provider creation fails", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "agent-connect-runtime-"));
+    const runtime = new OmnigentRuntime({
+      baseUrl: "http://127.0.0.1:6767",
+      workspace,
+      fetch: vi.fn(
+        async () => new Response("upstream failed", { status: 500 }),
+      ),
+    });
+    await expect(
+      runtime.createSession({
+        appId: "demo",
+        origin: "https://app.example",
+        toolHash: "hash",
+        approvedToolNames: ["read_state"],
+      }),
+    ).rejects.toThrow("OmniGENT POST /v1/sessions failed");
+    await expect(
+      readdir(join(workspace, ".agent-connect-sessions")),
+    ).resolves.toEqual([]);
     await rm(workspace, { recursive: true, force: true });
   });
 });

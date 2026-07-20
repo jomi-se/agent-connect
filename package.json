@@ -20,7 +20,8 @@
     "test:codex-acp-policy": "node scripts/test-codex-acp-tool-policy.mjs",
     "test:integration:omnigent": "npm run test:integration:omnigent --workspace @agent-connect/gateway",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "verify": "npm run format:check && npm run typecheck && npm test && npm run test:codex-acp-policy && npm run build"
+    "verify": "npm run format:check && npm run typecheck && npm test && npm run test:codex-acp-policy && npm run build",
+    "verify:full": "npm run verify && npm run test:package:web && npm run test:e2e --workspace @agent-connect/firebase-canvas"
   },
   "devDependencies": {
     "@agentclientprotocol/codex-acp": "1.1.2",

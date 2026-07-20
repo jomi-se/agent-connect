@@ -4,7 +4,11 @@ const runtimeCard = {
   version: 1,
   runtimeId: "sha256:test",
   endpoint: "https://gateway.example",
-  connectorPublicKey: {},
+  connectorPublicKey: {
+    kty: "OKP",
+    crv: "Ed25519",
+    x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  },
   transportProfile: "public-demo",
   authorizationServer: "https://gateway.example",
 };
