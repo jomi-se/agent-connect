@@ -27,12 +27,14 @@ comma-separated `AGENT_CONNECT_PUBLIC_DEMO_REDIRECT_URIS`, alongside the
 Firebase callback. Every entry remains bound to the same frozen app id and tool
 snapshot; this is not a wildcard development mode.
 
-The committed tool hash matches the current Firebase Canvas nine-tool snapshot:
-three project-board tools, three document-review tools, and three
-product-research tools. Recompute and review it whenever any definition changes.
+The committed tool hash matches the current Firebase Canvas ten-tool snapshot:
+one shared live-state read tool plus three project-board, three document-review,
+and three product-research write tools. Recompute and review it whenever any
+definition changes.
 
-The appliance runs a deterministic ACP runtime which selects a three-tool,
-Codex-authored plan from the scenario marker in the prompt. It still exercises
+The appliance runs a deterministic ACP runtime which first reads the selected
+app's live state, then selects a three-write-tool, Codex-authored plan from the
+scenario marker in the prompt. It still exercises
 the real OmniGENT, ACP, request-scoped MCP, gateway, SDK, and browser-tool path;
 it does not claim that live model reasoning occurs in the public fixture.
 

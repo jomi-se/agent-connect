@@ -1,7 +1,8 @@
 # Firebase Canvas demo
 
-A static web application that lends a connected user-owned agent a nine-tool
-snapshot spanning a project board, document review, and product research. When
+A static web application that lends a connected user-owned agent a ten-tool
+snapshot spanning a shared live-state read plus project-board, document-review,
+and product-research writes. When
 the runtime calls those tools, the loaded page mutates immediately. The tools
 are defined by the page and are not installed into Codex or OmniGENT in
 advance. The same SDK path has been proven with Codex through OmniGENT and with

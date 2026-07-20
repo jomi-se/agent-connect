@@ -18,6 +18,7 @@ const sessions = new Map();
 
 const scenarioPlans = {
   "project-board": [
+    { name: "get_current_app_state", arguments: {} },
     {
       name: "create_project_tasks",
       arguments: {
@@ -66,6 +67,7 @@ const scenarioPlans = {
     },
   ],
   "document-review": [
+    { name: "get_current_app_state", arguments: {} },
     {
       name: "add_document_comments",
       arguments: {
@@ -129,6 +131,7 @@ const scenarioPlans = {
     },
   ],
   "product-research": [
+    { name: "get_current_app_state", arguments: {} },
     {
       name: "add_product_assessment",
       arguments: {

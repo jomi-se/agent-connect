@@ -3,6 +3,7 @@ import {
   AgentConnectError,
   completeAgentAuthorization,
   connectAgent,
+  parseRuntimeCard,
   parseAuthorizationTransaction,
   revokeAgentAuthorization,
   serializeAuthorizationTransaction,
@@ -241,7 +242,13 @@ async function runTask(): Promise<void> {
   delete surface.dataset["changed"];
 
   try {
-    const prompt = `[Agent Connect demo scenario: ${selectedScenario}]\n${promptInput.value}`;
+    const prompt = [
+      `[Agent Connect demo scenario: ${selectedScenario}]`,
+      "Use get_current_app_state to inspect the live app before acting.",
+      "Use the selected app's tools to write the result back into the page.",
+      "",
+      `User request: ${promptInput.value}`,
+    ].join("\n");
     for await (const taskEvent of connection.session.streamTask(prompt)) {
       appendEvent(taskEvent);
       await paceVisibleTaskEvent(taskEvent);
@@ -634,7 +641,15 @@ function showScenarioTools(): void {
     const inputHeading = document.createElement("h3");
     inputHeading.textContent = "Inputs";
     const fields = renderSchemaFields(tool.inputSchema as DisplaySchema);
-    contract.append(heading, description, inputHeading, fields);
+    if (fields.childElementCount === 0) {
+      const noInputs = document.createElement("p");
+      noInputs.className = "tool-no-inputs";
+      noInputs.textContent =
+        "No inputs — reads the selected view at call time.";
+      contract.append(heading, description, noInputs);
+    } else {
+      contract.append(heading, description, inputHeading, fields);
+    }
     toolList.append(contract);
   }
   toolDialog.showModal();
@@ -1111,28 +1126,6 @@ function moveScenarioFocus(
 
 function callbackUri(): string {
   return `${location.origin}${location.pathname}`;
-}
-
-function parseRuntimeCard(value: string): RuntimeCard {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    throw new TypeError("Paste a valid Agent Connect runtime card");
-  }
-  const candidate = parsed as Partial<RuntimeCard>;
-  if (
-    candidate.version !== 1 ||
-    typeof candidate.runtimeId !== "string" ||
-    typeof candidate.endpoint !== "string" ||
-    typeof candidate.connectorPublicKey !== "object" ||
-    candidate.connectorPublicKey === null ||
-    typeof candidate.transportProfile !== "string" ||
-    typeof candidate.authorizationServer !== "string"
-  ) {
-    throw new TypeError("Paste a valid Agent Connect runtime card");
-  }
-  return candidate as RuntimeCard;
 }
 
 function updateRuntimeSummary(): void {

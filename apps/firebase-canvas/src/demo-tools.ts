@@ -1,4 +1,8 @@
-import { defineTool, type ApplicationTool } from "@agent-connect/web";
+import {
+  defineTool,
+  type ApplicationTool,
+  type JsonObject,
+} from "@agent-connect/web";
 
 export type DemoScenario =
   "project-board" | "document-review" | "product-research";
@@ -16,16 +20,19 @@ export const SCENARIO_TOOL_NAMES: Readonly<
   Record<DemoScenario, readonly string[]>
 > = {
   "project-board": [
+    "get_current_app_state",
     "create_project_tasks",
     "update_project_tasks",
     "move_project_tasks",
   ],
   "document-review": [
+    "get_current_app_state",
     "add_document_comments",
     "replace_document_text",
     "format_document_blocks",
   ],
   "product-research": [
+    "get_current_app_state",
     "add_product_assessment",
     "add_price_comparison",
     "add_product_alternatives",
@@ -34,6 +41,28 @@ export const SCENARIO_TOOL_NAMES: Readonly<
 
 export function createDemoTools(): readonly ApplicationTool[] {
   return [
+    defineTool({
+      name: "get_current_app_state",
+      description:
+        "Read the currently selected app view. Call this before deciding which app-specific write tools to use.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      execute: () => {
+        const state = readCurrentAppState();
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(state),
+            },
+          ],
+          structuredContent: state,
+        };
+      },
+    }),
     defineTool({
       name: "create_project_tasks",
       description: "Add several tasks to the project board.",
@@ -399,6 +428,94 @@ export function createDemoTools(): readonly ApplicationTool[] {
       },
     }),
   ];
+}
+
+function readCurrentAppState(): JsonObject {
+  const surface = document.querySelector<HTMLElement>(
+    "[data-scenario-panel]:not([hidden])",
+  );
+  const scenario = surface?.dataset["scenarioPanel"];
+  if (!surface || !isDemoScenario(scenario)) {
+    throw new Error("No demo app is currently selected");
+  }
+
+  if (scenario === "project-board") {
+    return {
+      app: "Northstar product workspace",
+      view: "Q3 launch board",
+      scenario,
+      columns: Object.fromEntries(
+        (["backlog", "doing", "done"] as const).map((status) => [
+          status,
+          [
+            ...surface.querySelectorAll<HTMLElement>(
+              `#task-list-${status} [data-task-id]`,
+            ),
+          ].map((task) => ({
+            id: task.dataset["taskId"] ?? "",
+            title:
+              requireDescendant(task, "[data-task-title]").textContent ?? "",
+            priority:
+              requireDescendant(task, "[data-task-priority]").textContent ?? "",
+          })),
+        ]),
+      ),
+    };
+  }
+
+  if (scenario === "document-review") {
+    return {
+      app: "Fieldnotes editorial workspace",
+      view: "A quieter way to work",
+      scenario,
+      blocks: [
+        ...surface.querySelectorAll<HTMLElement>(".document-page > [id]"),
+      ].map((block) => ({
+        id: block.id.replace("document-block-", ""),
+        format: block.dataset["format"] ?? "paragraph",
+        text: normalizeWhitespace(block.textContent ?? ""),
+      })),
+    };
+  }
+
+  const title = normalizeWhitespace(
+    requireDescendant(surface, ".product-context h3").textContent ?? "",
+  );
+  const priceText =
+    requireDescendant(surface, "#product-listed-price").textContent ?? "";
+  const ratingText = requireDescendant(surface, ".rating").textContent ?? "";
+  const claimsText =
+    requireDescendant(surface, ".product-details > p:not(.product-price)")
+      .textContent ?? "";
+
+  return {
+    app: "Everyday online market",
+    view: "Product detail",
+    scenario,
+    product: {
+      model: title,
+      title,
+      listedPrice: {
+        amount: Number(priceText.replace(/[^0-9.]/g, "")),
+        currency: priceText.includes("€") ? "EUR" : "unknown",
+      },
+      rating: Number(ratingText.match(/[0-9.]+/)?.[0] ?? 0),
+      reviewCount: Number(
+        (ratingText.match(/([0-9,]+) reviews/)?.[1] ?? "0").replaceAll(",", ""),
+      ),
+      listingClaims: normalizeWhitespace(claimsText)
+        .split("·")
+        .map((claim) => claim.trim()),
+    },
+  };
+}
+
+function isDemoScenario(value: unknown): value is DemoScenario {
+  return (
+    value === "project-board" ||
+    value === "document-review" ||
+    value === "product-research"
+  );
 }
 
 function taskList(status: string): HTMLElement {

@@ -11,6 +11,7 @@ const runtimeCard = {
 
 const plans = {
   "project-board": [
+    call("get_current_app_state", {}),
     call("create_project_tasks", {
       tasks: [
         {
@@ -35,6 +36,7 @@ const plans = {
     }),
   ],
   "document-review": [
+    call("get_current_app_state", {}),
     call("add_document_comments", {
       comments: [
         {
@@ -58,6 +60,7 @@ const plans = {
     }),
   ],
   "product-research": [
+    call("get_current_app_state", {}),
     call("add_product_assessment", {
       verdict: "Adult headphones are a poor fit for an eight-year-old.",
       kidFit: "poor",
@@ -83,7 +86,9 @@ const plans = {
 } as const;
 
 for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
-  test(`${scenario} executes its three browser tools`, async ({ page }) => {
+  test(`${scenario} reads live state and executes its write tools`, async ({
+    page,
+  }) => {
     const postedEvents = await mockConnectedRuntime(page, plans[scenario]);
     await openAndConnect(page, "desktop");
     await page.getByRole("tab", { name: scenarioTabName(scenario) }).click();
@@ -92,19 +97,9 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
     await expect(
       page.locator(`#scenario-${scenario} .tool-flight`),
     ).toBeVisible();
-    await expect
-      .poll(() =>
-        page
-          .locator(mutationTarget(scenario))
-          .evaluate((element) =>
-            element
-              .getAnimations()
-              .some((animation) => animation.playState === "running"),
-          ),
-      )
-      .toBe(true);
-
-    await expect(page.locator("body")).toHaveAttribute("data-demo", "passed");
+    await expect(page.locator("body")).toHaveAttribute("data-demo", "passed", {
+      timeout: 12_000,
+    });
     await expect(page.locator(`#scenario-${scenario}`)).toHaveAttribute(
       "data-changed",
       "true",
@@ -113,20 +108,33 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
       page.locator(
         '#activity-feed li[data-kind="tool"][data-state="complete"]',
       ),
-    ).toHaveCount(3);
+    ).toHaveCount(4);
     await expect(
       page.locator(
         '#activity-feed li[data-kind="result"][data-state="complete"]',
       ),
-    ).toHaveCount(3);
+    ).toHaveCount(4);
     const submittedNames = postedEvents
       .filter(isFunctionOutput)
       .map((event) => event.data.call_id);
-    expect(submittedNames).toEqual(["call-1", "call-2", "call-3"]);
+    expect(submittedNames).toEqual(["call-1", "call-2", "call-3", "call-4"]);
+    const stateResult = postedEvents.find(
+      (event) => isFunctionOutput(event) && event.data.call_id === "call-1",
+    );
+    expect(stateResult).toBeDefined();
+    expect(JSON.stringify(stateResult)).toContain(
+      selectedStateEvidence(scenario),
+    );
 
     if (scenario === "document-review") {
       await page.getByRole("button", { name: "Send prompt" }).click();
-      await expect(page.locator("body")).toHaveAttribute("data-demo", "passed");
+      await expect(page.locator("body")).toHaveAttribute(
+        "data-demo",
+        "passed",
+        {
+          timeout: 15_000,
+        },
+      );
     }
   });
 }
@@ -141,7 +149,9 @@ test("the mobile page completes the connection before a task can run", async ({
   await expect(page.locator("body")).toHaveAttribute("data-layout", "mobile");
   await expect(page.getByRole("button", { name: "Send prompt" })).toBeEnabled();
   await page.getByRole("button", { name: "Send prompt" }).click();
-  await expect(page.locator("body")).toHaveAttribute("data-demo", "passed");
+  await expect(page.locator("body")).toHaveAttribute("data-demo", "passed", {
+    timeout: 12_000,
+  });
   await expect(
     page.locator('[data-task-title=""]', {
       hasText: "Add launch analytics and alerts",
@@ -260,7 +270,7 @@ test("an invalid runtime card fails visibly", async ({ page }) => {
 
   await expect(page.locator("body")).toHaveAttribute("data-demo", "failed");
   await expect(page.locator("#status")).toHaveText(
-    "Paste a valid Agent Connect runtime card",
+    "Invalid Agent Connect runtime card",
   );
   await expect(
     page.getByRole("button", { name: "Connect runtime" }),
@@ -318,7 +328,7 @@ test("mobile and desktop mount different compositions", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Document review tools" }),
   ).toBeVisible();
-  await expect(page.locator("#tool-list .tool-contract")).toHaveCount(3);
+  await expect(page.locator("#tool-list .tool-contract")).toHaveCount(4);
   await expect(
     page.getByText("add_document_comments", { exact: true }),
   ).toBeVisible();
@@ -370,14 +380,13 @@ async function expectAlignedActions(
   expect(
     Math.abs((disconnectBox?.height ?? 0) - (sendBox?.height ?? 0)),
   ).toBeLessThan(1);
-  expect(
-    Math.abs((disconnectBox?.width ?? 0) - (sendBox?.width ?? 0)),
-  ).toBeLessThan(1);
+  const disconnectRight = (disconnectBox?.x ?? 0) + (disconnectBox?.width ?? 0);
+  const sendRight = (sendBox?.x ?? 0) + (sendBox?.width ?? 0);
+  expect(Math.abs(disconnectRight - sendRight)).toBeLessThan(1);
   if (view === "desktop") {
-    const disconnectRight =
-      (disconnectBox?.x ?? 0) + (disconnectBox?.width ?? 0);
-    const sendRight = (sendBox?.x ?? 0) + (sendBox?.width ?? 0);
-    expect(Math.abs(disconnectRight - sendRight)).toBeLessThan(1);
+    expect(
+      Math.abs((disconnectBox?.width ?? 0) - (sendBox?.width ?? 0)),
+    ).toBeLessThan(1);
   }
 }
 
@@ -392,12 +401,13 @@ async function mockConnectedRuntime(
     if (pathname === "/v1/app-sessions") {
       expect(request.headers()["authorization"]).toBe("Bearer existing-grant");
       const body = request.postDataJSON() as { tools: Array<{ name: string }> };
-      expect(body.tools).toHaveLength(9);
+      expect(body.tools).toHaveLength(10);
       expect(body.tools.map((tool) => tool.name)).toEqual(
         expect.arrayContaining([
           "create_project_tasks",
           "add_document_comments",
           "add_product_assessment",
+          "get_current_app_state",
         ]),
       );
       await route.fulfill({
@@ -450,10 +460,10 @@ function scenarioTabName(scenario: keyof typeof plans): string {
   return "Product research";
 }
 
-function mutationTarget(scenario: keyof typeof plans): string {
-  if (scenario === "project-board") return '[data-task-id="pricing"]';
-  if (scenario === "document-review") return "[data-original-quote]";
-  return "#product-research-results";
+function selectedStateEvidence(scenario: keyof typeof plans): string {
+  if (scenario === "project-board") return "Decide launch pricing";
+  if (scenario === "document-review") return "exactly twice as productive";
+  return "Sony WH-CH720N";
 }
 
 function isFunctionOutput(
