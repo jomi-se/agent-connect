@@ -168,6 +168,11 @@ gateway_pid=
 cleanup() {
   status=$?
   trap - EXIT INT TERM
+  omnigent host stop \
+    --server "$omnigent_url" \
+    --daemon-only \
+    --force \
+    >/dev/null 2>&1 || true
   if test -n "$gateway_pid"; then kill "$gateway_pid" 2>/dev/null || true; fi
   if test -n "$host_pid"; then kill "$host_pid" 2>/dev/null || true; fi
   if test -n "$server_pid"; then kill "$server_pid" 2>/dev/null || true; fi
@@ -177,6 +182,15 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT INT TERM
+
+# OmniGENT's host command owns a daemon process beyond its launcher process.
+# Clear a stale daemon for this profile-owned endpoint before starting a new
+# stack, such as after a killed terminal or an older launcher version.
+omnigent host stop \
+  --server "$omnigent_url" \
+  --daemon-only \
+  --force \
+  >/dev/null 2>&1 || true
 
 echo "Agent Connect: starting OmniGENT at $omnigent_url"
 omnigent server \
