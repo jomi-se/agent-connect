@@ -23,7 +23,9 @@ The complete path has been exercised on Ubuntu 24.04 ARM64 with:
 Other Linux distributions and architectures may work but have not yet passed
 the complete reference flow. Windows and macOS are not currently claimed as
 supported gateway hosts. The web SDK itself is browser-safe and has no Node
-runtime imports.
+runtime imports. The launcher rejects OmniGENT versions other than 0.5.1 rather
+than silently applying the reviewed tool-collision policy to a different
+provider inventory.
 
 ## 1. Install prerequisites
 
@@ -31,15 +33,16 @@ Install and authenticate Codex and Tailscale using their upstream instructions.
 Install OmniGENT, then install this repository:
 
 ```sh
-curl -fsSL https://omnigent.ai/install.sh | sh
-git clone https://github.com/YOUR_ACCOUNT/agent-connect.git
+curl -fsSL https://omnigent.ai/install.sh | sh -s -- --version 0.5.1
+git clone https://github.com/jomi-se/agent-connect.git
 cd agent-connect
 npm install
 npm run build
 ```
 
-The repository URL remains a placeholder until the public submission URL is
-final. Do not copy that placeholder into judge instructions.
+The repository is private during Build Week. Judges must authenticate GitHub
+with the access named in the submission before cloning; this command becomes
+anonymous once the repository is made public.
 
 ## 2. Create a dedicated Codex runtime home
 

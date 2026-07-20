@@ -40,6 +40,14 @@ built-ins are not approved and are excluded from that Codex MCP server. This is
 provider-specific compatibility code behind the internal adapter boundary; it
 does not change the browser API or claim to extend ACP.
 
+The compatibility path fails closed if its session manifest is absent, if the
+relay server is not named `omnigent`, or if the pinned adapter seams drift. It
+also forces the request-scoped relay to replace any same-named MCP configuration
+from `CODEX_HOME`; otherwise `codex-acp` conflict deduplication could silently
+drop the restricted relay. Until application tools receive a provider-owned
+namespace, the reference launcher requires OmniGENT 0.5.1 so a moving built-in
+tool inventory cannot invalidate the reviewed collision denylist.
+
 Use OmniGENT as the first internal provider behind the gateway. Use its existing
 HTTP/SSE surface for the hackathon; do not put an upstream ACP facade on the
 critical path.
