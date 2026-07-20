@@ -1,5 +1,11 @@
 # User-Owned Agent Runtime — Hackathon Handoff
 
+> Historical handoff from the repository's initial investigation. It preserves
+> the original product intent and dated OmniGENT/ACP research, but it is not a
+> current setup guide or backlog. Start with [`README.md`](README.md),
+> [`docs/mission.md`](docs/mission.md), and
+> [`docs/plan/current-work.md`](docs/plan/current-work.md).
+
 **Research snapshot:** 2026-07-13
 **Context:** This is a handoff for a new AI session in a new repository. This week is the OpenAI Hackathon, and the user is considering an MVP based on the idea below.
 

@@ -1,7 +1,7 @@
 # VAL-AUTHZ-001: Connector-owned consent issues an exact PKCE application grant
 
 Surface: API and browser.
-Needs: VAL-ENROLL-001, one allowed HTTPS app Origin, exact same-origin callback,
+Needs: VAL-ENROLL-001, one HTTPS app Origin, exact same-origin callback,
 and an allowlisted Tailscale requester.
 Behavior: a pushed request binds app id, Origin, callback, state, S256 challenge,
 the required narrow scope set, and canonical tool metadata snapshot. A top-level connector page enrolls the

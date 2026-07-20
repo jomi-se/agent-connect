@@ -166,13 +166,15 @@ public-demo transport.
 
 ## Implemented profile
 
-The implementation and its exact durable/memory-only boundary are recorded in
-[`docs/plan/secure-enrollment-implementation.md`](../plan/secure-enrollment-implementation.md).
-It includes a generated high-entropy enrollment passphrase used only on the
-connector origin, signed runtime challenges before tool disclosure, pushed
-authorization details, top-level consent, PKCE, durable hashed grants,
-revocation, and removal of the legacy pairing bypass. It must not be described
-as a generally conformant OAuth authorization server.
+The implemented profile includes a generated high-entropy enrollment
+passphrase used only on the connector origin, signed runtime challenges before
+tool disclosure, pushed authorization details, top-level consent, PKCE,
+durable hashed grants, revocation, and removal of the legacy pairing bypass.
+Connector identity, passphrase verifier, enrolled-device hashes, grant hashes,
+revocation state, and the capability-signing key are durable. Pending
+authorization requests and codes, provider-session mappings, and usage counters
+are memory-only. The implementation must not be described as a generally
+conformant OAuth authorization server.
 
 ## References
 

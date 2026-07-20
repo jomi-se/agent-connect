@@ -93,6 +93,11 @@ sudo tailscale funnel --bg --https=10000 http://127.0.0.1:10081
 sudo tailscale funnel status --json
 ```
 
+The resulting Funnel hostname is intentionally public for the judging period.
+Its address is routing information, not an authentication secret; the runtime
+card, enrolled device, fixed application authority, PKCE grant, and connector
+controls remain the authorization boundary.
+
 Use a clean or incognito browser for the public test because private Serve and
 public Funnel currently share a cookie hostname. Copy the public runtime card
 from the first-start logs into the Firebase Canvas; never copy the enrollment

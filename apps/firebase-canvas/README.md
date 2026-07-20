@@ -48,4 +48,6 @@ Run the browser behavior suite with:
 npm run test:e2e --workspace @agent-connect/firebase-canvas
 ```
 
-See `docs/plan/firebase-demo-setup.md` for the one-time Firebase/GitHub setup.
+See the
+[Firebase deployment guide](../../docs/guides/firebase-demo-deployment.md) for
+the one-time Firebase/GitHub setup.

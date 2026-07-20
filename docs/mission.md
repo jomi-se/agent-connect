@@ -16,10 +16,15 @@ An application can:
 1. connect to a runtime owned by its user;
 2. create or resume an agent session;
 3. supply a task and a fixed set of application-owned tools;
-4. receive streamed progress and permission requests;
+4. receive streamed progress, lifecycle events, and application-tool requests;
 5. execute requested application operations locally;
 6. return tool results without installing an MCP server into Codex;
-7. recover an unresolved application action after a network interruption without blindly duplicating a mutation.
+7. revoke the application's connector grant without knowing provider session
+   identifiers.
+
+The target reliability layer will also recover an unresolved application
+action after a network interruption without blindly duplicating a mutation.
+That behavior is not part of the current MVP.
 
 ## Current strategy
 
@@ -74,9 +79,10 @@ enrollment, OAuth, application grants, or recovery.
 
 The terminal is used once to export the connector's runtime card and enrollment
 passphrase and thereafter only for recovery. New apps are approved through the
-connector's Tailscale-hosted OAuth-style page. Live mobile deployment proof,
-app-instance sender binding, recovery/key rotation, and durable provider
-session mappings remain outstanding.
+connector's Tailscale-hosted OAuth-style page. The private Tailscale Serve flow
+and isolated public Funnel flow have both passed from remote mobile browsers.
+App-instance sender binding, recovery/key rotation, durable provider mappings,
+and durable unresolved-tool delivery remain outstanding.
 
 ## Non-goals for the first slice
 
@@ -88,5 +94,5 @@ session mappings remain outstanding.
 - importing normal Codex CLI history;
 - replaying every streamed token;
 - generic exactly-once side effects;
-- production identity federation, account recovery, or a public relay.
+- production identity federation, account recovery, or a public relay;
 - arbitrary custom URLs treated as verified user-owned runtimes.
