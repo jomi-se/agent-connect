@@ -13,12 +13,6 @@
           format("woff2-variations");
       }
 
-      :root {
-        font-family: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
-        color: #111820;
-        background: #f7f8fa;
-      }
-
       * {
         box-sizing: border-box;
       }
@@ -30,188 +24,44 @@
         height: 800px;
         margin: 0;
         overflow: hidden;
+        color: #111820;
         background:
-          radial-gradient(circle at 84% 15%, #e8e7ff 0, transparent 30%),
-          radial-gradient(circle at 14% 90%, #dff3ef 0, transparent 31%),
+          radial-gradient(circle at 88% 10%, #e8e7ff 0, transparent 34%),
+          radial-gradient(circle at 10% 92%, #dff3ef 0, transparent 34%),
           #f7f8fa;
+        font-family: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
       }
 
       main {
-        display: grid;
-        grid-template-rows: auto 1fr auto;
+        display: flex;
+        align-items: center;
         width: 1080px;
         height: 680px;
-        padding: 46px 54px 42px;
+        padding: 84px;
         border: 1px solid #d8dee5;
         border-radius: 28px;
         background: rgb(255 255 255 / 90%);
         box-shadow: 0 30px 80px rgb(30 42 54 / 10%);
       }
 
-      header {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        font-size: 24px;
-        font-weight: 760;
-      }
-
-      .dots {
-        display: flex;
-        gap: 7px;
-      }
-
-      .dot {
-        width: 11px;
-        height: 11px;
-        border-radius: 50%;
-      }
-
-      .dot:nth-child(1) {
-        background: #d34b3f;
-      }
-
-      .dot:nth-child(2) {
-        background: #d9a928;
-      }
-
-      .dot:nth-child(3) {
-        background: #08796e;
-      }
-
-      .hero {
-        display: grid;
-        grid-template-columns: 0.95fr 1.05fr;
-        align-items: center;
-        gap: 60px;
-      }
-
       h1 {
-        max-width: 520px;
+        max-width: 900px;
         margin: 0;
-        font-size: 74px;
-        line-height: 0.98;
+        font-size: 112px;
+        font-weight: 780;
+        line-height: 0.97;
         letter-spacing: -0.055em;
       }
 
-      .lead {
-        max-width: 470px;
-        margin: 24px 0 0;
-        color: #4f5d6b;
-        font-size: 25px;
-        line-height: 1.35;
-      }
-
-      .flow {
-        position: relative;
-        display: grid;
-        gap: 22px;
-      }
-
-      .node {
-        position: relative;
-        padding: 22px 26px;
-        border: 1px solid #cfd7df;
-        border-radius: 15px;
-        background: white;
-        box-shadow: 0 10px 22px rgb(32 45 58 / 7%);
-      }
-
-      .node::after {
-        position: absolute;
-        bottom: -25px;
-        left: 50%;
-        color: #73808d;
-        font-size: 26px;
-        content: "↕";
-        transform: translateX(-50%);
-      }
-
-      .node:last-child::after {
-        content: none;
-      }
-
-      .node.gateway {
-        border: 2px solid #08796e;
-        background: #e8f7f4;
-      }
-
-      .eyebrow {
-        color: #6c7884;
-        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-        font-size: 14px;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-      }
-
-      .node strong {
+      h1 span {
         display: block;
-        margin-top: 6px;
-        font-size: 27px;
-      }
-
-      .node p {
-        margin: 6px 0 0;
-        color: #53616e;
-        font-size: 17px;
-      }
-
-      footer {
-        display: flex;
-        gap: 12px;
-      }
-
-      .chip {
-        padding: 10px 15px;
-        border: 1px solid #d2d9e0;
-        border-radius: 999px;
-        color: #35424e;
-        background: white;
-        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-        font-size: 14px;
-        font-weight: 650;
+        color: #08796e;
       }
     </style>
   </head>
   <body>
     <main>
-      <header>
-        <span class="dots" aria-hidden="true">
-          <span class="dot"></span>
-          <span class="dot"></span>
-          <span class="dot"></span>
-        </span>
-        Agent Connect
-      </header>
-
-      <section class="hero">
-        <div>
-          <h1>Bring your own agent.</h1>
-          <p class="lead">Let Codex work inside your app.</p>
-        </div>
-
-        <div class="flow" aria-label="Agent Connect flow">
-          <article class="node">
-            <span class="eyebrow">Web app</span>
-            <strong>Defines narrow tools</strong>
-          </article>
-          <article class="node gateway">
-            <span class="eyebrow">Agent Connect gateway</span>
-            <strong>Identity, consent, grants</strong>
-          </article>
-          <article class="node">
-            <span class="eyebrow">User-owned agent</span>
-            <strong>Codex · Claude Code</strong>
-            <p>Powered by the user’s subscription</p>
-          </article>
-        </div>
-      </section>
-
-      <footer>
-        <span class="chip">No API key in the app</span>
-        <span class="chip">No app-specific MCP install</span>
-      </footer>
+      <h1>Agent Connect: <span>Bring Your Own Agent</span></h1>
     </main>
   </body>
 </html>
