@@ -26,10 +26,13 @@ __pycache__/
 *.sw?
 
 .playwright-mcp/
+.npm-cache/
 playwright-report/
 test-results/
 .omnigent-spike/
+.agent-connect/
 deploy/judge-demo/.env
+deploy/real-connector/.env
 
 # Agent local settings
 .antigravitycli/

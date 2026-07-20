@@ -31,6 +31,9 @@ export function configFromEnv(
       : {}),
     ...(sandbox ? { omnigentSandbox: sandbox } : {}),
     allowedOrigins: csvSet(env.AGENT_CONNECT_ALLOWED_ORIGINS),
+    dynamicAppEnrollment:
+      env.AGENT_CONNECT_DYNAMIC_APP_ENROLLMENT === "1" ||
+      env.AGENT_CONNECT_DYNAMIC_APP_ENROLLMENT === "true",
     allowedTailscaleUsers: csvSet(env.AGENT_CONNECT_ALLOWED_TAILSCALE_USERS),
     ...(env.AGENT_CONNECT_ACCESS_TOKEN
       ? { accessToken: env.AGENT_CONNECT_ACCESS_TOKEN }

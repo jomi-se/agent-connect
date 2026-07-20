@@ -627,6 +627,151 @@ describe("connector enrollment and app authorization", () => {
   });
 });
 
+describe("dynamic application enrollment", () => {
+  it("authorizes a previously unknown HTTPS Origin and binds the grant to it", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "agent-connect-dynamic-app-"));
+    temporaryDirectories.push(directory);
+    const runtime = new FakeRuntime();
+    const { baseUrl } = await start({
+      runtime,
+      allowedOrigins: new Set(),
+      dynamicAppEnrollment: true,
+      authStatePath: join(directory, "connector.json"),
+      publicEndpoint: "https://runtime.example",
+      transportProfile: "tailscale-serve",
+      enrollmentPassphrase: "dynamic enrollment phrase",
+    });
+    const appOrigin = "https://new-app.example";
+    const redirectUri = `${appOrigin}/agent-connect/callback`;
+    const verifier = "v".repeat(43);
+
+    const preflight = await fetch(`${baseUrl}/v1/authorization-requests`, {
+      method: "OPTIONS",
+      headers: { Origin: appOrigin },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe(
+      appOrigin,
+    );
+
+    const pushed = await fetch(`${baseUrl}/v1/authorization-requests`, {
+      method: "POST",
+      headers: {
+        Origin: appOrigin,
+        "Tailscale-User-Login": "owner@example.com",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        appId: "third-party-app",
+        redirectUri,
+        state: "state_state_state_state",
+        codeChallenge: await sha256Base64Url(verifier),
+        scopes: ["agent:prompt", "agent:result", "tools:invoke"],
+        tools: [tool()],
+      }),
+    });
+    expect(pushed.status).toBe(201);
+    const authorization = await pushed.json();
+
+    const consent = await fetch(
+      `${baseUrl}/authorize?request=${encodeURIComponent(authorization.requestId as string)}`,
+      { headers: { "Tailscale-User-Login": "owner@example.com" } },
+    );
+    expect(consent.status).toBe(200);
+    expect(await consent.text()).toContain(appOrigin);
+
+    const approval = await fetch(`${baseUrl}/authorize`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        Origin: "https://runtime.example",
+        "Tailscale-User-Login": "owner@example.com",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        request: authorization.requestId as string,
+        decision: "approve",
+        passphrase: "dynamic enrollment phrase",
+      }),
+    });
+    expect(approval.status).toBe(303);
+    const code = new URL(
+      approval.headers.get("location") ?? "",
+    ).searchParams.get("code");
+    expect(code).toMatch(/^acc_/);
+
+    const token = await fetch(`${baseUrl}/oauth/token`, {
+      method: "POST",
+      headers: {
+        Origin: appOrigin,
+        "Tailscale-User-Login": "owner@example.com",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        code,
+        codeVerifier: verifier,
+        appId: "third-party-app",
+        redirectUri,
+      }),
+    });
+    expect(token.status).toBe(200);
+    const grant = await token.json();
+
+    const session = await fetch(`${baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: {
+        Origin: appOrigin,
+        "Tailscale-User-Login": "owner@example.com",
+        Authorization: `Bearer ${grant.accessToken as string}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ appId: "third-party-app", tools: [tool()] }),
+    });
+    expect(session.status).toBe(201);
+    expect(runtime.created).toEqual([
+      expect.objectContaining({
+        appId: "third-party-app",
+        origin: appOrigin,
+      }),
+    ]);
+
+    const substitutedOrigin = await fetch(`${baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: {
+        Origin: "https://other-app.example",
+        "Tailscale-User-Login": "owner@example.com",
+        Authorization: `Bearer ${grant.accessToken as string}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ appId: "third-party-app", tools: [tool()] }),
+    });
+    expect(substitutedOrigin.status).toBe(401);
+
+    const insecureOrigin = await fetch(`${baseUrl}/v1/runtime-challenges`, {
+      method: "OPTIONS",
+      headers: { Origin: "http://new-app.example" },
+    });
+    expect(insecureOrigin.status).toBe(403);
+  });
+
+  it("cannot be enabled for the anonymous public-demo profile", () => {
+    expect(() =>
+      createGateway({
+        allowedOrigins: new Set(),
+        dynamicAppEnrollment: true,
+        allowedTailscaleUsers: new Set(),
+        omnigentBaseUrl: "http://127.0.0.1:6767",
+        authStatePath: "/tmp/unused-agent-connect-state.json",
+        publicEndpoint: "https://runtime.example",
+        transportProfile: "public-demo",
+        publicDemoAuthorities: [demoAuthority()],
+      }),
+    ).toThrow(
+      "dynamic app enrollment requires the tailscale-serve transport profile",
+    );
+  });
+});
+
 describe("public-demo transport profile", () => {
   it("uses connector enrollment without requiring or trusting a Tailscale identity", async () => {
     const directory = mkdtempSync(join(tmpdir(), "agent-connect-public-demo-"));
@@ -875,6 +1020,7 @@ class FakeRuntime implements AgentRuntime {
     appId: string;
     origin: string;
     toolHash: string;
+    approvedToolNames: readonly string[];
   }> = [];
   healthy = true;
 
@@ -882,6 +1028,7 @@ class FakeRuntime implements AgentRuntime {
     appId: string;
     origin: string;
     toolHash: string;
+    approvedToolNames: readonly string[];
   }): Promise<string> {
     this.created.push(request);
     this.healthy = true;
