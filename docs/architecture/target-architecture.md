@@ -1,20 +1,22 @@
 # Target architecture
 
+This page contains an "aspirational" target architecture that would be the end goal of this project.
+
 ## Component map
 
 ```text
 browser application
   @agent-connect/web
-  define tools, run task, events, confirm app-owned mutations
+  define tools, run task, events, confirm app-owned changes
              |
              | transport trust profile + runtime ID
-             | authenticated connector/app session
+             | authenticated gateway/app session
              | candidate payload: AG-UI
              v
 Agent Connect gateway
-  enrolled connector identity key
+  enrolled gateway identity key
   one-time runtime-card export
-  connector-hosted OAuth + key-bound application capabilities
+  gateway-hosted OAuth + key-bound application capabilities
   exact Origin (+ Tailscale identity in direct mode)
   logical -> provider session mapping and health recovery
   target: durable pending-action recovery
@@ -43,7 +45,7 @@ Codex
 
 Owns browser transport setup, application tool registration and execution,
 application-owned mutation confirmation, and reconnection orchestration. It
-cannot approve connector filesystem, shell, network, MCP, policy, or harness
+cannot approve gateway filesystem, shell, network, MCP, policy, or harness
 permission requests. It does not know OmniGENT or Codex message shapes. AG-UI is
 the leading pending candidate for standard run, message, and frontend-tool
 payloads; the existing ACP/MCP browser prototype remains experimental until the
@@ -65,21 +67,21 @@ types.
 The enrolled profile prints one runtime card and generated high-entropy
 enrollment passphrase on first state creation. The user saves the bundle in a
 password manager, imports only the public card into applications, and enters
-the passphrase only on the connector origin. The application accepts the
-destination only after it proves possession of the enrolled connector key.
+the passphrase only on the gateway origin. The application accepts the
+destination only after it proves possession of the enrolled gateway key.
 
-Each new application then redirects to a top-level connector-owned OAuth
+Each new application then redirects to a top-level gateway-owned OAuth
 authorization page. Tailscale authenticates the requesting user to that page;
-the connector shows and approves the exact browser Origin, application id,
+the gateway shows and approves the exact browser Origin, application id,
 tool metadata snapshot (name, description, and input schema), requested scopes,
 callback, and expiry. This binds declared authority, not the application-side
-handler implementation, which remains app code. The connector returns a
+handler implementation, which remains app code. The gateway returns a
 short-lived code protected by PKCE and issues a revocable bearer grant. An
 app-instance key and DPoP-style sender binding remain target hardening.
-Normal authorization does not require terminal access or connector restart.
-See [ADR 0007](../decisions/0007-runtime-card-and-connector-oauth.md).
+Normal authorization does not require terminal access or gateway restart.
+See [ADR 0007](../decisions/0007-runtime-card-and-gateway-authorization.md).
 
-An application Origin does not need to be configured when the connector
+An application Origin does not need to be configured when the gateway
 starts. A previously unknown HTTPS Origin may initiate only the bounded
 authorization bootstrap. Approval creates a durable, scoped application grant
 binding that exact Origin, redirect URI, application id, scopes, and tool
@@ -96,10 +98,10 @@ the [mutual runtime identity investigation](../research/2026-07-14-mutual-runtim
 and [trusted transport profile decision](../decisions/0005-trusted-transport-profiles.md).
 
 The first remote profile is Tailscale Serve. Tailscale authenticates node
-transport and supplies requester identity to the loopback connector, but an
+transport and supplies requester identity to the loopback gateway, but an
 ordinary hosted page cannot inspect the destination node key or owner directly.
 First-use enrollment therefore binds the selected Serve endpoint to an Agent
-Connect connector key; later handshakes verify that key. Recognizing a `.ts.net`
+Connect gateway key; later handshakes verify that key. Recognizing a `.ts.net`
 hostname is never sufficient evidence by itself.
 
 The gateway provisions a provider session on first use. A healthy provider
@@ -108,7 +110,7 @@ different tool hash creates a different downstream ACP session; an unhealthy
 matching session is replaced behind the same opaque application session.
 
 An authenticated application remains untrusted. The gateway selects a
-connector-owned runtime posture that the application cannot broaden and reports
+gateway-owned runtime posture that the application cannot broaden and reports
 its configuration, claim source, and relevant observations. The runtime adapter
 implements the filesystem, network, persistence, credential, and sandbox
 mechanics. The target hardened profile exposes only the approved application
@@ -120,7 +122,7 @@ grant-bound tool names in a mode-`0600` session manifest. An internal
 compatibility adapter converts that manifest into Codex MCP `enabled_tools`
 plus per-tool approval settings. This preapproves only the browser tools the
 user already consented to; OmniGENT's built-in MCP tools and all other MCP tools
-remain unavailable or approval-gated. Application result events and connector
+remain unavailable or approval-gated. Application result events and gateway
 approval events use separate protocols and credentials. See the
 [control-plane/runtime decision](../decisions/0008-control-plane-and-runtime-confinement-boundary.md)
 and [malicious-application threat model](../research/2026-07-14-malicious-application-runtime-threat-model.md).
@@ -135,14 +137,14 @@ user-owned runtime.
 ### OmniGENT
 
 Owns normalized conversation state, downstream harness processes, policy,
-streaming, and the selected agent environment for the reference connector. Its
+streaming, and the selected agent environment for the reference gateway. Its
 adapter owns the concrete sandbox, filesystem, network, persistence, native
 tool, credential, and approval integration. OmniGENT's sandbox and policy
-features are enforcement layers, not a generic guarantee: the connector must
+features are enforcement layers, not a generic guarantee: the gateway must
 report their configured state and observable behavior and separately account
 for MCP subprocesses and harness-native capabilities. A direct Codex process
-running as the connector's VM user is ambient host execution, regardless of
-what the connector calls the profile. It must not delegate
+running as the gateway's VM user is ambient host execution, regardless of
+what the gateway calls the profile. It must not delegate
 system-of-record responsibility to Codex session files.
 
 The first VM-local `linux_bwrap` profile verifies its outer boundary with a
@@ -155,7 +157,7 @@ or whole-runner containment with controlled egress is required before this can
 defend against a malicious app. See the
 [sandbox spike](../research/2026-07-14-omnigent-vm-sandbox-spike.md).
 
-The leading pending deployment alternative packages the gateway, connector UI,
+The leading pending deployment alternative packages the gateway, gateway UI,
 OmniGENT control plane and runner, Codex adapter, and dynamic relay as an
 Internet-connectable container appliance. Its first profile uses a shared
 appliance with gateway-owned ephemeral session workspaces; the stronger target
@@ -163,7 +165,7 @@ creates a separate runner container per downstream session. This can simplify
 installation and remove host-specific Bubblewrap composition, but it does not
 by itself solve agent-credential exfiltration or human authorization on a
 public endpoint. See the
-[containerized appliance plan](../plan/containerized-connector-appliance.md).
+[containerized deployment plan](../plan/containerized-gateway-deployment.md).
 
 ### Application
 
@@ -213,7 +215,7 @@ browser -- AG-UI + Agent Connect security --> gateway
 gateway -- OmniGENT adapter --> OmniGENT -- ACP --> codex-acp --> Codex
 ```
 
-The gateway retains connector enrollment, per-app authorization, opaque
+The gateway retains gateway enrollment, per-app authorization, opaque
 provider sessions, fixed tool policy, stable action IDs, and durable recovery.
 See the [AG-UI investigation](../research/2026-07-14-ag-ui-fit.md) and
 [compatibility spike](../plan/ag-ui-compatibility-spike.md).

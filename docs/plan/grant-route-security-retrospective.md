@@ -30,13 +30,13 @@ the fix lands.
    fabricated public principal would expose `/v1/grants` management to anonymous
    callers.
 
-The minimum fix is to require the connector-issued enrolled-device cookie for
+The minimum fix is to require the gateway-issued enrolled-device cookie for
 grant listing and revocation in `public-demo`, while keeping the private
 `tailscale-serve` behavior unchanged. Exact Firebase app id, Origin, callback,
 scope, and tool-snapshot authority must also be configured rather than accepted
 from arbitrary passphrase holders.
 
-A later review also caught that the private and public connectors share a
+A later review also caught that the private and public gateways share a
 hostname even though they use different ports. Browser cookies are not
 port-scoped, so the minimum judge instructions require a clean browser profile;
 a distinct public hostname is the durable transport-level separation.
@@ -62,7 +62,7 @@ primary-source confirmation and adversarial review.
 `packages/gateway/src/gateway.ts` now distinguishes `public-demo` from the
 unchanged private profile. Public API routes use an internal enrollment
 principal without reading or fabricating a Tailscale user. `/v1/grants`
-requires a valid connector-issued device cookie before listing or revoking
+requires a valid gateway-issued device cookie before listing or revoking
 grants. Authorization-request creation compares the submitted app id, callback,
 and canonical tool hash with explicit operator configuration before creating a
 pending consent request.

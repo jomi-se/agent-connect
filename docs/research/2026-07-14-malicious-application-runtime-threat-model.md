@@ -2,7 +2,7 @@
 
 Date: 2026-07-14
 
-Status: investigation and proposed security target; connector authentication,
+Status: investigation and proposed security target; gateway authentication,
 consent, grant binding/revocation, and a strict event-shape allowlist are
 implemented, while runtime confinement and resource ceilings remain incomplete.
 
@@ -16,7 +16,7 @@ access, or misleading actions?
 
 Authentication answers **which application is asking**. It does not make the
 application's prompts, tool descriptions, tool results, or frontend code
-trustworthy. The connector must treat even a correctly authenticated and
+trustworthy. The gateway must treat even a correctly authenticated and
 user-approved application as an adversarial principal operating within a
 strict capability ceiling.
 
@@ -61,17 +61,17 @@ access, and model connectivity still need to be proven on the live ACP path.
 
 ## Assets
 
-The connector must protect:
+The gateway must protect:
 
 - the user's Codex subscription, token budget, rate limits, and availability;
 - host files, repositories, credentials, environment variables, sockets, and
   local services;
-- connector identity keys, application grants, and provider credentials;
+- gateway identity keys, application grants, and provider credentials;
 - preconfigured MCP servers, connected SaaS accounts, and their write powers;
 - prompts, results, tool data, and history belonging to other applications;
 - the integrity of application mutations and unresolved action records;
 - the user's attention and approval decisions;
-- the truthfulness of what the connector says an application or agent did.
+- the truthfulness of what the gateway says an application or agent did.
 
 ## Adversaries and assumptions
 
@@ -86,7 +86,7 @@ Assume any of the following can be hostile:
 - an agent following prompt injection or making a dangerous mistake;
 - a caller bypassing the public SDK and speaking directly to gateway endpoints.
 
-For the first profile, assume the connector, its host OS, Tailscale, OmniGENT,
+For the first profile, assume the gateway, its host OS, Tailscale, OmniGENT,
 Codex, and the model provider are trusted computing-base components. Sandbox
 escape, dependency compromise, and malicious model-provider behavior remain
 residual supply-chain or platform risks rather than problems application-level
@@ -115,22 +115,22 @@ treated as authority to change the policy of a deeper boundary.
 
 ## Primary threats and controls
 
-| Threat                                        | Example                                                                                                 | Required control                                                                                                                                                      |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Subscription theft or denial of service       | App loops prompts, long turns, or tool calls                                                            | Per-app concurrency, turn, token, time, tool-call, and rate ceilings enforced by the connector; revoke and kill live work                                             |
-| Host data exfiltration                        | Prompt asks Codex to read SSH keys, dotfiles, another repo, or local service data                       | Empty per-app workspace by default; no home mounts; hidden dotfiles; minimal environment; deny local network; connector-owned explicit mounts only                    |
-| Host mutation or command execution            | Prompt asks for shell commands, package installation, persistence, or destructive edits                 | Application-tools-only default; deny permission escalation; no writable host path; separate named profile for explicit workspace access                               |
-| Ambient authority abuse                       | Agent calls an inherited Gmail, GitHub, filesystem, browser, or cloud MCP tool                          | Build a minimal provider home; disable inherited MCP/apps/plugins/skills; allowlist connector-owned integrations individually                                         |
-| Approval laundering                           | Malicious app submits or forges an approval response for a local shell, network, MCP, or policy request | Separate approval protocol and credential; only a top-level connector-owned UI authenticated as the user may answer; app session API must reject approval event types |
-| Cross-app data leakage                        | Provider session, transcript, cache, workspace, or pending action is reused across origins              | Separate downstream session and scratch state per app grant/tool snapshot; origin-bound storage; never expose provider ids; deletion and expiry                       |
-| Tool-authority deception                      | App gives an innocuous declaration a dangerous implementation or changes metadata after consent         | Hash and display names/descriptions/schemas; re-consent on metadata drift; state clearly that app-side handler behavior is not attested; app remains untrusted        |
-| Tool-result prompt injection                  | Tool returns instructions to reveal secrets or use local powers                                         | Treat result as untrusted data; local capability ceiling remains unchanged; provenance labels where supported; never rely on the model to ignore injection            |
-| Protocol event injection                      | Caller bypasses SDK and posts interrupt, output, approval, or future OmniGENT event shapes              | Explicit gateway event allowlist and schema; state-machine validation; bind result to an unresolved action id/name/tool hash; reject everything else                  |
-| Result spoofing or replay                     | App invents another call id, races duplicate outputs, or replays an old mutation                        | Persist request first; stable unpredictable action ids; one terminal result transition; application idempotency/deduplication; audit duplicates                       |
-| Network exfiltration or lateral movement      | Shell reaches a webhook, metadata service, loopback daemon, or another tailnet node                     | Tool network off by default; egress allowlist when enabled; block private, loopback, metadata, Unix sockets, and inherited proxy credentials                          |
-| Credential disclosure through process context | Agent reads environment, config, auth file, process args, or logs                                       | Broker credentials outside the tool-visible filesystem/environment; minimal child environment; redact logs; never place secrets in prompts or tool schemas            |
-| User deception                                | App or agent claims a local action was approved or completed                                            | Connector-owned approvals and audit log; trustworthy origin and authority display; distinguish app text, agent text, and verified connector events                    |
-| Sandbox escape or supervisor compromise       | Crafted command exploits bwrap, Codex, MCP, or runner                                                   | Defense in depth, least privilege host user, patched dependencies, disposable container/VM option, no host secrets, and explicit residual-risk statement              |
+| Threat                                        | Example                                                                                                 | Required control                                                                                                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Subscription theft or denial of service       | App loops prompts, long turns, or tool calls                                                            | Per-app concurrency, turn, token, time, tool-call, and rate ceilings enforced by the gateway; revoke and kill live work                                             |
+| Host data exfiltration                        | Prompt asks Codex to read SSH keys, dotfiles, another repo, or local service data                       | Empty per-app workspace by default; no home mounts; hidden dotfiles; minimal environment; deny local network; gateway-owned explicit mounts only                    |
+| Host mutation or command execution            | Prompt asks for shell commands, package installation, persistence, or destructive edits                 | Application-tools-only default; deny permission escalation; no writable host path; separate named profile for explicit workspace access                             |
+| Ambient authority abuse                       | Agent calls an inherited Gmail, GitHub, filesystem, browser, or cloud MCP tool                          | Build a minimal provider home; disable inherited MCP/apps/plugins/skills; allowlist gateway-owned integrations individually                                         |
+| Approval laundering                           | Malicious app submits or forges an approval response for a local shell, network, MCP, or policy request | Separate approval protocol and credential; only a top-level gateway-owned UI authenticated as the user may answer; app session API must reject approval event types |
+| Cross-app data leakage                        | Provider session, transcript, cache, workspace, or pending action is reused across origins              | Separate downstream session and scratch state per app grant/tool snapshot; origin-bound storage; never expose provider ids; deletion and expiry                     |
+| Tool-authority deception                      | App gives an innocuous declaration a dangerous implementation or changes metadata after consent         | Hash and display names/descriptions/schemas; re-consent on metadata drift; state clearly that app-side handler behavior is not attested; app remains untrusted      |
+| Tool-result prompt injection                  | Tool returns instructions to reveal secrets or use local powers                                         | Treat result as untrusted data; local capability ceiling remains unchanged; provenance labels where supported; never rely on the model to ignore injection          |
+| Protocol event injection                      | Caller bypasses SDK and posts interrupt, output, approval, or future OmniGENT event shapes              | Explicit gateway event allowlist and schema; state-machine validation; bind result to an unresolved action id/name/tool hash; reject everything else                |
+| Result spoofing or replay                     | App invents another call id, races duplicate outputs, or replays an old mutation                        | Persist request first; stable unpredictable action ids; one terminal result transition; application idempotency/deduplication; audit duplicates                     |
+| Network exfiltration or lateral movement      | Shell reaches a webhook, metadata service, loopback daemon, or another tailnet node                     | Tool network off by default; egress allowlist when enabled; block private, loopback, metadata, Unix sockets, and inherited proxy credentials                        |
+| Credential disclosure through process context | Agent reads environment, config, auth file, process args, or logs                                       | Broker credentials outside the tool-visible filesystem/environment; minimal child environment; redact logs; never place secrets in prompts or tool schemas          |
+| User deception                                | App or agent claims a local action was approved or completed                                            | Gateway-owned approvals and audit log; trustworthy origin and authority display; distinguish app text, agent text, and verified gateway events                      |
+| Sandbox escape or supervisor compromise       | Crafted command exploits bwrap, Codex, MCP, or runner                                                   | Defense in depth, least privilege host user, patched dependencies, disposable container/VM option, no host secrets, and explicit residual-risk statement            |
 
 ## Security invariants
 
@@ -138,14 +138,14 @@ treated as authority to change the policy of a deeper boundary.
 
 An application grant permits a bounded set of operations such as submitting a
 prompt, receiving output, and servicing one approved application-tool snapshot.
-It can never increase the connector's filesystem, shell, network, MCP, plugin,
+It can never increase the gateway's filesystem, shell, network, MCP, plugin,
 credential, model, or approval policy.
 
 The effective authority is the intersection:
 
 ```text
 application grant
-AND connector policy profile
+AND gateway policy profile
 AND OmniGENT policy
 AND harness policy
 AND OS/container boundary
@@ -156,9 +156,9 @@ less restrictive harness mode or sandbox.
 
 ### The app is never the approver for host authority
 
-Application tool completion and connector approval are different protocol
+Application tool completion and gateway approval are different protocol
 operations, credentials, event types, and UI surfaces. A local permission
-request must be answered on a top-level connector-owned page, authenticated
+request must be answered on a top-level gateway-owned page, authenticated
 through the active transport identity. It must show the requesting app, exact
 operation, affected resources, duration, and whether approval is one-time or a
 policy change.
@@ -174,11 +174,11 @@ ordinary interactive Codex environment. Agent Connect must construct a minimal
 `CODEX_HOME` containing only what is needed for model authentication and the
 selected runtime. User MCP servers, apps, plugins, memories, broad skills, shell
 profiles, Git credentials, and unrelated conversation history are absent unless
-the connector owner explicitly enables a named integration profile.
+the gateway owner explicitly enables a named integration profile.
 
 ### Outputs remain untrusted
 
-Sandboxing limits consequences on the connector; it does not make assistant
+Sandboxing limits consequences on the gateway; it does not make assistant
 output safe HTML or make app-supplied tool results true. Applications must render
 agent output safely, validate tool arguments, preserve their own authorization,
 and keep mutating operations idempotent or deduplicated by action id.
@@ -203,10 +203,10 @@ limits: one active turn plus bounded time/tool/token/rate budget
 ```
 
 The user may later create named profiles such as `repo-review`, `repo-write`, or
-`calendar-draft`. Those profiles are connector-owned configuration objects. An
+`calendar-draft`. Those profiles are gateway-owned configuration objects. An
 application may request one, but OAuth consent cannot make it broader than what
-the connector owner previously configured. High-impact profiles require a
-connector-owned per-use approval or a narrowly stated persistent policy.
+the gateway owner previously configured. High-impact profiles require a
+gateway-owned per-use approval or a narrowly stated persistent policy.
 
 ## How OmniGENT helps
 
@@ -234,11 +234,11 @@ The limitations matter just as much:
 
 Therefore Agent Connect should use OmniGENT's facilities, define a
 provider-neutral confinement vocabulary, and report how each claim is sourced.
-It cannot independently verify a self-hosted connector's claims. A future
+It cannot independently verify a self-hosted gateway's claims. A future
 OpenClaw or other adapter should use the same vocabulary even if its
 implementation and evidence differ.
 
-A Codex process launched directly as the connector's VM user is not an isolated
+A Codex process launched directly as the gateway's VM user is not an isolated
 profile. Launch arguments, configuration inspection, and canary probes can
 detect some mistakes, but they do not remove ambient filesystem, credential,
 process, or network authority and do not constitute remote attestation.
@@ -248,13 +248,13 @@ process, or network authority and do not constitute remote attestation.
 1. Add a gateway input-event allowlist. For an application session, accept only
    a task message, result for a currently unresolved application action, and
    cancellation. Reject approval/policy/session-management and unknown events.
-2. Split application-action completion from connector approval into separate
+2. Split application-action completion from gateway approval into separate
    typed endpoints and credentials before exposing any approval UI.
 3. Generate a minimal, isolated provider home rather than copying the user's
    full Codex configuration. Inventory every inherited MCP/app/plugin/skill.
 4. Provision an empty per-app scratch workspace and force `codex-acp` read-only
    mode with local escalation denied.
-5. Add connector-enforced concurrency, rate, time, tool-call, and budget limits;
+5. Add gateway-enforced concurrency, rate, time, tool-call, and budget limits;
    do not depend solely on model or application cooperation.
 6. Spike explicit Omnibox `linux_bwrap` around the generic ACP harness. Prove
    Codex authentication, model access, client tools, cancellation, restart, and
@@ -266,7 +266,7 @@ process, or network authority and do not constitute remote attestation.
    network endpoints. The oracle is denied access, not model refusal text.
 9. Add a disposable container/cloud-sandbox profile for users who want a
    stronger host boundary, while documenting container and supply-chain risk.
-10. Only then add explicit connector-owned profiles for repository or external
+10. Only then add explicit gateway-owned profiles for repository or external
     integration access.
 
 ## Validation floor
@@ -292,19 +292,19 @@ evidence of confinement.
 
 Even after the first profile is complete:
 
-- a compromised connector host can read data before or after the sandbox;
+- a compromised gateway host can read data before or after the sandbox;
 - an exploit in the kernel, Bubblewrap, OmniGENT, Codex, or an allowed tool can
   escape intended boundaries;
 - model prompts and application data are disclosed to the configured model
   provider according to that provider's terms;
 - the application can misuse data the user intentionally gives it and can lie
   in its own UI;
-- a connector-owned integration profile can still be over-broad;
+- a gateway-owned integration profile can still be over-broad;
 - availability and subscription costs can be bounded but not made free.
 
 Agent Connect should report the configured confinement profile, who asserted
 it, and any named observations or external attestation. It must not display a
-generic "sandboxed" badge or call connector-local inspection independent
+generic "sandboxed" badge or call gateway-local inspection independent
 verification.
 
 ## Sources

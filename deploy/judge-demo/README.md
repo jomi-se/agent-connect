@@ -1,4 +1,4 @@
-# Public judge appliance
+# Public judge demo
 
 This profile runs the Agent Connect gateway, OmniGENT server and host, and the
 deterministic ACP fixture in one disposable container. It has no Codex or model
@@ -32,7 +32,7 @@ one shared live-state read tool plus three project-board, three document-review,
 and three product-research write tools. Recompute and review it whenever any
 definition changes.
 
-The appliance runs a deterministic ACP runtime which first reads the selected
+The demo runs a deterministic ACP runtime which first reads the selected
 app's live state, then selects a three-write-tool, Codex-authored plan from the
 scenario marker in the prompt. It still exercises
 the real OmniGENT, ACP, request-scoped MCP, gateway, SDK, and browser-tool path;
@@ -60,7 +60,7 @@ AGENT_CONNECT_SMOKE_ENROLLMENT_PASSPHRASE='the same passphrase from .env' \
 ```
 
 The command prints one sanitized JSON success record. It does not print bearer
-tokens or the enrollment passphrase. It derives the connector-owned approval
+tokens or the enrollment passphrase. It derives the gateway-owned approval
 Origin from the signed runtime card rather than assuming a placeholder URL.
 After the tool loop completes, it revokes its own application grant and proves
 that the revoked credential can no longer create an application session. The
@@ -95,7 +95,7 @@ sudo tailscale funnel status --json
 
 The resulting Funnel hostname is intentionally public for the judging period.
 Its address is routing information, not an authentication secret; the runtime
-card, enrolled device, fixed application authority, PKCE grant, and connector
+card, enrolled device, fixed application authority, PKCE grant, and gateway
 controls remain the authorization boundary.
 
 Use a clean or incognito browser for the public test because private Serve and
@@ -106,7 +106,7 @@ passphrase into the application.
 ## Start automatically with Tailscale
 
 The Compose service already uses `restart: unless-stopped`, so Docker restarts
-an existing appliance after a process, daemon, or host restart. Funnel must use
+the existing demo container after a process, daemon, or host restart. Funnel must use
 Tailscale's background configuration; a foreground Funnel kept in tmux does not
 survive a host reboot.
 
@@ -128,9 +128,9 @@ sudo systemctl enable --now agent-connect-judge.service
 ```
 
 The unit is wanted by and part of `tailscaled.service`. Whenever Tailscale
-starts, it idempotently brings the Compose appliance to healthy state and
+starts, it idempotently brings the Compose stack to healthy state and
 reapplies the port `10000` Funnel in `--bg` mode. It deliberately has no
-`ExecStop`: a manual unit reload must not destroy the connector state volume or
+`ExecStop`: a manual unit reload must not destroy the gateway state volume or
 silently remove judge access.
 
 Verify the installed path:
@@ -148,14 +148,14 @@ must retain its published identity.
 
 ## Credential backup
 
-The two text credentials that preserve the published connector are:
+The two text credentials that preserve the published gateway are:
 
 - `/home/dev/agent-connect/deploy/judge-demo/.env` on the host; and
-- `/var/lib/agent-connect/connector.json` inside the appliance, backed by host
+- `/var/lib/agent-connect/connector.json` inside the demo, backed by host
   Docker volume `judge-demo_judge-state` (normally
   `/var/lib/docker/volumes/judge-demo_judge-state/_data/connector.json`).
 
-`connector.json` contains the connector private key, capability-signing secret,
+`connector.json` contains the gateway private key, capability-signing secret,
 passphrase verifier, enrolled-device hashes, and grant audit state. Store it as
 a sensitive password-manager attachment or encrypted secure note. Restoring an
 older copy preserves the runtime card and enrollment passphrase but loses any
@@ -178,6 +178,6 @@ Disable the reconciliation unit before the final Funnel shutdown. Otherwise a
 later `tailscaled.service` restart will intentionally run the unit and publish
 the demo again. If the systemd unit was never installed, omit that command.
 
-Do not use `down -v` until the disposable connector identity and grants should
+Do not use `down -v` until the disposable gateway identity and grants should
 be destroyed. A configured enrollment passphrase is deliberately omitted from
 startup logs.

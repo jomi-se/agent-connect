@@ -1,13 +1,13 @@
-# VAL-AUTHZ-001: Connector-owned consent issues an exact PKCE application grant
+# VAL-AUTHZ-001: Gateway-owned consent issues an exact PKCE application grant
 
 Surface: API and browser.
 Needs: VAL-ENROLL-001, one HTTPS app Origin, exact same-origin callback,
 and an allowlisted Tailscale requester.
 Behavior: a pushed request binds app id, Origin, callback, state, S256 challenge,
-the required narrow scope set, and canonical tool metadata snapshot. A top-level connector page enrolls the
+the required narrow scope set, and canonical tool metadata snapshot. A top-level gateway page enrolls the
 device with the saved passphrase when necessary, displays declared authority, and
 approves or denies. A short-lived single-use code exchanges only with the
-matching verifier and bindings. Consent/revocation forms require connector
+matching verifier and bindings. Consent/revocation forms require gateway
 same-origin requests. The legacy pairing exchange is unavailable.
 Evidence: API/browser tests for success, denial, wrong redirect, wrong Origin,
 CSRF, wrong passphrase, bad PKCE, replay, state substitution, incomplete scope

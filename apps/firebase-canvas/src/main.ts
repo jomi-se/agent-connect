@@ -148,11 +148,11 @@ async function connectRuntime(): Promise<void> {
   resetActivity();
   activeConnectionActivity = addActivity(
     "connector",
-    "Checking connector access",
+    "Checking gateway access",
     "Runtime card and application grant",
     "active",
   );
-  status.textContent = "Checking the connector and application grant…";
+  status.textContent = "Checking the gateway and application grant…";
   connectionState.textContent = "Connecting";
   document.body.dataset["demo"] = "running";
 
@@ -172,12 +172,12 @@ async function connectRuntime(): Promise<void> {
         STORED_TRANSACTION,
         serializeAuthorizationTransaction(authorization.transaction),
       );
-      status.textContent = "Opening the connector for approval…";
+      status.textContent = "Opening the gateway for approval…";
       connectionState.textContent = "Approval required";
       updateActivity(
         activeConnectionActivity,
         "Application approval required",
-        "Opening the connector-owned consent page",
+        "Opening the gateway-owned consent page",
         "active",
       );
       location.assign(authorization.authorizeUrl);

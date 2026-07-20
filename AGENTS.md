@@ -9,6 +9,14 @@ working provider transport. ACP remains the preferred future standardized
 adapter; MCP-over-ACP is unstable, so keep draft-specific code and types out of
 the default application API.
 
+## Terminology
+
+Use **gateway** for the Agent Connect component that applications reach and
+users operate. Public documentation, UI copy, deployment paths, and new APIs
+must not call it a connector. Older internal compatibility names may remain
+until a dedicated migration, including `ConnectorAuth`, `connectorPublicKey`,
+`connector.json`, and `AGENT_CONNECT_REAL_CONNECTOR_ENV`.
+
 ## Current scope
 
 The browser-to-Codex spike and gateway-owned provisioning pass. Continue to

@@ -14,7 +14,7 @@ local request showing an opaque public id, a distinct internal OmniGENT id, and
 Fail: provider ids appear in the public response, tool changes reuse a fixed ACP
 session, an offline runner requires an OmniGENT UI/CLI restart, or two concurrent
 creates provision duplicate matching sessions.
-Scope: in-process recovery is required; persistence across connector restarts is
+Scope: in-process recovery is required; persistence across gateway restarts is
 deferred and must not be described as implemented.
 
 ## Current status

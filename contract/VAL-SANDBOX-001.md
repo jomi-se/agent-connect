@@ -15,7 +15,7 @@ Fail: fallback to unsandboxed launch, visible host sentinel, writable workspace,
 ambient normal Codex home, agent-readable long-lived login with unrestricted
 egress, failed MCP startup, or no dynamic tool call.
 Scope: host network is currently shared and `/tmp` supports the relay; this is
-not hardware attestation or proof against a compromised connector host.
+not hardware attestation or proof against a compromised gateway host.
 
 ## Current status
 

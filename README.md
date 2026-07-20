@@ -2,39 +2,57 @@
 
 Bring your own coding agent to any web app.
 
-App developers want useful AI features, but metered API costs are a poor fit
-for small products and BYOK still asks users to fund another usage bill. Agent
-Connect lets a user connect a coding agent they already operate while the web
-application lends it only the typed tools needed for the task.
+Build AI features by leveraging users' coding agents included with their
+subscriptions. This is currently focused on Codex specifically, but the goal is
+to support any agent that has an ACP interface.
 
-The application does not install an MCP server into Codex, expose a provider
-session id, or implement a different client for every agent harness.
+## Built with Codex and GPT-5.6
+
+Agent Connect was designed and implemented through Codex using GPT-5.6 Sol Medium for the most part. Codex
+researched OmniGENT and ACP, shaped the provider-neutral boundary, implemented
+the SDK, gateway, authorization flow, test layers, public demo, and real
+browser-to-Codex composition, and debugged the deployed mobile flow.
+
+One concrete example: while adapting the private Tailscale profile to a public
+Funnel, a delegated Codex review treated the transport change as a trust-
+boundary substitution and found that grant listing and revocation could
+otherwise become anonymous. The finding was source-verified, fixed, and covered
+by regression tests. The human builder chose the product direction, rejected
+excessive scope and unsupported security claims, and performed the live tests and debugging.
+
+The primary `/feedback` build thread is
+`019f5c47-a462-73d0-a329-39013786bae4`.
 
 ## Try the public demo
 
 Open [agent-connect-demo.web.app](https://agent-connect-demo.web.app/), paste
 the runtime card supplied in the judge instructions, and connect with the
-private enrollment passphrase on the connector-owned page.
+private enrollment passphrase on the gateway authorization page.
 
-The demo includes project-board bulk editing, in-place document review, and
-product research. It exercises the real browser SDK, signed runtime identity,
-connector-owned consent, PKCE grant, gateway, OmniGENT, ACP, request-scoped MCP,
-browser tool execution, result return, and visible page mutation.
+The demo includes three example apps: a project-board app with bulk editing,
+in-place document review in a document editor, and product research in a
+shopping app. It uses the Agent Connect browser SDK and gateway. Internally, it
+uses [OmniGENT](https://omnigent.ai/) as an agent orchestrator, Codex as the
+agent, and [Tailscale](https://tailscale.com/) as the network path between the
+demo web app and a live Agent Connect gateway.
 
-The public appliance uses disclosed deterministic, Codex-authored action plans
-so anyone can test it without consuming a model account. It is not presented as
-live model reasoning. The separate reference profile below runs the same path
-with a real Codex instance and the user's own login.
+The demo's runtime card targets an Agent Connect gateway in front of a
+fixture-based agent behind an ACP interface, so anyone can test it without
+consuming a model account. Codex with GPT-5.6 was used to author these
+scenarios.
 
-The same Firebase Canvas accepts either profile's runtime card: use the public
-judge connector on port `10000` for the deterministic evaluation path, or a
-user-owned connector such as the real Codex reference profile on port `9443`
-for live model reasoning.
+The separate reference profile below runs the same path with a real Codex
+instance and the user's own account. The same demo web app accepts either
+profile's runtime card: use the public judge demo on port `10000` for the
+deterministic evaluation path, or a user-owned gateway you set up for live
+model reasoning.
 
 ## Run the real Codex reference profile
 
-The [real connector guide](deploy/real-connector/README.md) starts the usable
-MVP on a Linux machine:
+The [real gateway guide](deploy/real-gateway/README.md) starts the usable MVP on
+a Linux machine. It requires a [Tailscale account and tailnet](https://tailscale.com/docs/install),
+with Tailscale installed and authenticated on both the gateway host and the
+browser device.
 
 ```sh
 curl -fsSL https://omnigent.ai/install.sh | sh -s -- --version 0.5.1
@@ -43,36 +61,31 @@ cd agent-connect
 npm install
 npm run build
 
-cp deploy/real-connector/.env.example deploy/real-connector/.env
+cp deploy/real-gateway/.env.example deploy/real-gateway/.env
 # Configure Tailscale endpoint, user, dedicated CODEX_HOME, and workspace.
-deploy/real-connector/run.sh
+deploy/real-gateway/run.sh
 ```
-
-During Build Week the repository is private, so judges must authenticate
-GitHub with the access named in the submission before cloning. The clone is
-anonymous once the repository is public.
 
 The supervisor runs a loopback Agent Connect gateway, OmniGENT server and host,
 a narrow compatibility wrapper around the pinned `codex-acp` adapter, and a
 real Codex process. Tailscale Serve publishes only the gateway over
 authenticated HTTPS.
 
-Previously unknown HTTPS applications can begin authorization without editing
-the connector configuration or restarting it. The connector shows the exact
+On a first connection, the gateway shows the exact
 Origin, callback, scopes, and tools before approval. The resulting grant is
-bound to that Origin, app id, redirect URI, scope set, and canonical tool
+bound to that Origin, app id, redirect URI, scope set, and tool
 snapshot. The frozen anonymous judge profile deliberately keeps its fixed
 application allowlist.
 
 ## Add Agent Connect to a web app
 
 `@agent-connect/web` is a browser-safe TypeScript package. It is currently
-distributed from source rather than the public npm registry. The
+distributed from source until it is more stable for normal npm package. The
 [web application integration guide](docs/guides/web-app-integration.md) shows
 how to build and install its npm tarball in another application, authorize a
 runtime, send a prompt, and handle live tool calls.
 
-The application-facing shape is intentionally agent- and harness-neutral:
+The application-facing shape is meant to be agent- and harness-neutral:
 
 ```ts
 const tools = [
@@ -103,9 +116,8 @@ for await (const event of connection.session.streamTask(prompt)) {
 }
 ```
 
-The full guide includes signed runtime-card verification and the connector
-authorization redirect; `approvedGrant` is not an API key supplied by the app
-developer.
+The full guide includes signed runtime-card verification and the gateway
+authorization redirect.
 
 ## Architecture
 
@@ -115,7 +127,7 @@ Web application
         │ HTTPS task/events and scoped tool results
         ▼
 User-owned Agent Connect gateway
-  connector identity, consent, grants, opaque sessions
+  gateway identity, consent, grants, opaque sessions
         │ internal provider adapter
         ▼
 OmniGENT ──ACP──> codex-acp ──> Codex
@@ -124,36 +136,33 @@ OmniGENT ──ACP──> codex-acp ──> Codex
 ```
 
 OmniGENT HTTP/SSE is the first working provider transport. ACP is the preferred
-downstream harness boundary. Neither OmniGENT, Codex, nor draft MCP-over-ACP
-types are part of the application API. Future runtime and transport adapters
+downstream harness boundary. Neither OmniGENT nor Codex types are part of the
+application API. Future runtime and transport adapters
 should preserve the web integration.
 
 ## Supported platforms
 
 - Web SDK: modern HTTPS browsers with Fetch, SSE, Web Crypto, and Web Storage.
 - Development: Node.js 22+ and npm 10+.
-- Real connector reference host: tested on Ubuntu 24.04 ARM64 with OmniGENT
+- Real gateway reference host: tested on Ubuntu 24.04 with OmniGENT
   0.5.1, `codex-acp` 1.1.2, Codex CLI, and Tailscale Serve.
-- Public judge appliance: Linux with Docker Engine, Docker Compose v2, and
-  Tailscale Funnel.
 
 Other Linux distributions and architectures may work but have not passed the
 complete real-Codex reference flow. Windows and macOS gateway hosting are not
-currently claimed.
+currently tested.
 
 ## Security boundary
 
-The runtime card pins the connector public key before the app sends tools or
-prompts. Tailscale authenticates the private transport user. Connector-owned
+The runtime card pins the gateway public key before the app sends tools or
+prompts. Tailscale authenticates the private transport user. Gateway-owned
 consent and PKCE create a revocable capability bound to the exact application
-and tool snapshot. These mechanisms authorize an application; they do not make
-that application trustworthy.
+and tool snapshot. These mechanisms authorize an application.
 
 Treat every authorized app as a potentially adversarial principal. The real
 reference profile is not a hardened sandbox for arbitrary hostile apps: Codex
 can use its configured native capabilities inside the selected workspace, and
-the runtime operator owns the machine's security posture. The public judge
-appliance contains no Codex credential or general agent shell.
+the runtime operator owns the machine's security posture. The public judge demo
+contains no Codex credential or general agent shell.
 
 See [the architecture documentation](docs/architecture/),
 [the runtime threat model](docs/research/2026-07-14-malicious-application-runtime-threat-model.md),
@@ -185,35 +194,15 @@ credits. The real OmniGENT provider test remains explicit because it starts
 local services.
 
 The provider-contract test exercises gateway → OmniGENT → ACP → request-scoped
-MCP → application result without using a model. The real connector guide is the
+MCP → application result without using a model. The real gateway guide is the
 manual milestone path using the user's Codex instance.
-
-## Built with Codex and GPT-5.6
-
-Agent Connect was designed and implemented through Codex using GPT-5.6. Codex
-researched OmniGENT and ACP, shaped the provider-neutral boundary, implemented
-the SDK, gateway, authorization flow, test layers, public appliance, and real
-browser-to-Codex composition, and debugged the deployed mobile flow.
-
-One concrete example: while adapting the private Tailscale profile to a public
-Funnel, a delegated Codex review treated the transport change as a trust-
-boundary substitution and found that grant listing and revocation could
-otherwise become anonymous. The finding was source-verified, fixed, and covered
-by regression tests. The human builder chose the product direction, rejected
-excessive scope and unsupported security claims, and performed the live mobile
-and reboot tests.
-
-The primary `/feedback` build thread is
-`019f5c47-a462-73d0-a329-39013786bae4`.
 
 ## Project status
 
-This is a hackathon MVP, not a production identity or orchestration platform.
+This is a hackathon MVP and is still in hackathon MVP state.
 The current boundary is one user, one online OmniGENT host, one downstream
 agent, one active task per app session, and one fixed tool snapshot per logical
-session. Durable unresolved tool delivery, DPoP sender binding, connector
-credential recovery, a hardened real-agent sandbox, published packages, and
-additional runtime adapters remain future work.
+session. Use at your own risk ^^.
 
 See [the documentation index](docs/README.md), [mission](docs/mission.md), and
 [accepted decisions](docs/decisions/).

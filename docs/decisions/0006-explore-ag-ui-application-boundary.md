@@ -17,7 +17,7 @@ and coding-agent harness, but its normal trust model and editor-oriented
 architecture are less directly aligned with an arbitrary hosted web
 application.
 
-AG-UI does not provide user-owned connector enrollment, destination identity,
+AG-UI does not provide user-owned gateway enrollment, destination identity,
 per-origin authorization, end-to-end channel binding, runner lifecycle, or
 pending-action durability. Those remain Agent Connect responsibilities.
 
@@ -36,14 +36,14 @@ Run a bounded compatibility spike in parallel with the existing transport:
   plan.
 
 If accepted after the spike, AG-UI supersedes only the application-facing
-portion of ADR 0001. ACP remains the preferred connector-to-agent adapter, and
+portion of ADR 0001. ACP remains the preferred gateway-to-agent adapter, and
 the experimental direct ACP-over-WebSocket path may remain available for ACP
 clients.
 
 ## Why this is a profile, not a fork
 
 Agent Connect should use standard AG-UI run, message, and tool representations
-unchanged. Connector enrollment and authorization should be a separate
+unchanged. Gateway enrollment and authorization should be a separate
 pre-session security layer, with standard HTTP metadata or headers where
 possible. Agent Connect-specific durability metadata must use documented
 extension points or remain gateway-internal.

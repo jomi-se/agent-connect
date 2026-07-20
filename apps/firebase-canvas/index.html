@@ -448,8 +448,8 @@
           <div class="security-note">
             <strong>Consent is not a trust guarantee.</strong>
             <span
-              >The connector shows the exact app origin and requested tools so
-              the user can decide—and revoke access later.</span
+              >The gateway shows the exact app origin and requested tools so the
+              user can decide—and revoke access later.</span
             >
           </div>
         </section>
@@ -497,7 +497,7 @@ for await (const event of connection.session.streamTask(prompt)) {
             <h2 id="gateway-setup-title">Run the gateway beside your agent.</h2>
             <p>
               The user runs this part on infrastructure they control. It keeps
-              coding-agent and transport details behind one connector-owned
+              coding-agent and transport details behind one gateway-owned
               boundary.
             </p>
             <span>Current prototype · source-based setup</span>
@@ -856,7 +856,7 @@ for await (const event of connection.session.streamTask(prompt)) {
           </div>
 
           <details>
-            <summary>Why the connector exists</summary>
+            <summary>Why the gateway exists</summary>
             <p>
               It keeps Codex, OmniGENT, and other provider details behind one
               browser API. Users approve or revoke each app from the gateway.
@@ -866,7 +866,7 @@ for await (const event of connection.session.streamTask(prompt)) {
             <summary>What the user is trusting</summary>
             <p>
               Approval lets this app send tasks and expose the listed tools. The
-              connector shows the real origin before access is granted.
+              gateway shows the real origin before access is granted.
             </p>
           </details>
         </section>

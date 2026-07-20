@@ -1,13 +1,13 @@
-# Containerized connector appliance
+# Containerized gateway deployment
 
 Status: pending architecture and deployment spike
 
 ## Opportunity
 
-Package the reference Agent Connect deployment as a connector appliance that
+Package the reference Agent Connect setup as a gateway deployment that
 can run on an arbitrary Internet-connected container host. The appliance would
 compose the Agent Connect gateway, OmniGENT control plane and runner, Codex ACP
-adapter, dynamic application-tool relay, connector-owned enrollment and OAuth
+adapter, dynamic application-tool relay, gateway-owned enrollment and OAuth
 pages, and operator diagnostics behind one documented deployment boundary.
 
 This is more than a sandbox replacement. It is a possible installation and
@@ -18,7 +18,7 @@ the user to understand OmniGENT, Bubblewrap, or the internal service topology.
 
 The container is still user-owned infrastructure. Agent Connect remains
 harness-neutral at its application boundary; this image is the opinionated
-OmniGENT/Codex reference connector, not a requirement imposed on other runtime
+OmniGENT/Codex reference gateway, not a requirement imposed on other runtime
 adapters.
 
 ## Why investigate it
@@ -42,7 +42,7 @@ adapters.
 
 One container or Compose application contains the gateway, OmniGENT server and
 host/runner, Codex adapter, and relay. Each Agent Connect session receives a
-fresh private workspace directory inside the appliance.
+fresh private workspace directory inside the container.
 
 This is the first target because it is operationally small and protects the
 underlying host when no host directories or container-runtime socket are
@@ -71,13 +71,13 @@ reported with their actual source.
 ```text
 browser application
         |
-        | HTTPS + connector identity + application grant
+        | HTTPS + gateway identity + application grant
         v
 container appliance
-  Agent Connect gateway and connector-owned UI
+  Agent Connect gateway and gateway-owned UI
   OmniGENT server and selected host/runner
   codex-acp + Codex + dynamic tool relay
-  connector state volume
+  gateway state volume
   ephemeral per-session workspaces
         |
         | restricted model/provider and optional web egress
@@ -95,10 +95,10 @@ are not an acceptance requirement.
 
 The appliance needs at least three distinct state classes:
 
-1. **Connector identity and grants.** Persist the connector private key,
+1. **Gateway identity and grants.** Persist the gateway private key,
    authorization grants, revocations, and audit data in a dedicated encrypted
    or access-controlled volume. Recreating the container must not silently
-   change the enrolled connector identity.
+   change the enrolled gateway identity.
 2. **Agent authentication.** Support an explicit bootstrap path for the user's
    Codex authentication. Initial experiments may import a dedicated Codex home
    or secret file, but production design must investigate interactive login,
@@ -116,27 +116,27 @@ the agent. Credential visibility and egress remain explicit threat-model work.
 
 ## Transport and enrollment consequences
 
-The runtime-card and connector OAuth design still applies. The application
-trusts the enrolled connector key, not a hostname or hosting vendor. The
+The runtime-card and gateway OAuth design still applies. The application
+trusts the enrolled gateway key, not a hostname or hosting vendor. The
 appliance can therefore support several transport profiles:
 
 - Tailscale Serve for a private user-owned endpoint and requester identity;
 - a managed HTTPS ingress with an explicitly configured user identity provider;
-- a custom domain with connector-key continuity but no transport identity
+- a custom domain with gateway-key continuity but no transport identity
   claim beyond TLS; or
-- a future relay that routes encrypted traffic without becoming connector
+- a future relay that routes encrypted traffic without becoming gateway
   identity.
 
 Moving off Tailscale removes its automatic requester-identity signal. A public
-deployment must replace that signal for the connector-owned authorization page
+deployment must replace that signal for the gateway-owned authorization page
 with an identity provider, a local enrolled-device credential, or another
-explicit presence mechanism. CORS and connector-key proof do not authorize a
+explicit presence mechanism. CORS and gateway-key proof do not authorize a
 person to spend the user's agent subscription.
 
 For the hackathon, the concrete lowest-cost profile keeps this appliance on the
-existing VM and exposes a separate judge connector through Tailscale Funnel on
+existing VM and exposes a separate judge gateway through Tailscale Funnel on
 port 10000. Funnel supplies public HTTPS but no trusted tailnet-user identity;
-the connector therefore uses a separately named `public-demo` enrollment and
+the gateway therefore uses a separately named `public-demo` enrollment and
 authorization profile while leaving private `tailscale-serve` enforcement
 unchanged. See the [judge demo environment plan](judge-demo-environment.md).
 
@@ -157,12 +157,12 @@ unchanged. See the [judge demo environment plan](judge-demo-environment.md).
 
 ### Phase B: secure deployment profile
 
-- Separate connector state, agent credentials, audit state, and disposable
+- Separate gateway state, agent credentials, audit state, and disposable
   session data into distinct mounts or secret channels.
 - Restrict inbound ports and outbound destinations; record the minimum egress
   needed for Codex, OmniGENT coordination, and intentionally enabled web use.
 - Apply CPU, memory, process, task-duration, concurrency, and storage ceilings.
-- Define upgrade, backup, connector-key recovery, revocation, and rollback
+- Define upgrade, backup, gateway-key recovery, revocation, and rollback
   behavior.
 - Add operator-visible posture that accurately distinguishes a shared
   appliance from a per-session container.
@@ -173,7 +173,7 @@ unchanged. See the [judge demo environment plan](judge-demo-environment.md).
   container platform without making that vendor part of the public SDK.
 - Prototype a per-session runner container lifecycle and determine whether it
   can use an OmniGENT extension point or needs a narrow maintained fork.
-- Design interactive first-run setup for connector enrollment, user identity,
+- Design interactive first-run setup for gateway enrollment, user identity,
   Codex authentication, public/private ingress, and runtime-card export.
 - Produce a disposable end-to-end deployment test from empty host to revoked
   application grant.
@@ -187,7 +187,7 @@ unchanged. See the [judge demo environment plan](judge-demo-environment.md).
   invokes a dynamic application tool through Codex, and revokes access through
   the appliance's public endpoint.
 - **VAL-APPLIANCE-003 — host boundary:** a session cannot read a host sentinel,
-  host home, container-runtime socket, connector identity volume, or another
+  host home, container-runtime socket, gateway identity volume, or another
   session workspace.
 - **VAL-APPLIANCE-004 — lifecycle:** session workspaces are unique, mode-`0700`,
   absent from image layers, and removed after close and crash-expiry paths.
@@ -195,9 +195,9 @@ unchanged. See the [judge demo environment plan](judge-demo-environment.md).
   appear in the image, logs, browser protocol, runtime card, or workspace;
   remaining in-container read and exfiltration authority is documented.
 - **VAL-APPLIANCE-006 — authorization:** an unapproved origin, wrong user,
-  substituted connector, revoked grant, or replayed code cannot start or use
+  substituted gateway, revoked grant, or replayed code cannot start or use
   an agent task.
-- **VAL-APPLIANCE-007 — honest posture:** the connector reports whether the
+- **VAL-APPLIANCE-007 — honest posture:** the gateway reports whether the
   session used a shared appliance or a fresh runner container and does not
   promote its self-report into external attestation.
 

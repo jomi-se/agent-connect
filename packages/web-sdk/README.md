@@ -1,18 +1,16 @@
 # `@agent-connect/web`
 
-Browser-safe, harness-neutral primitives for lending temporary application
-tools to a user-owned agent runtime.
+Browser SDK to implement AI features leveraging a user owned AI agent behind an Agent Connect Gateway
 
 The package provides:
 
-- signed runtime-card verification before application disclosure;
-- connector-owned authorization with PKCE;
-- opaque Agent Connect sessions and provider-neutral task events;
-- JSON Schema validation before browser tool execution; and
-- correlated tool results returned to the same agent turn.
+- Signed runtime-card verification
+- Gateway authorization;
+- Agent Connect sessions and task events
+- JSON Schema validation before browser tool execution
+- Correlated tool results returned to the same agent turn.
 
-OmniGENT is the first provider behind the gateway. Its session ids and wire
-types do not enter this API.
+OmniGENT is the current lone provider behind the gateway.
 
 ```ts
 import {
@@ -65,15 +63,10 @@ for await (const event of connection.session.streamTask(
 See the repository's complete
 [web application integration guide](https://github.com/jomi-se/agent-connect/blob/main/docs/guides/web-app-integration.md)
 for callback handling, transaction storage, package installation, revocation,
-and the real connector setup.
+and the real gateway setup.
 
 ## Current constraints
 
-- one active task per application session;
-- a fixed tool snapshot per logical/downstream session;
-- in-memory action suppression only, not generic exactly-once execution;
-- bearer app grants are not yet sender-bound with DPoP;
-- no durable unresolved-tool recovery yet; and
-- the experimental MCP-over-ACP helpers are not the default provider path.
-
-MIT licensed.
+- One active task per application session
+- A fixed tool snapshot per session
+- No generic exactly-once execution

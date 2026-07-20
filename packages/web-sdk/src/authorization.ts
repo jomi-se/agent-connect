@@ -67,7 +67,7 @@ export async function beginAgentAuthorization(
   if (authorizeUrl.origin !== new URL(baseUrl).origin) {
     throw new AgentConnectError(
       "runtime_identity_mismatch",
-      "Connector returned an authorization URL on another origin",
+      "Gateway returned an authorization URL on another origin",
     );
   }
   return {
@@ -232,7 +232,7 @@ async function verifyChallenge(
   } catch {
     throw new AgentConnectError(
       "protocol_error",
-      "This browser cannot verify the connector identity key",
+      "This browser cannot verify the gateway identity key",
     );
   }
   const payload = JSON.stringify({
@@ -250,7 +250,7 @@ async function verifyChallenge(
   if (!valid) {
     throw new AgentConnectError(
       "runtime_identity_mismatch",
-      "The endpoint could not prove possession of the enrolled connector key",
+      "The endpoint could not prove possession of the enrolled gateway key",
     );
   }
 }

@@ -115,7 +115,7 @@ await waitFor(
   },
   gateway,
 );
-process.stdout.write("Agent Connect judge appliance is ready\n");
+process.stdout.write("Agent Connect judge demo is ready\n");
 
 await new Promise(() => {});
 

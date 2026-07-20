@@ -6,10 +6,10 @@ Status: public Funnel/browser and revocation proven; final judge-instruction reh
 
 Provide OpenAI Build Week judges with a free, working Agent Connect environment
 that does not require joining the developer's tailnet, rebuilding the project,
-or receiving access to the developer's personal connector or Codex login.
+or receiving access to the developer's personal gateway or Codex login.
 
 The minimum deployment reuses the existing VM and publishes a separate judge
-connector through Tailscale Funnel. It uses the deterministic ACP agent already
+gateway through Tailscale Funnel. It uses the deterministic ACP agent already
 used by the real OmniGENT integration suite, not the owner's Codex subscription
 or a paid model credential. Firebase continues to host the static Canvas
 application. The real Codex composition remains the recorded and private live
@@ -50,9 +50,9 @@ https://artifex-box.tail246db1.ts.net:10000
           | loopback proxy only
           v
 127.0.0.1:10081
-  Agent Connect judge appliance container
+  Agent Connect judge demo container
       Agent Connect API and authorization UI
-      dedicated connector-state volume
+      dedicated gateway-state volume
       OmniGENT server and host
       deterministic ACP agent and request-scoped MCP relay
       disposable tmpfs home, temp, and workspace
@@ -71,20 +71,20 @@ the Funnel configuration resume after a
 Tailscale or host restart. Capture `tailscale funnel status --json` as deployment
 evidence.
 
-## Isolation from the personal connector
+## Isolation from the personal gateway
 
-The judge deployment must not reuse or expose the private connector currently
+The judge deployment must not reuse or expose the private gateway currently
 served through Tailscale Serve. The deterministic ACP agent intentionally has
 no model, filesystem tool, ambient MCP authority, or prompt-to-process path,
 but it must spawn OmniGENT's request-scoped MCP relay. A parser, dependency, or
 protocol-handler RCE would therefore be serious if the stack ran as the VM's
 normal `dev` user. The minimum public profile puts the complete deterministic
-stack in one disposable appliance container rather than relying only on
+stack in one disposable demo container rather than relying only on
 application-level tool restrictions.
 
 It receives its own:
 
-- connector identity and runtime card;
+- gateway identity and runtime card;
 - enrollment passphrase and enrolled devices;
 - application grants, revocations, and audit state;
 - OmniGENT state and downstream sessions;
@@ -92,18 +92,18 @@ It receives its own:
 - isolated container state and workspace root; and
 - logs and shutdown lifecycle.
 
-Run the appliance as a non-root user with a read-only root filesystem,
+Run the demo container as a non-root user with a read-only root filesystem,
 default seccomp, all Linux capabilities dropped, `no-new-privileges`, bounded
 PIDs/CPU/memory, and writable tmpfs only where required. Do not mount the host
 home, repository, normal `~/.codex`, SSH material, or Docker socket. Persist
-only the disposable judge connector and OmniGENT state required across a
+only the disposable judge gateway and OmniGENT state required across a
 restart. Publish only the gateway port, bound to host loopback for Funnel.
 
-This boundary protects the VM and personal connector from an ordinary
+This boundary protects the VM and personal gateway from an ordinary
 application or dependency compromise. It deliberately does not isolate the
 gateway, OmniGENT server, and deterministic runner from one another: compromise
-of any process may compromise the disposable judge appliance. That is an
-accepted hackathon risk because the appliance contains no personal data,
+of any process may compromise the disposable judge demo. That is an
+accepted hackathon risk because the demo contains no personal data,
 Codex/model credential, shell tool, or host mount. Separate service/runner
 containers remain a possible production hardening step, not a minimum-demo
 requirement. This is not a TEE or a claim that kernel/container escapes are
@@ -120,8 +120,8 @@ Add a separately named `public-demo` profile whose authorization requires:
 - an explicit allowlist containing the Firebase Canvas Origin and callback;
   a tailnet-only HTTPS development preview may be added as a second exact
   authority without weakening this to a wildcard;
-- proof of the connector key from the imported judge runtime card;
-- a high-entropy judge enrollment passphrase entered only on the connector
+- proof of the gateway key from the imported judge runtime card;
+- a high-entropy judge enrollment passphrase entered only on the gateway
   origin;
 - the resulting enrolled-device credential;
 - a PKCE application grant bound to origin, app id, scopes, tool snapshot, and
@@ -139,13 +139,13 @@ must require a valid enrolled-device cookie. Cookies remain `HttpOnly`,
 caller authentication. Device-scoped grant ownership is desirable but does not
 gate the first public demo.
 
-Cookies are hostname-scoped, not port-scoped. The private Serve connector and
+Cookies are hostname-scoped, not port-scoped. The private Serve gateway and
 public Funnel profile currently share one `.ts.net` hostname on different
-ports, so a browser that has used the private connector may send its private
-device cookie to the public appliance. Separate server-side state means that
+ports, so a browser that has used the private gateway may send its private
+device cookie to the public demo. Separate server-side state means that
 token will not authenticate there, but its transmission weakens the isolation
 claim. Require a clean or incognito browser profile for the public demo and do
-not reuse the owner's private-connector browser. A distinct public hostname is
+not reuse the owner's private-gateway browser. A distinct public hostname is
 the durable fix after the hackathon; changing only the cookie name does not
 prevent the old cookie from being sent.
 
@@ -161,7 +161,7 @@ minimum profile is deliberately narrow: fixed Firebase authority, fixed tool
 snapshot, no model credential, an empty disposable workspace, no host mounts,
 one loopback-published service, and Docker CPU/memory/PID bounds. Existing API
 request-size and protocol bounds remain in force. The operator kill switch is
-`tailscale funnel reset` plus stopping the appliance.
+`tailscale funnel reset` plus stopping the demo container.
 
 Do not add a matrix of rolling request, session, authorization, concurrency,
 and passphrase-verification counters before the happy path works. That logic is
@@ -184,7 +184,7 @@ runtime profiles honestly.
    revocation flow as the known-good fallback.
 3. Implement and test the narrow `public-demo` transport profile without
    weakening the `tailscale-serve` profile.
-4. Build the one-container judge appliance with isolated state, disposable
+4. Build the one-container judge demo with isolated state, disposable
    tmpfs, loopback-only publishing, and the baseline hardening controls above.
 5. Adapt the deterministic ACP agent to select only the advertised
    `set_page_message` tool and complete the full loop on containerized loopback.
@@ -198,7 +198,7 @@ Steps 3–5 passed on containerized loopback on 2026-07-17. The reusable smoke
 client completed enrollment, PKCE exchange, OmniGENT provisioning, ACP startup,
 request-scoped MCP `set_page_message`, browser result, and turn completion.
 Step 6 and the happy-path portion of step 7 passed on 2026-07-18 from a clean
-external mobile browser. The public Firebase Canvas verified the connector,
+external mobile browser. The public Firebase Canvas verified the gateway,
 redirected to the Funnel-hosted consent page, completed enrollment and PKCE,
 created an OmniGENT session, executed `set_page_message` exactly once, returned
 the correlated browser-tool result, and visibly replaced the page message. No
@@ -208,7 +208,7 @@ did not bypass the gateway. The remaining rehearsal work is a final pass over
 the exact private judge instructions.
 
 Time-box this narrow deterministic image rather than reviving the full Codex
-appliance. If Compose cannot reproduce the real OmniGENT/ACP/MCP tool loop, the
+setup. If Compose cannot reproduce the real OmniGENT/ACP/MCP tool loop, the
 public judge deployment remains blocked until the boundary passes; do not expose
 a weaker stack merely to meet the deadline, and never expose it as the normal
 `dev` user.
@@ -216,11 +216,11 @@ a weaker stack merely to meet the deadline, and never expose it as the normal
 ## Validation targets
 
 - **VAL-JUDGE-001 — public reachability:** a clean device outside the tailnet
-  reaches the connector through Funnel with valid TLS and without local-network
+  reaches the gateway through Funnel with valid TLS and without local-network
   permission prompts.
-- **VAL-JUDGE-002 — disposable appliance:** the judge runtime card, enrollment
+- **VAL-JUDGE-002 — disposable judge demo:** the judge runtime card, enrollment
   passphrase, grants, OmniGENT state, and process environment are different
-  from the personal Serve connector; no Codex credential or sensitive host
+  from the personal Serve gateway; no Codex credential or sensitive host
   mount is present; and the sole published port is bound to loopback.
 - **VAL-JUDGE-003 — authorization:** the supplied judge credential completes
   enrollment and PKCE consent. The fixed Firebase app/tool authority is
@@ -260,11 +260,11 @@ cases remain covered by the gateway behavior suite. It does not prove the
 private Codex runtime has the same sandbox posture or that Funnel itself is an
 Agent Connect security boundary.
 
-On 2026-07-20 the rebuilt public appliance repeated the loop with the current
+On 2026-07-20 the rebuilt public demo repeated the loop with the current
 Canvas snapshot: `get_current_app_state` was followed by three project-board
 write tools, each correlated result returned to the deterministic ACP runtime,
-and the page visibly reflected the final state. The appliance and Funnel also
-recovered after a VM reboot with the same connector identity.
+and the page visibly reflected the final state. The demo container and Funnel also
+recovered after a VM reboot with the same gateway identity.
 
 ## Tailscale dependency and fallback
 
@@ -272,10 +272,10 @@ Funnel is currently available on all Tailscale plans, including the free
 Personal plan, but remains beta and has non-configurable bandwidth limits. Its
 `.ts.net` hostname and supported public ports are vendor constraints.
 
-Agent Connect must depend only on a public HTTPS endpoint plus connector-level
+Agent Connect must depend only on a public HTTPS endpoint plus gateway-level
 identity and authorization. If Funnel pricing, limits, or availability change,
 the same judge deployment can move behind another HTTPS reverse tunnel, a small
-VPS, or a managed OCI ingress without changing the browser SDK or connector
+VPS, or a managed OCI ingress without changing the browser SDK or gateway
 identity.
 
 ## Parked demo polish

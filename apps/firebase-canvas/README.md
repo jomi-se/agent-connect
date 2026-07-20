@@ -11,7 +11,7 @@ the deterministic public judge runtime.
 The Build Week surface is also a self-explaining product demo. Real connection,
 task, tool-call, result, and completion events append to a live activity feed;
 there is no predefined execution path. The architecture and integration
-sections explain the application, connector, runtime, and security boundaries.
+sections explain the application, gateway, runtime, and security boundaries.
 The public judge runtime is labeled as deterministic; the page does not present
 that capability-limited environment as a live Codex session.
 
@@ -22,16 +22,16 @@ application, not at the monorepo root.
 
 The app needs:
 
-- the public runtime card printed when the connector identity is first created;
-- a browser that can reach the connector's Tailscale Serve HTTPS URL.
+- the public runtime card printed when the gateway identity is first created;
+- a browser that can reach the gateway's Tailscale Serve HTTPS URL.
 
-The app verifies the card's connector key before sending its tool schema, then
-redirects to the connector-owned authorization page. The enrollment passphrase
-is entered only there, never into this application's JavaScript. The connector
+The app verifies the card's gateway key before sending its tool schema, then
+redirects to the gateway-owned authorization page. The enrollment passphrase
+is entered only there, never into this application's JavaScript. The gateway
 enrolls the browser device, shows the exact origin and tool set, and returns a
 PKCE-bound revocable grant. The page keeps that grant in `sessionStorage` for
 the life of the tab.
-The **Disconnect agent** action revokes that grant at the connector before
+The **Disconnect agent** action revokes that grant at the gateway before
 clearing the browser copy. If access was already revoked elsewhere, Canvas
 discards the rejected local credential and lets the next Run begin a fresh
 authorization flow.

@@ -3,11 +3,11 @@
 set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-env_file=${AGENT_CONNECT_REAL_CONNECTOR_ENV:-"$repo_root/deploy/real-connector/.env"}
+env_file=${AGENT_CONNECT_REAL_CONNECTOR_ENV:-"$repo_root/deploy/real-gateway/.env"}
 
 if test ! -f "$env_file"; then
   echo "Agent Connect: missing $env_file" >&2
-  echo "Copy deploy/real-connector/.env.example to deploy/real-connector/.env and edit it." >&2
+  echo "Copy deploy/real-gateway/.env.example to deploy/real-gateway/.env and edit it." >&2
   exit 78
 fi
 

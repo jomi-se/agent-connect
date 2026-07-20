@@ -1,7 +1,7 @@
 # VAL-JUDGE-004: The deterministic ACP fixture performs the real dynamic tool loop
 
 Surface: browser, API, and protocol artifact.
-Needs: VAL-JUDGE-003, the one-container judge appliance with an online OmniGENT
+Needs: VAL-JUDGE-003, the one-container judge demo with an online OmniGENT
 host, and the deterministic ACP agent configured as the only harness.
 Behavior: Firebase Canvas sends a task through the public Agent Connect API;
 OmniGENT provisions the deterministic ACP runner; that runner initializes the

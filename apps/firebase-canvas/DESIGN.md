@@ -9,7 +9,7 @@ colors:
   muted: "oklch(0.46 0.018 250)"
   border: "oklch(0.85 0.012 250)"
   app-coral: "oklch(0.56 0.16 32.1)"
-  connector-teal: "oklch(0.43 0.09 190)"
+  gateway-teal: "oklch(0.43 0.09 190)"
   agent-periwinkle: "oklch(0.52 0.15 275)"
   signal-amber: "oklch(0.79 0.14 83)"
   success: "oklch(0.48 0.12 150)"
@@ -91,7 +91,7 @@ components:
 
 Agent Connect Canvas is a precise workbench in a bright studio: the useful machinery is visible, every handoff is marked, and nothing important is hidden behind decorative spectacle. The interface begins as a focused product tool, then opens outward into a live explanation of the system carrying the task.
 
-The neutral foundation keeps the application calm while a functional palette identifies the web app, connector, agent, in-flight work, and outcome. Density increases only when the visitor asks for technical depth. Mobile and desktop are independently composed over the same behavior: mobile is linear and disclosure-led; desktop keeps the workbench and supporting evidence visible together. The system explicitly rejects futuristic science-fiction AI interfaces, generic gradient-heavy AI startup landing pages, terminal-first hacker demos, and dense enterprise-security dashboards.
+The neutral foundation keeps the application calm while a functional palette identifies the web app, gateway, agent, in-flight work, and outcome. Density increases only when the visitor asks for technical depth. Mobile and desktop are independently composed over the same behavior: mobile is linear and disclosure-led; desktop keeps the workbench and supporting evidence visible together. The system explicitly rejects futuristic science-fiction AI interfaces, generic gradient-heavy AI startup landing pages, terminal-first hacker demos, and dense enterprise-security dashboards.
 
 **Key Characteristics:**
 
@@ -115,7 +115,7 @@ The palette maps color to responsibility. It is a navigation aid for the system,
 
 ### Secondary
 
-- **Connector Teal:** Marks the connector, runtime identity, authorization boundary, and verified trust state.
+- **Gateway Teal:** Marks the gateway, runtime identity, authorization boundary, and verified trust state.
 - **Agent Periwinkle:** Marks the remote agent, task execution, and streamed agent output.
 
 ### Tertiary
@@ -133,7 +133,7 @@ The palette maps color to responsibility. It is a navigation aid for the system,
 
 ### Named Rules
 
-**The Actor Color Rule.** Coral means app, teal means connector, and periwinkle means agent everywhere. Never reuse them as generic decoration.
+**The Actor Color Rule.** Coral means app, teal means gateway, and periwinkle means agent everywhere. Never reuse them as generic decoration.
 
 **The Semantic Red Rule.** Application Coral may identify an actor, but Danger Red alone communicates failure or revocation. Never use either for arbitrary emphasis.
 

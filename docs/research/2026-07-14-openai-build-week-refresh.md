@@ -50,7 +50,7 @@ way to test without rebuilding from scratch.
 
 ## Remaining submission-critical work
 
-1. Finish the connector authorization flow on the deployed Firebase/tailnet
+1. Finish the gateway authorization flow on the deployed Firebase/tailnet
    surface and capture mobile screenshots/video.
 2. Choose the final demo: the current Canvas flow is submission-safe; the
    spreadsheet + durable action recovery is stronger but only if finished.

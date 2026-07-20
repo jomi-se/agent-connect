@@ -14,9 +14,9 @@ processing so its animation can catch up.
 
 The useful sequence is:
 
-1. application SDK challenges the connector;
-2. connector proves its pinned identity;
-3. browser redirects to connector-owned authorization when needed;
+1. application SDK challenges the gateway;
+2. gateway proves its pinned identity;
+3. browser redirects to gateway-owned authorization when needed;
 4. task and fixed application tool snapshot travel to the gateway;
 5. provider adapter delivers the task to the selected runtime;
 6. the runtime requests an application tool;
@@ -88,8 +88,8 @@ payloads directly:
 
 ```ts
 type DiagramEvent =
-  | { type: "connector.challenge.started" }
-  | { type: "connector.verified" }
+  | { type: "gateway.challenge.started" }
+  | { type: "gateway.verified" }
   | { type: "authorization.required" }
   | { type: "authorization.completed" }
   | { type: "task.sent" }
@@ -111,7 +111,7 @@ short animation segment. When events arrive faster than the visuals:
 
 ## Motion language
 
-- **Request:** a compact solid marker travels app → connector → runtime.
+- **Request:** a compact solid marker travels app → gateway → runtime.
 - **Tool call:** the runtime path activates in reverse and the tool name arrives
   at the application boundary.
 - **Tool result:** a second marker returns with the stable action id visually
