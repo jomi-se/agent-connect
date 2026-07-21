@@ -777,9 +777,8 @@ function architectureStoryMarkup(layout: "desktop" | "mobile"): string {
     <div class="architecture-intro">
       <div>
         <h2 id="architecture-story-title">How it works today</h2>
-        <p>A real browser-to-Codex path, with each responsibility kept on the side that owns it.</p>
+        <p>A real browser-to-Codex path</p>
       </div>
-      <span class="architecture-mode">Private proof · real Codex · real subscription</span>
     </div>
 
     <div class="current-architecture" role="img" aria-label="The web app lends browser tools through Tailscale Serve to the Agent Connect Gateway. Inside the user's boundary, the gateway uses OmniGENT and the codex-acp adapter to run Codex from the user's subscription.">

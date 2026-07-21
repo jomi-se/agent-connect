@@ -418,20 +418,18 @@
           aria-labelledby="how-title"
         >
           <div class="explanation-copy">
-            <h2 id="how-title">Two pieces, two owners.</h2>
+            <h2 id="how-title">Two sides with two target users.</h2>
             <p>
-              App developers integrate the SDK. Agent owners run the gateway
-              inside their own boundary.
+              App developers integrate the Agent Connect SDK while users run the
+              Agent Connect Gateway inside their own VM, laptop, or other
+              environment.
             </p>
           </div>
           <div class="responsibility-list persona-list">
             <article>
               <span class="persona-label">For app developers</span>
               <h3>Agent Connect SDK</h3>
-              <p>
-                Define scoped, app-native actions in the browser. The public API
-                does not depend on Codex, OmniGENT, or another harness.
-              </p>
+              <p>Define scoped, app-native actions in the browser.</p>
               <strong>Tools execute in the app.</strong>
             </article>
             <article>
@@ -457,7 +455,10 @@
         <section id="code" class="desktop-code" aria-labelledby="code-title">
           <div class="code-intro">
             <h2 id="code-title">The browser side</h2>
-            <p>Ordinary functions become request-scoped tools.</p>
+            <p>
+              Define your app tools, connect them to their handlers, and plug in
+              the Agent Connect authentication flow.
+            </p>
           </div>
           <article class="code-example">
             <div class="code-heading">
@@ -844,7 +845,7 @@ for await (const event of connection.session.streamTask(prompt)) {
         </section>
 
         <section class="mobile-explanation" aria-labelledby="mobile-how-title">
-          <h2 id="mobile-how-title">Two pieces, two owners</h2>
+          <h2 id="mobile-how-title">Two sides with two target users</h2>
           <div class="mobile-boundaries">
             <p>
               <strong>SDK</strong
@@ -880,7 +881,10 @@ for await (const event of connection.session.streamTask(prompt)) {
           aria-labelledby="mobile-browser-code-title"
         >
           <h2 id="mobile-browser-code-title">The browser side</h2>
-          <p>Ordinary functions become request-scoped tools.</p>
+          <p>
+            Define your app tools, connect them to their handlers, and plug in
+            the Agent Connect authentication flow.
+          </p>
           <article class="code-example">
             <div class="code-heading">
               <span>app.ts</span>

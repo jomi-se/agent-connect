@@ -303,7 +303,7 @@ test("mobile and desktop mount different compositions", async ({ page }) => {
     page.getByRole("heading", { name: "Session activity" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Two pieces, two owners." }),
+    page.getByRole("heading", { name: "Two sides with two target users." }),
   ).toBeVisible();
   await expect(page.locator("[data-micro-flow] svg")).toBeVisible();
   await expect(page.locator("[data-micro-ring]")).toHaveCount(3);
@@ -354,7 +354,6 @@ test("the architecture story distinguishes today's proof from the north star", a
   await expect(
     page.getByRole("heading", { name: "How it works today" }),
   ).toBeVisible();
-  await expect(page.getByText("Private proof · real Codex")).toBeVisible();
   await expect(
     page.getByText("Public judge demo", { exact: true }),
   ).toBeVisible();
