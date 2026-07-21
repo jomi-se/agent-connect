@@ -29,28 +29,50 @@ type GatewayTerminalStep =
 const GATEWAY_TERMINAL_STEPS: readonly GatewayTerminalStep[] = [
   {
     kind: "output",
-    text: "# after configuring the runtime adapter and transport",
+    text: "# authenticated Codex + Tailscale required",
     tone: "muted",
   },
-  { kind: "command", text: "npm install" },
-  { kind: "output", text: "workspace dependencies installed", tone: "success" },
   {
     kind: "command",
-    text: "npm run build --workspace @agent-connect/gateway",
+    text: "curl -fsSL https://omnigent.ai/install.sh | sh -s -- --version 0.5.1",
   },
-  { kind: "output", text: "gateway build complete", tone: "success" },
   {
     kind: "command",
-    text: "npm run start --workspace @agent-connect/gateway",
+    text: "git clone https://github.com/jomi-se/agent-connect.git && cd agent-connect",
+  },
+  { kind: "command", text: "npm install && npm run build" },
+  {
+    kind: "command",
+    text: 'mkdir -p "$HOME/.agent-connect/codex-home" && chmod 700 "$HOME/.agent-connect/codex-home"',
+  },
+  {
+    kind: "command",
+    text: 'CODEX_HOME="$HOME/.agent-connect/codex-home" codex login',
+  },
+  {
+    kind: "command",
+    text: "cp deploy/real-gateway/.env.example deploy/real-gateway/.env && chmod 600 deploy/real-gateway/.env",
   },
   {
     kind: "output",
-    text: "listening on http://127.0.0.1:8787",
+    text: "# set Serve URL, Tailscale login, Codex home, workspace",
+    tone: "muted",
+  },
+  { kind: "command", text: "$EDITOR deploy/real-gateway/.env" },
+  { kind: "command", text: "deploy/real-gateway/run.sh" },
+  {
+    kind: "output",
+    text: "runtime card + enrollment passphrase ready",
     tone: "success",
   },
   {
     kind: "output",
-    text: "runtime card ready · waiting for app authorization",
+    text: "# in another shell, publish the loopback gateway",
+    tone: "muted",
+  },
+  {
+    kind: "command",
+    text: "sudo tailscale serve --bg --https=8443 http://127.0.0.1:8787",
   },
 ];
 
@@ -741,14 +763,16 @@ function mountArchitectureStories(): void {
   for (const host of document.querySelectorAll<HTMLElement>(
     "[data-architecture-story]",
   )) {
+    const layout =
+      host.dataset["storyLayout"] === "mobile" ? "mobile" : "desktop";
     host.className = "architecture-story";
     host.setAttribute("aria-labelledby", "architecture-story-title");
-    host.innerHTML = architectureStoryMarkup();
-    mountFutureStory(host);
+    host.innerHTML = architectureStoryMarkup(layout);
+    if (layout === "desktop") mountFutureStory(host);
   }
 }
 
-function architectureStoryMarkup(): string {
+function architectureStoryMarkup(layout: "desktop" | "mobile"): string {
   return `
     <div class="architecture-intro">
       <div>
@@ -807,76 +831,168 @@ function architectureStoryMarkup(): string {
 
     <div class="future-intro">
       <h2>Where this goes</h2>
-      <p>The MVP is one working composition. The goal is to keep the trust boundary and make everything around it replaceable.</p>
+      <p>Keep the trust boundary. Make everything around it replaceable.</p>
     </div>
 
-    <div class="future-story" data-future-story data-story-step="0">
-      <div class="future-story-sticky">
-        <div class="future-progress" aria-hidden="true">
-          <span data-future-progress="0"></span>
-          <span data-future-progress="1"></span>
-          <span data-future-progress="2"></span>
-        </div>
+    ${layout === "desktop" ? desktopFutureStoryMarkup() : mobileFutureStoryMarkup()}
+  `;
+}
 
-        <div class="future-story-layout">
-          <div class="future-diagram" aria-hidden="true">
-            <div class="future-row future-row-app">
-              <span class="future-row-label">Applications</span>
-              <strong>Agent Connect Web SDK</strong>
-              <small>One provider-neutral tool and task API</small>
-            </div>
-            <div class="future-options future-options-transport">
-              <span class="future-row-label">Reachability</span>
-              <div><strong data-current-option>Tailscale</strong><strong>Local</strong><strong>Remote tunnels</strong><strong>Cloud runner</strong></div>
-            </div>
-            <div class="future-core">
-              <span>Stable center</span>
-              <strong>Identity · consent · grants · sessions</strong>
-              <small>Agent Connect Gateway trust core</small>
-            </div>
-            <div class="future-options future-options-provider">
-              <span class="future-row-label">Agent bridge</span>
-              <div><strong data-current-option>OmniGENT</strong><strong>AG-UI adapter</strong><strong>ACP adapter</strong><strong>Provider adapters</strong></div>
-            </div>
-            <div class="future-options future-options-agent">
-              <span class="future-row-label">User-owned agent</span>
-              <div><strong data-current-option>Codex</strong><strong>Claude Code</strong><strong>Other coding agents</strong></div>
-            </div>
+function statusBadge(label: "proven" | "transitional" | "intended"): string {
+  return `<span class="north-status north-status-${label}">${label}</span>`;
+}
+
+function desktopFutureStoryMarkup(): string {
+  const axes = [
+    {
+      className: "north-conductor",
+      label: "Conductor",
+      current: "OmniGENT today",
+      status: "transitional" as const,
+      future: "any conductor — or none",
+    },
+    {
+      className: "north-agent",
+      label: "Coding agent",
+      current: "Codex",
+      status: "proven" as const,
+      future: "Claude Code<br><span>+ any compatible agent</span>",
+    },
+    {
+      className: "north-transport",
+      label: "Transport",
+      current: "Tailscale",
+      status: "proven" as const,
+      future: "any secure tunnel",
+    },
+    {
+      className: "north-deployment",
+      label: "Deployment",
+      current: "personal VM",
+      status: "transitional" as const,
+      future: "a simple packaged box",
+    },
+  ];
+  const axisMarkup = axes
+    .map(
+      (axis) => `
+        <article class="north-axis ${axis.className}">
+          <span class="north-axis-label">${axis.label}</span>
+          <div class="north-axis-stage">
+            <div class="north-axis-current"><strong>${axis.current}</strong>${statusBadge(axis.status)}</div>
+            <div class="north-axis-intended"><strong>${axis.future}</strong>${statusBadge("intended")}</div>
+          </div>
+        </article>`,
+    )
+    .join("");
+
+  return `
+    <div class="north-story" data-future-story data-story-phase="today">
+      <div class="north-sticky">
+        <div class="north-canvas" role="img" aria-label="Agent Connect keeps one stable control plane while the conductor, coding agent, transport, and deployment become replaceable.">
+          <svg class="north-wires" viewBox="0 0 1100 660" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M345 188 H375 Q390 188 390 203 V226 H405" />
+            <path d="M345 384 H375 Q390 384 390 369 V346 H405" />
+            <path d="M755 188 H725 Q710 188 710 203 V226 H695" />
+            <path d="M755 384 H725 Q710 384 710 369 V346 H695" />
+          </svg>
+
+          <div class="north-legend" aria-label="Architectural status">
+            ${statusBadge("proven")}${statusBadge("transitional")}${statusBadge("intended")}
+            <span>honest architectural status</span>
           </div>
 
-          <div class="future-copy">
-            <article data-future-copy="0">
-              <span>Today</span>
-              <h3>One honest composition</h3>
-              <p>Tailscale, OmniGENT, codex-acp, and Codex prove the complete idea end to end. They are the first implementation—not the public SDK contract.</p>
-            </article>
-            <article data-future-copy="1">
-              <span>Next</span>
-              <h3>Make the seams real</h3>
-              <p>Keep application tools and gateway trust stable while transports and agent bridges become explicit adapters. AG-UI and remote ACP are promising paths, not finished commitments.</p>
-            </article>
-            <article data-future-copy="2">
-              <span>North star</span>
-              <h3>Bring whichever agent you own</h3>
-              <p>An app integrates once. Each user chooses where their gateway runs, how it is reached, and which compatible coding agent powers the experience.</p>
-            </article>
+          ${axisMarkup}
+
+          <article class="north-control-plane">
+            <span>Agent Connect</span>
+            <h3>control plane</h3>
+            <em>stays stable</em>
+            <ul>
+              <li>one identity you enroll once</li>
+              <li>explicit consent, per app</li>
+              <li>scoped grants that expire</li>
+              <li>every action tracked</li>
+              <li>one-click revocation</li>
+            </ul>
+          </article>
+
+          <div class="north-roadmap">
+            <div>
+              <span>Where this goes</span>
+              <strong>Fewer moving parts, not more.</strong>
+              <p>Any agent a user already owns should plug in — without depending on one specific orchestrator in the middle.</p>
+            </div>
+            <ol>
+              <li>plug in more agents</li>
+              <li>drop the bespoke orchestrator</li>
+              <li>simpler setup</li>
+              <li>keep hardening trust</li>
+            </ol>
           </div>
         </div>
       </div>
-    </div>
-  `;
+    </div>`;
+}
+
+function mobileFutureStoryMarkup(): string {
+  const rows = [
+    ["Conductor", "OmniGENT today", "any conductor — or none"],
+    ["Coding agent", "Codex", "any compatible agent"],
+    ["Transport", "Tailscale", "any secure tunnel"],
+    ["Deployment", "personal VM", "a simple packaged box"],
+  ];
+  return `
+    <div class="mobile-north">
+      <article class="mobile-north-core">
+        <span>Agent Connect control plane</span>
+        <strong>Identity, consent, scoped grants, sessions, and revocation stay stable.</strong>
+      </article>
+      <div class="mobile-north-axes">
+        ${rows
+          .map(
+            ([label, current, future]) => `
+              <article>
+                <span>${label}</span>
+                <div><del>${current}</del><i aria-hidden="true">→</i><strong>${future}</strong></div>
+              </article>`,
+          )
+          .join("")}
+      </div>
+      <p><strong>Fewer moving parts, not more.</strong> Any agent a user already owns should plug in without depending on one specific orchestrator.</p>
+    </div>`;
 }
 
 function mountFutureStory(host: HTMLElement): void {
   const story = host.querySelector<HTMLElement>("[data-future-story]");
   if (!story) return;
+  const segment = (value: number, start: number, end: number) => {
+    const linear = Math.min(1, Math.max(0, (value - start) / (end - start)));
+    return 1 - Math.pow(1 - linear, 4);
+  };
   const update = () => {
     const rect = story.getBoundingClientRect();
     const travel = Math.max(1, story.offsetHeight - window.innerHeight);
     const progress = Math.min(1, Math.max(0, -rect.top / travel));
-    const step = Math.min(2, Math.floor(progress * 3));
-    story.dataset["storyStep"] = String(step);
-    story.style.setProperty("--story-progress", String(progress));
+    const time = progress * 3;
+    const transitions = [
+      ["--conductor-progress", 1.06, 1.55],
+      ["--agent-progress", 1.15, 1.64],
+      ["--transport-progress", 1.24, 1.73],
+      ["--deployment-progress", 1.33, 1.82],
+      ["--stable-progress", 1.05, 1.3],
+      ["--legend-progress", 0.3, 0.6],
+      ["--roadmap-progress", 2.02, 2.25],
+      ["--roadmap-one", 2.1, 2.35],
+      ["--roadmap-two", 2.19, 2.44],
+      ["--roadmap-three", 2.28, 2.53],
+      ["--roadmap-four", 2.37, 2.62],
+    ] as const;
+    for (const [property, start, end] of transitions) {
+      story.style.setProperty(property, String(segment(time, start, end)));
+    }
+    story.dataset["storyPhase"] =
+      time < 1.05 ? "today" : time < 2.02 ? "opening" : "future";
   };
 
   update();

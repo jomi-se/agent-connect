@@ -373,39 +373,29 @@ test("the architecture story distinguishes today's proof from the north star", a
     document.documentElement.style.scrollBehavior = "auto";
     window.scrollTo(0, top + (height - window.innerHeight) * 0.5);
   }, storyMetrics);
-  await expect(story).toHaveAttribute("data-story-step", "1");
-  await expect(
-    page.getByRole("heading", { name: "Make the seams real" }),
-  ).toBeVisible();
+  await expect(story).toHaveAttribute("data-story-phase", "opening");
+  await expect(page.locator(".north-control-plane em")).toHaveText(
+    "stays stable",
+  );
 
   await page.evaluate(({ top, height }) => {
     window.scrollTo(0, top + (height - window.innerHeight) * 0.86);
   }, storyMetrics);
-  await expect(story).toHaveAttribute("data-story-step", "2");
-  await expect(
-    page.getByRole("heading", { name: "Bring whichever agent you own" }),
-  ).toBeVisible();
+  await expect(story).toHaveAttribute("data-story-phase", "future");
+  await expect(page.getByText("any conductor — or none")).toBeVisible();
+  await expect(page.getByText("Fewer moving parts, not more.")).toBeVisible();
 });
 
-test("reduced motion exposes every architecture step without sticky scrolling", async ({
+test("reduced motion exposes the intended architecture without sticky scrolling", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?view=desktop");
 
-  await expect(page.locator(".future-story-sticky")).toHaveCSS(
-    "position",
-    "static",
-  );
-  await expect(
-    page.getByRole("heading", { name: "One honest composition" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Make the seams real" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Bring whichever agent you own" }),
-  ).toBeVisible();
+  await expect(page.locator(".north-sticky")).toHaveCSS("position", "static");
+  await expect(page.getByText("any conductor — or none")).toBeVisible();
+  await expect(page.getByText("a simple packaged box")).toBeVisible();
+  await expect(page.getByText("keep hardening trust")).toBeVisible();
 });
 
 async function openAndConnect(
