@@ -161,6 +161,12 @@ See [the architecture documentation](docs/architecture/),
 [the runtime threat model](docs/research/2026-07-14-malicious-application-runtime-threat-model.md),
 and [the grant-route security retrospective](docs/plan/grant-route-security-retrospective.md).
 
+Contributors can install the checksum-pinned staged-secret hook with
+`npm run security:hooks:install` and scan all reachable history with
+`npm run security:scan`. Local hooks are a guardrail, not an unbypassable
+security boundary; GitHub secret scanning and push protection provide the
+server-side backstop.
+
 ## Develop and test
 
 ```sh
