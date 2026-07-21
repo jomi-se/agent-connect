@@ -492,20 +492,22 @@ for await (const event of connection.session.streamTask(prompt)) {
           </article>
         </section>
 
-        <section data-architecture-story data-story-layout="desktop"></section>
-
         <section class="gateway-setup" aria-labelledby="gateway-setup-title">
           <div class="gateway-setup-copy">
             <h2 id="gateway-setup-title">Run the gateway beside your agent.</h2>
             <p>
               The user runs this part on infrastructure they control. It keeps
-              coding-agent and transport details behind one gateway-owned
+              Codex, OmniGENT, and the public transport behind one gateway-owned
               boundary.
             </p>
-            <span>Current prototype · source-based setup</span>
+            <span
+              >Reference setup · Ubuntu 24.04 ARM64 · read-only by default</span
+            >
           </div>
           <div data-gateway-terminal></div>
         </section>
+
+        <section data-architecture-story data-story-layout="desktop"></section>
       </main>
 
       <footer class="site-footer">
@@ -908,8 +910,6 @@ const connection = await connectAgent({
           </article>
         </section>
 
-        <section data-architecture-story data-story-layout="mobile"></section>
-
         <section
           class="mobile-implementation mobile-gateway-setup"
           aria-labelledby="mobile-gateway-setup-title"
@@ -918,11 +918,13 @@ const connection = await connectAgent({
             Run the gateway beside your agent.
           </h2>
           <p>
-            This part runs on infrastructure the user controls. The commands
-            below are today's source-based setup.
+            This runs on infrastructure the user controls, with a dedicated
+            Codex home and read-only mode by default.
           </p>
           <div data-gateway-terminal></div>
         </section>
+
+        <section data-architecture-story data-story-layout="mobile"></section>
 
         <p class="mobile-runtime-note">
           Public demo: a deterministic ACP runtime replays Codex-authored tool
