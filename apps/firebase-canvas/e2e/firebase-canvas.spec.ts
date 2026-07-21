@@ -382,8 +382,10 @@ test("the architecture story distinguishes today's proof from the north star", a
     window.scrollTo(0, top + (height - window.innerHeight) * 0.86);
   }, storyMetrics);
   await expect(story).toHaveAttribute("data-story-phase", "future");
-  await expect(page.getByText("any conductor — or none")).toBeVisible();
-  await expect(page.getByText("Fewer moving parts, not more.")).toBeVisible();
+  await expect(page.getByText("any conductor or none")).toBeVisible();
+  await expect(
+    page.getByText("Support more setups while making usage simpler."),
+  ).toBeVisible();
 });
 
 test("reduced motion exposes the intended architecture without sticky scrolling", async ({
@@ -393,7 +395,7 @@ test("reduced motion exposes the intended architecture without sticky scrolling"
   await page.goto("/?view=desktop");
 
   await expect(page.locator(".north-sticky")).toHaveCSS("position", "static");
-  await expect(page.getByText("any conductor — or none")).toBeVisible();
+  await expect(page.getByText("any conductor or none")).toBeVisible();
   await expect(page.getByText("a simple packaged box")).toBeVisible();
   await expect(page.getByText("keep hardening trust")).toBeVisible();
 });
