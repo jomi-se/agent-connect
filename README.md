@@ -13,13 +13,6 @@ researched OmniGENT and ACP, shaped the provider-neutral boundary, implemented
 the SDK, gateway, authorization flow, test layers, public demo, and real
 browser-to-Codex composition, and debugged the deployed mobile flow.
 
-One concrete example: while adapting the private Tailscale profile to a public
-Funnel, a delegated Codex review treated the transport change as a trust-
-boundary substitution and found that grant listing and revocation could
-otherwise become anonymous. The finding was source-verified, fixed, and covered
-by regression tests. The human builder chose the product direction, rejected
-excessive scope and unsupported security claims, and performed the live tests and debugging.
-
 The primary `/feedback` build thread is
 `019f5c47-a462-73d0-a329-39013786bae4`.
 
