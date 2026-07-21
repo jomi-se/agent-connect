@@ -13,7 +13,7 @@
     "@agent-connect/web": "0.0.0"
   },
   "devDependencies": {
-    "@types/node": "24.0.14",
+    "@types/node": "26.1.1",
     "typescript": "6.0.2",
     "vite": "7.3.6"
   }
