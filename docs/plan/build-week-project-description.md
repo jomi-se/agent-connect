@@ -87,4 +87,4 @@ I'd also like to write other profiles for connecting the SDK to the Gateway: for
 
 Another important goal is make Agent Connect gateway deployment safer. In its current state it inherits a bit of the agent environmnet already set up. I imagine a future where Agent Connect handles some level of sandboxing and isolation to reduce the risks of 3rd party apps trying to abuse the underlying agent and its environment.
 
-The underlying goal is to make Agent Connect easier to use and accessible to anyone, and safer, so that it can potentially become a common way of integrating AI features and making them available to any user who has an AI subscription—especially those who know how to set something like this up themselves. Good, simple packaging for something like this is essential.
+The underlying goal is to make Agent Connect easier to use and accessible to anyone, and safer, so that it can potentially become a common way of integrating AI features and making them available to any user who has an AI subscription, not only those who know how to set something like this up themselves. Good, simple packaging for something like this is essential.
