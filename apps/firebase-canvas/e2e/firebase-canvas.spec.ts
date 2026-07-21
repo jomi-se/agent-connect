@@ -345,6 +345,69 @@ test("mobile and desktop mount different compositions", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("the architecture story distinguishes today's proof from the north star", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?view=desktop");
+
+  await expect(
+    page.getByRole("heading", { name: "How it works today" }),
+  ).toBeVisible();
+  await expect(page.getByText("Private proof · real Codex")).toBeVisible();
+  await expect(
+    page.getByText("Public judge demo", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("At the agent layer, this Codex box is replaced", {
+      exact: false,
+    }),
+  ).toBeVisible();
+
+  const story = page.locator("[data-future-story]");
+  const storyMetrics = await story.evaluate((element) => ({
+    top: element.getBoundingClientRect().top + window.scrollY,
+    height: element.getBoundingClientRect().height,
+  }));
+  await page.evaluate(({ top, height }) => {
+    document.documentElement.style.scrollBehavior = "auto";
+    window.scrollTo(0, top + (height - window.innerHeight) * 0.5);
+  }, storyMetrics);
+  await expect(story).toHaveAttribute("data-story-step", "1");
+  await expect(
+    page.getByRole("heading", { name: "Make the seams real" }),
+  ).toBeVisible();
+
+  await page.evaluate(({ top, height }) => {
+    window.scrollTo(0, top + (height - window.innerHeight) * 0.86);
+  }, storyMetrics);
+  await expect(story).toHaveAttribute("data-story-step", "2");
+  await expect(
+    page.getByRole("heading", { name: "Bring whichever agent you own" }),
+  ).toBeVisible();
+});
+
+test("reduced motion exposes every architecture step without sticky scrolling", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?view=desktop");
+
+  await expect(page.locator(".future-story-sticky")).toHaveCSS(
+    "position",
+    "static",
+  );
+  await expect(
+    page.getByRole("heading", { name: "One honest composition" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Make the seams real" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Bring whichever agent you own" }),
+  ).toBeVisible();
+});
+
 async function openAndConnect(
   page: Page,
   view: "desktop" | "mobile",

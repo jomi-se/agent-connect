@@ -57,6 +57,7 @@ const GATEWAY_TERMINAL_STEPS: readonly GatewayTerminalStep[] = [
 mountGatewayTerminals();
 highlightTypescriptSnippets();
 mountMicroFlow();
+mountArchitectureStories();
 
 const connectForm = requireElement<HTMLFormElement>("connect-form");
 const taskForm = requireElement<HTMLFormElement>("task-form");
@@ -734,6 +735,162 @@ function scenarioTitle(scenario: DemoScenario): string {
 
 function reducedMotion(): boolean {
   return matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function mountArchitectureStories(): void {
+  for (const host of document.querySelectorAll<HTMLElement>(
+    "[data-architecture-story]",
+  )) {
+    host.className = "architecture-story";
+    host.setAttribute("aria-labelledby", "architecture-story-title");
+    host.innerHTML = architectureStoryMarkup();
+    mountFutureStory(host);
+  }
+}
+
+function architectureStoryMarkup(): string {
+  return `
+    <div class="architecture-intro">
+      <div>
+        <h2 id="architecture-story-title">How it works today</h2>
+        <p>A real browser-to-Codex path, with each responsibility kept on the side that owns it.</p>
+      </div>
+      <span class="architecture-mode">Private proof · real Codex · real subscription</span>
+    </div>
+
+    <div class="current-architecture" role="img" aria-label="The web app lends browser tools through Tailscale Serve to the Agent Connect Gateway. Inside the user's boundary, the gateway uses OmniGENT and the codex-acp adapter to run Codex from the user's subscription.">
+      <article class="architecture-app">
+        <div class="architecture-browser-bar" aria-hidden="true"><i></i><i></i><i></i><span>yourapp.com</span></div>
+        <div class="architecture-app-body">
+          <code>@agent-connect/web</code>
+          <p>Typed tools are declared for the session. Their handlers run here.</p>
+          <ul>
+            <li><i></i><code>create_project_tasks</code></li>
+            <li><i></i><code>update_project_tasks</code></li>
+            <li><i></i><code>move_project_tasks</code></li>
+          </ul>
+          <strong>Tools execute in the app</strong>
+        </div>
+      </article>
+
+      <div class="architecture-handoff" aria-hidden="true"><span></span></div>
+
+      <div class="architecture-boundary">
+        <span class="boundary-label">User's boundary · laptop / VM</span>
+        <div class="architecture-stack">
+          <article class="architecture-layer architecture-layer-transport">
+            <div><strong>Tailscale Serve</strong><span>private tailnet HTTPS</span></div>
+            <p>Authenticated transport to a gateway listening on loopback.</p>
+          </article>
+          <article class="architecture-layer architecture-layer-gateway">
+            <div><strong>Agent Connect Gateway</strong><span>trust core</span></div>
+            <p>Identity, consent, origin- and tool-bound grants, opaque sessions, revocation, and recovery.</p>
+          </article>
+          <article class="architecture-layer architecture-layer-runtime">
+            <div><strong>OmniGENT</strong><span>conductor</span></div>
+            <p>Agent lifecycle and a request-scoped MCP relay for the app's tools.</p>
+          </article>
+          <article class="architecture-layer architecture-layer-adapter">
+            <div><strong>codex-acp</strong><span>ACP adapter</span></div>
+          </article>
+          <article class="architecture-layer architecture-layer-agent">
+            <div><strong>Codex</strong><span>user's subscription</span></div>
+            <p>Reasons, streams events, and calls the tools lent by the app.</p>
+          </article>
+        </div>
+        <aside class="judge-substitution">
+          <strong>Public judge demo</strong>
+          <span>At the agent layer, this Codex box is replaced by a deterministic ACP agent replaying Codex-authored tool plans. The public transport uses Tailscale Funnel; the SDK, gateway, grants, sessions, and browser tool loop remain live.</span>
+        </aside>
+      </div>
+    </div>
+
+    <div class="future-intro">
+      <h2>Where this goes</h2>
+      <p>The MVP is one working composition. The goal is to keep the trust boundary and make everything around it replaceable.</p>
+    </div>
+
+    <div class="future-story" data-future-story data-story-step="0">
+      <div class="future-story-sticky">
+        <div class="future-progress" aria-hidden="true">
+          <span data-future-progress="0"></span>
+          <span data-future-progress="1"></span>
+          <span data-future-progress="2"></span>
+        </div>
+
+        <div class="future-story-layout">
+          <div class="future-diagram" aria-hidden="true">
+            <div class="future-row future-row-app">
+              <span class="future-row-label">Applications</span>
+              <strong>Agent Connect Web SDK</strong>
+              <small>One provider-neutral tool and task API</small>
+            </div>
+            <div class="future-options future-options-transport">
+              <span class="future-row-label">Reachability</span>
+              <div><strong data-current-option>Tailscale</strong><strong>Local</strong><strong>Remote tunnels</strong><strong>Cloud runner</strong></div>
+            </div>
+            <div class="future-core">
+              <span>Stable center</span>
+              <strong>Identity · consent · grants · sessions</strong>
+              <small>Agent Connect Gateway trust core</small>
+            </div>
+            <div class="future-options future-options-provider">
+              <span class="future-row-label">Agent bridge</span>
+              <div><strong data-current-option>OmniGENT</strong><strong>AG-UI adapter</strong><strong>ACP adapter</strong><strong>Provider adapters</strong></div>
+            </div>
+            <div class="future-options future-options-agent">
+              <span class="future-row-label">User-owned agent</span>
+              <div><strong data-current-option>Codex</strong><strong>Claude Code</strong><strong>Other coding agents</strong></div>
+            </div>
+          </div>
+
+          <div class="future-copy">
+            <article data-future-copy="0">
+              <span>Today</span>
+              <h3>One honest composition</h3>
+              <p>Tailscale, OmniGENT, codex-acp, and Codex prove the complete idea end to end. They are the first implementation—not the public SDK contract.</p>
+            </article>
+            <article data-future-copy="1">
+              <span>Next</span>
+              <h3>Make the seams real</h3>
+              <p>Keep application tools and gateway trust stable while transports and agent bridges become explicit adapters. AG-UI and remote ACP are promising paths, not finished commitments.</p>
+            </article>
+            <article data-future-copy="2">
+              <span>North star</span>
+              <h3>Bring whichever agent you own</h3>
+              <p>An app integrates once. Each user chooses where their gateway runs, how it is reached, and which compatible coding agent powers the experience.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function mountFutureStory(host: HTMLElement): void {
+  const story = host.querySelector<HTMLElement>("[data-future-story]");
+  if (!story) return;
+  const update = () => {
+    const rect = story.getBoundingClientRect();
+    const travel = Math.max(1, story.offsetHeight - window.innerHeight);
+    const progress = Math.min(1, Math.max(0, -rect.top / travel));
+    const step = Math.min(2, Math.floor(progress * 3));
+    story.dataset["storyStep"] = String(step);
+    story.style.setProperty("--story-progress", String(progress));
+  };
+
+  update();
+  if (reducedMotion() || matchMedia("(max-width: 700px)").matches) return;
+  let frame: number | undefined;
+  const schedule = () => {
+    if (frame !== undefined) return;
+    frame = requestAnimationFrame(() => {
+      frame = undefined;
+      update();
+    });
+  };
+  window.addEventListener("scroll", schedule, { passive: true });
+  window.addEventListener("resize", schedule);
 }
 
 type MicroFlowMover = {
