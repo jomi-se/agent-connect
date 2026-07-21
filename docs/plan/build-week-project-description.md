@@ -1,6 +1,6 @@
 ## Inspiration
 
-Between having a full-time job and being the father of two young kids, personal coding projects had pretty much vanished from existence. The advent of AI and so-called vibe coding has made them a reality again. I don't think I've ever made so many cool little personal projects as I have recently.
+Between having a full-time job and being the father of two young kids, personal coding projects had pretty much vanished from existence. The advent of AI and so-called vibe coding has made them a reality again for me. I don't think I've ever made so many cool little personal projects as I have recently.
 
 However, every time I got excited about implementing fun AI features, I hit the wall that API rates are simply far too expensive for simple, free, personal everyday apps. AI subscriptions want you to use their apps and can't be easily integrated into third-party ones.
 
@@ -30,13 +30,13 @@ Once both exist, the user's flow is:
 - Get redirected back to the web app with the material needed to establish an authorized connection to the Agent Connect Gateway.
 - Now the user's agent is ready to interact with the app through remote tool calls 🎉🎉 All the user has to do is prompt, and the remote agent does its magic.
 
-## How we built it
+## How I built it
 
 This was built in close partnership with GPT-5.6 Sol through Codex. It started as a discussion, exploration, and research with subagents.
 
-Are there standard protocols for this kind of thing that already exist? There is ACP, but full support for remote agents is still a work in progress. ACP was conceived primarily so that editors and IDEs could talk to coding agents. It now also defines remote HTTP and WebSocket scenarios, so the shape isn't too far off from the idea.
+Are there standard protocols for this kind of thing that already exist? There is ACP, but full support for remote agents is still a work in progress. ACP was concieved so that IDEs could talk to coding agents on the same machine through stdio. It now also has a draft to define remote HTTP and WebSocket scenarios, so the shape isn't too far off from the idea.
 
-I'd also recently heard about OmniGENT, built by the Databricks AI team and Neon. At first, I'd dismissed it as unnecessary overhead for running coding agents. But the more I thought about the problems involved in orchestrating an agent, the more I understood the value of something like OmniGENT. I realized it already did a lot of what I wanted, such as orchestrating agents in a harness-agnostic-ish way. It seemed more and more like a good fit.
+I'd also recently heard about [OmniGENT](https://www.databricks.com/blog/introducing-omnigent-meta-harness-combine-control-and-share-your-agents), built by the Databricks team. At first, I'd dismissed it as unnecessary overhead for running coding agents. But the more I thought about the problems involved in orchestrating an agent, the more I understood the big value of something like OmniGENT. I realized it already did a lot of what I wanted, such as orchestrating agents in a harness-agnostic-ish way. It seemed more and more like a good fit.
 
 Then came the problem of "dynamic tools." The current common approach is to define tools in advance on the harness side, or at least install some kind of [MCP](https://modelcontextprotocol.io/) server. What I was imagining required defining and presenting the tools from the client side to an already-running setup. OmniGENT can handle this by setting up an MCP relay dynamically at the start of a session.
 
@@ -61,11 +61,11 @@ The first major challenge of this project was dynamically defining the tools ava
 
 The second major challenge was security. At the end of the day, this project is about opening a remote execution channel to an agent running on the user's boundary. If the app is also made by the user and everything is running inside their own tailnet, then everything is fine. But if Agent Connect is meant to be made available to more people and you end up using it with third-party apps, the security story changes. We need to secure the channel and make sure everyone knows who is talking to whom.
 
-A third major challenge is that this domain is very young. I would have preferred to use an existing standard protocol for communication between the SDK and the Gateway, so the SDK could be more agnostic about what was being used behind the scenes to run the agent. The first gateway implementation in the hackathon MVP is tightly coupled internally with OmniGENT, which isn't necessarily a bad thing. But it means that people have to deploy OmniGENT instead of being able to use anything that speaks ACP together with something not yet stable, such as MCP-over-ACP.
+A third major challenge is that this domain is very young. I would have preferred to use an existing standard protocol for communication between the SDK and the Gateway, so the SDK could be more agnostic about what was being used behind the scenes to run the agent. The first gateway implementation in the hackathon MVP is tightly coupled internally with OmniGENT, which isn't necessarily a bad thing, snce Omnigent is awesome. But it means that people have to deploy OmniGENT instead of being able to use anything that speaks ACP together with something like MCP-over-ACP (which isn't stable yet).
 
 ## Accomplishments that we're proud of
 
-Agent Connect actually works, and I now have AI features in my shopping list app, which I managed to convince some people close to me to actually use.
+Agent Connect actually works, and I now have AI features in my shopping list app, which I managed to convince some people close to me to actually use 🎉🎉
 
 I think the security story is pretty solid, even if it's not perfect. Agent Connect cannot guarantee that the gateway environment hasn't been compromised or that a third-party app isn't malicious. A malicious app can implement whatever handlers it wants. But even so, I'm proud that the final shape cares about trying to protect the user to some extent.
 
@@ -73,16 +73,18 @@ I think the security story is pretty solid, even if it's not perfect. Agent Conn
 
 First, GPT-5.6 Sol on medium is absurdly capable. Almost the entire project was designed and implemented through it. It was especially interesting when, for the public demo, we had to move from the private Tailscale Serve setup to a public [Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel). Codex found a security issue by itself: the grant page had suddenly become anonymously accessible. I would have expected it to catch something like that when prompted, but I didn't expect it to autonomously find the problem while implementing the alternative public version of the demo.
 
-I also learned that OmniGENT is awesome. The Databricks AI team and Neon have built a really cool open-source project. Its [source is available on GitHub](https://github.com/omnigent-ai/omnigent), and it has been great to see other people working on it too.
+I also learned that OmniGENT is awesome. The Databricks AI team and Neon have built a really cool open-source project. Its [source is available on GitHub](https://github.com/omnigent-ai/omnigent).
 
-Finally, needless to say, I learned a lot about the complexities of remotely managing an agent: its responses, its tool calls, keeping a session online, and thinking about how to deal with reconnects that have unfinished tool calls. It'll be an interesting future for this project for sure, but even in its current state, it's already usable and it feels great.
+Finally, I learned a lot about the complexities of remotely managing an agent: its responses, its tool calls, keeping a session online, and thinking about how to deal with reconnects that have unfinished tool calls. It'll be an interesting future for this project for sure, but even in its current state, it's already usable and it feels great.
 
 ## What's next for Agent Connect: Bring your own agent
 
-The next step for the project is cleaning up all the AI "artifacts" that get created when a project is developed in this way with a coding harness.
+The next step for the project is cleaning up all the AI "artifacts" that get created when a project is developed in this way with a coding harness. And there's definitely a lot of it to do.
 
 Then I'd like to explore switching to a more open protocol like [AG-UI](https://docs.ag-ui.com/) for communication between the SDK and the Gateway, because it seems like a good fit.
 
 I'd also like to write other profiles for connecting the SDK to the Gateway: for example, by using [Microsoft's Remote Tunnels](https://code.visualstudio.com/docs/remote/tunnels), like the ones used by VS Code; by targeting a locally running Gateway on the same laptop; or even by using a VM environment in a cloud provider to make it easy for a user who isn't super technical and doesn't want to maintain a remote VM with Tailscale. It's definitely doable.
 
-The underlying goal is to make Agent Connect easier to use and accessible to anyone, so that it can potentially become a common way of integrating AI features and making them available to any user who has an AI subscription—especially those who know how to set something like this up themselves. Good, simple packaging for something like this is essential.
+Another important goal is make Agent Connect gateway deployment safer. In its current state it inherits a bit of the agent environmnet already set up. I imagine a future where Agent Connect handles some level of sandboxing and isolation to reduce the risks of 3rd party apps trying to abuse the underlying agent and its environment.
+
+The underlying goal is to make Agent Connect easier to use and accessible to anyone, and safer, so that it can potentially become a common way of integrating AI features and making them available to any user who has an AI subscription—especially those who know how to set something like this up themselves. Good, simple packaging for something like this is essential.
