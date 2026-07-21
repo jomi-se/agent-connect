@@ -10,7 +10,7 @@ Evidence: integration test creates a grant and session, revokes through the
 gateway page, observes 401 and zero upstream calls on the existing session,
 then reloads state and observes the persisted revocation timestamp.
 Fail: plaintext grant is stored, restart restores access, or an already-issued
-capability reaches OmniGENT after revocation.
+capability reaches Omnigent after revocation.
 Scope: provider-session mappings remain memory-only. Device management and
 distributed revocation are deferred.
 

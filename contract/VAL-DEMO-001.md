@@ -2,7 +2,7 @@
 
 Surface: browser.
 Needs: a dedicated Firebase Hosting project, GitHub deployment credentials, an
-online OmniGENT/Codex session, and the tailnet HTTPS gateway from VAL-REMOTE-001.
+online Omnigent/Codex session, and the tailnet HTTPS gateway from VAL-REMOTE-001.
 Behavior: from the dedicated Firebase URL, the user starts a task and Codex
 calls the page-defined `set_page_message` tool; the large visible page message
 changes exactly once and the same task reaches a successful terminal response.
@@ -10,7 +10,7 @@ Evidence: GitHub deployment run and resulting stable URL; real-browser
 screenshot; console and network capture covering CORS preflight, SSE, tool
 result POST, and completion; page attribute showing one write; Codex response.
 Fail: mocked provider output, a locally served page, a direct DOM test, or a
-Firebase deploy without the live OmniGENT/Codex path cannot pass this assertion.
+Firebase deploy without the live Omnigent/Codex path cannot pass this assertion.
 
 ## Current status
 

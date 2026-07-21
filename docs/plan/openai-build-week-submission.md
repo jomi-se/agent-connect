@@ -24,7 +24,7 @@ and approval behavior are actually completed.
 The north star is broader than the demonstrated deployment: applications
 integrate once against a harness-neutral capability-lending contract, while the
 user chooses an agent runtime and an appropriate provisioning profile. The
-current Tailscale + OmniGENT + Codex composition is the first working proof, not
+current Tailscale + Omnigent + Codex composition is the first working proof, not
 the product boundary. Future adapters may reuse standard event and agent
 vocabularies such as AG-UI and ACP where they fit, without presenting Agent
 Connect's current custom bridge as an established standard.
@@ -87,7 +87,7 @@ The primary development session used `gpt-5.6-sol` and is recorded through the
 required public `/feedback` identifier below.
 
 This session contains the product and protocol investigation, architecture
-choice, monorepo creation, adversarial plan review, OmniGENT composition proof,
+choice, monorepo creation, adversarial plan review, Omnigent composition proof,
 browser SDK, browser-to-Codex loop, tailnet gateway, Firebase Canvas, live
 debugging, pairing and scoped-capability broker, and mutual-runtime-identity
 follow-up. It encompasses the large majority of the core implementation and is
@@ -166,20 +166,20 @@ The shortest coherent story is:
    is more than a transport proxy.
 6. **Close on the boundary and direction.** Web applications integrate the
    provider-neutral SDK; users run the security gateway at their own boundary;
-   OmniGENT plus ACP is the first adapter, not the public API. The north star is
+   Omnigent plus ACP is the first adapter, not the public API. The north star is
    swappable agents, harnesses, and deployment profiles without rewriting the
    application integration.
 
 ### Required honesty about the two proofs
 
 The public judge demo uses a deterministic ACP agent fixture so judges can
-run the full authorization, OmniGENT, ACP, request-scoped MCP, browser-tool, and
+run the full authorization, Omnigent, ACP, request-scoped MCP, browser-tool, and
 page-mutation path without consuming a model account. Its three action plans
 were authored from real Codex interactions, but the public fixture must not be
 described as live model reasoning.
 
 Separately, the private composition proof completed the same browser-to-tool
-loop with a real Codex session behind OmniGENT. If footage or a concise capture
+loop with a real Codex session behind Omnigent. If footage or a concise capture
 of that run is available, use it to establish that the adapter works with the
 real agent; then use the deterministic public profile for the reproducible
 judge experience. Label the transition clearly rather than visually blending
@@ -192,9 +192,9 @@ story is stronger:
 
 - the project was designed and implemented through the primary Codex build
   thread, recorded as `gpt-5.6-sol` across its turn contexts;
-- Codex researched OmniGENT and ACP, shaped the agent-neutral boundary, created
+- Codex researched Omnigent and ACP, shaped the agent-neutral boundary, created
   the monorepo, implemented the browser SDK and gateway, wrote tests, and
-  debugged the real browser → OmniGENT → Codex → browser-tool loop;
+  debugged the real browser → Omnigent → Codex → browser-tool loop;
 - during the public-Funnel design, a delegated Codex audit treated the transport
   change as a trust-boundary substitution and discovered that `/v1/grants`
   listing and revocation could otherwise become anonymously reachable;
@@ -228,7 +228,7 @@ durability work.
 
 Treat this as the highest-risk criterion. Runtime-card import, enrollment,
 consent, progress, completion, and revocation must feel like one coherent
-product experience. Judges should not need to understand OmniGENT, ACP, MCP, SSE, or
+product experience. Judges should not need to understand Omnigent, ACP, MCP, SSE, or
 the internal session mapping to understand the result.
 
 ### Potential Impact
@@ -284,7 +284,7 @@ submission prose.
 - User-owned gateway: durable identity, enrollment, consent, origin- and
   tool-bound grants, opaque sessions, revocation, and provider isolation.
 - Current real-agent composition: Tailscale Serve, Agent Connect gateway,
-  OmniGENT, ACP, `codex-acp`, Codex, and a request-scoped MCP relay back to the
+  Omnigent, ACP, `codex-acp`, Codex, and a request-scoped MCP relay back to the
   browser.
 - Public judge composition: the same boundaries with a deterministic ACP
   fixture replaying Codex-authored plans, clearly labelled as deterministic.
@@ -307,7 +307,7 @@ submission prose.
 
 ### Accomplishments
 
-- A real browser to gateway to OmniGENT to Codex to browser-tool round trip
+- A real browser to gateway to Omnigent to Codex to browser-tool round trip
   works.
 - An arbitrary web Origin can enroll through the authorization flow instead of
   being configured in advance.
@@ -315,7 +315,7 @@ submission prose.
   model account.
 - The browser SDK and real gateway can also be installed from source for a
   third-party integration test.
-- Fast gateway behavior tests and an OmniGENT integration layer exercise the
+- Fast gateway behavior tests and an Omnigent integration layer exercise the
   authentication and orchestration boundaries without paying for model calls.
 
 ### What Codex and GPT-5.6 contributed

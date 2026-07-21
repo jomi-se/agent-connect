@@ -7,7 +7,7 @@ Status: pending exploration; not on the current critical path.
 ## Goal
 
 Determine whether AG-UI can replace Agent Connect's custom browser/gateway task
-wire while preserving the proven OmniGENT/Codex composition and the stronger
+wire while preserving the proven Omnigent/Codex composition and the stronger
 Agent Connect security and durability model.
 
 ## Baseline
@@ -17,7 +17,7 @@ The oracle is the passing Firebase/browser flow:
 ```text
 browser-defined tool
   -> Agent Connect gateway
-  -> OmniGENT session with request-scoped tools
+  -> Omnigent session with request-scoped tools
   -> codex-acp
   -> Codex tool call
   -> application tool result
@@ -49,17 +49,17 @@ Implement an experimental gateway-owned adapter:
 ```text
 AG-UI RunAgentInput
   -> existing logical session and tool-snapshot validation
-  -> OmniGENT message event with OpenAI-format function tools
+  -> Omnigent message event with OpenAI-format function tools
 
-OmniGENT response stream
+Omnigent response stream
   -> AG-UI run/text/tool/error events
 
 AG-UI tool-result message
-  -> OmniGENT function_call_output
+  -> Omnigent function_call_output
 ```
 
 Provider-specific parsing must live in the gateway package, not the browser
-package. OmniGENT provisioning, health recovery, and opaque identifiers remain
+package. Omnigent provisioning, health recovery, and opaque identifiers remain
 unchanged.
 
 ## Security composition slice
@@ -87,13 +87,13 @@ bearer credentials inside AG-UI messages or shared state.
    pinned AG-UI schemas.
 5. Unknown tools, malformed arguments, duplicate action IDs, changed tool
    snapshots, wrong Origin, wrong requester, and expired grants fail closed.
-6. OmniGENT runner replacement remains hidden behind the logical application
+6. Omnigent runner replacement remains hidden behind the logical application
    session.
 7. A disconnect with a pending tool request has an explicit recovery outcome;
    missing AG-UI semantics must be recorded rather than papered over.
 8. The existing custom endpoint continues to pass its regression suite.
 
-Collect the browser network trace, gateway translation trace, OmniGENT events,
+Collect the browser network trace, gateway translation trace, Omnigent events,
 and final Codex output. Redact credentials and personal identifiers.
 
 ## Adoption criteria
@@ -101,7 +101,7 @@ and final Codex output. Redact credentials and personal identifiers.
 Recommend adoption only if:
 
 - the official client interoperates without a project-specific AG-UI fork;
-- frontend tools work through the live OmniGENT/Codex composition;
+- frontend tools work through the live Omnigent/Codex composition;
 - the security layer composes outside standard AG-UI event schemas;
 - action correlation and recovery remain at least as strong as the baseline;
 - the browser package becomes provider-neutral in implementation as well as in
@@ -115,7 +115,7 @@ specific incompatibility, and reconsider after the relevant protocol evolves.
 
 ## Non-goals
 
-- replacing OmniGENT's conductor or Codex orchestration;
+- replacing Omnigent's conductor or Codex orchestration;
 - implementing every AG-UI capability;
 - claiming that AG-UI supplies authentication or runtime ownership;
 - removing ACP or `codex-acp` from the downstream path;

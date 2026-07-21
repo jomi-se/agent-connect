@@ -2,9 +2,9 @@
 
 ## Product boundary
 
-Agent Connect is an application-to-user-owned-agent bridge. Keep the application-facing API agent- and harness-neutral. Codex, OmniGENT, ACP adapters, and transport bridges belong behind internal adapter boundaries.
+Agent Connect is an application-to-user-owned-agent bridge. Keep the application-facing API agent- and harness-neutral. Codex, Omnigent, ACP adapters, and transport bridges belong behind internal adapter boundaries.
 
-The public task/tool API is provider-neutral. OmniGENT HTTP/SSE is the first
+The public task/tool API is provider-neutral. Omnigent HTTP/SSE is the first
 working provider transport. ACP remains the preferred future standardized
 adapter; MCP-over-ACP is unstable, so keep draft-specific code and types out of
 the default application API.
@@ -20,10 +20,10 @@ until a dedicated migration, including `ConnectorAuth`, `connectorPublicKey`,
 ## Current scope
 
 The browser-to-Codex spike and gateway-owned provisioning pass. Continue to
-assume one online OmniGENT host, one active task per application session, one
+assume one online Omnigent host, one active task per application session, one
 fixed tool snapshot per logical/downstream session, and one downstream agent
 until durability and approval behavior are implemented. Browser APIs must use
-opaque Agent Connect sessions, never raw OmniGENT ids.
+opaque Agent Connect sessions, never raw Omnigent ids.
 
 Do not add generalized multi-agent orchestration, arbitrary MCP features, Android automation, or a second proprietary session protocol without recording a decision under `docs/decisions/`.
 

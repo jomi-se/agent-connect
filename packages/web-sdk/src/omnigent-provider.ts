@@ -22,10 +22,10 @@ export class OmnigentProvider implements AgentProvider {
 
   constructor(options: OmnigentProviderOptions) {
     if (options.baseUrl.trim().length === 0) {
-      throw new TypeError("OmniGENT baseUrl must not be empty");
+      throw new TypeError("Omnigent baseUrl must not be empty");
     }
     if (options.sessionId.trim().length === 0) {
-      throw new TypeError("OmniGENT sessionId must not be empty");
+      throw new TypeError("Omnigent sessionId must not be empty");
     }
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.sessionId = options.sessionId;
@@ -41,7 +41,7 @@ export class OmnigentProvider implements AgentProvider {
     if (this.activeController) {
       throw new AgentConnectError(
         "protocol_error",
-        "This OmniGENT provider already has an active task",
+        "This Omnigent provider already has an active task",
       );
     }
 
@@ -58,11 +58,11 @@ export class OmnigentProvider implements AgentProvider {
           signal: controller.signal,
         },
       );
-      await requireOk(response, "open OmniGENT session stream");
+      await requireOk(response, "open Omnigent session stream");
       if (!response.body) {
         throw new AgentConnectError(
           "protocol_error",
-          "OmniGENT session stream response had no body",
+          "Omnigent session stream response had no body",
         );
       }
 
@@ -105,7 +105,7 @@ export class OmnigentProvider implements AgentProvider {
       }
       throw new AgentConnectError(
         "http_error",
-        "The OmniGENT session connection failed",
+        "The Omnigent session connection failed",
         { cause },
       );
     } finally {
@@ -139,7 +139,7 @@ export class OmnigentProvider implements AgentProvider {
         body: JSON.stringify(event),
       },
     );
-    await requireOk(response, "post OmniGENT session event");
+    await requireOk(response, "post Omnigent session event");
   }
 }
 
@@ -203,14 +203,14 @@ function parseSseFrame(frame: string): OmnigentEvent | undefined {
   } catch (cause) {
     throw new AgentConnectError(
       "protocol_error",
-      "OmniGENT emitted malformed JSON in its session stream",
+      "Omnigent emitted malformed JSON in its session stream",
       { cause },
     );
   }
   if (!isRecord(parsed) || typeof parsed.type !== "string") {
     throw new AgentConnectError(
       "protocol_error",
-      "OmniGENT emitted a session event without a string type",
+      "Omnigent emitted a session event without a string type",
     );
   }
   return parsed as OmnigentEvent;
@@ -248,7 +248,7 @@ function mapOmnigentEvent(
         } catch (cause) {
           throw new AgentConnectError(
             "protocol_error",
-            "OmniGENT emitted malformed tool-call arguments",
+            "Omnigent emitted malformed tool-call arguments",
             { cause },
           );
         }
@@ -289,7 +289,7 @@ function terminalMessage(event: OmnigentEvent): string {
 function malformedEvent(type: string, field: string): AgentConnectError {
   return new AgentConnectError(
     "protocol_error",
-    `OmniGENT ${type} event had an invalid ${field} field`,
+    `Omnigent ${type} event had an invalid ${field} field`,
   );
 }
 

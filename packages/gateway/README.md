@@ -2,16 +2,16 @@
 
 The gateway is the narrow HTTPS-facing envelope for browser applications. It
 binds to loopback, authenticates the configured Tailscale user, and brokers only
-the application sessions and OmniGENT stream/event routes used by the web SDK.
+the application sessions and Omnigent stream/event routes used by the web SDK.
 The private reference profile can enroll previously unknown HTTPS Origins
 through gateway-owned consent; a static Origin allowlist remains available
 as an operator policy.
 
-It is intentionally not a general OmniGENT reverse proxy.
+It is intentionally not a general Omnigent reverse proxy.
 
 ## Run locally
 
-For the supported OmniGENT/Codex supervisor, dedicated Codex home, current
+For the supported Omnigent/Codex supervisor, dedicated Codex home, current
 Tailscale Serve setup, and security boundary, use the
 [real gateway guide](../../deploy/real-gateway/README.md). The commands
 below show the lower-level generic gateway profile.
@@ -31,7 +31,7 @@ npm run start --workspace @agent-connect/gateway
 Defaults:
 
 - gateway: `http://127.0.0.1:8787`
-- OmniGENT: `http://127.0.0.1:6767`
+- Omnigent: `http://127.0.0.1:6767`
 
 Keep the gateway on loopback. Tailscale Serve terminates HTTPS and adds the
 authenticated Tailscale identity headers:
@@ -67,9 +67,9 @@ grant listing and revocation with the enrolled-device cookie. It is intentionall
 not a general anonymous deployment profile.
 
 The gateway uploads its narrow Codex ACP agent bundle, selects the one online
-OmniGENT host, launches the runner, and replaces an unhealthy runner
+Omnigent host, launches the runner, and replaces an unhealthy runner
 automatically. Set `AGENT_CONNECT_OMNIGENT_HOST_ID` when several hosts are
-online. Raw OmniGENT session ids never enter the browser configuration.
+online. Raw Omnigent session ids never enter the browser configuration.
 
 Gateway keys, enrolled-device token hashes, grant token hashes, revocation,
 and the capability secret are durable. Pending authorization requests, codes,

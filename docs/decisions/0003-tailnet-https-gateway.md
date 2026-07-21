@@ -7,7 +7,7 @@
 
 The first target application is hosted on Firebase and therefore runs from an
 HTTPS origin outside the agent VM. A browser page cannot safely call a raw HTTP
-tailnet IP from that origin. Directly exposing OmniGENT would also leave CORS,
+tailnet IP from that origin. Directly exposing Omnigent would also leave CORS,
 authorization, route scope, and later action durability at the wrong boundary.
 
 The VM already has a Tailscale HTTPS hostname. Its port 443 Serve mapping is in
@@ -26,7 +26,7 @@ The first security envelope has three independent checks:
 3. an exact browser Origin allowlist, with an optional runtime bearer token.
 
 The gateway exposes only the session stream and event routes required by the
-web SDK. It does not expose raw Codex app-server or the full OmniGENT API.
+web SDK. It does not expose raw Codex app-server or the full Omnigent API.
 
 Firebase Hosting serves the application only. A Firebase preview channel is the
 first non-production application origin; it does not host the agent gateway.

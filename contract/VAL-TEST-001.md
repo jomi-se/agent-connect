@@ -1,7 +1,7 @@
 # VAL-TEST-001: Gateway policy remains fast and fail-closed
 
 Surface: api.
-Needs: the repository's supported Node toolchain; no OmniGENT service, Codex
+Needs: the repository's supported Node toolchain; no Omnigent service, Codex
 credential, Tailscale daemon, browser, or external runner is required.
 Behavior: routine tests make real HTTP requests to an in-process Agent Connect
 gateway with an instrumented provider boundary. They cover enrolled grant and

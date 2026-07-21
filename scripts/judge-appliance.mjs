@@ -71,7 +71,7 @@ const server = start("omnigent-server", omnigent, [
   "--no-open",
 ]);
 await waitFor(
-  "OmniGENT server",
+  "Omnigent server",
   async () => {
     const response = await fetch(`${omnigentUrl}/v1/hosts`).catch(
       () => undefined,
@@ -88,7 +88,7 @@ const host = start("omnigent-host", omnigent, [
   "--non-interactive",
 ]);
 await waitFor(
-  "OmniGENT host",
+  "Omnigent host",
   async () => {
     const response = await fetch(`${omnigentUrl}/v1/hosts`).catch(
       () => undefined,

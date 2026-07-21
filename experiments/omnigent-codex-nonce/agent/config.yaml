@@ -1,6 +1,6 @@
 spec_version: 1
 name: agent-connect-nonce
-description: Proves that a session-scoped application tool crosses OmniGENT and Codex ACP.
+description: Proves that a session-scoped application tool crosses Omnigent and Codex ACP.
 
 executor:
   type: omnigent

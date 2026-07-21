@@ -120,7 +120,7 @@ type RuntimeAssurance = {
 ```
 
 The exact public shape is deferred until implementation. It must remain
-harness-neutral and must not expose OmniGENT, Codex, or ACP types.
+harness-neutral and must not expose Omnigent, Codex, or ACP types.
 
 ## Consequences
 

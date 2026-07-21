@@ -105,7 +105,7 @@ export class OmnigentRuntime implements AgentRuntime {
         await delay(this.pollIntervalMs);
       }
       throw new Error(
-        `OmniGENT runner for ${sessionId} did not become healthy in time`,
+        `Omnigent runner for ${sessionId} did not become healthy in time`,
       );
     } catch (error) {
       await rm(workspace, { recursive: true, force: true });
@@ -125,7 +125,7 @@ export class OmnigentRuntime implements AgentRuntime {
     );
     if (reservedName) {
       throw new TypeError(
-        `Application tool name collides with the OmniGENT provider: ${reservedName}`,
+        `Application tool name collides with the Omnigent provider: ${reservedName}`,
       );
     }
     const workspace = join(
@@ -166,7 +166,7 @@ export class OmnigentRuntime implements AgentRuntime {
   private async selectHost(): Promise<string> {
     const payload = await this.requestJson("/v1/hosts");
     const hosts = payload["hosts"];
-    if (!Array.isArray(hosts)) throw new Error("Invalid OmniGENT host list");
+    if (!Array.isArray(hosts)) throw new Error("Invalid Omnigent host list");
     const online = hosts.filter(
       (host): host is Record<string, unknown> =>
         isRecord(host) && host["status"] === "online",
@@ -175,14 +175,14 @@ export class OmnigentRuntime implements AgentRuntime {
       const selected = online.find((host) => host["host_id"] === this.hostId);
       if (!selected) {
         throw new Error(
-          `Configured OmniGENT host ${this.hostId} is not online`,
+          `Configured Omnigent host ${this.hostId} is not online`,
         );
       }
       return requiredString(selected, "host_id");
     }
     if (online.length !== 1) {
       throw new Error(
-        `Expected exactly one online OmniGENT host, observed ${online.length}; configure AGENT_CONNECT_OMNIGENT_HOST_ID`,
+        `Expected exactly one online Omnigent host, observed ${online.length}; configure AGENT_CONNECT_OMNIGENT_HOST_ID`,
       );
     }
     return requiredString(online[0]!, "host_id");
@@ -199,12 +199,12 @@ export class OmnigentRuntime implements AgentRuntime {
     const text = await response.text();
     if (!response.ok) {
       throw new Error(
-        `OmniGENT ${init.method ?? "GET"} ${path} failed: HTTP ${response.status}${text ? ` — ${text.slice(0, 500)}` : ""}`,
+        `Omnigent ${init.method ?? "GET"} ${path} failed: HTTP ${response.status}${text ? ` — ${text.slice(0, 500)}` : ""}`,
       );
     }
     const value: unknown = text ? JSON.parse(text) : {};
     if (!isRecord(value))
-      throw new Error(`OmniGENT ${path} returned invalid JSON`);
+      throw new Error(`Omnigent ${path} returned invalid JSON`);
     return value;
   }
 }
@@ -236,7 +236,7 @@ ${(sandbox.readPaths ?? []).map((path) => `      - ${yamlString(path)}`).join("\
 `
     : "";
   const runtimeBoundaryPrompt = sandbox
-    ? `The enclosing OmniGENT process sandbox, not a nested Codex sandbox, is
+    ? `The enclosing Omnigent process sandbox, not a nested Codex sandbox, is
   the filesystem enforcement boundary for this profile.`
     : `Agent Connect has not configured an outer OS sandbox for this profile.
   Remain within the current session workspace and do not inspect unrelated host
@@ -269,7 +269,7 @@ function validateSandboxSentinel(
 ): void {
   if (!isAbsolute(sandbox.hostSentinel)) {
     throw new TypeError(
-      `OmniGENT sandbox path must be absolute: ${sandbox.hostSentinel}`,
+      `Omnigent sandbox path must be absolute: ${sandbox.hostSentinel}`,
     );
   }
   const mountedRoots = [
@@ -288,14 +288,14 @@ function validateSandboxSentinel(
     })
   ) {
     throw new TypeError(
-      "OmniGENT host sentinel must be outside the workspace, Codex home, read roots, and /tmp",
+      "Omnigent host sentinel must be outside the workspace, Codex home, read roots, and /tmp",
     );
   }
 }
 
 function yamlString(value: string): string {
   if (!value.startsWith("/")) {
-    throw new TypeError(`OmniGENT sandbox path must be absolute: ${value}`);
+    throw new TypeError(`Omnigent sandbox path must be absolute: ${value}`);
   }
   return JSON.stringify(value);
 }
@@ -352,7 +352,7 @@ function writeOctal(
 function requiredString(value: Record<string, unknown>, key: string): string {
   const candidate = value[key];
   if (typeof candidate !== "string" || candidate.length === 0) {
-    throw new Error(`OmniGENT response is missing ${key}`);
+    throw new Error(`Omnigent response is missing ${key}`);
   }
   return candidate;
 }

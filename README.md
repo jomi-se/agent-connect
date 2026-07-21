@@ -9,7 +9,7 @@ to support any agent that has an ACP interface.
 ## Built with Codex and GPT-5.6
 
 Agent Connect was designed and implemented through Codex using GPT-5.6 Sol Medium for the most part. Codex
-researched OmniGENT and ACP, shaped the provider-neutral boundary, implemented
+researched Omnigent and ACP, shaped the provider-neutral boundary, implemented
 the SDK, gateway, authorization flow, test layers, public demo, and real
 browser-to-Codex composition, and debugged the deployed mobile flow.
 
@@ -25,7 +25,7 @@ private enrollment passphrase on the gateway authorization page.
 The demo includes three example apps: a project-board app with bulk editing,
 in-place document review in a document editor, and product research in a
 shopping app. It uses the Agent Connect browser SDK and gateway. Internally, it
-uses [OmniGENT](https://omnigent.ai/) as an agent orchestrator, Codex as the
+uses [Omnigent](https://omnigent.ai/) as an agent orchestrator, Codex as the
 agent, and [Tailscale](https://tailscale.com/) as the network path between the
 demo web app and a live Agent Connect gateway.
 
@@ -59,7 +59,7 @@ cp deploy/real-gateway/.env.example deploy/real-gateway/.env
 deploy/real-gateway/run.sh
 ```
 
-The supervisor runs a loopback Agent Connect gateway, OmniGENT server and host,
+The supervisor runs a loopback Agent Connect gateway, Omnigent server and host,
 a narrow compatibility wrapper around the pinned `codex-acp` adapter, and a
 real Codex process. Tailscale Serve publishes only the gateway over
 authenticated HTTPS.
@@ -123,13 +123,13 @@ User-owned Agent Connect gateway
   gateway identity, consent, grants, opaque sessions
         │ internal provider adapter
         ▼
-OmniGENT ──ACP──> codex-acp ──> Codex
+Omnigent ──ACP──> codex-acp ──> Codex
         │
         └── request-scoped MCP tool calls return to the web application
 ```
 
-OmniGENT HTTP/SSE is the first working provider transport. ACP is the preferred
-downstream harness boundary. Neither OmniGENT nor Codex types are part of the
+Omnigent HTTP/SSE is the first working provider transport. ACP is the preferred
+downstream harness boundary. Neither Omnigent nor Codex types are part of the
 application API. Future runtime and transport adapters
 should preserve the web integration.
 
@@ -137,7 +137,7 @@ should preserve the web integration.
 
 - Web SDK: modern HTTPS browsers with Fetch, SSE, Web Crypto, and Web Storage.
 - Development: Node.js 22+ and npm 10+.
-- Real gateway reference host: tested on Ubuntu 24.04 with OmniGENT
+- Real gateway reference host: tested on Ubuntu 24.04 with Omnigent
   0.5.1, `codex-acp` 1.1.2, Codex CLI, and Tailscale Serve.
 
 Other Linux distributions and architectures may work but have not passed the
@@ -169,7 +169,7 @@ npm run verify
 ```
 
 `npm run verify` runs formatting, type checks, gateway and SDK behavior tests,
-and all builds without OmniGENT, Tailscale, Codex credentials, or model usage.
+and all builds without Omnigent, Tailscale, Codex credentials, or model usage.
 
 Additional real-boundary checks:
 
@@ -177,23 +177,23 @@ Additional real-boundary checks:
 # Pack the SDK, install it into a clean external npm project, and import it.
 npm run test:package:web
 
-# Start disposable real OmniGENT services with a deterministic ACP agent.
+# Start disposable real Omnigent services with a deterministic ACP agent.
 npm run test:integration:omnigent
 ```
 
 `npm run verify:full` adds the clean external SDK-package consumer and Canvas
 Playwright suites to the default fast gate. It still does not consume model
-credits. The real OmniGENT provider test remains explicit because it starts
+credits. The real Omnigent provider test remains explicit because it starts
 local services.
 
-The provider-contract test exercises gateway → OmniGENT → ACP → request-scoped
+The provider-contract test exercises gateway → Omnigent → ACP → request-scoped
 MCP → application result without using a model. The real gateway guide is the
 manual milestone path using the user's Codex instance.
 
 ## Project status
 
 This is a hackathon MVP and is still in hackathon MVP state.
-The current boundary is one user, one online OmniGENT host, one downstream
+The current boundary is one user, one online Omnigent host, one downstream
 agent, one active task per app session, and one fixed tool snapshot per logical
 session. Use at your own risk ^^.
 

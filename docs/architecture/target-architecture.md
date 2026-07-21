@@ -24,10 +24,10 @@ Agent Connect gateway
   requested/configured posture + observations
   input event allowlist + resource ceilings
              |
-             | OmniGENT HTTP/SSE Sessions API
+             | Omnigent HTTP/SSE Sessions API
              | request-scoped client tools
              v
-OmniGENT conductor
+Omnigent conductor
   normalized sessions, policy, harness lifecycle
              |
              | generic ACP harness
@@ -46,22 +46,22 @@ Codex
 Owns browser transport setup, application tool registration and execution,
 application-owned mutation confirmation, and reconnection orchestration. It
 cannot approve gateway filesystem, shell, network, MCP, policy, or harness
-permission requests. It does not know OmniGENT or Codex message shapes. AG-UI is
+permission requests. It does not know Omnigent or Codex message shapes. AG-UI is
 the leading pending candidate for standard run, message, and frontend-tool
 payloads; the existing ACP/MCP browser prototype remains experimental until the
 comparison spike is decided.
 
 The current package still exports `OmnigentProvider`, `connectOmnigent`, and
-OmniGENT option types from the spike. Those are transitional provider entry
+Omnigent option types from the spike. Those are transitional provider entry
 points, not the intended default public integration. The neutral `connectAgent`
 and task/tool types are the target application surface.
 
 ### Gateway
 
-Owns enrollment, authorization, mapping application sessions to OmniGENT
+Owns enrollment, authorization, mapping application sessions to Omnigent
 conversations, request-scoped tool-schema injection, and normalized events.
 Durable pending application actions are a required next reliability layer, not
-current behavior. Its provider interface contains no browser-facing OmniGENT
+current behavior. Its provider interface contains no browser-facing Omnigent
 types.
 
 The enrolled profile prints one runtime card and generated high-entropy
@@ -121,7 +121,7 @@ but that directory is not yet an OS confidentiality boundary. It records the
 grant-bound tool names in a mode-`0600` session manifest. An internal
 compatibility adapter converts that manifest into Codex MCP `enabled_tools`
 plus per-tool approval settings. This preapproves only the browser tools the
-user already consented to; OmniGENT's built-in MCP tools and all other MCP tools
+user already consented to; Omnigent's built-in MCP tools and all other MCP tools
 remain unavailable or approval-gated. Application result events and gateway
 approval events use separate protocols and credentials. See the
 [control-plane/runtime decision](../decisions/0008-control-plane-and-runtime-confinement-boundary.md)
@@ -134,12 +134,12 @@ request. The hardened public judge profile may additionally retain a static
 Origin allowlist. Firebase hosts application assets, not the gateway or the
 user-owned runtime.
 
-### OmniGENT
+### Omnigent
 
 Owns normalized conversation state, downstream harness processes, policy,
 streaming, and the selected agent environment for the reference gateway. Its
 adapter owns the concrete sandbox, filesystem, network, persistence, native
-tool, credential, and approval integration. OmniGENT's sandbox and policy
+tool, credential, and approval integration. Omnigent's sandbox and policy
 features are enforcement layers, not a generic guarantee: the gateway must
 report their configured state and observable behavior and separately account
 for MCP subprocesses and harness-native capabilities. A direct Codex process
@@ -150,7 +150,7 @@ system-of-record responsibility to Codex session files.
 The first VM-local `linux_bwrap` profile verifies its outer boundary with a
 guard, read-only workspace, dedicated writable Codex home, host sentinel,
 `NoNewPrivs`, and seccomp. Its dynamic tool loop is currently blocked by the
-OmniGENT-to-Codex MCP child startup under that boundary, so it is experimental,
+Omnigent-to-Codex MCP child startup under that boundary, so it is experimental,
 not the default demonstrated profile. It also leaves a copied Codex credential
 visible to a network-capable `agent-full-access` process; credential brokerage
 or whole-runner containment with controlled egress is required before this can
@@ -158,7 +158,7 @@ defend against a malicious app. See the
 [sandbox spike](../research/2026-07-14-omnigent-vm-sandbox-spike.md).
 
 The leading pending deployment alternative packages the gateway, gateway UI,
-OmniGENT control plane and runner, Codex adapter, and dynamic relay as an
+Omnigent control plane and runner, Codex adapter, and dynamic relay as an
 Internet-connectable container appliance. Its first profile uses a shared
 appliance with gateway-owned ephemeral session workspaces; the stronger target
 creates a separate runner container per downstream session. This can simplify
@@ -177,14 +177,14 @@ Owns the actual side effect. It receives a stable action ID and must make conseq
 1. Browser registers a fixed tool snapshot while creating the application session.
 2. Gateway validates, canonically hashes, authorizes, and records the snapshot.
 3. Gateway writes the exact authorized tool names into a private session policy manifest.
-4. Gateway provisions and binds a healthy OmniGENT runner for that snapshot.
+4. Gateway provisions and binds a healthy Omnigent runner for that snapshot.
 5. The internal Codex adapter enables and preapproves only those granted relay tools.
-6. OmniGENT provider attaches the schemas to the first session message event.
-7. Codex calls a tool through OmniGENT's downstream MCP relay.
-8. OmniGENT emits action_required.
+6. Omnigent provider attaches the schemas to the first session message event.
+7. Codex calls a tool through Omnigent's downstream MCP relay.
+8. Omnigent emits action_required.
 9. Gateway sends the normalized tool call to the browser.
 10. Browser executes the application-owned handler and returns its result.
-11. Gateway posts the correlated tool result to OmniGENT.
+11. Gateway posts the correlated tool result to Omnigent.
 12. Codex resumes and completes the turn.
 ```
 
@@ -194,7 +194,7 @@ disconnect can still lose an unresolved tool request.
 
 ## Fallback architecture
 
-If the proven OmniGENT path regresses or blocks the browser slice, replace the
+If the proven Omnigent path regresses or blocks the browser slice, replace the
 provider with a Codex app-server dynamic-tool adapter. The application API and
 future pending-action contract remain unchanged.
 
@@ -207,12 +207,12 @@ working browser slice; it is not required to demonstrate the hackathon product.
 ## Pending AG-UI application adapter
 
 AG-UI appears to match the browser-facing run, streaming, and frontend-defined
-tool surface more directly than ACP. It does not replace OmniGENT orchestration
+tool surface more directly than ACP. It does not replace Omnigent orchestration
 or downstream ACP. The proposed shape is:
 
 ```text
 browser -- AG-UI + Agent Connect security --> gateway
-gateway -- OmniGENT adapter --> OmniGENT -- ACP --> codex-acp --> Codex
+gateway -- Omnigent adapter --> Omnigent -- ACP --> codex-acp --> Codex
 ```
 
 The gateway retains gateway enrollment, per-app authorization, opaque

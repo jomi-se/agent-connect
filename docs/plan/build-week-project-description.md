@@ -16,7 +16,7 @@ There are two sides to it.
 
 From an app developer's side, Agent Connect is an SDK. You define tools, attach a handler to each, pass in the identifying information needed to connect to a remote agent, and bam: AI features powered by users' coding agents.
 
-From a user's perspective, Agent Connect is a program you launch on your side: on your laptop, a remote VM, an ephemeral development environment, etc. It just needs to be made safely reachable through the internet. [Tailscale](https://tailscale.com/) fills this role in the MVP. This Agent Connect program acts as a gateway that handles authentication and manages an [OmniGENT](https://omnigent.ai/) instance, which itself orchestrates a Codex instance through [ACP](https://agentclientprotocol.com/).
+From a user's perspective, Agent Connect is a program you launch on your side: on your laptop, a remote VM, an ephemeral development environment, etc. It just needs to be made safely reachable through the internet. [Tailscale](https://tailscale.com/) fills this role in the MVP. This Agent Connect program acts as a gateway that handles authentication and manages an [Omnigent](https://omnigent.ai/) instance, which itself orchestrates a Codex instance through [ACP](https://agentclientprotocol.com/).
 
 Once both exist, the user's flow is:
 
@@ -36,9 +36,9 @@ This was built in close partnership with GPT-5.6 Sol through Codex. It started a
 
 Are there standard protocols for this kind of thing that already exist? There is ACP, but full support for remote agents is still a work in progress. ACP was concieved so that IDEs could talk to coding agents on the same machine through stdio. It now also has a draft to define remote HTTP and WebSocket scenarios, so the shape isn't too far off from the idea.
 
-I'd also recently heard about [OmniGENT](https://www.databricks.com/blog/introducing-omnigent-meta-harness-combine-control-and-share-your-agents), built by the Databricks team. At first, I'd dismissed it as unnecessary overhead for running coding agents. But the more I thought about the problems involved in orchestrating an agent, the more I understood the big value of something like OmniGENT. I realized it already did a lot of what I wanted, such as orchestrating agents in a harness-agnostic-ish way. It seemed more and more like a good fit.
+I'd also recently heard about [Omnigent](https://www.databricks.com/blog/introducing-omnigent-meta-harness-combine-control-and-share-your-agents), built by the Databricks team. At first, I'd dismissed it as unnecessary overhead for running coding agents. But the more I thought about the problems involved in orchestrating an agent, the more I understood the big value of something like Omnigent. I realized it already did a lot of what I wanted, such as orchestrating agents in a harness-agnostic-ish way. It seemed more and more like a good fit.
 
-Then came the problem of "dynamic tools." The current common approach is to define tools in advance on the harness side, or at least install some kind of [MCP](https://modelcontextprotocol.io/) server. What I was imagining required defining and presenting the tools from the client side to an already-running setup. OmniGENT can handle this by setting up an MCP relay dynamically at the start of a session.
+Then came the problem of "dynamic tools." The current common approach is to define tools in advance on the harness side, or at least install some kind of [MCP](https://modelcontextprotocol.io/) server. What I was imagining required defining and presenting the tools from the client side to an already-running setup. Omnigent can handle this by setting up an MCP relay dynamically at the start of a session.
 
 The next part was how to expose this on the internet so it could be called by some third-party app. For personal apps, Tailscale would probably have been enough, but if this was to become a library and utility, we needed to push security further.
 
@@ -57,11 +57,11 @@ The resulting grant is bound to the app origin and the exact tool definitions th
 
 ## Challenges we ran into
 
-The first major challenge of this project was dynamically defining the tools available to an agent remotely. This ended up being solved mostly under the hood by OmniGENT.
+The first major challenge of this project was dynamically defining the tools available to an agent remotely. This ended up being solved mostly under the hood by Omnigent.
 
 The second major challenge was security. At the end of the day, this project is about opening a remote execution channel to an agent running on the user's boundary. If the app is also made by the user and everything is running inside their own tailnet, then everything is fine. But if Agent Connect is meant to be made available to more people and you end up using it with third-party apps, the security story changes. We need to secure the channel and make sure everyone knows who is talking to whom.
 
-A third major challenge is that this domain is very young. I would have preferred to use an existing standard protocol for communication between the SDK and the Gateway, so the SDK could be more agnostic about what was being used behind the scenes to run the agent. The first gateway implementation in the hackathon MVP is tightly coupled internally with OmniGENT, which isn't necessarily a bad thing, snce Omnigent is awesome. But it means that people have to deploy OmniGENT instead of being able to use anything that speaks ACP together with something like MCP-over-ACP (which isn't stable yet).
+A third major challenge is that this domain is very young. I would have preferred to use an existing standard protocol for communication between the SDK and the Gateway, so the SDK could be more agnostic about what was being used behind the scenes to run the agent. The first gateway implementation in the hackathon MVP is tightly coupled internally with Omnigent, which isn't necessarily a bad thing, snce Omnigent is awesome. But it means that people have to deploy Omnigent instead of being able to use anything that speaks ACP together with something like MCP-over-ACP (which isn't stable yet).
 
 ## Accomplishments that we're proud of
 
@@ -73,7 +73,7 @@ I think the security story is pretty solid, even if it's not perfect. Agent Conn
 
 First, GPT-5.6 Sol on medium is absurdly capable. Almost the entire project was designed and implemented through it. It was especially interesting when, for the public demo, we had to move from the private Tailscale Serve setup to a public [Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel). Codex found a security issue by itself: the grant page had suddenly become anonymously accessible. I would have expected it to catch something like that when prompted, but I didn't expect it to autonomously find the problem while implementing the alternative public version of the demo.
 
-I also learned that OmniGENT is awesome. The Databricks AI team and Neon have built a really cool open-source project. Its [source is available on GitHub](https://github.com/omnigent-ai/omnigent).
+I also learned that Omnigent is awesome. The Databricks AI team and Neon have built a really cool open-source project. Its [source is available on GitHub](https://github.com/omnigent-ai/omnigent).
 
 Finally, I learned a lot about the complexities of remotely managing an agent: its responses, its tool calls, keeping a session online, and thinking about how to deal with reconnects that have unfinished tool calls. It'll be an interesting future for this project for sure, but even in its current state, it's already usable and it feels great.
 

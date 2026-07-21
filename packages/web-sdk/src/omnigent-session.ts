@@ -7,7 +7,7 @@ export interface ConnectOmnigentOptions extends OmnigentProviderOptions {
 }
 
 /**
- * Bind the harness-neutral application API to an existing OmniGENT session.
+ * Bind the harness-neutral application API to an existing Omnigent session.
  * Session provisioning and runner launch belong to the user-owned runtime.
  */
 export function connectOmnigent(options: ConnectOmnigentOptions): AgentSession {

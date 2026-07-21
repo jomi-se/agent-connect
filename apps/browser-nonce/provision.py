@@ -1,4 +1,4 @@
-"""Provision one online OmniGENT session for the browser nonce demo."""
+"""Provision one online Omnigent session for the browser nonce demo."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ async def provision(base_url: str, agent_dir: Path, workspace: Path) -> None:
         ]
         if len(online) != 1:
             raise RuntimeError(
-                f"expected exactly one online OmniGENT host, observed {len(online)}"
+                f"expected exactly one online Omnigent host, observed {len(online)}"
             )
         launch = await http.post(
             f"/v1/hosts/{online[0]['host_id']}/runners",

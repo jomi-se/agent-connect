@@ -2,12 +2,12 @@
 
 ## Status
 
-Accepted for the OmniGENT-first implementation on 2026-07-13.
+Accepted for the Omnigent-first implementation on 2026-07-13.
 
 ## Decision
 
 The public browser API creates opaque Agent Connect sessions. It never accepts
-or returns an OmniGENT conversation identifier as required application
+or returns an Omnigent conversation identifier as required application
 configuration.
 
 The gateway emits a short-lived, single-use pairing code through its local
@@ -16,7 +16,7 @@ fixed tool snapshot. The gateway binds the resulting capability to the request
 Origin, application id, logical session id, and canonical tool-snapshot hash.
 Capabilities are signed by a gateway-local secret and expire.
 
-The gateway provisions the OmniGENT conversation and runner. A matching healthy
+The gateway provisions the Omnigent conversation and runner. A matching healthy
 provider session is reused. An offline provider runner is replaced without
 changing the logical application session. A changed tool snapshot creates a new
 logical and downstream ACP session rather than mutating a live ACP tool surface.
