@@ -1381,13 +1381,6 @@ body[data-layout="desktop"] {
   transform: translateY(calc((1 - var(--legend-progress, 0)) * 8px));
 }
 
-.north-legend > span:last-child {
-  margin-left: 4px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-}
-
 .north-status {
   display: inline-flex;
   align-items: center;
@@ -1606,13 +1599,6 @@ body[data-layout="desktop"] {
   display: block;
   margin-top: 5px;
   font-size: clamp(1rem, 1.7vw, 1.35rem);
-}
-
-.north-roadmap p {
-  margin: 5px 0 0;
-  color: var(--muted);
-  font-size: clamp(0.62rem, 0.85vw, 0.74rem);
-  line-height: 1.4;
 }
 
 .north-roadmap ol {

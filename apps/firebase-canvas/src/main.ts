@@ -849,14 +849,15 @@ function desktopFutureStoryMarkup(): string {
       label: "Conductor",
       current: "OmniGENT today",
       status: "transitional" as const,
-      future: "any conductor — or none",
+      future: "any conductor or none",
     },
     {
       className: "north-agent",
       label: "Coding agent",
       current: "Codex",
       status: "proven" as const,
-      future: "Claude Code<br><span>+ any compatible agent</span>",
+      future:
+        "Codex · Claude Code<br><span>Pi · Agy · other compatible agents</span>",
     },
     {
       className: "north-transport",
@@ -899,14 +900,13 @@ function desktopFutureStoryMarkup(): string {
 
           <div class="north-legend" aria-label="Architectural status">
             ${statusBadge("proven")}${statusBadge("transitional")}${statusBadge("intended")}
-            <span>honest architectural status</span>
           </div>
 
           ${axisMarkup}
 
           <article class="north-control-plane">
-            <span>Agent Connect</span>
-            <h3>control plane</h3>
+            <span>control plane</span>
+            <h3>Agent Connect</h3>
             <em>stays stable</em>
             <ul>
               <li>one identity you enroll once</li>
@@ -920,12 +920,11 @@ function desktopFutureStoryMarkup(): string {
           <div class="north-roadmap">
             <div>
               <span>Where this goes</span>
-              <strong>Fewer moving parts, not more.</strong>
-              <p>Any agent a user already owns should plug in — without depending on one specific orchestrator in the middle.</p>
+              <strong>Support more setups while making usage simpler.</strong>
             </div>
             <ol>
               <li>plug in more agents</li>
-              <li>drop the bespoke orchestrator</li>
+              <li>decouple from the orchestrator</li>
               <li>simpler setup</li>
               <li>keep hardening trust</li>
             </ol>
@@ -937,8 +936,8 @@ function desktopFutureStoryMarkup(): string {
 
 function mobileFutureStoryMarkup(): string {
   const rows = [
-    ["Conductor", "OmniGENT today", "any conductor — or none"],
-    ["Coding agent", "Codex", "any compatible agent"],
+    ["Conductor", "OmniGENT today", "any conductor or none"],
+    ["Coding agent", "Codex", "Codex, Claude Code, Pi, Agy, and others"],
     ["Transport", "Tailscale", "any secure tunnel"],
     ["Deployment", "personal VM", "a simple packaged box"],
   ];
@@ -959,7 +958,7 @@ function mobileFutureStoryMarkup(): string {
           )
           .join("")}
       </div>
-      <p><strong>Fewer moving parts, not more.</strong> Any agent a user already owns should plug in without depending on one specific orchestrator.</p>
+      <p><strong>Support more setups while making usage simpler.</strong></p>
     </div>`;
 }
 
