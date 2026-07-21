@@ -1,7 +1,7 @@
 # User-Owned Agent Runtime — Hackathon Handoff
 
 > Historical handoff from the repository's initial investigation. It preserves
-> the original product intent and dated OmniGENT/ACP research, but it is not a
+> the original product intent and dated Omnigent/ACP research, but it is not a
 > current setup guide or backlog. Start with [`README.md`](README.md),
 > [`docs/mission.md`](docs/mission.md), and
 > [`docs/plan/current-work.md`](docs/plan/current-work.md).
@@ -11,7 +11,7 @@
 
 ## Read this first
 
-Do not assume the product architecture has already been decided. The original idea is broader than OmniGENT, ACP, MCP, or any one coding agent. Those projects are possible building blocks and prior art.
+Do not assume the product architecture has already been decided. The original idea is broader than Omnigent, ACP, MCP, or any one coding agent. Those projects are possible building blocks and prior art.
 
 The core question is:
 
@@ -81,9 +81,9 @@ At the network level, the important point is that the existing connection is alr
 
 For a hackathon demonstration with one application, one connection, and one agent, a simplified version is entirely plausible. Frontier coding models should have no fundamental difficulty choosing and calling a small, well-described tool surface. The hard parts are lifecycle, permissions, reconnects, duplicate execution, and security—not whether the model can understand `write_cells`.
 
-## What OmniGENT contributes
+## What Omnigent contributes
 
-[OmniGENT](https://github.com/omnigent-ai/omnigent) is an Apache-2.0 open-source meta-harness for running and supervising multiple agent harnesses. It provides a terminal/browser/mobile-accessible UI, session management, policies, sandboxing, and adapters for several coding agents.
+[Omnigent](https://github.com/omnigent-ai/omnigent) is an Apache-2.0 open-source meta-harness for running and supervising multiple agent harnesses. It provides a terminal/browser/mobile-accessible UI, session management, policies, sandboxing, and adapters for several coding agents.
 
 It is relevant because it can plausibly serve as the **user-owned orchestration layer** between an application and Codex/Claude Code/etc.
 
@@ -91,19 +91,19 @@ It is relevant because it can plausibly serve as the **user-owned orchestration 
 
 The source was inspected at commit `6e3c77855b08c9b612bf20763fe14f57a7ff9ad4` dated 2026-07-10.
 
-1. **OmniGENT can drive downstream ACP agents.**
+1. **Omnigent can drive downstream ACP agents.**
 
-   Merged [PR #2152](https://github.com/omnigent-ai/omnigent/pull/2152), titled `feat(acp): generic ACP harness + Omnigent-tool MCP bridge for all ACP harnesses`, added a generic ACP harness. OmniGENT acts as the ACP client and launches an ACP-capable agent command.
+   Merged [PR #2152](https://github.com/omnigent-ai/omnigent/pull/2152), titled `feat(acp): generic ACP harness + Omnigent-tool MCP bridge for all ACP harnesses`, added a generic ACP harness. Omnigent acts as the ACP client and launches an ACP-capable agent command.
 
-2. **It exposes OmniGENT tools to those downstream agents using ordinary MCP.**
+2. **It exposes Omnigent tools to those downstream agents using ordinary MCP.**
 
-   The generic ACP executor supplies `session/new.mcpServers`. A stdio MCP relay exposes OmniGENT's tool dispatch to the downstream ACP agent. This is conventional MCP configured through ACP session creation; it is **not** the proposed MCP-over-ACP transport.
+   The generic ACP executor supplies `session/new.mcpServers`. A stdio MCP relay exposes Omnigent's tool dispatch to the downstream ACP agent. This is conventional MCP configured through ACP session creation; it is **not** the proposed MCP-over-ACP transport.
 
-3. **OmniGENT itself is not exposed as a generic upstream ACP agent.**
+3. **Omnigent itself is not exposed as a generic upstream ACP agent.**
 
-   External applications currently integrate through OmniGENT's HTTP APIs and SSE streams, not by treating OmniGENT as an ACP server. PR #2152 points ACP in the other direction: OmniGENT is the client of the downstream agent.
+   External applications currently integrate through Omnigent's HTTP APIs and SSE streams, not by treating Omnigent as an ACP server. PR #2152 points ACP in the other direction: Omnigent is the client of the downstream agent.
 
-4. **OmniGENT has an official Python client SDK.**
+4. **Omnigent has an official Python client SDK.**
 
    The `omnigent-client` package provides typed HTTP/SSE access to sessions. Its session stream is a live SSE tail.
 
@@ -117,10 +117,10 @@ The source was inspected at commit `6e3c77855b08c9b612bf20763fe14f57a7ff9ad4` da
 
    ```text
    app SDK over HTTP/SSE
-       -> OmniGENT session
+       -> Omnigent session
        -> generic ACP adapter
        -> Codex/Claude/etc ACP agent
-       -> OmniGENT MCP relay
+       -> Omnigent MCP relay
        -> runtime:client tool becomes action_required
        -> app SDK executes local callable
        -> function_call_output is posted
@@ -131,7 +131,7 @@ The source was inspected at commit `6e3c77855b08c9b612bf20763fe14f57a7ff9ad4` da
 
 ### The major reliability gap
 
-OmniGENT persists normalized session/conversation state in SQLite or Postgres and can return a session snapshot. Its session SSE endpoint is live-tail only: it does not replay missed history. The documented reconnect pattern is:
+Omnigent persists normalized session/conversation state in SQLite or Postgres and can return a session snapshot. Its session SSE endpoint is live-tail only: it does not replay missed history. The documented reconnect pattern is:
 
 1. reconnect to the SSE stream;
 2. fetch the current session snapshot;
@@ -159,23 +159,23 @@ The orchestrator persists the action before notifying the application. A reconne
 
 ### Session/config isolation
 
-OmniGENT largely keeps its state separate under `~/.omnigent`, so trying it should not heavily pollute or overwrite the user's normal agent configuration.
+Omnigent largely keeps its state separate under `~/.omnigent`, so trying it should not heavily pollute or overwrite the user's normal agent configuration.
 
 For Codex specifically:
 
 - authentication may be shared from the normal Codex home;
-- configuration may be copied into an OmniGENT-managed Codex home;
-- native Codex sessions are kept in an OmniGENT-specific persistent Codex home;
+- configuration may be copied into an Omnigent-managed Codex home;
+- native Codex sessions are kept in an Omnigent-specific persistent Codex home;
 - the direct Codex harness can use a temporary private Codex home;
-- existing normal `~/.codex/sessions` are therefore not automatically visible to OmniGENT's resume flow.
+- existing normal `~/.codex/sessions` are therefore not automatically visible to Omnigent's resume flow.
 
 This isolation is probably intentional: it avoids conflicts and ambiguous ownership, at the cost of not sharing ordinary Codex CLI session history.
 
 ### Adapter portability
 
-OmniGENT has a common executor shape and a plugin/registry concept, so the architecture is modular. However, its native Codex and Claude integrations are not tiny standalone libraries: they depend on OmniGENT session state, server routes, terminal/tmux machinery, private homes, tool bridges, and runner services.
+Omnigent has a common executor shape and a plugin/registry concept, so the architecture is modular. However, its native Codex and Claude integrations are not tiny standalone libraries: they depend on Omnigent session state, server routes, terminal/tmux machinery, private homes, tool bridges, and runner services.
 
-If building a small independent gateway, using existing ACP adapters such as `codex-acp` or `claude-code-acp` is likely easier than extracting OmniGENT's native adapters. If the product can build on OmniGENT, extending its client-tool reliability is likely less work than forking and recreating its orchestration layer.
+If building a small independent gateway, using existing ACP adapters such as `codex-acp` or `claude-code-acp` is likely easier than extracting Omnigent's native adapters. If the product can build on Omnigent, extending its client-tool reliability is likely less work than forking and recreating its orchestration layer.
 
 ## What OpenClaw contributes
 
@@ -192,7 +192,7 @@ It does **not** appear to provide the neutral interoperability layer imagined he
 
 ## First-party Codex/mobile background
 
-The discussion began with remote-controlling a Codex CLI session from mobile without relying on the desktop app. No suitable first-party, general-purpose mobile remote-control surface was identified. That motivated looking at OmniGENT's web/mobile UI.
+The discussion began with remote-controlling a Codex CLI session from mobile without relying on the desktop app. No suitable first-party, general-purpose mobile remote-control surface was identified. That motivated looking at Omnigent's web/mobile UI.
 
 This status is time-sensitive. Before making it a claim in a hackathon submission, recheck current official Codex documentation.
 
@@ -213,7 +213,7 @@ A browser spreadsheet-like application exposes tools such as:
 - `format_range`
 - `add_comment`
 
-The user connects the app to an OmniGENT instance running on their VM and selects Codex as the downstream agent. They ask:
+The user connects the app to an Omnigent instance running on their VM and selects Codex as the downstream agent. They ask:
 
 > Clean this table, fix inconsistent dates, add formulas for totals, and highlight suspicious rows. Explain each class of change.
 
@@ -232,17 +232,17 @@ That last step makes the project more than a thin chat integration. It demonstra
 
 ### A pragmatic implementation strategy
 
-1. **Prove the existing OmniGENT path first.** Build a tiny Python SDK client with one `runtime: client` tool and run it through the generic ACP harness to Codex. Confirm the full round trip.
+1. **Prove the existing Omnigent path first.** Build a tiny Python SDK client with one `runtime: client` tool and run it through the generic ACP harness to Codex. Confirm the full round trip.
 2. **Put a thin gateway/client library in front of it.** Give the app a small, model-agnostic interface for session creation, event consumption, client-tool registration, results, cancellation, and reconnect reconciliation.
 3. **Use HTTP/SSE for the MVP.** Do not block on implementing the proposed network ACP or MCP-over-ACP standards. Keep the internal interfaces shaped so those transports could replace the custom edge later.
-4. **Add durable pending actions.** If OmniGENT does not already persist and expose them on the chosen API path, implement the smallest correct persistence/claim/result mechanism.
+4. **Add durable pending actions.** If Omnigent does not already persist and expose them on the chosen API path, implement the smallest correct persistence/claim/result mechanism.
 5. **Make security visible.** Tool allowlists, schemas, scoped session tokens, origin/pairing, approval for writes, and an audit trail should be part of the demo rather than a verbal footnote.
 
 ### Proposed MVP boundary
 
 In scope:
 
-- one OmniGENT server owned by the user;
+- one Omnigent server owned by the user;
 - one downstream agent, preferably Codex;
 - one web application;
 - one active session at a time;
@@ -251,7 +251,7 @@ In scope:
 - permission prompts for mutations;
 - reconnect plus snapshot reconciliation;
 - idempotent recovery of pending tool calls;
-- a clean adapter interface that does not expose OmniGENT-specific details to app code.
+- a clean adapter interface that does not expose Omnigent-specific details to app code.
 
 Out of scope for the first demo:
 
@@ -266,11 +266,11 @@ Out of scope for the first demo:
 
 ## Questions the new session should answer first
 
-1. Can the exact OmniGENT version selected run the complete `runtime: client` callback path through the generic ACP adapter and Codex?
+1. Can the exact Omnigent version selected run the complete `runtime: client` callback path through the generic ACP adapter and Codex?
 2. Does the current session snapshot include unresolved `action_required` function calls, or is a persistence patch needed?
 3. Which Codex ACP adapter is reliable enough for the demo, and how does it authenticate using the user's existing subscription/login?
 4. What is the narrowest app tool schema that still produces a visually convincing demo?
-5. Should the persistence work live as a small upstreamable OmniGENT patch, or in a separate edge gateway for hackathon speed?
+5. Should the persistence work live as a small upstreamable Omnigent patch, or in a separate edge gateway for hackathon speed?
 6. What exact reconnect/idempotency invariant will be demonstrated and tested?
 7. Which claims are safe to make about ACP/MCP interoperability today, versus proposals or future compatibility?
 
@@ -306,21 +306,21 @@ A concise pitch:
 - **Overbuilding protocol machinery before proving the UX.** First prove one task and one callback tool.
 - **Exposing excessively powerful tools.** Prefer semantic operations such as `write_range` over raw shell/device control.
 - **Treating coding-agent session files as the system of record.** Let the orchestrator own normalized sessions and pending actions.
-- **Forking too much of OmniGENT.** Its native adapters are coupled. Extend or consume the public surfaces first.
+- **Forking too much of Omnigent.** Its native adapters are coupled. Extend or consume the public surfaces first.
 - **Building a generic phone agent as the first demo.** It creates major permission, security, UX, and judging complexity.
 - **Relying on a live-only tool request.** Explicitly test disconnect before execution, during execution, and after execution but before result acknowledgement.
 
 ## Starting references
 
-- [OmniGENT repository](https://github.com/omnigent-ai/omnigent)
-- [OmniGENT PR #2152: generic ACP harness and MCP bridge](https://github.com/omnigent-ai/omnigent/pull/2152)
+- [Omnigent repository](https://github.com/omnigent-ai/omnigent)
+- [Omnigent PR #2152: generic ACP harness and MCP bridge](https://github.com/omnigent-ai/omnigent/pull/2152)
 - [Agent Client Protocol](https://agentclientprotocol.com/)
 - [ACP protocol repository](https://github.com/agentclientprotocol/agent-client-protocol)
 - [Model Context Protocol specification](https://modelcontextprotocol.io/specification/)
 - [OpenClaw documentation](https://docs.openclaw.ai/)
 
-The next session should refresh these sources before settling architecture because ACP, OmniGENT, Codex, and their adapters are evolving quickly.
+The next session should refresh these sources before settling architecture because ACP, Omnigent, Codex, and their adapters are evolving quickly.
 
 ## Original user intent, in their own register
 
-The user is not primarily trying to build another generic agent framework. The idea is that an arbitrary application could implement a common client and let its user plug in their own running Codex, Claude Code, or similar environment as the application's intelligence provider. The application also needs to grant the agent a way back into the app so it can do useful work there. OmniGENT may supply much of the server-side orchestration, but the interesting product seam is the simple, reusable, bidirectional app connection—and making it dependable enough for a phone or other intermittently connected client.
+The user is not primarily trying to build another generic agent framework. The idea is that an arbitrary application could implement a common client and let its user plug in their own running Codex, Claude Code, or similar environment as the application's intelligence provider. The application also needs to grant the agent a way back into the app so it can do useful work there. Omnigent may supply much of the server-side orchestration, but the interesting product seam is the simple, reusable, bidirectional app connection—and making it dependable enough for a phone or other intermittently connected client.

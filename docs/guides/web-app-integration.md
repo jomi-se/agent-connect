@@ -1,7 +1,7 @@
 # Integrate Agent Connect into a web application
 
 This guide connects an arbitrary HTTPS web application to the real
-OmniGENT/Codex reference gateway. The app declares tools implemented in its
+Omnigent/Codex reference gateway. The app declares tools implemented in its
 own JavaScript, asks the user to authorize their gateway, and sends tasks
 through an Agent Connect session.
 
@@ -233,6 +233,6 @@ HTTPS_ because redirect URIs and dynamically enrolled Origins are HTTPS-only.
 The browser must be signed into the gateway operator's allowed tailnet
 identity.
 
-The current reference scope is one user, one online OmniGENT host, one agent,
+The current reference scope is one user, one online Omnigent host, one agent,
 one active task per application session, and one fixed tool snapshot per
 downstream session.

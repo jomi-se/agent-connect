@@ -1,7 +1,7 @@
-# OmniGENT–Codex nonce spike
+# Omnigent–Codex nonce spike
 
 This experiment tests one assertion only: a session-scoped application tool can
-travel through OmniGENT's generic ACP harness and the maintained Codex ACP
+travel through Omnigent's generic ACP harness and the maintained Codex ACP
 adapter, execute in the client, and resume the same Codex turn.
 
 The client creates a fresh unpredictable nonce, uploads the agent bundle, and

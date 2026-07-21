@@ -18,13 +18,13 @@ Stable ACP covers most application-to-agent session behavior. The ACP repository
 
 The official TypeScript SDK already provides an experimental WebSocket client transport. Its own documentation notes that ACP v1 reconnect creates a new physical connection and does not replay in-flight messages.
 
-## OmniGENT
+## Omnigent
 
-OmniGENT can drive arbitrary configured ACP agents and supply tools through an ordinary per-session stdio MCP relay. It also accepts request-supplied client tool schemas and can surface `action_required` calls for application execution.
+Omnigent can drive arbitrary configured ACP agents and supply tools through an ordinary per-session stdio MCP relay. It also accepts request-supplied client tool schemas and can surface `action_required` calls for application execution.
 
 Its generic ACP relay captures and caches the tool set when the downstream session is created. That matches the proposed fixed-tools-per-session hackathon profile. The exact composition through the maintained Codex ACP adapter has not yet been proven live.
 
-OmniGENT's Sessions SSE is live-tail. Current source and tests state that `action_required` client calls are not persisted as conversation items. Durable pending interactions remain necessary for reconnect-safe mutations.
+Omnigent's Sessions SSE is live-tail. Current source and tests state that `action_required` client calls are not persisted as conversation items. Durable pending interactions remain necessary for reconnect-safe mutations.
 
 ## Resulting hypothesis
 

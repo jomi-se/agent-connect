@@ -243,7 +243,7 @@ It proves:
 It does not prove:
 
 - the VM is uncompromised;
-- OmniGENT, Codex, or any reported harness is genuine;
+- Omnigent, Codex, or any reported harness is genuine;
 - the gateway is running an audited release unless a separate software supply
   chain or platform-attestation policy is enabled;
 - an authorized application origin is free from XSS or malicious first-party

@@ -85,7 +85,7 @@ The `public-demo transport profile` cases in
 The pre-existing private-profile cases continue to prove missing, unexpected,
 and ambiguous Tailscale identities fail closed. The gateway suite passed 23
 tests on 2026-07-17. The container smoke additionally completed the real
-OmniGENT/ACP/MCP tool loop under this public grant.
+Omnigent/ACP/MCP tool loop under this public grant.
 
 Accepted residual risks remain device-global grant visibility for enrolled
 judges, shared-passphrase denial of service, and same-hostname cookie

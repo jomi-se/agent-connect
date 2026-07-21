@@ -11,7 +11,7 @@ largely independent of the selected agent harness. Filesystem isolation,
 network policy, credential placement, workspace persistence, and sandbox
 lifecycle depend heavily on the runtime and deployment environment.
 
-Treating all of those concerns as one OmniGENT-specific gateway would make
+Treating all of those concerns as one Omnigent-specific gateway would make
 the application SDK unnecessarily proprietary. Requiring every agent or app
 developer to implement the whole security system would make simple use cases,
 such as adding an item to a shopping list, unreasonably difficult.
@@ -39,7 +39,7 @@ plane. Runtime adapters own agent execution and confinement mechanics.
 - preventing an application request from broadening the selected runtime
   policy.
 
-These capabilities are reusable across OmniGENT, OpenClaw, direct Codex
+These capabilities are reusable across Omnigent, OpenClaw, direct Codex
 app-server, ACP, AG-UI, or another runtime adapter.
 
 ### The runtime adapter owns
@@ -55,7 +55,7 @@ app-server, ACP, AG-UI, or another runtime adapter.
 
 The reference gateway may configure and validate recommended runtime profiles,
 but the public SDK does not prescribe Bubblewrap, containers, micro-VMs,
-OmniGENT managed hosts, or any other sandbox implementation.
+Omnigent managed hosts, or any other sandbox implementation.
 
 ### Responsibility is separate from assurance
 
@@ -107,8 +107,8 @@ user.
 
 ## Reference implementation
 
-The first gateway uses OmniGENT for conversation state, harness lifecycle,
-policy, and the Codex ACP bridge. OmniGENT is therefore an important
+The first gateway uses Omnigent for conversation state, harness lifecycle,
+policy, and the Codex ACP bridge. Omnigent is therefore an important
 implementation dependency, not part of the application-facing product model.
 Its Omnibox or managed-host configuration is one way for the reference
 gateway to satisfy a runtime posture.
@@ -137,13 +137,13 @@ Connect gateway itself needs to implement the full gateway trust contract.
 ## Consequences
 
 - A shopping-list developer uses the web SDK and defines application tools;
-  they do not configure OmniGENT or a sandbox.
+  they do not configure Omnigent or a sandbox.
 - A user installs the reference gateway once and selects one of its supported
   agents and runtime profiles.
 - Supporting another harness is substantially smaller than implementing a new
   gateway.
 - The reference gateway can make secure deployment and policy approachable
-  without turning OmniGENT wire shapes into the public standard.
+  without turning Omnigent wire shapes into the public standard.
 - Runtime-specific confinement remains testable through adapter integration and
   real enforcement probes, but those probes are regression evidence rather
   than general proof of confinement.

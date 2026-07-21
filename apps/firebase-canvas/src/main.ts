@@ -781,7 +781,7 @@ function architectureStoryMarkup(layout: "desktop" | "mobile"): string {
       </div>
     </div>
 
-    <div class="current-architecture" role="img" aria-label="The web app lends browser tools through Tailscale Serve to the Agent Connect Gateway. Inside the user's boundary, the gateway uses OmniGENT and the codex-acp adapter to run Codex from the user's subscription.">
+    <div class="current-architecture" role="img" aria-label="The web app lends browser tools through Tailscale Serve to the Agent Connect Gateway. Inside the user's boundary, the gateway uses Omnigent and the codex-acp adapter to run Codex from the user's subscription.">
       <article class="architecture-app">
         <div class="architecture-browser-bar" aria-hidden="true"><i></i><i></i><i></i><span>yourapp.com</span></div>
         <div class="architecture-app-body">
@@ -810,7 +810,7 @@ function architectureStoryMarkup(layout: "desktop" | "mobile"): string {
             <p>Identity, consent, origin- and tool-bound grants, opaque sessions, revocation, and recovery.</p>
           </article>
           <article class="architecture-layer architecture-layer-runtime">
-            <div><strong>OmniGENT</strong><span>conductor</span></div>
+            <div><strong>Omnigent</strong><span>conductor</span></div>
             <p>Agent lifecycle and a request-scoped MCP relay for the app's tools.</p>
           </article>
           <article class="architecture-layer architecture-layer-adapter">
@@ -846,7 +846,7 @@ function desktopFutureStoryMarkup(): string {
     {
       className: "north-conductor",
       label: "Conductor",
-      current: "OmniGENT today",
+      current: "Omnigent today",
       status: "transitional" as const,
       future: "any conductor or none",
     },
@@ -935,7 +935,7 @@ function desktopFutureStoryMarkup(): string {
 
 function mobileFutureStoryMarkup(): string {
   const rows = [
-    ["Conductor", "OmniGENT today", "any conductor or none"],
+    ["Conductor", "Omnigent today", "any conductor or none"],
     ["Coding agent", "Codex", "Codex, Claude Code, Pi, Agy, and others"],
     ["Transport", "Tailscale", "any secure tunnel"],
     ["Deployment", "personal VM", "a simple packaged box"],
@@ -1420,7 +1420,7 @@ function showRuntimeSummary(runtimeCard: RuntimeCard): void {
 function runtimeLabel(runtimeCard: RuntimeCard): string {
   return runtimeCard.transportProfile === "public-demo"
     ? "Recorded Codex plan · deterministic ACP"
-    : "Codex through OmniGENT";
+    : "Codex through Omnigent";
 }
 
 async function copySnippet(button: HTMLButtonElement): Promise<void> {

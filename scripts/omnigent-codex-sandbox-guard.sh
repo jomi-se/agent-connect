@@ -26,7 +26,7 @@ test -d "$CODEX_HOME" || fail "CODEX_HOME does not exist"
 test -w "$CODEX_HOME" || fail "CODEX_HOME is not writable"
 
 # Codex's own Linux sandbox uses another bubblewrap namespace. Nested user
-# namespaces are unavailable inside OmniGENT's outer bwrap, which also prevents
+# namespaces are unavailable inside Omnigent's outer bwrap, which also prevents
 # the per-session MCP relay from starting. The outer sandbox is the enforcement
 # boundary, so run Codex in full-access mode *inside that boundary*.
 export INITIAL_AGENT_MODE="agent-full-access"

@@ -8,7 +8,7 @@
 ADR 0001 selected ACP as the preferred long-term application boundary because
 ACP models agent sessions and its draft MCP-over-ACP work models
 application-provided capabilities. The working hackathon path instead uses
-OmniGENT HTTP/SSE with request-scoped tools behind a custom browser API.
+Omnigent HTTP/SSE with request-scoped tools behind a custom browser API.
 
 Subsequent investigation found that AG-UI directly targets the missing
 frontend-to-agent layer and already models frontend-defined tools, streaming
@@ -25,13 +25,13 @@ pending-action durability. Those remain Agent Connect responsibilities.
 
 Run a bounded compatibility spike in parallel with the existing transport:
 
-- keep the current OmniGENT implementation as the passing baseline;
+- keep the current Omnigent implementation as the passing baseline;
 - expose a narrow AG-UI-compatible gateway endpoint;
 - translate AG-UI runs, frontend tools, events, cancellation, and tool results
-  to the existing OmniGENT provider path;
+  to the existing Omnigent provider path;
 - preserve Agent Connect enrollment, authorization, opaque sessions, tool-hash
   policy, stable action IDs, and recovery outside AG-UI message schemas;
-- verify the same live browser-to-OmniGENT-to-Codex dynamic-tool round trip;
+- verify the same live browser-to-Omnigent-to-Codex dynamic-tool round trip;
 - adopt AG-UI only if the spike passes the decision gates in the exploration
   plan.
 
@@ -54,8 +54,8 @@ standard unless it is accepted upstream.
 ## Consequences if adopted
 
 - The application-facing wire gains an existing ecosystem and vocabulary.
-- OmniGENT and `codex-acp` continue to perform Codex orchestration.
-- The browser package no longer contains an OmniGENT provider.
+- Omnigent and `codex-acp` continue to perform Codex orchestration.
+- The browser package no longer contains an Omnigent provider.
 - Agent Connect's differentiated work becomes secure runtime ownership,
   authorization, reliability, and adapters rather than custom agent event
   semantics.
@@ -68,7 +68,7 @@ This proposal becomes accepted only after the spike demonstrates:
 
 1. official AG-UI client interoperability through a real browser;
 2. request-scoped frontend tool execution in the same live Codex turn;
-3. no OmniGENT or Codex types in the browser-facing transport;
+3. no Omnigent or Codex types in the browser-facing transport;
 4. no weakening of Agent Connect's enrollment or per-app authorization model;
 5. stable action correlation and a credible pending-action recovery mapping;
 6. a smaller or more interoperable public protocol surface than the current

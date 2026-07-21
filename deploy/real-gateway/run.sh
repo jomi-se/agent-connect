@@ -77,7 +77,7 @@ omnigent_version=$(omnigent --version 2>&1 || true)
 case "$omnigent_version" in
   "omnigent 0.5.1 "*) ;;
   *)
-    echo "Agent Connect: this reference profile requires OmniGENT 0.5.1." >&2
+    echo "Agent Connect: this reference profile requires Omnigent 0.5.1." >&2
     echo "Detected: ${omnigent_version:-unknown}" >&2
     exit 78
     ;;
@@ -183,7 +183,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# OmniGENT's host command owns a daemon process beyond its launcher process.
+# Omnigent's host command owns a daemon process beyond its launcher process.
 # Clear a stale daemon for this profile-owned endpoint before starting a new
 # stack, such as after a killed terminal or an older launcher version.
 omnigent host stop \
@@ -192,7 +192,7 @@ omnigent host stop \
   --force \
   >/dev/null 2>&1 || true
 
-echo "Agent Connect: starting OmniGENT at $omnigent_url"
+echo "Agent Connect: starting Omnigent at $omnigent_url"
 omnigent server \
   --host 127.0.0.1 \
   --port "$omnigent_port" \
@@ -206,17 +206,17 @@ attempt=0
 until curl -fsS "$omnigent_url/v1/hosts" >/dev/null 2>&1; do
   attempt=$((attempt + 1))
   if ! kill -0 "$server_pid" 2>/dev/null; then
-    echo "Agent Connect: OmniGENT server exited; inspect $log_dir/omnigent-server.log" >&2
+    echo "Agent Connect: Omnigent server exited; inspect $log_dir/omnigent-server.log" >&2
     exit 1
   fi
   if test "$attempt" -ge 60; then
-    echo "Agent Connect: OmniGENT server did not become healthy; inspect $log_dir/omnigent-server.log" >&2
+    echo "Agent Connect: Omnigent server did not become healthy; inspect $log_dir/omnigent-server.log" >&2
     exit 1
   fi
   sleep 1
 done
 
-echo "Agent Connect: starting the OmniGENT execution host"
+echo "Agent Connect: starting the Omnigent execution host"
 omnigent host --non-interactive "$omnigent_url" \
   >"$log_dir/omnigent-host.log" 2>&1 &
 host_pid=$!
@@ -233,11 +233,11 @@ until OMNIGENT_URL="$omnigent_url" node -e '
 ' >/dev/null 2>&1; do
   attempt=$((attempt + 1))
   if ! kill -0 "$host_pid" 2>/dev/null; then
-    echo "Agent Connect: OmniGENT host exited; inspect $log_dir/omnigent-host.log" >&2
+    echo "Agent Connect: Omnigent host exited; inspect $log_dir/omnigent-host.log" >&2
     exit 1
   fi
   if test "$attempt" -ge 60; then
-    echo "Agent Connect: OmniGENT host did not become ready; inspect $log_dir/omnigent-host.log" >&2
+    echo "Agent Connect: Omnigent host did not become ready; inspect $log_dir/omnigent-host.log" >&2
     exit 1
   fi
   sleep 1
@@ -259,9 +259,9 @@ do
 done
 
 if ! kill -0 "$server_pid" 2>/dev/null; then
-  echo "Agent Connect: OmniGENT server exited; inspect $log_dir/omnigent-server.log" >&2
+  echo "Agent Connect: Omnigent server exited; inspect $log_dir/omnigent-server.log" >&2
 elif ! kill -0 "$host_pid" 2>/dev/null; then
-  echo "Agent Connect: OmniGENT host exited; inspect $log_dir/omnigent-host.log" >&2
+  echo "Agent Connect: Omnigent host exited; inspect $log_dir/omnigent-host.log" >&2
 else
   echo "Agent Connect: gateway exited" >&2
 fi

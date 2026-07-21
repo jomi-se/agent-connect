@@ -1,7 +1,7 @@
 telemetry: false
 
 # Experimental only. The sandbox guard deliberately refuses to start unless
-# OmniGENT's outer linux_bwrap profile is active and passes all probes.
+# Omnigent's outer linux_bwrap profile is active and passes all probes.
 acp:
   agents:
     - name: Codex ACP

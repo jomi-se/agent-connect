@@ -10,11 +10,11 @@ or receiving access to the developer's personal gateway or Codex login.
 
 The minimum deployment reuses the existing VM and publishes a separate judge
 gateway through Tailscale Funnel. It uses the deterministic ACP agent already
-used by the real OmniGENT integration suite, not the owner's Codex subscription
+used by the real Omnigent integration suite, not the owner's Codex subscription
 or a paid model credential. Firebase continues to host the static Canvas
 application. The real Codex composition remains the recorded and private live
 proof; the public sandbox proves that a clean judge can exercise the same SDK,
-authorization, OmniGENT, ACP, dynamic-tool, and page-mutation boundaries.
+authorization, Omnigent, ACP, dynamic-tool, and page-mutation boundaries.
 
 The judge environment must remain available through the official end of
 judging, 2026-08-06 00:00 UTC (August 5 at 5:00 PM Pacific Time), and should be
@@ -32,7 +32,7 @@ Observed on 2026-07-15:
 - private Tailscale Serve routes already occupy HTTPS ports 443 and 8443; and
 - Funnel-supported port 10000 is unused.
 
-This is ample for one disposable container containing the gateway, OmniGENT,
+This is ample for one disposable container containing the gateway, Omnigent,
 and deterministic ACP composition. No new VM or model credential is required
 for the judge sandbox.
 
@@ -53,7 +53,7 @@ https://artifex-box.tail246db1.ts.net:10000
   Agent Connect judge demo container
       Agent Connect API and authorization UI
       dedicated gateway-state volume
-      OmniGENT server and host
+      Omnigent server and host
       deterministic ACP agent and request-scoped MCP relay
       disposable tmpfs home, temp, and workspace
 ```
@@ -76,7 +76,7 @@ evidence.
 The judge deployment must not reuse or expose the private gateway currently
 served through Tailscale Serve. The deterministic ACP agent intentionally has
 no model, filesystem tool, ambient MCP authority, or prompt-to-process path,
-but it must spawn OmniGENT's request-scoped MCP relay. A parser, dependency, or
+but it must spawn Omnigent's request-scoped MCP relay. A parser, dependency, or
 protocol-handler RCE would therefore be serious if the stack ran as the VM's
 normal `dev` user. The minimum public profile puts the complete deterministic
 stack in one disposable demo container rather than relying only on
@@ -87,7 +87,7 @@ It receives its own:
 - gateway identity and runtime card;
 - enrollment passphrase and enrolled devices;
 - application grants, revocations, and audit state;
-- OmniGENT state and downstream sessions;
+- Omnigent state and downstream sessions;
 - no Codex or model authentication at all;
 - isolated container state and workspace root; and
 - logs and shutdown lifecycle.
@@ -96,12 +96,12 @@ Run the demo container as a non-root user with a read-only root filesystem,
 default seccomp, all Linux capabilities dropped, `no-new-privileges`, bounded
 PIDs/CPU/memory, and writable tmpfs only where required. Do not mount the host
 home, repository, normal `~/.codex`, SSH material, or Docker socket. Persist
-only the disposable judge gateway and OmniGENT state required across a
+only the disposable judge gateway and Omnigent state required across a
 restart. Publish only the gateway port, bound to host loopback for Funnel.
 
 This boundary protects the VM and personal gateway from an ordinary
 application or dependency compromise. It deliberately does not isolate the
-gateway, OmniGENT server, and deterministic runner from one another: compromise
+gateway, Omnigent server, and deterministic runner from one another: compromise
 of any process may compromise the disposable judge demo. That is an
 accepted hackathon risk because the demo contains no personal data,
 Codex/model credential, shell tool, or host mount. Separate service/runner
@@ -195,12 +195,12 @@ runtime profiles honestly.
    commands.
 
 Steps 3–5 passed on containerized loopback on 2026-07-17. The reusable smoke
-client completed enrollment, PKCE exchange, OmniGENT provisioning, ACP startup,
+client completed enrollment, PKCE exchange, Omnigent provisioning, ACP startup,
 request-scoped MCP `set_page_message`, browser result, and turn completion.
 Step 6 and the happy-path portion of step 7 passed on 2026-07-18 from a clean
 external mobile browser. The public Firebase Canvas verified the gateway,
 redirected to the Funnel-hosted consent page, completed enrollment and PKCE,
-created an OmniGENT session, executed `set_page_message` exactly once, returned
+created an Omnigent session, executed `set_page_message` exactly once, returned
 the correlated browser-tool result, and visibly replaced the page message. No
 local-network permission prompt was required. Grant listing and revocation were
 then proven from the same external browser: retaining the revoked credential
@@ -208,7 +208,7 @@ did not bypass the gateway. The remaining rehearsal work is a final pass over
 the exact private judge instructions.
 
 Time-box this narrow deterministic image rather than reviving the full Codex
-setup. If Compose cannot reproduce the real OmniGENT/ACP/MCP tool loop, the
+setup. If Compose cannot reproduce the real Omnigent/ACP/MCP tool loop, the
 public judge deployment remains blocked until the boundary passes; do not expose
 a weaker stack merely to meet the deadline, and never expose it as the normal
 `dev` user.
@@ -219,7 +219,7 @@ a weaker stack merely to meet the deadline, and never expose it as the normal
   reaches the gateway through Funnel with valid TLS and without local-network
   permission prompts.
 - **VAL-JUDGE-002 — disposable judge demo:** the judge runtime card, enrollment
-  passphrase, grants, OmniGENT state, and process environment are different
+  passphrase, grants, Omnigent state, and process environment are different
   from the personal Serve gateway; no Codex credential or sensitive host
   mount is present; and the sole published port is bound to loopback.
 - **VAL-JUDGE-003 — authorization:** the supplied judge credential completes
@@ -246,7 +246,7 @@ in deeper security tests only after the public happy path is reliable.
 - The public TLS health endpoint returned `{"ok":true}`.
 - A public-origin protocol probe returned the exact Firebase CORS origin and
   rejected a missing challenge nonce with `400 invalid_request`.
-- The container remained healthy and created a fresh OmniGENT runner/session
+- The container remained healthy and created a fresh Omnigent runner/session
   for the external browser task.
 - The external mobile browser displayed the configured deterministic message
   and a tool result reporting `displayed: true` and `writes: 1`.

@@ -10,7 +10,7 @@ The prototype prints a one-time pairing code in the gateway terminal for each
 application session. That proves a browser user had access to a gateway-owned
 channel, but it is unacceptable as the normal authorization experience for a
 headless runtime. A mobile user should not need to open Termux, SSH to a VM, or
-operate OmniGENT whenever a new web application requests access.
+operate Omnigent whenever a new web application requests access.
 
 Two ceremonies have different security purposes:
 
@@ -96,7 +96,7 @@ already complete.
 ### Terminal is recovery, not routine UX
 
 After runtime-card export, routine app authorization must not require terminal
-access, gateway restart, OmniGENT access, or knowledge of a downstream
+access, gateway restart, Omnigent access, or knowledge of a downstream
 provider session. The operator channel remains the target surface for recovery,
 key rotation, disabling browser authorization, and re-exporting the public card;
 those operator commands remain deferred.

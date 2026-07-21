@@ -34,7 +34,7 @@ afterEach(async () => {
   await Promise.all(liveGateways.splice(0).map(closeServer));
 });
 
-integration("real OmniGENT with deterministic ACP", () => {
+integration("real Omnigent with deterministic ACP", () => {
   it("completes a request-scoped MCP tool loop through the gateway", async () => {
     const result = await withIsolatedOmnigent(async (harness) => {
       return exerciseToolLoop(harness);
@@ -195,11 +195,11 @@ async function withIsolatedOmnigent<T>(
   if (version !== compat.version) {
     rmSync(root, { recursive: true, force: true });
     throw new Error(
-      `OmniGENT integration requires ${compat.version}; observed ${version ?? versionOutput}`,
+      `Omnigent integration requires ${compat.version}; observed ${version ?? versionOutput}`,
     );
   }
   process.stdout.write(
-    `OmniGENT integration compatibility accepted: ${version}\n`,
+    `Omnigent integration compatibility accepted: ${version}\n`,
   );
 
   const agentScript = join(
@@ -237,7 +237,7 @@ async function withIsolatedOmnigent<T>(
     );
     processes.push(server);
     await waitFor(
-      "OmniGENT server",
+      "Omnigent server",
       async () => {
         const response = await fetch(`${serverUrl}/v1/hosts`).catch(
           () => undefined,
@@ -255,7 +255,7 @@ async function withIsolatedOmnigent<T>(
     );
     processes.push(host);
     await waitFor(
-      "online OmniGENT host",
+      "online Omnigent host",
       async () => {
         const response = await fetch(`${serverUrl}/v1/hosts`).catch(
           () => undefined,
@@ -294,7 +294,7 @@ async function withIsolatedOmnigent<T>(
       const remainingPids = findProcessesReferencing(root);
       if (remainingPids.length > 0) {
         throw new Error(
-          `OmniGENT cleanup left processes referencing the isolated root: ${remainingPids.join(", ")}`,
+          `Omnigent cleanup left processes referencing the isolated root: ${remainingPids.join(", ")}`,
         );
       }
     } catch (error) {
@@ -311,7 +311,7 @@ async function withIsolatedOmnigent<T>(
   if (operationError !== undefined && cleanupError !== undefined) {
     throw new AggregateError(
       [operationError, cleanupError],
-      "OmniGENT operation and cleanup both failed",
+      "Omnigent operation and cleanup both failed",
     );
   }
   if (operationError !== undefined) throw operationError;
@@ -729,7 +729,7 @@ async function waitUntilPortClosed(port: number): Promise<void> {
     if (!(await canConnect(port))) return;
     await delay(100);
   }
-  throw new Error(`OmniGENT server port ${port} remained open after cleanup`);
+  throw new Error(`Omnigent server port ${port} remained open after cleanup`);
 }
 
 function canConnect(port: number): Promise<boolean> {
@@ -768,7 +768,7 @@ async function* parseSse(
       const result = await Promise.race([
         read,
         delay(45_000).then(() => {
-          throw new Error("Timed out reading OmniGENT SSE");
+          throw new Error("Timed out reading Omnigent SSE");
         }),
       ]);
       buffer += decoder.decode(result.value, { stream: !result.done });
@@ -786,7 +786,7 @@ async function* parseSse(
       }
       if (result.done) return;
     }
-    throw new Error("Timed out waiting for OmniGENT completion");
+    throw new Error("Timed out waiting for Omnigent completion");
   } finally {
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();

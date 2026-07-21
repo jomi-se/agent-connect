@@ -12,11 +12,11 @@ live in [`deploy/`](../../deploy/).
 The repository currently contains two end-to-end profiles:
 
 - a public, deterministic judge demo exposed through Tailscale Funnel;
-  it exercises enrollment, consent, PKCE, OmniGENT, ACP, request-scoped MCP,
+  it exercises enrollment, consent, PKCE, Omnigent, ACP, request-scoped MCP,
   browser-owned tools, visible mutations, revocation, and reboot recovery
   without a model credential; and
 - a source-installable Tailscale Serve profile that runs the same application
-  contract against a real user-owned Codex login through OmniGENT.
+  contract against a real user-owned Codex login through Omnigent.
 
 `@agent-connect/web` can be packed and installed into an external npm project,
 but it is not yet published to npm. The Firebase Canvas accepts either
@@ -32,7 +32,7 @@ npm run test:integration:omnigent
 
 The first command covers formatting, types, behavior tests, builds, a clean
 SDK-package consumer, and Canvas browser tests. The second starts disposable
-real OmniGENT services with a deterministic ACP agent. A real Codex/browser
+real Omnigent services with a deterministic ACP agent. A real Codex/browser
 composition remains a manual milestone because it consumes the operator's
 credentials and model allowance.
 
@@ -73,9 +73,9 @@ These are real product gaps, not submission blockers:
    budgets and downstream-work termination on revocation are not complete.
 6. Add app-instance proof/DPoP only if the copied-bearer-token threat justifies
    its complexity.
-7. Remove the temporary OmniGENT built-in-name collision policy by introducing
+7. Remove the temporary Omnigent built-in-name collision policy by introducing
    provider-owned tool namespacing or an upstream contract. The reference
-   profile remains pinned to OmniGENT 0.5.1 meanwhile.
+   profile remains pinned to Omnigent 0.5.1 meanwhile.
 
 Use stable action IDs and require idempotent application operations or
 application-owned deduplication. Do not claim generic exactly-once execution.
@@ -113,4 +113,4 @@ application-owned deduplication. Do not claim generic exactly-once execution.
 - Android automation;
 - hardware-attestation claims;
 - verification of a provider's self-reported sandbox posture; and
-- replacing OmniGENT solely to make the architecture appear more neutral.
+- replacing Omnigent solely to make the architecture appear more neutral.

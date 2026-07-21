@@ -1,4 +1,4 @@
-"""Live OmniGENT -> codex-acp -> Codex -> client-tool composition proof."""
+"""Live Omnigent -> codex-acp -> Codex -> client-tool composition proof."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ NONCE_TOOL_SCHEMA: dict[str, object] = {
 
 
 def build_bundle(agent_dir: Path) -> bytes:
-    """Pack an OmniGENT agent directory into the session upload format."""
+    """Pack an Omnigent agent directory into the session upload format."""
     payload = io.BytesIO()
     with tarfile.open(fileobj=payload, mode="w:gz") as archive:
         archive.add(agent_dir, arcname=".")
@@ -53,7 +53,7 @@ async def resolve_host_id(http: httpx.AsyncClient, requested: str | None) -> str
     ]
     if len(online) != 1:
         raise RuntimeError(
-            f"expected exactly one online OmniGENT host, observed {len(online)}; "
+            f"expected exactly one online Omnigent host, observed {len(online)}; "
             "pass --host-id explicitly"
         )
     return str(online[0]["host_id"])
@@ -119,7 +119,7 @@ async def run(
         )
         emit("session.created", session_id=chat.session_id, agent_id=chat.agent_id)
 
-        # OmniGENT's sessions wire accepts request-scoped tools at the top level
+        # Omnigent's sessions wire accepts request-scoped tools at the top level
         # of a message event, but SessionsChat 0.5.1 does not expose that field.
         # Inject it at the namespace boundary so the tool remains application-
         # supplied (rather than becoming a bundled/local agent tool).

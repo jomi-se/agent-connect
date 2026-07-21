@@ -11,7 +11,7 @@ silently treating a target as a shipped guarantee.
 | Capability                                             | Status                          | Current evidence or boundary                                                                         |
 | ------------------------------------------------------ | ------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Define typed application-owned tools                   | Implemented                     | Browser-safe `defineTool`; schemas are fixed for the logical session                                 |
-| Connect with an opaque application session             | Implemented                     | Browser APIs never expose OmniGENT session IDs                                                       |
+| Connect with an opaque application session             | Implemented                     | Browser APIs never expose Omnigent session IDs                                                       |
 | Verify a selected gateway before disclosure            | Implemented                     | Runtime card pins an Ed25519 key; SDK verifies a fresh signed challenge                              |
 | Authorize an HTTPS application without terminal access | Implemented                     | Gateway-owned consent and S256 PKCE grant bind Origin, redirect, app id, scopes, and canonical tools |
 | Dynamically enroll a previously unknown app Origin     | Implemented for Tailscale Serve | The Origin may begin authorization but receives no operational access before approval                |
@@ -29,9 +29,9 @@ silently treating a target as a shipped guarantee.
 
 | Capability                                                                 | Status                        | Current evidence or boundary                                                                  |
 | -------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------- |
-| Broker the OmniGENT HTTP/SSE Sessions API                                  | Implemented                   | First provider behind an internal adapter                                                     |
+| Broker the Omnigent HTTP/SSE Sessions API                                  | Implemented                   | First provider behind an internal adapter                                                     |
 | Provision one downstream runner and heal an unhealthy match                | Implemented                   | Grant-bound tool policy is written before launch                                              |
-| Restrict Codex's request-scoped relay tools to the authorized snapshot     | Implemented reference profile | Fail-closed manifest and `enabled_tools` compatibility wrapper, pinned to OmniGENT 0.5.1      |
+| Restrict Codex's request-scoped relay tools to the authorized snapshot     | Implemented reference profile | Fail-closed manifest and `enabled_tools` compatibility wrapper, pinned to Omnigent 0.5.1      |
 | Keep provider IDs and wire types out of the normal browser API             | Implemented                   | `connectAgent` is the supported neutral entry point; legacy spike exports remain transitional |
 | Allocate a fresh workspace for each provider session                       | Implemented                   | Failed launches are cleaned immediately; successful-session expiry remains deferred           |
 | Persist gateway identity, devices, grants, revocations, and capability key | Implemented                   | Owner-only gateway state file                                                                 |
@@ -78,9 +78,9 @@ silently treating a target as a shipped guarantee.
    checks, and builds.
 2. `npm run verify:full` additionally packs/installs the SDK in a clean
    consumer and runs Canvas browser tests.
-3. `npm run test:integration:omnigent` starts disposable real OmniGENT services
+3. `npm run test:integration:omnigent` starts disposable real Omnigent services
    and a deterministic ACP/MCP agent without model credentials.
-4. The real Tailscale Serve + OmniGENT + Codex + deployed-browser flow is a
+4. The real Tailscale Serve + Omnigent + Codex + deployed-browser flow is a
    manual composition milestone.
 5. The public Funnel profile is tested from a clean external browser and has a
    documented reboot and teardown path.

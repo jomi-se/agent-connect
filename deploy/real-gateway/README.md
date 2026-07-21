@@ -1,7 +1,7 @@
-# Real OmniGENT + Codex reference gateway
+# Real Omnigent + Codex reference gateway
 
 This is the source-installable Agent Connect profile for a real, user-owned
-Codex agent. It runs the Agent Connect gateway, an OmniGENT server and host,
+Codex agent. It runs the Agent Connect gateway, an Omnigent server and host,
 and a small compatibility wrapper around the published `codex-acp` adapter on
 one Linux machine. A separate HTTPS web application can authorize through
 Tailscale Serve, lend task-scoped tools, and receive real Codex tool calls.
@@ -15,19 +15,19 @@ The complete path has been tested on Ubuntu 24.04 ARM64 with:
 
 - Node.js 22 and npm 10 or newer;
 - Codex CLI with a valid subscription account already logged in through OAuth;
-- OmniGENT 0.5.1;
+- Omnigent 0.5.1;
 - `@agentclientprotocol/codex-acp` 1.1.2; and
 - Tailscale Serve with the browser and gateway in the same tailnet.
 
 Other Linux distributions and architectures may work but have not yet been
 fully tested. Windows and macOS have not been tested. The launcher rejects
-OmniGENT versions other than 0.5.1 in case upstream changes would break Agent
+Omnigent versions other than 0.5.1 in case upstream changes would break Agent
 Connect.
 
 ## 1. Install prerequisites
 
 Install and authenticate _Codex_ and _Tailscale_ using their upstream instructions.
-Install OmniGENT, then install this repository:
+Install Omnigent, then install this repository:
 
 ```sh
 curl -fsSL https://omnigent.ai/install.sh | sh -s -- --version 0.5.1
@@ -49,7 +49,7 @@ chmod 700 "$HOME/.agent-connect/codex-home"
 CODEX_HOME="$HOME/.agent-connect/codex-home" codex login
 ```
 
-OmniGENT will use the resulting `auth.json` as a live credential.
+Omnigent will use the resulting `auth.json` as a live credential.
 
 ## 3. Configure the gateway
 
@@ -69,7 +69,7 @@ Edit `.env` with:
 ## Codex configuration
 
 The reference launcher passes a dedicated `CODEX_HOME`, one
-`AGENT_CONNECT_WORKSPACE`, and an explicit Codex ACP mode into every OmniGENT
+`AGENT_CONNECT_WORKSPACE`, and an explicit Codex ACP mode into every Omnigent
 runner. It does not inherit the interactive shell's default `~/.codex` unless
 the user deliberately points `CODEX_HOME` there.
 
@@ -121,7 +121,7 @@ deploy/real-gateway/run.sh
 ```
 
 This command starts and supervises all downstream actors: the Agent Connect
-gateway, the OmniGENT server, and the OmniGENT execution host. On first state
+gateway, the Omnigent server, and the Omnigent execution host. On first state
 creation it prints two deliberately separate values:
 
 - a public runtime card: this is how a web app knows how to target and verify an
@@ -135,7 +135,7 @@ The durable gateway identity, grants, and enrollment state live in the
 gitignored `.agent-connect/real-connector` directory by default. This legacy
 internal directory name is retained for compatibility. Keep the
 foreground process in tmux/screen or replace it with a user-managed service for
-long-running use. The supervisor also gives OmniGENT a dedicated home
+long-running use. The supervisor also gives Omnigent a dedicated home
 inside that state directory. Codex continues to use the separately authenticated
 `CODEX_HOME`.
 

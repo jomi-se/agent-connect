@@ -62,7 +62,7 @@ describe("OmnigentRuntime sandbox profile", () => {
     expect(uploadedConfig).toContain("allow_network: true");
     expect(uploadedConfig).toContain("AGENT_CONNECT_HOST_SENTINEL");
     expect(uploadedConfig).toContain(
-      "The enclosing OmniGENT process sandbox, not a nested Codex sandbox",
+      "The enclosing Omnigent process sandbox, not a nested Codex sandbox",
     );
     expect(uploadedConfig).not.toContain(
       "Agent Connect has not configured an outer OS sandbox",
@@ -115,7 +115,7 @@ describe("OmnigentRuntime sandbox profile", () => {
     ).toThrow("host sentinel must be outside");
   });
 
-  it("rejects application tool names reserved by the OmniGENT relay", async () => {
+  it("rejects application tool names reserved by the Omnigent relay", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "agent-connect-runtime-"));
     const runtime = new OmnigentRuntime({
       baseUrl: "http://127.0.0.1:6767",
@@ -129,7 +129,7 @@ describe("OmnigentRuntime sandbox profile", () => {
         toolHash: "hash",
         approvedToolNames: ["sys_agent_download"],
       }),
-    ).rejects.toThrow("collides with the OmniGENT provider");
+    ).rejects.toThrow("collides with the Omnigent provider");
     await rm(workspace, { recursive: true, force: true });
   });
 
@@ -193,7 +193,7 @@ describe("OmnigentRuntime sandbox profile", () => {
         toolHash: "hash",
         approvedToolNames: ["read_state"],
       }),
-    ).rejects.toThrow("OmniGENT POST /v1/sessions failed");
+    ).rejects.toThrow("Omnigent POST /v1/sessions failed");
     await expect(
       readdir(join(workspace, ".agent-connect-sessions")),
     ).resolves.toEqual([]);

@@ -1,7 +1,7 @@
-# VAL-SANDBOX-001: VM-local OmniGENT sandbox preserves the dynamic tool loop
+# VAL-SANDBOX-001: VM-local Omnigent sandbox preserves the dynamic tool loop
 
 Surface: live downstream runtime.
-Needs: OmniGENT 0.5.1, bubblewrap, dedicated Codex home, read-only application
+Needs: Omnigent 0.5.1, bubblewrap, dedicated Codex home, read-only application
 workspace, outside-root host sentinel, pinned Codex ACP/Codex binaries, and one
 request-scoped application tool.
 Behavior: the outer runner hides the sentinel, rejects workspace writes, has
@@ -20,7 +20,7 @@ not hardware attestation or proof against a compromised gateway host.
 ## Current status
 
 Blocked on 2026-07-14. Outer boundary evidence passes, but the Codex app-server
-reports the OmniGENT MCP initialize connection closed, so the required dynamic
+reports the Omnigent MCP initialize connection closed, so the required dynamic
 tool loop does not pass. The copied Codex login is also visible to the
 network-capable full-access process, so credential isolation independently
 fails. See the timestamped sandbox research document.

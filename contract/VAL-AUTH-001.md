@@ -7,7 +7,7 @@ Behavior: the code can be exchanged exactly once for an expiring signed
 capability bound to origin, application id, logical session id, and canonical
 tool-snapshot hash. Session traffic with a missing, expired, tampered,
 cross-origin, cross-session, or tool-mismatched capability is rejected before
-reaching OmniGENT. Consuming a code rotates a new code without restarting the
+reaching Omnigent. Consuming a code rotates a new code without restarting the
 gateway.
 Evidence: API tests covering valid exchange and all negative bindings, rotation,
 tool-envelope enforcement, and zero upstream calls for rejected traffic.

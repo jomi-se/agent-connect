@@ -29,15 +29,15 @@ That behavior is not part of the current MVP.
 ## Current strategy
 
 - Give web applications a harness-neutral tool and task API.
-- Use OmniGENT's existing HTTP/SSE Sessions API as the first transport and
-  conductor implementation. OmniGENT selects and launches the user's underlying
+- Use Omnigent's existing HTTP/SSE Sessions API as the first transport and
+  conductor implementation. Omnigent selects and launches the user's underlying
   agent harness; the application does not depend on that choice.
 - Supply a fixed tool snapshot on each task's first session message. Execute
   `action_required` calls in the application and return correlated results.
-- Keep OmniGENT wire types behind a browser-safe adapter so ACP-over-WebSocket,
+- Keep Omnigent wire types behind a browser-safe adapter so ACP-over-WebSocket,
   MCP-over-ACP, or another conductor can implement the same public API later.
 - Evaluate AG-UI as the standardized browser/gateway run and frontend-tool wire.
-  Keep the passing OmniGENT path until an official AG-UI client completes the
+  Keep the passing Omnigent path until an official AG-UI client completes the
   same live Codex tool round trip without weakening security or recovery.
 - Model remote connectivity as named transport trust profiles. Implement
   Tailscale Serve first, bind its selected endpoint to an enrolled gateway
@@ -61,19 +61,19 @@ That behavior is not part of the current MVP.
 ## Current acceptance boundary
 
 The browser tool loop has passed against an automatically provisioned
-OmniGENT/Codex session. The enrolled gateway slice is now implemented: the
+Omnigent/Codex session. The enrolled gateway slice is now implemented: the
 SDK verifies a pinned gateway key before tool disclosure, the user enrolls a
 browser device with a generated passphrase only on the gateway origin, and a
 top-level gateway page issues a PKCE-protected revocable grant bound to the
 exact origin, app id, scopes, and tool snapshot.
 
-Raw OmniGENT session identifiers are an internal provider detail. A user starts
-the gateway once; normal application use must not require opening OmniGENT,
+Raw Omnigent session identifiers are an internal provider detail. A user starts
+the gateway once; normal application use must not require opening Omnigent,
 copying a conversation id, or restarting a runner when the application tool
 surface changes.
 
-The reference gateway uses OmniGENT, but applications integrate with Agent
-Connect rather than OmniGENT. Adding another agent harness should normally
+The reference gateway uses Omnigent, but applications integrate with Agent
+Connect rather than Omnigent. Adding another agent harness should normally
 require only a narrow runtime adapter; it must not require reimplementing
 enrollment, OAuth, application grants, or recovery.
 

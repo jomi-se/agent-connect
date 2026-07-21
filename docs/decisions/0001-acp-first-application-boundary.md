@@ -23,7 +23,7 @@ backing a browser-friendly ACP client with an embedded application-owned MCP
 server.
 
 For the hackathon, the wire below that public API will use the selected
-provider's proven transport: OmniGENT HTTP/SSE session events with
+provider's proven transport: Omnigent HTTP/SSE session events with
 request-scoped tools. ACP-over-WebSocket and MCP-over-ACP remain an experimental
 adapter until the application-to-Codex loop is complete. This avoids making two
 draft transports prerequisites for proving temporary capability lending.
@@ -32,7 +32,7 @@ Custom methods are permitted only for remote ownership and durability behavior t
 
 ## Consequences
 
-- Applications do not depend on OmniGENT or Codex types.
+- Applications do not depend on Omnigent or Codex types.
 - Draft protocol changes are isolated inside an experimental adapter.
 - The first implementation may require translation for downstream adapters that advertise `mcpCapabilities.acp: false`.
 - Stable remote reconnect and pending-request recovery remain product work beyond ACP transport.

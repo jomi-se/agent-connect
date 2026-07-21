@@ -1,6 +1,6 @@
 # Public judge demo
 
-This profile runs the Agent Connect gateway, OmniGENT server and host, and the
+This profile runs the Agent Connect gateway, Omnigent server and host, and the
 deterministic ACP fixture in one disposable container. It has no Codex or model
 credential. Only the gateway is published, on host loopback.
 
@@ -35,7 +35,7 @@ definition changes.
 The demo runs a deterministic ACP runtime which first reads the selected
 app's live state, then selects a three-write-tool, Codex-authored plan from the
 scenario marker in the prompt. It still exercises
-the real OmniGENT, ACP, request-scoped MCP, gateway, SDK, and browser-tool path;
+the real Omnigent, ACP, request-scoped MCP, gateway, SDK, and browser-tool path;
 it does not claim that live model reasoning occurs in the public fixture.
 
 ## Build and validate on loopback
@@ -52,7 +52,7 @@ docker compose --env-file deploy/judge-demo/.env \
 ```
 
 The only published address should be `127.0.0.1:10081`. Run the complete
-enrollment, grant, OmniGENT, ACP, MCP, and browser-tool loop with:
+enrollment, grant, Omnigent, ACP, MCP, and browser-tool loop with:
 
 ```sh
 AGENT_CONNECT_SMOKE_ENROLLMENT_PASSPHRASE='the same passphrase from .env' \

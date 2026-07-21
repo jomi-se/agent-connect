@@ -1,11 +1,11 @@
 # Browser nonce demo
 
 This ordinary Vite application imports `@agent-connect/web`, binds its neutral
-`AgentSession` API to an already-online OmniGENT session, and lends one
+`AgentSession` API to an already-online Omnigent session, and lends one
 request-scoped browser tool. The page passes only when Codex calls that tool
 once and the same turn includes the browser-generated nonce.
 
-With the isolated OmniGENT server and host running, provision a session:
+With the isolated Omnigent server and host running, provision a session:
 
 ```sh
 UV_CACHE_DIR="$PWD/.omnigent-spike/uv-cache" \
@@ -15,7 +15,7 @@ UV_CACHE_DIR="$PWD/.omnigent-spike/uv-cache" \
 ```
 
 Then start the Vite app, pointing its same-origin development proxy at the
-printed OmniGENT URL:
+printed Omnigent URL:
 
 ```sh
 OMNIGENT_URL=http://127.0.0.1:PORT npm run dev \

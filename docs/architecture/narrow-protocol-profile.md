@@ -4,7 +4,7 @@ Status: experimental and not used by the default application/gateway path.
 
 This profile records the deliberately narrow browser ACP prototype. It is not a
 claim of full ACP or MCP-over-ACP conformance. The working MVP instead uses the
-provider-neutral browser API, Agent Connect gateway, and internal OmniGENT
+provider-neutral browser API, Agent Connect gateway, and internal Omnigent
 adapter. Keep these draft-specific methods out of the normal application API.
 
 ## Topology

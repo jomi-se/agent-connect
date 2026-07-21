@@ -24,9 +24,9 @@ strict capability ceiling.
 
 The live proof currently uses:
 
-- OmniGENT 0.5.1 with the generic `acp:codex-acp` harness;
+- Omnigent 0.5.1 with the generic `acp:codex-acp` harness;
 - `@agentclientprotocol/codex-acp` 1.1.2;
-- a gateway-provisioned OmniGENT agent bundle with no explicit `os_env`
+- a gateway-provisioned Omnigent agent bundle with no explicit `os_env`
   sandbox or contextual policies;
 - a private `CODEX_HOME` copied from the user's Codex configuration;
 - an application capability bound to Origin, app id, session, and tool hash.
@@ -34,10 +34,10 @@ The live proof currently uses:
 This is adequate for a composition proof, not a safe default for arbitrary
 applications.
 
-OmniGENT's generic ACP documentation says `sandbox: none` is currently the
+Omnigent's generic ACP documentation says `sandbox: none` is currently the
 default and notes that an ACP agent needing to write its configuration directory
 needs that mode. Therefore the `codex-acp` process in the current proof is not
-inside OmniGENT's Omnibox OS sandbox.
+inside Omnigent's Omnibox OS sandbox.
 
 `codex-acp` independently defaults to its `agent` mode: Codex receives a
 workspace-write sandbox, network disabled for sandboxed tool execution, and an
@@ -48,7 +48,7 @@ for the Agent Connect boundary:
   and other authority into a remote application session;
 - Codex permission requests need a trusted answer surface, which the requesting
   application must not control;
-- OmniGENT's OS sandbox does not cover MCP server subprocesses or the OmniGENT
+- Omnigent's OS sandbox does not cover MCP server subprocesses or the Omnigent
   supervisor;
 - the gateway now permits only strict task-message, tool-result, and interrupt
   shapes, but tool-result correlation still awaits persisted pending actions;
@@ -56,7 +56,7 @@ for the Agent Connect boundary:
   enforcement.
 
 Bubblewrap is installed on the current Linux host, so an Omnibox compatibility
-spike is possible. Nested OmniGENT and Codex sandbox behavior, Codex auth/config
+spike is possible. Nested Omnigent and Codex sandbox behavior, Codex auth/config
 access, and model connectivity still need to be proven on the live ACP path.
 
 ## Assets
@@ -86,7 +86,7 @@ Assume any of the following can be hostile:
 - an agent following prompt injection or making a dangerous mistake;
 - a caller bypassing the public SDK and speaking directly to gateway endpoints.
 
-For the first profile, assume the gateway, its host OS, Tailscale, OmniGENT,
+For the first profile, assume the gateway, its host OS, Tailscale, Omnigent,
 Codex, and the model provider are trusted computing-base components. Sandbox
 escape, dependency compromise, and malicious model-provider behavior remain
 residual supply-chain or platform risks rather than problems application-level
@@ -97,7 +97,7 @@ authorization can solve.
 ```text
 untrusted app origin and JavaScript
   -> Agent Connect authentication and authorization gateway
-  -> OmniGENT server, policy engine, and supervisor
+  -> Omnigent server, policy engine, and supervisor
   -> runner and generic ACP process
   -> codex-acp and Codex app-server
   -> Codex native tools and sandbox
@@ -125,7 +125,7 @@ treated as authority to change the policy of a deeper boundary.
 | Cross-app data leakage                        | Provider session, transcript, cache, workspace, or pending action is reused across origins              | Separate downstream session and scratch state per app grant/tool snapshot; origin-bound storage; never expose provider ids; deletion and expiry                     |
 | Tool-authority deception                      | App gives an innocuous declaration a dangerous implementation or changes metadata after consent         | Hash and display names/descriptions/schemas; re-consent on metadata drift; state clearly that app-side handler behavior is not attested; app remains untrusted      |
 | Tool-result prompt injection                  | Tool returns instructions to reveal secrets or use local powers                                         | Treat result as untrusted data; local capability ceiling remains unchanged; provenance labels where supported; never rely on the model to ignore injection          |
-| Protocol event injection                      | Caller bypasses SDK and posts interrupt, output, approval, or future OmniGENT event shapes              | Explicit gateway event allowlist and schema; state-machine validation; bind result to an unresolved action id/name/tool hash; reject everything else                |
+| Protocol event injection                      | Caller bypasses SDK and posts interrupt, output, approval, or future Omnigent event shapes              | Explicit gateway event allowlist and schema; state-machine validation; bind result to an unresolved action id/name/tool hash; reject everything else                |
 | Result spoofing or replay                     | App invents another call id, races duplicate outputs, or replays an old mutation                        | Persist request first; stable unpredictable action ids; one terminal result transition; application idempotency/deduplication; audit duplicates                     |
 | Network exfiltration or lateral movement      | Shell reaches a webhook, metadata service, loopback daemon, or another tailnet node                     | Tool network off by default; egress allowlist when enabled; block private, loopback, metadata, Unix sockets, and inherited proxy credentials                        |
 | Credential disclosure through process context | Agent reads environment, config, auth file, process args, or logs                                       | Broker credentials outside the tool-visible filesystem/environment; minimal child environment; redact logs; never place secrets in prompts or tool schemas          |
@@ -146,7 +146,7 @@ The effective authority is the intersection:
 ```text
 application grant
 AND gateway policy profile
-AND OmniGENT policy
+AND Omnigent policy
 AND harness policy
 AND OS/container boundary
 ```
@@ -208,9 +208,9 @@ application may request one, but OAuth consent cannot make it broader than what
 the gateway owner previously configured. High-impact profiles require a
 gateway-owned per-use approval or a narrowly stated persistent policy.
 
-## How OmniGENT helps
+## How Omnigent helps
 
-OmniGENT provides useful enforcement points:
+Omnigent provides useful enforcement points:
 
 - Omnibox uses Bubblewrap namespaces plus seccomp on Linux and can restrict
   paths, environment, and network egress;
@@ -228,11 +228,11 @@ The limitations matter just as much:
 - cloud-container isolation is different from per-tool filesystem/network
   policy and should be an additional layer;
 - LLM-evaluated intent or prompt policies are useful heuristics, not a hard
-  authorization boundary; OmniGENT documents that intent authorization fails
+  authorization boundary; Omnigent documents that intent authorization fails
   open when its evaluator is unavailable;
 - harness-native sandbox and approval semantics still need compatibility tests.
 
-Therefore Agent Connect should use OmniGENT's facilities, define a
+Therefore Agent Connect should use Omnigent's facilities, define a
 provider-neutral confinement vocabulary, and report how each claim is sourced.
 It cannot independently verify a self-hosted gateway's claims. A future
 OpenClaw or other adapter should use the same vocabulary even if its
@@ -278,7 +278,7 @@ Confidence in a trusted deployment requires real enforcement evidence:
 - approval spoofing and confused-deputy attempts;
 - cross-origin, cross-session, and stale-action attempts;
 - inspection of the actual spawned process environment, mounts, children, and
-  effective OmniGENT/Codex policy;
+  effective Omnigent/Codex policy;
 - fail-closed startup tests with Bubblewrap missing or deliberately invalid;
 - confirmation that no ambient MCP/app/plugin capability appears in `/mcp`,
   tool lists, or a live session;
@@ -293,7 +293,7 @@ evidence of confinement.
 Even after the first profile is complete:
 
 - a compromised gateway host can read data before or after the sandbox;
-- an exploit in the kernel, Bubblewrap, OmniGENT, Codex, or an allowed tool can
+- an exploit in the kernel, Bubblewrap, Omnigent, Codex, or an allowed tool can
   escape intended boundaries;
 - model prompts and application data are disclosed to the configured model
   provider according to that provider's terms;
@@ -309,10 +309,10 @@ verification.
 
 ## Sources
 
-- [OmniGENT Omnibox OS sandbox](https://omnigent.ai/docs/policies/os-sandbox)
-- [OmniGENT built-in policies](https://omnigent.ai/docs/policies/builtin)
-- [OmniGENT harnesses and generic ACP behavior](https://omnigent.ai/docs/build/harnesses)
-- [OmniGENT shared-server architecture](https://omnigent.ai/docs/deploy/overview)
-- [OmniGENT cloud sandbox host](https://omnigent.ai/docs/deploy/cloud-sandbox-host)
-- [OmniGENT collaboration warning](https://omnigent.ai/docs/collaborate)
+- [Omnigent Omnibox OS sandbox](https://omnigent.ai/docs/policies/os-sandbox)
+- [Omnigent built-in policies](https://omnigent.ai/docs/policies/builtin)
+- [Omnigent harnesses and generic ACP behavior](https://omnigent.ai/docs/build/harnesses)
+- [Omnigent shared-server architecture](https://omnigent.ai/docs/deploy/overview)
+- [Omnigent cloud sandbox host](https://omnigent.ai/docs/deploy/cloud-sandbox-host)
+- [Omnigent collaboration warning](https://omnigent.ai/docs/collaborate)
 - [`codex-acp` package documentation](https://www.npmjs.com/package/@agentclientprotocol/codex-acp)

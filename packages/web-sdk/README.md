@@ -10,7 +10,7 @@ The package provides:
 - JSON Schema validation before browser tool execution
 - Correlated tool results returned to the same agent turn.
 
-OmniGENT is the current lone provider behind the gateway.
+Omnigent is the current lone provider behind the gateway.
 
 ```ts
 import {

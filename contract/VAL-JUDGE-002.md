@@ -4,7 +4,7 @@ Surface: operator and data.
 Needs: VAL-JUDGE-001 and the existing private Serve gateway as the comparison
 baseline.
 Behavior: the judge profile has a distinct gateway key/runtime card,
-enrollment verifier, devices, grants, OmniGENT database/artifacts, logs, and
+enrollment verifier, devices, grants, Omnigent database/artifacts, logs, and
 workspace lifecycle. No Codex/model credential, personal gateway state, host
 home or repository bind mount, `.git` history, unrelated source, SSH material,
 or Docker socket is present in the judge demo. Only required built runtime

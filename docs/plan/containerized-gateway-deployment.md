@@ -6,7 +6,7 @@ Status: pending architecture and deployment spike
 
 Package the reference Agent Connect setup as a gateway deployment that
 can run on an arbitrary Internet-connected container host. The appliance would
-compose the Agent Connect gateway, OmniGENT control plane and runner, Codex ACP
+compose the Agent Connect gateway, Omnigent control plane and runner, Codex ACP
 adapter, dynamic application-tool relay, gateway-owned enrollment and OAuth
 pages, and operator diagnostics behind one documented deployment boundary.
 
@@ -14,20 +14,20 @@ This is more than a sandbox replacement. It is a possible installation and
 distribution model: deploy one image or Compose application, inject the user's
 agent authentication through a deliberate bootstrap channel, publish one HTTPS
 endpoint, export the runtime card, and connect applications without requiring
-the user to understand OmniGENT, Bubblewrap, or the internal service topology.
+the user to understand Omnigent, Bubblewrap, or the internal service topology.
 
 The container is still user-owned infrastructure. Agent Connect remains
 harness-neutral at its application boundary; this image is the opinionated
-OmniGENT/Codex reference gateway, not a requirement imposed on other runtime
+Omnigent/Codex reference gateway, not a requirement imposed on other runtime
 adapters.
 
 ## Why investigate it
 
-- It avoids nesting OmniGENT and Codex Bubblewrap policies.
+- It avoids nesting Omnigent and Codex Bubblewrap policies.
 - It can keep the host home, SSH material, application repositories, and other
   ambient VM state outside the agent execution boundary.
 - It gives the dynamic MCP relay a reproducible filesystem and dependency
-  layout instead of mounting a user-specific OmniGENT installation.
+  layout instead of mounting a user-specific Omnigent installation.
 - It turns the current multi-step VM setup into the basis for a one-command or
   one-click deployment.
 - It can run behind a conventional HTTPS endpoint, a private overlay network,
@@ -40,7 +40,7 @@ adapters.
 
 ### Single long-running appliance
 
-One container or Compose application contains the gateway, OmniGENT server and
+One container or Compose application contains the gateway, Omnigent server and
 host/runner, Codex adapter, and relay. Each Agent Connect session receives a
 fresh private workspace directory inside the container.
 
@@ -54,7 +54,7 @@ the container, process namespace, credentials, or writable state.
 The control plane remains long-lived while every downstream agent session runs
 in a fresh container with its own filesystem, process namespace, resource
 limits, network policy, and teardown lifecycle. This is the stronger target.
-It may require an OmniGENT container-host adapter or fork unless an existing
+It may require an Omnigent container-host adapter or fork unless an existing
 managed-host API can provision a local container runner without exposing the
 host Docker socket to agent-controlled processes.
 
@@ -75,7 +75,7 @@ browser application
         v
 container appliance
   Agent Connect gateway and gateway-owned UI
-  OmniGENT server and selected host/runner
+  Omnigent server and selected host/runner
   codex-acp + Codex + dynamic tool relay
   gateway state volume
   ephemeral per-session workspaces
@@ -145,8 +145,8 @@ unchanged. See the [judge demo environment plan](judge-demo-environment.md).
 ### Phase A: feasibility and image composition
 
 - Inventory every process, port, persistent path, temporary path, binary, and
-  health check used by the current gateway/OmniGENT/Codex loop.
-- Build a reproducible image containing pinned OmniGENT, `codex-acp`, Codex,
+  health check used by the current gateway/Omnigent/Codex loop.
+- Build a reproducible image containing pinned Omnigent, `codex-acp`, Codex,
   and the dynamic relay; do not depend on host-installed `uv` paths.
 - Add gateway-owned per-session workspace allocation, ownership, TTL cleanup,
   and an explicit persistence policy.
@@ -160,7 +160,7 @@ unchanged. See the [judge demo environment plan](judge-demo-environment.md).
 - Separate gateway state, agent credentials, audit state, and disposable
   session data into distinct mounts or secret channels.
 - Restrict inbound ports and outbound destinations; record the minimum egress
-  needed for Codex, OmniGENT coordination, and intentionally enabled web use.
+  needed for Codex, Omnigent coordination, and intentionally enabled web use.
 - Apply CPU, memory, process, task-duration, concurrency, and storage ceilings.
 - Define upgrade, backup, gateway-key recovery, revocation, and rollback
   behavior.
@@ -172,7 +172,7 @@ unchanged. See the [judge demo environment plan](judge-demo-environment.md).
 - Evaluate Compose, a generic OCI deployment template, and one managed
   container platform without making that vendor part of the public SDK.
 - Prototype a per-session runner container lifecycle and determine whether it
-  can use an OmniGENT extension point or needs a narrow maintained fork.
+  can use an Omnigent extension point or needs a narrow maintained fork.
 - Design interactive first-run setup for gateway enrollment, user identity,
   Codex authentication, public/private ingress, and runtime-card export.
 - Produce a disposable end-to-end deployment test from empty host to revoked
@@ -181,7 +181,7 @@ unchanged. See the [judge demo environment plan](judge-demo-environment.md).
 ## Validation targets for the spike
 
 - **VAL-APPLIANCE-001 — clean bootstrap:** a documented empty-host command
-  starts the appliance and all health checks without host-installed OmniGENT or
+  starts the appliance and all health checks without host-installed Omnigent or
   Codex dependencies.
 - **VAL-APPLIANCE-002 — real tool loop:** the Firebase demo enrolls, authorizes,
   invokes a dynamic application tool through Codex, and revokes access through
@@ -207,4 +207,4 @@ unchanged. See the [judge demo environment plan](judge-demo-environment.md).
 - solving provider credential exfiltration solely through containerization;
 - running Docker from an agent-visible process or mounting the Docker socket;
 - production multi-tenancy, billing, or a public Agent Connect relay;
-- requiring this deployment model for non-OmniGENT runtime adapters.
+- requiring this deployment model for non-Omnigent runtime adapters.
