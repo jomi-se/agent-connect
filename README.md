@@ -177,6 +177,12 @@ npm run verify
 `npm run verify` runs formatting, type checks, gateway and SDK behavior tests,
 and all builds without Omnigent, Tailscale, Codex credentials, or model usage.
 
+For local maintainability diagnostics, run `npm run analyze`. It reports
+complexity, dependency boundaries, unused code, and production duplication
+without treating the current baseline as a refactoring mandate. See the
+[code-quality analysis guide](docs/guides/code-quality-analysis.md) for the
+rules and ratcheting policy.
+
 Additional real-boundary checks:
 
 ```sh
