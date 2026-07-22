@@ -7,7 +7,7 @@
 
 Agent Connect currently lets a hosted browser application call a user-owned
 gateway at a configured URL. HTTPS protects the connection, and the gateway's
-pairing code authorizes the application, but neither fact alone proves that an
+application grant authorizes the app, but neither fact alone proves that an
 arbitrary destination is the runtime the user intended to enroll.
 
 A gateway key accepted on first contact improves continuity only after that

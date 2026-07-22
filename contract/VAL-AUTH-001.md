@@ -1,31 +1,25 @@
-# VAL-AUTH-001: Private-channel pairing grants a scoped application capability
+# VAL-AUTH-001: Application grants create scoped session capabilities
 
 Surface: api.
-Needs: an exact allowed browser Origin and a pairing code emitted through the
-gateway's local terminal.
-Behavior: the code can be exchanged exactly once for an expiring signed
-capability bound to origin, application id, logical session id, and canonical
-tool-snapshot hash. Session traffic with a missing, expired, tampered,
+Needs: an active application grant bound to an exact browser Origin,
+application id, scope set, and canonical tool snapshot.
+Behavior: the grant creates or recovers an opaque logical session and returns
+an expiring signed capability bound to origin, application id, logical session
+id, and canonical tool-snapshot hash. Session traffic with a missing, expired, tampered,
 cross-origin, cross-session, or tool-mismatched capability is rejected before
-reaching Omnigent. Consuming a code rotates a new code without restarting the
-gateway.
-Evidence: API tests covering valid exchange and all negative bindings, rotation,
-tool-envelope enforcement, and zero upstream calls for rejected traffic.
-Fail: CORS or a caller-supplied identity claim is treated as user proof, a
-pairing code remains reusable, a hosted bundle contains the code, or a bearer
-can access a different application session.
-Scope: this proves possession-based pairing for a single-user gateway. Device
-public keys, durable revocation, identity federation, and public-relay security
-are deferred.
+reaching Omnigent. A revoked grant invalidates its existing session capability.
+Evidence: API tests covering valid grant use, expiration, tamper and binding
+failures, tool-envelope enforcement, revocation, raw-provider rejection, and
+zero provider calls for rejected traffic.
+Fail: session creation succeeds without an active application grant; a bearer
+can access a different application session; a revoked grant leaves its session
+usable; or a caller can address a raw provider session.
+Scope: application authorization and grant issuance are covered by
+VAL-AUTHZ-001. Identity federation, DPoP, public-relay end-to-end encryption,
+and durable provider-session recovery remain deferred.
 
 ## Current status
 
-Superseded for enrolled gateways by VAL-ENROLL-001, VAL-AUTHZ-001, and
-VAL-REVOKE-001. The legacy in-process possession boundary still passes
-automated API coverage: one-use code
-rotation, signed capability issuance, expiration, tamper rejection,
-cross-origin rejection, session binding, changed-snapshot rejection, and
-pre-upstream tool-envelope enforcement. Production identity, durable device
-keys, revocation, and relay security remain explicitly unproven.
-It is disabled whenever durable gateway authorization is configured so it
-cannot bypass gateway-owned consent.
+Passed automated gateway tests on 2026-07-22. The pre-release terminal pairing
+and static raw-provider proxy paths have been removed, so the grant ceremony is
+the only route to an application session.

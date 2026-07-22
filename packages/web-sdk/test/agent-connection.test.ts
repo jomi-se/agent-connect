@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { connectAgent, defineTool } from "../src/index.js";
 
 describe("connectAgent", () => {
-  it("pairs, receives an opaque session, and runs through the neutral API", async () => {
+  it("uses an app grant, receives an opaque session, and runs through the neutral API", async () => {
     const requests: Array<{
       url: string;
       method: string;
@@ -56,7 +56,7 @@ describe("connectAgent", () => {
     const connection = await connectAgent({
       baseUrl: "https://runtime.example/",
       appId: "notes-app",
-      pairingCode: "AC-1234-5678-ABCD",
+      accessToken: "application-grant",
       fetch,
       tools: [
         defineTool({
@@ -78,7 +78,7 @@ describe("connectAgent", () => {
     expect(requests[0]).toMatchObject({
       url: "https://runtime.example/v1/app-sessions",
       method: "POST",
-      authorization: "Pairing AC-1234-5678-ABCD",
+      authorization: "Bearer application-grant",
       body: {
         appId: "notes-app",
         tools: [expect.objectContaining({ name: "read_page" })],
@@ -96,7 +96,7 @@ describe("connectAgent", () => {
     );
   });
 
-  it("requires exactly one bootstrap credential", async () => {
+  it("requires a non-empty application grant", async () => {
     const options = {
       baseUrl: "https://runtime.example",
       appId: "app",
@@ -109,12 +109,9 @@ describe("connectAgent", () => {
         }),
       ],
     };
-    await expect(connectAgent(options)).rejects.toThrow(
-      "pairingCode or existing accessToken",
+    await expect(connectAgent({ ...options, accessToken: "" })).rejects.toThrow(
+      "application grant accessToken",
     );
-    await expect(
-      connectAgent({ ...options, pairingCode: "code", accessToken: "token" }),
-    ).rejects.toThrow("not both");
   });
 
   it("surfaces a revoked application grant as a typed recovery error", async () => {

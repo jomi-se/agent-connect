@@ -13,8 +13,8 @@ decided by Agent Connect is rejected before a provider call.
 Evidence: the normal gateway test command covers the listed policy families;
 focused requester-identity cases assert allowed, missing, unexpected, and
 ambiguous values and zero instrumented provider calls for rejection.
-Fail: a rejected policy case reaches the provider; an enrolled gateway can
-use the legacy pairing path; a capability or grant crosses its bound origin,
+Fail: a rejected policy case reaches the provider; a gateway can create an
+application session without an approved grant; a capability or grant crosses its bound origin,
 application, session, or tool snapshot; a revoked or replayed credential is
 accepted; or a caller can use a raw provider session.
 Scope: this validates Agent Connect's consumption of Tailscale requester

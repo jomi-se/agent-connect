@@ -169,7 +169,9 @@ public-demo transport.
 The implemented profile includes a generated high-entropy enrollment
 passphrase used only on the gateway origin, signed runtime challenges before
 tool disclosure, pushed authorization details, top-level consent, PKCE,
-durable hashed grants, revocation, and removal of the legacy pairing bypass.
+durable hashed grants, and revocation. The pre-release terminal pairing and
+static raw-provider proxy paths were removed on 2026-07-22; an approved grant
+is now the only route to application-session creation.
 Gateway identity, passphrase verifier, enrolled-device hashes, grant hashes,
 revocation state, and the capability-signing key are durable. Pending
 authorization requests and codes, provider-session mappings, and usage counters

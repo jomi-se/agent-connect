@@ -15,7 +15,7 @@ interface CreateSessionResponse {
 }
 
 /**
- * Pair with an Agent Connect gateway and create or recover a harness-neutral
+ * Connect to an authorized Agent Connect gateway and create or recover a harness-neutral
  * application session. Provider session identifiers remain gateway-internal.
  */
 export async function connectAgent(
@@ -30,25 +30,19 @@ export async function connectAgent(
   if (options.tools.length === 0) {
     throw new TypeError("Agent Connect requires at least one application tool");
   }
-  if (!options.pairingCode && !options.accessToken) {
-    throw new TypeError("A pairingCode or existing accessToken is required");
-  }
-  if (options.pairingCode && options.accessToken) {
-    throw new TypeError("Provide pairingCode or accessToken, not both");
+  if (options.accessToken.trim().length === 0) {
+    throw new TypeError("An application grant accessToken is required");
   }
 
   const baseUrl = options.baseUrl.replace(/\/$/, "");
   const tools = snapshotTools(options.tools);
   const fetchImplementation =
     options.fetch ?? globalThis.fetch.bind(globalThis);
-  const authorization = options.pairingCode
-    ? `Pairing ${options.pairingCode}`
-    : `Bearer ${options.accessToken}`;
   const response = await fetchImplementation(`${baseUrl}/v1/app-sessions`, {
     method: "POST",
     headers: {
       ...options.headers,
-      Authorization: authorization,
+      Authorization: `Bearer ${options.accessToken}`,
       "Content-Type": "application/json",
     },
     credentials: options.credentials ?? "same-origin",

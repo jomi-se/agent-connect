@@ -74,9 +74,8 @@ online. Raw Omnigent session ids never enter the browser configuration.
 Gateway keys, enrolled-device token hashes, grant token hashes, revocation,
 and the capability secret are durable. Pending authorization requests, codes,
 provider-session mappings, and rate-limit counters are still memory-only. The
-legacy pairing exchange is disabled whenever the enrolled profile is enabled.
-`AGENT_CONNECT_ACCESS_TOKEN` only keeps the old raw-session proxy available for
-the earlier spike; new applications should not use it.
+gateway accepts application-session creation only through an approved grant,
+and it never exposes raw Omnigent session routes.
 
 An experimental VM-local sandbox can be selected with
 `AGENT_CONNECT_OMNIGENT_SANDBOX=linux_bwrap` plus the required Codex-home,
