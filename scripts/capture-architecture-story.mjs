@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { chromium } from "playwright";
+import { chromium } from "@playwright/test";
 
 const source = resolve(process.argv[2] ?? "Architecture Story - Desktop.html");
 const output = resolve(process.argv[3] ?? "submission-assets/architecture");

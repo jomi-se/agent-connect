@@ -22,6 +22,8 @@ gateway, SDK example, supported platforms, and verification commands.
   expose, recover, and tear down the deterministic demo profile.
 - [Firebase deployment](guides/firebase-demo-deployment.md): deploy the static
   Canvas without placing Firebase credentials on the gateway.
+- [Local code-quality analysis](guides/code-quality-analysis.md): ESLint,
+  dependency-cruiser, Knip, and jscpd commands, scope, and baseline policy.
 - [Build Week submission](plan/openai-build-week-submission.md): presentation,
   judge instructions checklist, video outline, and deadline.
 

@@ -12,9 +12,14 @@
     "node": ">=22"
   },
   "scripts": {
+    "analyze": "npm run lint && npm run analyze:dependencies && npm run analyze:dead-code && npm run analyze:duplicates",
+    "analyze:dead-code": "knip --no-exit-code",
+    "analyze:dependencies": "depcruise apps packages",
+    "analyze:duplicates": "jscpd apps packages",
     "build": "npm run build --workspace @agent-connect/web && npm run build --workspace @agent-connect/gateway && npm run build --workspace @agent-connect/browser-nonce && npm run build --workspace @agent-connect/firebase-canvas",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "lint": "eslint .",
     "security:hooks:install": "./scripts/install-git-hooks.sh",
     "security:scan": "./scripts/scan-secrets.sh history",
     "test": "npm run test --workspaces --if-present",
@@ -27,9 +32,17 @@
   },
   "devDependencies": {
     "@agentclientprotocol/codex-acp": "1.1.2",
+    "@eslint/js": "10.0.1",
     "@playwright/test": "1.58.2",
+    "dependency-cruiser": "18.1.0",
+    "eslint": "10.7.0",
+    "eslint-plugin-sonarjs": "4.2.0",
+    "globals": "17.7.0",
+    "jscpd": "5.0.12",
+    "knip": "6.27.0",
     "prettier": "3.9.0",
     "typescript": "6.0.2",
+    "typescript-eslint": "8.65.0",
     "vitest": "4.1.0"
   },
   "dependencies": {

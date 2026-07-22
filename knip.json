@@ -1,0 +1,30 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.{js,mjs,cjs,ts}"],
+      "project": ["*.{js,mjs,cjs,ts}", "scripts/**/*.{js,mjs,cjs,ts}"],
+      "ignoreBinaries": ["omnigent"]
+    },
+    "apps/browser-nonce": {
+      "entry": ["e2e/**/*.spec.ts"],
+      "project": ["src/**/*.ts", "*.config.ts", "e2e/**/*.ts"]
+    },
+    "apps/firebase-canvas": {
+      "entry": ["e2e/**/*.spec.ts"],
+      "project": ["src/**/*.ts", "*.config.ts", "e2e/**/*.ts"],
+      "ignoreDependencies": [
+        "@fontsource-variable/figtree",
+        "@fontsource/ibm-plex-mono"
+      ]
+    },
+    "packages/gateway": {
+      "entry": ["src/index.ts", "src/main.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
+    "packages/web-sdk": {
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"]
+    }
+  }
+}

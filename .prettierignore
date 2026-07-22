@@ -2,7 +2,9 @@ dist
 node_modules
 package-lock.json
 .agents
+.claude/skills
 .codex
 .gemini/skills
 .impeccable/hook.cache.json
 .playwright-mcp
+Architecture Story - Desktop.html

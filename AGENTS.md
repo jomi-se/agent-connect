@@ -38,7 +38,12 @@ npm run typecheck
 npm test
 npm run build
 npm run verify
+npm run analyze
 ```
+
+`npm run analyze` is initially report-first. Treat its metrics as investigation
+inputs, not automatic refactoring instructions; dependency boundary violations
+remain hard failures.
 
 Add or update tests for public SDK behavior. Keep browser packages free of Node-only runtime imports.
 
