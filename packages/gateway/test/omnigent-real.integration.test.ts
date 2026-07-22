@@ -349,8 +349,9 @@ async function exerciseToolLoop(
     allowedTailscaleUsers: new Set(["owner@example.com"]),
     omnigentBaseUrl: harness.serverUrl,
     runtime,
-    pairingCode: "PAIR-INTEGRATION",
-    capabilitySigningSecret: "integration-signing-secret",
+    authStatePath: join(harness.root, "gateway-auth.json"),
+    publicEndpoint: "https://integration-runtime.example",
+    enrollmentPassphrase: "integration enrollment phrase",
   });
   liveGateways.push(gateway);
   await new Promise<void>((resolve) => gateway.listen(0, "127.0.0.1", resolve));
@@ -369,11 +370,65 @@ async function exerciseToolLoop(
       additionalProperties: false,
     },
   };
+  const verifier = "v".repeat(43);
+  const codeChallenge = createHash("sha256")
+    .update(verifier)
+    .digest("base64url");
+  const authorizationResponse = await fetch(
+    `${gatewayUrl}/v1/authorization-requests`,
+    {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        appId: "integration-test",
+        redirectUri: "https://integration.example/oauth/callback",
+        state: "integration_state",
+        codeChallenge,
+        scopes: ["agent:prompt", "agent:result", "tools:invoke"],
+        tools: [tool],
+      }),
+    },
+  );
+  expect(authorizationResponse.status).toBe(201);
+  const authorization = (await authorizationResponse.json()) as {
+    requestId: string;
+  };
+  const approvalResponse = await fetch(`${gatewayUrl}/authorize`, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "Tailscale-User-Login": "owner@example.com",
+      Origin: "https://integration-runtime.example",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      request: authorization.requestId,
+      decision: "approve",
+      passphrase: "integration enrollment phrase",
+    }),
+  });
+  expect(approvalResponse.status).toBe(303);
+  const code = new URL(
+    approvalResponse.headers.get("location") ?? "",
+  ).searchParams.get("code");
+  expect(code).toMatch(/^acc_/);
+  const tokenResponse = await fetch(`${gatewayUrl}/oauth/token`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      code,
+      codeVerifier: verifier,
+      appId: "integration-test",
+      redirectUri: "https://integration.example/oauth/callback",
+    }),
+  });
+  expect(tokenResponse.status).toBe(200);
+  const grant = (await tokenResponse.json()) as { accessToken: string };
   const createdResponse = await fetch(`${gatewayUrl}/v1/app-sessions`, {
     method: "POST",
     headers: {
       ...headers,
-      Authorization: "Pairing PAIR-INTEGRATION",
+      Authorization: `Bearer ${grant.accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ appId: "integration-test", tools: [tool] }),

@@ -46,21 +46,8 @@ export function configFromEnv(
     allowedOrigins: csvSet(env.AGENT_CONNECT_ALLOWED_ORIGINS),
     dynamicAppEnrollment,
     allowedTailscaleUsers: csvSet(env.AGENT_CONNECT_ALLOWED_TAILSCALE_USERS),
-    ...(env.AGENT_CONNECT_ACCESS_TOKEN
-      ? { accessToken: env.AGENT_CONNECT_ACCESS_TOKEN }
-      : {}),
-    ...(env.AGENT_CONNECT_PAIRING_CODE
-      ? { pairingCode: env.AGENT_CONNECT_PAIRING_CODE }
-      : {}),
-    ...(env.AGENT_CONNECT_SIGNING_SECRET
-      ? { capabilitySigningSecret: env.AGENT_CONNECT_SIGNING_SECRET }
-      : {}),
-    ...(env.AGENT_CONNECT_STATE_PATH
-      ? { authStatePath: env.AGENT_CONNECT_STATE_PATH }
-      : {}),
-    ...(env.AGENT_CONNECT_PUBLIC_ENDPOINT
-      ? { publicEndpoint: env.AGENT_CONNECT_PUBLIC_ENDPOINT }
-      : {}),
+    authStatePath: requiredEnv(env, "AGENT_CONNECT_STATE_PATH"),
+    publicEndpoint: requiredEnv(env, "AGENT_CONNECT_PUBLIC_ENDPOINT"),
     ...(transportProfile ? { transportProfile } : {}),
     ...(publicDemoAuthorities ? { publicDemoAuthorities } : {}),
     ...(env.AGENT_CONNECT_ENROLLMENT_PASSPHRASE
@@ -69,10 +56,6 @@ export function configFromEnv(
     capabilityTtlSeconds: parsePositiveInteger(
       env.AGENT_CONNECT_CAPABILITY_TTL_SECONDS ?? "3600",
       "AGENT_CONNECT_CAPABILITY_TTL_SECONDS",
-    ),
-    pairingCodeTtlSeconds: parsePositiveInteger(
-      env.AGENT_CONNECT_PAIRING_CODE_TTL_SECONDS ?? "600",
-      "AGENT_CONNECT_PAIRING_CODE_TTL_SECONDS",
     ),
   };
 }

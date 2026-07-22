@@ -94,33 +94,15 @@ describe("gateway", () => {
   );
 
   it("accepts the exact configured Tailscale identity", async () => {
-    const upstream = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response("data: [DONE]\n\n", {
-        headers: { "Content-Type": "text/event-stream" },
-      }),
-    );
-    const { baseUrl } = await start({
-      fetch: upstream,
-      accessToken: "legacy-token",
-    });
-    const response = await fetch(`${baseUrl}/v1/sessions/session-1/stream`, {
-      headers: allowedHeaders({ Authorization: "Bearer legacy-token" }),
+    const { baseUrl } = await start();
+    const response = await fetch(`${baseUrl}/v1/grants`, {
+      headers: { "Tailscale-User-Login": "owner@example.com" },
     });
 
     expect(response.status).toBe(200);
-    expect(upstream).toHaveBeenCalledTimes(1);
   });
 
-  it("requires the configured bearer token", async () => {
-    const { baseUrl } = await start({ accessToken: "correct horse" });
-    const response = await fetch(`${baseUrl}/v1/sessions/session-1/stream`, {
-      headers: allowedHeaders({ Authorization: "Bearer wrong" }),
-    });
-
-    expect(response.status).toBe(401);
-  });
-
-  it("does not expose raw provider sessions unless legacy mode is enabled", async () => {
+  it("never exposes raw provider sessions", async () => {
     const upstream = vi.fn<typeof fetch>();
     const { baseUrl } = await start({ fetch: upstream });
     const response = await fetch(`${baseUrl}/v1/sessions/conv_secret/stream`, {
@@ -130,48 +112,15 @@ describe("gateway", () => {
     expect(response.status).toBe(404);
     expect(upstream).not.toHaveBeenCalled();
   });
-
-  it("proxies only a valid session event route", async () => {
-    const upstream = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ accepted: true }), {
-        status: 202,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    const { baseUrl } = await start({
-      fetch: upstream,
-      accessToken: "legacy-token",
-    });
-    const response = await fetch(`${baseUrl}/v1/sessions/session-1/events`, {
-      method: "POST",
-      headers: allowedHeaders({
-        Authorization: "Bearer legacy-token",
-        "Content-Type": "application/json",
-      }),
-      body: JSON.stringify({ type: "interrupt", data: {} }),
-    });
-
-    expect(response.status).toBe(202);
-    expect(await response.json()).toEqual({ accepted: true });
-    expect(upstream).toHaveBeenCalledWith(
-      "http://127.0.0.1:6767/v1/sessions/session-1/events",
-      expect.objectContaining({ method: "POST" }),
-    );
-  });
 });
 
 describe("managed application sessions", () => {
-  it("exchanges a single-use code and hides the provider session id", async () => {
+  it("uses an application grant and hides the provider session id", async () => {
     const runtime = new FakeRuntime();
-    const codes: string[] = [];
-    const { baseUrl } = await start({
-      runtime,
-      pairingCode: "PAIR-ONCE",
-      capabilitySigningSecret: "test-signing-secret",
-      onPairingCodeGenerated: (code) => codes.push(code),
-    });
+    const { baseUrl } = await start({ runtime });
+    const grant = await authorizeApp(baseUrl);
 
-    const response = await createAppSession(baseUrl, "Pairing PAIR-ONCE");
+    const response = await createAppSession(baseUrl, `Bearer ${grant}`);
     expect(response.status).toBe(201);
     const created = await response.json();
     expect(created).toMatchObject({
@@ -180,11 +129,6 @@ describe("managed application sessions", () => {
       toolHash: expect.any(String),
     });
     expect(JSON.stringify(created)).not.toContain("provider-1");
-    expect(runtime.created).toHaveLength(1);
-    expect(codes).toHaveLength(2);
-
-    const replay = await createAppSession(baseUrl, "Pairing PAIR-ONCE");
-    expect(replay.status).toBe(401);
     expect(runtime.created).toHaveLength(1);
   });
 
@@ -198,14 +142,13 @@ describe("managed application sessions", () => {
     const { baseUrl } = await start({
       runtime,
       fetch: upstream,
-      pairingCode: "PAIR-BOUND",
-      capabilitySigningSecret: "test-signing-secret",
       allowedOrigins: new Set([
         "https://preview.example",
         "https://other.example",
       ]),
     });
-    const paired = await createAppSession(baseUrl, "Pairing PAIR-BOUND");
+    const grant = await authorizeApp(baseUrl);
+    const paired = await createAppSession(baseUrl, `Bearer ${grant}`);
     const created = await paired.json();
     const sessionUrl = `${baseUrl}/v1/sessions/${created.sessionId as string}`;
 
@@ -271,10 +214,9 @@ describe("managed application sessions", () => {
     const { baseUrl } = await start({
       runtime,
       fetch: upstream,
-      pairingCode: "PAIR-HEAL",
-      capabilitySigningSecret: "test-signing-secret",
     });
-    const first = await createAppSession(baseUrl, "Pairing PAIR-HEAL");
+    const grant = await authorizeApp(baseUrl);
+    const first = await createAppSession(baseUrl, `Bearer ${grant}`);
     const created = await first.json();
 
     const reused = await createAppSession(
@@ -312,12 +254,11 @@ describe("managed application sessions", () => {
     const runtime = new FakeRuntime();
     const { baseUrl } = await start({
       runtime,
-      pairingCode: "PAIR-TIME",
-      capabilitySigningSecret: "test-signing-secret",
       capabilityTtlSeconds: 10,
       now: () => clock,
     });
-    const paired = await createAppSession(baseUrl, "Pairing PAIR-TIME");
+    const grant = await authorizeApp(baseUrl);
+    const paired = await createAppSession(baseUrl, `Bearer ${grant}`);
     const created = await paired.json();
 
     const changed = await createAppSession(
@@ -510,8 +451,7 @@ describe("connector enrollment and app authorization", () => {
       runtimeCard: { runtimeId: bundles[0]?.runtimeCard.runtimeId },
     });
 
-    // Enabling durable connector authorization removes the legacy terminal
-    // pairing path; otherwise it would bypass connector-owned consent.
+    // Terminal pairing credentials are not an alternate consent path.
     const pairingBypass = await createAppSession(baseUrl, "Pairing PAIR-ONCE");
     expect(pairingBypass.status).toBe(401);
 
@@ -1051,6 +991,8 @@ describe("public-demo transport profile", () => {
         allowedOrigins: new Set(["https://preview.example"]),
         allowedTailscaleUsers: new Set(),
         omnigentBaseUrl: "http://127.0.0.1:6767",
+        authStatePath: "/tmp/unused-agent-connect-test-state.json",
+        publicEndpoint: "https://runtime.example",
         transportProfile: "public-demo",
       }),
     ).toThrow("public-demo requires an exact configured application authority");
@@ -1090,10 +1032,15 @@ describe("public-demo transport profile", () => {
 async function start(
   overrides: Partial<Parameters<typeof createGateway>[0]> = {},
 ) {
+  const directory = mkdtempSync(join(tmpdir(), "agent-connect-gateway-"));
+  temporaryDirectories.push(directory);
   const server = createGateway({
     allowedOrigins: new Set(["https://preview.example"]),
     allowedTailscaleUsers: new Set(["owner@example.com"]),
     omnigentBaseUrl: "http://127.0.0.1:6767",
+    authStatePath: join(directory, "gateway.json"),
+    publicEndpoint: "https://runtime.example",
+    enrollmentPassphrase: "test enrollment phrase",
     ...overrides,
   });
   servers.push(server);
@@ -1214,6 +1161,39 @@ async function pushAuthorization(
       ...overrides,
     }),
   });
+}
+
+async function authorizeApp(baseUrl: string): Promise<string> {
+  const pushed = await pushAuthorization(baseUrl);
+  expect(pushed.status).toBe(201);
+  const authorization = await pushed.json();
+  const approval = await fetch(`${baseUrl}/authorize`, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "Tailscale-User-Login": "owner@example.com",
+      Origin: "https://runtime.example",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      request: authorization.requestId as string,
+      decision: "approve",
+      passphrase: "test enrollment phrase",
+    }),
+  });
+  expect(approval.status).toBe(303);
+  const code = new URL(approval.headers.get("location") ?? "").searchParams.get(
+    "code",
+  );
+  expect(code).toMatch(/^acc_/);
+  const token = await exchangeAuthorizationCode(
+    baseUrl,
+    code ?? "",
+    "v".repeat(43),
+  );
+  expect(token.status).toBe(200);
+  const grant = await token.json();
+  return grant.accessToken as string;
 }
 
 async function pushPublicDemoAuthorization(

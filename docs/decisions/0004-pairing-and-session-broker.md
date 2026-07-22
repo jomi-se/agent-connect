@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted for the Omnigent-first implementation on 2026-07-13.
+Superseded by ADR 0007 on 2026-07-14. The compatibility implementation was
+removed on 2026-07-22 before public release.
 
 ## Decision
 
@@ -45,9 +46,8 @@ application capabilities to both gateway and browser keys. This clarifies the
 production direction without retroactively claiming that the prototype already
 implements it.
 
-ADR 0007 replaces the per-application terminal-code target with two separate
+ADR 0007 replaced the per-application terminal-code target with two separate
 ceremonies: export a stable public runtime card once through the gateway's
 operator channel, then authorize each new web origin through a gateway-owned
-OAuth page. The generic startup code in this ADR remains only a legacy
-compatibility mode. When durable gateway authorization is configured, the
-gateway disables it so the terminal code cannot bypass gateway-owned consent.
+OAuth page. The generic startup code described by this ADR has been removed;
+this document remains as a historical decision record.

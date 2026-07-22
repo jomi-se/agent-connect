@@ -125,8 +125,7 @@ export interface ConnectAgentOptions {
   readonly baseUrl: string;
   readonly appId: string;
   readonly tools: readonly ApplicationTool[];
-  readonly pairingCode?: string;
-  readonly accessToken?: string;
+  readonly accessToken: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: Readonly<Record<string, string>>;
   readonly credentials?: RequestCredentials;

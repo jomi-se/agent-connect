@@ -290,9 +290,7 @@ test("mobile and desktop mount different compositions", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(page.locator("body")).toHaveAttribute("data-layout", "mobile");
-  await expect(
-    page.getByRole("heading", { name: "Let Codex work inside your app." }),
-  ).toBeVisible();
+  await expect(page.locator("#mobile-title")).toHaveText("Agent Connect");
   await expect(
     page.getByRole("heading", { name: "Session activity" }),
   ).toBeVisible();

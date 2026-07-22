@@ -19,11 +19,6 @@ const server = createGateway({
       );
     }
   },
-  onPairingCodeGenerated: (code, expiresAt) => {
-    process.stdout.write(
-      `Agent Connect pairing code: ${code} (expires ${expiresAt})\n`,
-    );
-  },
 });
 server.listen(config.port, config.host, () => {
   process.stdout.write(

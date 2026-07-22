@@ -8,13 +8,13 @@ the required narrow scope set, and canonical tool metadata snapshot. A top-level
 device with the saved passphrase when necessary, displays declared authority, and
 approves or denies. A short-lived single-use code exchanges only with the
 matching verifier and bindings. Consent/revocation forms require gateway
-same-origin requests. The legacy pairing exchange is unavailable.
+same-origin requests. No alternate session-creation credential bypasses consent.
 Evidence: API/browser tests for success, denial, wrong redirect, wrong Origin,
 CSRF, wrong passphrase, bad PKCE, replay, state substitution, incomplete scope
-sets, changed tool metadata, and pairing bypass.
+sets, changed tool metadata, and alternate-credential bypass.
 Fail: an app can self-approve, cross-site forms can approve/revoke, a redirect
 is wildcarded, a code is replayable, missing scopes still authorize a session,
-or pairing bypasses consent.
+or another credential bypasses consent.
 Scope: custom Agent Connect OAuth-style profile. General OAuth conformance,
 app-instance keys, DPoP, RAR, discovery, and incremental consent are deferred.
 The hash does not attest to the web application's handler implementation.

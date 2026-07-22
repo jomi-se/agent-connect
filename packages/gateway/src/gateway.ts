@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   createServer,
   type IncomingMessage,
@@ -6,9 +6,7 @@ import {
 } from "node:http";
 
 import {
-  createPairingCode,
   issueCapability,
-  safeEqual,
   verifyCapability,
   type CapabilityClaims,
 } from "./capability.js";
@@ -38,13 +36,9 @@ export interface GatewayOptions {
   readonly workspace?: string;
   readonly omnigentHostId?: string;
   readonly omnigentSandbox?: OmnigentSandboxOptions;
-  readonly accessToken?: string;
-  readonly pairingCode?: string;
-  readonly pairingCodeTtlSeconds?: number;
-  readonly capabilitySigningSecret?: string;
   readonly capabilityTtlSeconds?: number;
-  readonly authStatePath?: string;
-  readonly publicEndpoint?: string;
+  readonly authStatePath: string;
+  readonly publicEndpoint: string;
   readonly transportProfile?: string;
   readonly publicDemoAuthorities?: readonly {
     readonly appId: string;
@@ -55,7 +49,6 @@ export interface GatewayOptions {
   readonly runtime?: AgentRuntime;
   readonly fetch?: typeof globalThis.fetch;
   readonly now?: () => number;
-  readonly onPairingCodeGenerated?: (code: string, expiresAt: string) => void;
   readonly onEnrollmentBundle?: (bundle: EnrollmentBundle) => void;
 }
 
@@ -65,7 +58,7 @@ interface ManagedSession {
   readonly origin: string;
   readonly toolHash: string;
   readonly approvedToolNames: readonly string[];
-  readonly authorizationGrantId?: string;
+  readonly authorizationGrantId: string;
   providerSessionId: string;
 }
 
@@ -90,11 +83,6 @@ export function createGateway(options: GatewayOptions) {
       "dynamic app enrollment requires the tailscale-serve transport profile",
     );
   }
-  if (dynamicAppEnrollment && !options.authStatePath) {
-    throw new TypeError(
-      "dynamic app enrollment requires gateway authorization state",
-    );
-  }
   if (!publicDemo && options.allowedTailscaleUsers.size === 0) {
     throw new TypeError("At least one allowed Tailscale login is required");
   }
@@ -108,9 +96,7 @@ export function createGateway(options: GatewayOptions) {
       "publicDemoAuthorities is valid only for the public-demo profile",
     );
   }
-  const publicEndpoint = options.publicEndpoint
-    ? canonicalPublicEndpoint(options.publicEndpoint)
-    : undefined;
+  const publicEndpoint = canonicalPublicEndpoint(options.publicEndpoint);
 
   const fetchImplementation =
     options.fetch ?? globalThis.fetch.bind(globalThis);
@@ -125,47 +111,26 @@ export function createGateway(options: GatewayOptions) {
       fetch: fetchImplementation,
     });
   const now = options.now ?? Date.now;
-  if (Boolean(options.authStatePath) !== Boolean(publicEndpoint)) {
-    throw new TypeError(
-      "authStatePath and publicEndpoint must be configured together",
-    );
-  }
-  const connectorAuth =
-    options.authStatePath && publicEndpoint
-      ? new ConnectorAuth({
-          statePath: options.authStatePath,
-          publicEndpoint,
-          ...(options.transportProfile
-            ? { transportProfile: options.transportProfile }
-            : {}),
-          ...(options.enrollmentPassphrase
-            ? { enrollmentPassphrase: options.enrollmentPassphrase }
-            : {}),
-          now,
-          ...(options.onEnrollmentBundle
-            ? { onEnrollmentBundle: options.onEnrollmentBundle }
-            : {}),
-        })
-      : undefined;
-  const pairingTtl = options.pairingCodeTtlSeconds ?? 10 * 60;
+  const connectorAuth = new ConnectorAuth({
+    statePath: options.authStatePath,
+    publicEndpoint,
+    ...(options.transportProfile
+      ? { transportProfile: options.transportProfile }
+      : {}),
+    ...(options.enrollmentPassphrase
+      ? { enrollmentPassphrase: options.enrollmentPassphrase }
+      : {}),
+    now,
+    ...(options.onEnrollmentBundle
+      ? { onEnrollmentBundle: options.onEnrollmentBundle }
+      : {}),
+  });
   const capabilityTtl = options.capabilityTtlSeconds ?? 60 * 60;
-  const signingSecret =
-    options.capabilitySigningSecret ??
-    connectorAuth?.capabilitySigningSecret ??
-    randomBytes(32).toString("base64url");
+  const signingSecret = connectorAuth.capabilitySigningSecret;
   const managedSessions = new Map<string, ManagedSession>();
   const sessionsByKey = new Map<string, ManagedSession>();
   const pendingSessions = new Map<string, Promise<ManagedSession>>();
   const pendingRepairs = new Map<string, Promise<ManagedSession>>();
-  // OAuth-style grants replace the spike's terminal pairing code. Keeping both
-  // enabled would leave a consent-bypass path in an otherwise enrolled runtime.
-  const legacyPairingEnabled = connectorAuth === undefined;
-  let pairing = newPairing(options.pairingCode ?? createPairingCode());
-
-  if (legacyPairingEnabled) {
-    options.onPairingCodeGenerated?.(pairing.code, iso(pairing.expiresAt));
-  }
-
   return createServer(async (request, response) => {
     try {
       if (request.url === "/healthz" && request.method === "GET") {
@@ -176,10 +141,7 @@ export function createGateway(options: GatewayOptions) {
       const pathname = new URL(request.url ?? "/", "http://gateway.invalid")
         .pathname;
 
-      if (
-        connectorAuth &&
-        (pathname === "/authorize" || pathname === "/v1/grants")
-      ) {
+      if (pathname === "/authorize" || pathname === "/v1/grants") {
         const principal = requireTransportPrincipal(
           request,
           response,
@@ -193,7 +155,7 @@ export function createGateway(options: GatewayOptions) {
             response,
             connectorAuth,
             principal,
-            publicEndpoint ?? "",
+            publicEndpoint,
           );
         } else {
           if (
@@ -210,7 +172,7 @@ export function createGateway(options: GatewayOptions) {
             request,
             response,
             connectorAuth,
-            publicEndpoint ?? "",
+            publicEndpoint,
           );
         }
         return;
@@ -357,44 +319,23 @@ export function createGateway(options: GatewayOptions) {
             origin,
             managedSessions,
           );
-          if (
-            session.authorizationGrantId &&
-            !connectorAuth?.isGrantActive(session.authorizationGrantId)
-          ) {
+          if (!connectorAuth.isGrantActive(session.authorizationGrantId)) {
             sendJson(response, 401, { error: "grant_revoked" });
             return;
           }
           session = await ensureHealthy(session);
         } else {
           const bearer = bearerCredential(authorization);
-          const grant =
-            bearer && connectorAuth
-              ? connectorAuth.verifyGrant(bearer, {
-                  origin,
-                  appId: input.appId,
-                  toolHash: input.toolHash,
-                  scopes: ["agent:prompt", "agent:result", "tools:invoke"],
-                })
-              : undefined;
+          const grant = bearer
+            ? connectorAuth.verifyGrant(bearer, {
+                origin,
+                appId: input.appId,
+                toolHash: input.toolHash,
+                scopes: ["agent:prompt", "agent:result", "tools:invoke"],
+              })
+            : undefined;
           if (grant) {
             session = await getOrCreateSession(input, origin, grant.id);
-          } else if (legacyPairingEnabled) {
-            const submittedCode = pairingCredential(authorization);
-            if (
-              !submittedCode ||
-              pairing.expiresAt <= now() ||
-              !safeEqual(submittedCode, pairing.code)
-            ) {
-              if (pairing.expiresAt <= now()) rotatePairing();
-              response.setHeader("WWW-Authenticate", "Pairing, Bearer");
-              sendJson(response, 401, { error: "invalid_app_grant" });
-              return;
-            }
-
-            // Reserve and rotate before the asynchronous provider launch so one
-            // credential can authorize at most one exchange, even under races.
-            rotatePairing();
-            session = await getOrCreateSession(input, origin);
           } else {
             response.setHeader("WWW-Authenticate", "Bearer");
             sendJson(response, 401, { error: "invalid_app_grant" });
@@ -445,48 +386,35 @@ export function createGateway(options: GatewayOptions) {
       }
 
       const managed = managedSessions.get(requestedId);
-      let providerSessionId = requestedId;
+      if (!managed) {
+        sendJson(response, 404, { error: "session_not_found" });
+        return;
+      }
+      let providerSessionId = managed.providerSessionId;
       let body: string | undefined;
-      if (managed) {
-        const claims = bearerClaims(
-          header(request, "authorization") ?? "",
-          signingSecret,
-          Math.floor(now() / 1000),
-        );
-        if (
-          !claims ||
-          !claimsMatchSession(claims, managed, origin) ||
-          (managed.authorizationGrantId !== undefined &&
-            !connectorAuth?.isGrantActive(managed.authorizationGrantId))
-        ) {
-          response.setHeader("WWW-Authenticate", "Bearer");
-          sendJson(response, 401, { error: "invalid_session_capability" });
-          return;
-        }
-        if (request.method === "GET") {
-          providerSessionId = (await ensureHealthy(managed)).providerSessionId;
-        } else {
-          body = await readBody(request, MAX_EVENT_BYTES);
-          if (!eventMatchesToolSnapshot(body, managed.toolHash)) {
-            sendJson(response, 403, { error: "tool_snapshot_mismatch" });
-            return;
-          }
-          providerSessionId = managed.providerSessionId;
-        }
+      const claims = bearerClaims(
+        header(request, "authorization") ?? "",
+        signingSecret,
+        Math.floor(now() / 1000),
+      );
+      if (
+        !claims ||
+        !claimsMatchSession(claims, managed, origin) ||
+        !connectorAuth.isGrantActive(managed.authorizationGrantId)
+      ) {
+        response.setHeader("WWW-Authenticate", "Bearer");
+        sendJson(response, 401, { error: "invalid_session_capability" });
+        return;
+      }
+      if (request.method === "GET") {
+        providerSessionId = (await ensureHealthy(managed)).providerSessionId;
       } else {
-        if (!options.accessToken) {
-          sendJson(response, 404, { error: "session_not_found" });
+        body = await readBody(request, MAX_EVENT_BYTES);
+        if (!eventMatchesToolSnapshot(body, managed.toolHash)) {
+          sendJson(response, 403, { error: "tool_snapshot_mismatch" });
           return;
         }
-        if (!hasBearerToken(request, options.accessToken)) {
-          response.setHeader("WWW-Authenticate", "Bearer");
-          sendJson(response, 401, { error: "invalid_session_capability" });
-          return;
-        }
-        body =
-          request.method === "POST"
-            ? await readBody(request, MAX_EVENT_BYTES)
-            : undefined;
+        providerSessionId = managed.providerSessionId;
       }
 
       const controller = new AbortController();
@@ -548,21 +476,10 @@ export function createGateway(options: GatewayOptions) {
     }
   });
 
-  function newPairing(code: string): { code: string; expiresAt: number } {
-    return { code, expiresAt: now() + pairingTtl * 1000 };
-  }
-
-  function rotatePairing(): void {
-    pairing = newPairing(createPairingCode());
-    if (legacyPairingEnabled) {
-      options.onPairingCodeGenerated?.(pairing.code, iso(pairing.expiresAt));
-    }
-  }
-
   async function getOrCreateSession(
     input: CreateSessionInput,
     origin: string,
-    authorizationGrantId?: string,
+    authorizationGrantId: string,
   ): Promise<ManagedSession> {
     const key = sessionKey(
       origin,
@@ -587,7 +504,7 @@ export function createGateway(options: GatewayOptions) {
         origin,
         toolHash: input.toolHash,
         approvedToolNames: input.tools.map((tool) => tool.name),
-        ...(authorizationGrantId ? { authorizationGrantId } : {}),
+        authorizationGrantId,
         providerSessionId,
       };
       managedSessions.set(created.id, created);
@@ -797,12 +714,6 @@ function isSafeSessionId(value: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value);
 }
 
-function pairingCredential(authorization: string): string | undefined {
-  return authorization.startsWith("Pairing ")
-    ? authorization.slice("Pairing ".length)
-    : undefined;
-}
-
 function bearerCredential(authorization: string): string | undefined {
   return authorization.startsWith("Bearer ")
     ? authorization.slice("Bearer ".length)
@@ -821,14 +732,6 @@ function bearerClaims(
         nowSeconds,
       )
     : undefined;
-}
-
-function hasBearerToken(request: IncomingMessage, expected: string): boolean {
-  const authorization = header(request, "authorization");
-  return Boolean(
-    authorization?.startsWith("Bearer ") &&
-    safeEqual(authorization.slice(7), expected),
-  );
 }
 
 async function readBody(
@@ -861,9 +764,9 @@ function sessionKey(
   origin: string,
   appId: string,
   toolHash: string,
-  authorizationGrantId?: string,
+  authorizationGrantId: string,
 ): string {
-  return `${origin}\n${appId}\n${toolHash}\n${authorizationGrantId ?? "pairing"}`;
+  return `${origin}\n${appId}\n${toolHash}\n${authorizationGrantId}`;
 }
 
 function iso(timestamp: number): string {

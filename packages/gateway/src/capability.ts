@@ -11,11 +11,6 @@ export interface CapabilityClaims {
   readonly nonce: string;
 }
 
-export function createPairingCode(): string {
-  const value = randomBytes(6).toString("hex").toUpperCase();
-  return `AC-${value.slice(0, 4)}-${value.slice(4, 8)}-${value.slice(8)}`;
-}
-
 export function issueCapability(
   claims: Omit<CapabilityClaims, "version" | "nonce">,
   secret: string,
@@ -62,7 +57,7 @@ export function verifyCapability(
   }
 }
 
-export function safeEqual(actual: string, expected: string): boolean {
+function safeEqual(actual: string, expected: string): boolean {
   const actualBytes = Buffer.from(actual);
   const expectedBytes = Buffer.from(expected);
   return (
