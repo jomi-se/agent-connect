@@ -42,6 +42,11 @@ That behavior is not part of the current MVP.
 - Model remote connectivity as named transport trust profiles. Implement
   Tailscale Serve first, bind its selected endpoint to an enrolled gateway
   key, and keep hostname recognition out of the trust decision.
+- Keep transport ingress, gateway-owner authentication, application
+  authorization, and session authorization as separate mechanisms. Use one
+  transport-independent grant/session core with interchangeable owner
+  authenticators; profile-specific shortcuts must validate their prerequisites
+  and state their local-process trust assumptions.
 - Bootstrap that gateway identity once with a runtime card exported through
   the trusted operator channel. Authorize later web apps through a
   gateway-hosted OAuth/PKCE page; routine use must not require SSH, terminal
