@@ -48,6 +48,10 @@ These are plans, not shipped capabilities.
 - [ADR 0007: Runtime card and gateway authorization](decisions/0007-runtime-card-and-gateway-authorization.md)
 - [ADR 0008: Control plane and runtime confinement boundary](decisions/0008-control-plane-and-runtime-confinement-boundary.md)
 
+## Proposed decisions
+
+- [ADR 0009: Separate ingress, owner authentication, and application authorization](decisions/0009-separate-ingress-owner-authentication-and-application-authorization.md)
+
 ## Evidence and research
 
 - [Original product/runtime handoff](../USER_OWNED_AGENT_RUNTIME_HACKATHON_HANDOFF.md)
