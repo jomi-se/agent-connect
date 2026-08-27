@@ -458,6 +458,22 @@ history and deduplicate by item id, then attach the live tail. Its
 the tail partition with no gap and no double-rendered delta. The backend must
 use that hook ordering rather than snapshot-then-subscribe.
 
+The snapshot endpoint carries everything the contract needs. Omnigent 0.5.1's
+`_build_session_response` returns:
+
+- `items` — committed conversation items in chronological order, each with an
+  item id, which is the deduplication key;
+- `status` — `idle | running | waiting | failed`, which distinguishes a live
+  run from a dead one without guessing; and
+- `pending_elicitation_events` — the outstanding prompts, replayed with their
+  full payload specifically so a cold client can re-render them.
+
+The third field matters most: an unresolved application call is returned by the
+snapshot. The gateway does not have to infer a pending call from a truncated
+event stream, it reads it back. This makes `reconciled_from_snapshot` a
+straightforward mapping rather than a reconstruction, and it is why the
+recovery milestone is judged feasible.
+
 #### The limit of recovery, stated plainly
 
 A parked application call is an in-process awaiter inside the **Omnigent**
