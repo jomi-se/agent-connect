@@ -109,6 +109,60 @@ may reach bounded challenge and authorization-request endpoints before a grant
 exists. It includes profile-specific exposure and abuse controls but cannot
 issue a grant without owner consent.
 
+### Browser and standard-client ingress profiles
+
+The gateway currently requires an allowlisted ambient `Origin` header before
+any `/v1` routing, and later requires that header to equal the `origin` claim
+signed into the session capability. That rule assumes every caller is a browser
+page. It blocks an ordinary server-side Open Responses client, which sends
+`Authorization` but no `Origin`, and therefore blocks a stated acceptance gate
+of [ADR 0010](0010-open-responses-gateway-pivot.md).
+
+**What the ambient `Origin` check actually provides.** Against a browser it is
+a strong control: page JavaScript cannot set or suppress `Origin`, so the
+header is an unforgeable statement of which page is calling. Against anything
+that is not a browser it provides nothing — a caller that has already satisfied
+the transport principal can send any `Origin` value it likes with one header.
+The check is browser-behavior enforcement and consent validation. It is not a
+security boundary for non-browser callers, and it never was.
+
+**Profile selection is sound in this deployment.** The gateway is served from a
+different origin than any application page, so every browser request to it is
+cross-origin and browsers always attach `Origin` to those. A browser cannot
+suppress the header. The absence of `Origin` therefore reliably indicates a
+non-browser caller and can be used to select a profile without creating a
+bypass: a non-browser caller that forges `Origin` to select the browser profile
+gains nothing it could not already do.
+
+**What is genuinely lost, and how it is repaid.** The loss is not
+cryptographic; it is consent semantics. The owner consent page names an origin
+— "*https://app.example.com* is asking to use your agent subscription" — and a
+server-side caller is not that page. The decision is therefore to make the
+weaker profile _consented_, not silent:
+
+1. **Browser profile.** Unchanged. `Origin` present, allowlisted, and equal to
+   the capability's signed claim.
+2. **Standard-client profile.** `Origin` absent, accepted only when all hold:
+   - the transport principal is present (loopback plus an allowed Tailscale
+     user — the actual perimeter, unchanged);
+   - the bearer is a valid, unexpired session capability; and
+   - the underlying grant carries an explicit `non_browser_clients` consent
+     bit.
+3. The consent page gains a line, default **off**: "Also allow use from scripts
+   and servers, not only from this web page. This removes browser-origin
+   protection for this grant."
+4. The bit is stored on the grant and is rechecked on continuation, recovery,
+   and cancellation, not only at session creation.
+5. Dynamic application enrollment is closed to this profile. Origin-derived
+   enrollment has no meaning without an origin, so the standard-client profile
+   requires a pre-registered application and an existing grant.
+
+Capability theft is mitigated by expiry and revocation, not by `Origin`. A
+leaked capability replayed by a tailnet-local script succeeds under either
+profile today, so this is not a regression — but it does mean the current
+one-hour capability lifetime with no refresh path is the only bound, and
+ADR 0010's long response chains need a refresh mechanism regardless.
+
 ## Semantic route access classes
 
 Routes declare the principal or authority they require, not a transport:

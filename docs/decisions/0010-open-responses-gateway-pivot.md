@@ -101,13 +101,26 @@ Version 0 supports only the portion required for the first real vertical slice:
 - cancellation through a clearly labeled Agent Connect control operation; and
 - a stable, documented error taxonomy.
 
-The Open Responses 2.3 specification defines response creation and
-continuation but does not define general HTTP retrieval, unresolved-call
-recovery, or cancellation endpoints. The vertical slice must therefore
-document which behavior is standard Open Responses and which narrowly scoped
-Agent Connect control operations provide recovery and cancellation.
-Unsupported fields or combinations fail explicitly rather than being silently
-ignored.
+The Open Responses specification, pinned at commit `92c12d96` (OpenAPI 3.1.0,
+`info.version` 2026-04-24), defines response creation and continuation but does
+not define general HTTP retrieval, unresolved-call recovery, or cancellation
+endpoints. The vertical slice must therefore document which behavior is
+standard Open Responses and which narrowly scoped Agent Connect control
+operations provide recovery and cancellation. Unsupported fields or
+combinations fail explicitly rather than being silently ignored.
+
+An earlier revision of this ADR cited an "Open Responses 2.3 specification".
+No such version exists at the pinned revision; the citation has been corrected
+to the commit and the document's own `info.version`.
+
+Compatibility here is a **compatible façade with a documented constant
+profile**. The specification standardizes the OpenAI Responses parameter
+surface and makes sampling and service fields — `temperature`, `top_p`,
+`presence_penalty`, `frequency_penalty`, `top_logprobs`, `service_tier` —
+required and non-nullable on the returned resource. A harness-backed gateway
+does not control any of them. Version 0 renders them as documented inert
+constants rather than pretending they describe a decision the gateway makes.
+The plan holds the exact table.
 
 Version 0 does not claim support for:
 
@@ -317,7 +330,11 @@ may be used behind a backend; none is required by applications.
 This ADR remains proposed until a time-boxed vertical slice demonstrates:
 
 1. An ordinary Open Responses client can use the documented profile without
-   Agent Connect-specific response payloads.
+   Agent Connect-specific response payloads. This gate depends on the
+   non-browser ingress profile decided in
+   [ADR 0009](0009-separate-ingress-owner-authentication-and-application-authorization.md);
+   an ordinary server-side client sends no `Origin` header and is otherwise
+   rejected before routing.
 2. A live Codex execution can make multiple sequential application function
    calls, receive their outputs through response continuation, and return final
    text without losing harness continuity. This must be proven through the
@@ -330,7 +347,11 @@ This ADR remains proposed until a time-boxed vertical slice demonstrates:
 5. Every application call is persisted before it is published.
 6. Stable call IDs survive reconnect, redelivery, and duplicate result
    submission without claiming generic exactly-once execution.
-7. Cancellation propagates through response, durable run, and harness layers.
+7. Cancellation propagates through response, durable run, and harness layers,
+   and a gateway restart resolves every chain to one of the four declared
+   recovery outcomes. Loss of the harness process is a declared `interrupted`
+   terminal state, not a recoverable one: the parked application call is an
+   in-process awaiter inside Omnigent and does not survive it.
 8. Runtime-owned and application-owned tool paths remain distinct.
 9. A run can invoke only the exact function snapshot the user approved.
 10. Unsupported Open Responses features fail explicitly.
