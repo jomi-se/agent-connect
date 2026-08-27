@@ -4,10 +4,14 @@ Updated: 2026-08-27
 
 ## Outcome
 
-Prove that the existing Agent Connect gateway can present one useful, honest
+Prove that the existing Agent Connect gateway can present one useful, bounded
 subset of Open Responses in front of the already working Omnigent -> Codex
 runtime. The proof must complete a real multi-step application-function loop;
 it is not a route-renaming exercise.
+
+The public surface is a **compatible façade with a documented constant
+profile**, not a claim that every field it must return is meaningful. See
+[Required response fields and the constant profile](#required-response-fields-and-the-constant-profile).
 
 This plan deliberately leaves the existing authorization ceremony, gateway
 session provisioning, Omnigent supervision, and fixed approved tool snapshot
@@ -71,10 +75,20 @@ until the replacement gate passes.
 
 The profile is pinned for implementation and tests to:
 
-- Open Responses OpenAPI version `2.3.0`;
 - upstream repository commit
-  `92c12d96d7b61d6d15e2214daa5e9c6000ab6e1c` (2026-07-15); and
+  `92c12d96d7b61d6d15e2214daa5e9c6000ab6e1c`;
+- the document `public/openapi/openapi.json` at that commit, which declares
+  OpenAPI `3.1.0` and `info.version` `2026-04-24`;
+- vendored fixture checksum
+  `sha256:693f26090d206230ed22b336681f547a2882cf5b131e86743966cf71bbdeedab`;
+  and
 - the specification, reference, and compliance suite available on 2026-08-27.
+
+There is no upstream artifact numbered `2.3.0`. Earlier drafts of this plan and
+of ADR 0010 cited that version; it was not traceable to any primary source at
+the pinned revision and has been replaced by the commit plus the document's own
+`info.version`. Every schema claim in this plan must cite the pinned document,
+not remembered protocol semantics.
 
 The standard currently defines `POST /responses` and
 `POST /responses/compact`. It defines `previous_response_id`, external
@@ -95,7 +109,13 @@ only the profile below in production code.
 - Endpoint: `POST /v1/responses`.
 - Authentication: the existing short-lived application-session capability in
   `Authorization: Bearer ...`.
-- Browser requests still require the exact Origin bound into that capability.
+- Two ingress profiles, decided in
+  [ADR 0009](../decisions/0009-separate-ingress-owner-authentication-and-application-authorization.md):
+  - **browser**: an ambient `Origin` header is mandatory, must be allowlisted,
+    and must equal the capability's signed `origin` claim. Unchanged from today.
+  - **standard client**: `Origin` is absent. Accepted only when the transport
+    principal is present, the bearer is a valid session capability, and the
+    underlying grant carries the explicit non-browser consent bit.
 - The existing `/v1/app-sessions` authorization and provisioning step remains
   the control plane that produces the capability. It is not part of Open
   Responses conformance.
@@ -120,6 +140,39 @@ only the profile below in production code.
 The gateway normalizes accepted tools once, checks their canonical hash, and
 stores their complete definitions on the logical run. The application cannot
 change the snapshot after the run begins.
+
+### Canonical function projection
+
+Three shapes are involved and they are not the same shape. Version 0 must
+define one projection between them or the hash will not mean what the consent
+screen said.
+
+| Shape                                     | Required properties                                   |
+| ----------------------------------------- | ----------------------------------------------------- |
+| Agent Connect `GatewayToolDefinition`     | `name`, `description`, `inputSchema`                  |
+| Pinned `FunctionToolParam` (request side) | `name`, `type`                                        |
+| Pinned `FunctionTool` (returned resource) | `type`, `name`, `description`, `parameters`, `strict` |
+
+Rules for version 0:
+
+- `strict` is **fixed by the Agent Connect profile at `true`**. It is not part
+  of consent and not part of the hash. The user approves a schema, not a
+  validation mode. A request that supplies a different `strict` value is a
+  `tool_snapshot_mismatch`, not a new configuration.
+- `description` and `parameters` are required on the returned resource and are
+  projected from the approved snapshot's `description` and `inputSchema`. They
+  are never reflected from the request.
+- Function names must satisfy the pinned `FunctionToolParam` pattern
+  `^[a-zA-Z0-9_-]+$` with a maximum length of 64. The gateway's own snapshot
+  validator is narrowed to this charset so an approvable tool is always
+  representable on the wire; see the note in Milestone 0.
+- Public `call_id` values must satisfy the pinned constraints
+  `minLength: 1`, `maxLength: 64`.
+- Every response in a chain renders `tools` from the immutable canonical
+  snapshot, including continuations that omitted `tools`. A continuation never
+  produces an empty tool list.
+- Repeated continuation tools are compared **after** canonicalization, never as
+  raw JSON.
 
 ### Accepted continuation request
 
@@ -160,6 +213,45 @@ needs it and the backend has a testable meaning for it.
 Use standard response, message, output-text, function-call, and error shapes.
 Do not emit Omnigent `action_required`, provider session IDs, ACP events, or
 Agent Connect task events on this endpoint.
+
+#### Required response fields and the constant profile
+
+`ResponseResource` at the pinned commit has 31 required properties. Rejecting a
+field in a _request_ does not excuse omitting it from a _returned resource_.
+They divide into three groups.
+
+The gateway knows these and must render real values: `id`, `object`,
+`created_at`, `completed_at`, `status`, `model`, `previous_response_id`,
+`output`, `error`, `tools`, `tool_choice`, `store`, `background`, `truncation`,
+and `text` (which itself requires `format`).
+
+These are nullable and are emitted as `null` in version 0: `instructions`,
+`usage`, `reasoning`, `incomplete_details`, `max_output_tokens`,
+`max_tool_calls`, `safety_identifier`, `prompt_cache_key`, and `metadata`.
+
+These six are required, are **not** nullable, and describe sampling and service
+behavior that a harness-backed gateway does not control. Version 0 renders them
+as documented schema constants:
+
+| Field               | Constant    | Why it carries no meaning                            |
+| ------------------- | ----------- | ---------------------------------------------------- |
+| `temperature`       | `1`         | sampling is owned by the user's harness              |
+| `top_p`             | `1`         | sampling is owned by the user's harness              |
+| `presence_penalty`  | `0`         | not exposed by the harness                           |
+| `frequency_penalty` | `0`         | not exposed by the harness                           |
+| `top_logprobs`      | `0`         | the gateway does not surface logprobs                |
+| `service_tier`      | `"default"` | Agent Connect is single-tier and has no billing tier |
+
+Open Responses standardizes the OpenAI Responses parameter surface, including
+sampling and service fields, and makes them required rather than optional. An
+implementation whose backend is a coding harness cannot supply meaningful
+values. These constants satisfy the required-field contract and are documented
+as inert.
+
+This is why version 0 is described as a **compatible façade with a documented
+constant profile** rather than an "honest subset": the subset of _behavior_ is
+honest, but the response resource necessarily carries required fields that do
+not describe anything the gateway decides.
 
 For a text item, emit the standard lifecycle:
 
@@ -296,22 +388,162 @@ must **not** abort the backend run.
 
 ### Durable records
 
-Persist only state the gateway owns:
+Persist only state the gateway owns. The durable chain record must be
+sufficient to **reconstruct authority** after a restart without consulting
+process memory, so it carries more than an ID mapping:
 
-- chain ID, application session ID, tool hash, and provider session mapping;
+- chain ID, application session ID, and chain status;
+- application ID, normalized origin, and authorization grant ID;
+- approved tool hash **and** the immutable canonical tool definitions, or a
+  content-addressed reference to them;
+- provider kind and provider session ID;
 - each response ID, previous response ID, normalized input, output items,
   status, timestamps, and terminal error;
 - each public call ID, private provider token, tool name, arguments, owning
   response, state, and optional result fingerprint; and
 - cancellation/failure state.
 
-The call transition is `pending -> delivered -> resolved`. The `pending`
-record must reach durable storage before its SSE event is written. Repeating
-the same output for a resolved call returns the recorded outcome; a different
-output for the same call ID fails with a conflict. This is idempotent result
-submission, not a claim of exactly-once application side effects.
+Application ID, origin, grant ID, and canonical definitions are the fields the
+earlier draft omitted. Without them a restarted gateway can know that a
+response mapped to a provider session but cannot prove which still-active grant
+authorized it, and therefore cannot enforce revocation on recovery.
+
+#### Call state is three axes, not one
+
+`pending -> delivered -> resolved` conflates two independent delivery problems:
+publishing a call to the application, and getting a result accepted by the
+provider. It has nowhere to record "output persisted but not yet posted."
+Version 0 uses three orthogonal durable axes:
+
+```text
+publication: recorded -> publication_started -> published
+result:      none -> output_recorded -> delivery_attempted -> provider_observed
+chain:       running | waiting_for_output | cancelling | terminal
+```
+
+Rules:
+
+- the `recorded` publication state must reach durable storage before the call's
+  SSE event is written;
+- the canonical output must be persisted before the provider is contacted;
+- a same-output retry returns the existing record and may safely redrive
+  provider delivery; a different output conflicts from `output_recorded` onward;
+- a provider `202` acknowledgement is **not** proof of effect. The result is
+  not `provider_observed` until provider transcript reconciliation or a
+  subsequent response item proves it; and
+- transitions are serialized per chain.
+
+This is idempotent result submission, not a claim of exactly-once application
+side effects. An idempotent application operation, or application-owned
+deduplication, is still required.
+
+### Recovery contract
+
+"Reattach when possible" is not an algorithm. Every recovery attempt must
+resolve to exactly one of four declared outcomes:
+
+| Outcome                    | Meaning                                                              |
+| -------------------------- | -------------------------------------------------------------------- |
+| `reattached_live`          | live tail resumed with a monotonic provider cursor                   |
+| `reconciled_from_snapshot` | provider snapshot replayed and deduplicated, then live tail attached |
+| `terminal_reconstructed`   | a persisted complete public response resource is returned            |
+| `interrupted`              | stable terminal error; never a silent provider replacement           |
+
+For the Omnigent backend the algorithm is the one Omnigent documents for
+itself. `omnigent/runtime/session_stream.py` is a live fan-out broadcaster with
+no buffer and no replay: events published while no subscriber is attached are
+lost. Its own guidance is to fetch `GET /v1/sessions/{id}` for persisted
+history and deduplicate by item id, then attach the live tail. Its
+`subscribe(pre_ready_snapshot=...)` hook exists precisely so the snapshot and
+the tail partition with no gap and no double-rendered delta. The backend must
+use that hook ordering rather than snapshot-then-subscribe.
+
+#### The limit of recovery, stated plainly
+
+A parked application call is an in-process awaiter inside the **Omnigent**
+process, not inside the gateway. `omnigent/runtime/pending_elicitations.py`
+states that the index "lives alongside the underlying parked awaiter ... and
+shares its lifecycle: when the Omnigent process dies, both the index and every
+parked awaiter die together." It is in-memory only.
+
+Therefore:
+
+- **gateway restart is recoverable** — the parked run survives in Omnigent and
+  the snapshot-plus-live-tail procedure above restores the public chain; and
+- **Omnigent process death is terminal** — no amount of gateway-side durability
+  restores the awaiter. That chain resolves `interrupted`.
+
+`interrupted` is a first-class terminal state of the version 0 profile, not an
+edge case. Milestone 5 must not promise recovery it cannot deliver.
+
+The gateway's generic provider-session repair (`ensureHealthy` in
+`packages/gateway/src/gateway.ts`) currently mints a replacement provider
+session in place. That is acceptable for today's stateless task route and
+**invalid for an active response chain**, whose private call IDs belong to the
+old provider session. Transparent replacement is forbidden for a chain that is
+running or waiting for output; such a chain transitions to `interrupted`.
+
+### Cancellation, disconnect, and revocation precedence
+
+The current gateway couples `ServerResponse` close directly to an
+`AbortController` for the upstream stream. The new ownership boundary removes
+that coupling, which means close, cancel, completion, and revocation can now
+race. Version 0 fixes precedence:
+
+- a client close after a **committed function boundary** does not cancel
+  anything; the parked run is recoverable and that is the point of the design;
+- a client close during ordinary generation requests best-effort cancellation,
+  but may still settle as `completed` if completion was already committed;
+- an explicit cancel wins only **before** a terminal commit;
+- provider events observed after a terminal commit are audit-only and never
+  change the published status;
+- grant revocation blocks all new continuation, output submission, and
+  recovery, and either triggers best-effort cancellation of the active run or
+  is documented to take effect at the next authorization boundary — version 0
+  chooses one and tests it; and
+- exactly one durable public terminal status is committed per chain.
+
+The file-backed store is defined as single-process, atomic, and fsync-backed.
+The existing auth store's temporary-file-plus-rename is not sufficient on its
+own for the persistence-before-publication guarantee.
 
 ## Implementation sequence
+
+### Milestone 0: narrow the tool-name charset
+
+`packages/gateway/src/tool-snapshot.ts` accepts `^[A-Za-z_][A-Za-z0-9_.-]{0,63}$`,
+which permits `.`. The pinned `FunctionToolParam.name` pattern is
+`^[a-zA-Z0-9_-]+$`. A tool named `app.doThing` is approvable today and
+unrepresentable on the Open Responses wire.
+
+No shipped application uses a dotted name, so this is currently latent. Narrow
+the validator now, before any grant persists a hash over a name that the wire
+cannot carry; afterwards the same change would require migrating user consent.
+
+Checkpoint: the snapshot validator rejects names outside the pinned charset and
+existing tests still pass.
+
+### Milestone 0.5: disposable Omnigent ownership spike
+
+Run this **before** building the general engine. It is the cheapest way to fail,
+and it is the only architecture-specific unknown in the plan. It is disposable
+code and is not merged as a component.
+
+Prove, against real Omnigent and the deterministic ACP agent:
+
+1. a gateway-owned reader survives the close of the client-facing segment;
+2. two sequential application calls complete on one retained run;
+3. an explicit cancel reaches the run;
+4. the same output submitted twice does not double-apply;
+5. after killing the gateway process, `GET /v1/sessions/{id}` plus
+   `subscribe(pre_ready_snapshot=...)` reconstructs the chain with no duplicate
+   public item IDs; and
+6. killing the Omnigent process yields a deterministic `interrupted`, not a
+   hang.
+
+Stop condition: if 1, 2, or 5 cannot be demonstrated, stop and evaluate the
+Codex app-server fallback before writing the engine. Do not distort the public
+profile around an Omnigent limitation.
 
 ### Milestone 1: executable profile contract
 
@@ -352,14 +584,20 @@ distort the public profile around an Omnigent limitation.
 1. Implement `ResponsesProvider` using standard response requests and events.
 2. Preserve the current `connectAgent()`, tool execution, and `runTask()` user
    experience while chaining response segments internally.
-3. Make `connectAgent()` select the Responses provider by default; retain the
-   old Omnigent provider only as an explicitly transitional test path.
+3. Put the Responses provider behind an explicit opt-in flag. It does **not**
+   become the `connectAgent()` default at this milestone.
 4. Add browser-safe tests for streaming, cancellation, tool errors, repeated
    calls, and no Node-only imports.
 
+The default switch moves to Milestone 5, after durability. Making the new path
+the default before pending-call recovery, restart reconstruction, and
+capability refresh exist would regress recovery against the plan's own stated
+priority and would expose non-idempotent application functions to known
+disconnect loss.
+
 Checkpoint: the Canvas application completes its existing user flow through
-`/v1/responses`; no browser package imports Omnigent wire types for the new
-path.
+`/v1/responses` with the flag enabled; no browser package imports Omnigent wire
+types for the new path.
 
 ### Milestone 4: real browser-to-Codex composition
 
@@ -407,21 +645,41 @@ green rather than on every build.
 
 1. Replace the in-memory store with the narrow file-backed store and atomic
    updates.
-2. Restore response-chain/provider mappings on gateway restart and define what
-   Omnigent can reattach versus what fails as an interrupted run.
-3. Add two explicitly Agent Connect control operations, addressed by an opaque
-   response ID:
+2. Reconstruct chain authority on gateway restart from the durable record
+   alone, and implement the four declared recovery outcomes. Forbid transparent
+   provider-session replacement for an active chain.
+3. Add three explicitly Agent Connect control operations, addressed by an
+   opaque response ID:
+   - `GET /v1/agent-connect/responses/:responseId` to retrieve chain status and
+     the latest complete public response;
    - `GET /v1/agent-connect/responses/:responseId/pending-function-calls` to
      retrieve/redeliver unresolved application function calls; and
    - `POST /v1/agent-connect/responses/:responseId/cancel` to cancel the
      logical response chain and propagate interruption downstream.
+
+   The chain resource is required because a pending-call list cannot recover a
+   response that _completed_ during an outage: the list is simply empty, and
+   empty is indistinguishable from "still running". All three are Agent Connect
+   extensions; the standard `/v1/responses` profile is unchanged.
+
 4. Check grant revocation on continuation, recovery, and cancellation.
-5. Add crash-point tests immediately before and after pending-call publication
-   and result acknowledgement.
+5. Implement capability refresh for a live chain, or a declared bounded maximum
+   chain lifetime that fails explicitly. The current one-hour capability with no
+   refresh path is not sufficient for a long chain.
+6. Add crash-point tests that kill an actual gateway process — not only throw
+   between in-memory operations — at each commit boundary: after output
+   persistence and before POST, after POST and before acknowledgement, after
+   acknowledgement and before the local transition, and after the provider
+   emits the next item.
+7. Only after the above pass, make the Responses provider the `connectAgent()`
+   default and retain the old Omnigent provider as an explicitly transitional
+   test path.
 
 Checkpoint: a disconnect or gateway restart cannot silently lose an already
-published unresolved call, duplicate output submission is deterministic, and
-cancellation reaches Omnigent/Codex where the backend supports it.
+published unresolved call, a response completed during an outage is
+retrievable, duplicate output submission is deterministic, Omnigent process
+loss yields a deterministic `interrupted`, and cancellation reaches
+Omnigent/Codex where the backend supports it.
 
 ### Milestone 6: conformance, replacement, and deletion
 
@@ -448,16 +706,31 @@ cancellation responsibilities that Open Responses does not standardize.
 Implementation work should add the following compact contracts before changing
 runtime behavior:
 
-| Contract       | Required proof                                                                                            |
-| -------------- | --------------------------------------------------------------------------------------------------------- |
-| `VAL-RESP-001` | accepted/rejected profile matrix plus pinned-schema validation                                            |
-| `VAL-RESP-002` | exact JSON and SSE lifecycle for text and one function call                                               |
-| `VAL-RESP-003` | ordinary client completes two sequential calls and final text over `previous_response_id`                 |
-| `VAL-RESP-004` | real browser -> private gateway -> Omnigent -> Codex -> two browser functions -> final browser result     |
-| `VAL-RESP-005` | wrong Origin, capability, model, snapshot, response chain, or call ID fails closed                        |
-| `VAL-RESP-006` | pending call is durable before publication; redelivery and same-output retry preserve its stable ID       |
-| `VAL-RESP-007` | disconnect, cancellation, revocation, malformed provider events, and backend failure have stable outcomes |
-| `VAL-RESP-008` | browser application uses the new path and the old public task wire is removed only after parity           |
+| Contract       | Required proof                                                                                                                                |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VAL-RESP-000` | Omnigent ownership spike: retained run, two calls, cancel, restart reconciliation, deterministic `interrupted`                                |
+| `VAL-RESP-001` | accepted/rejected profile matrix plus validation of complete resources against the pinned schema                                              |
+| `VAL-RESP-002` | exact JSON and SSE lifecycle for text and one function call, including `event:` equal to the JSON `type`                                      |
+| `VAL-RESP-003` | an unmodified OpenAI client with only `baseURL` and `apiKey` completes two sequential calls and final text                                    |
+| `VAL-RESP-004` | real browser -> private gateway -> Omnigent -> Codex -> two browser functions -> final browser result                                         |
+| `VAL-RESP-005` | wrong Origin, capability, model, snapshot, response chain, or call ID fails closed; canonical-projection equivalence classes hash as intended |
+| `VAL-RESP-006` | pending call is durable before publication; redelivery and same-output retry preserve its stable ID; process-kill crash points recover        |
+| `VAL-RESP-007` | disconnect, cancellation, revocation, malformed provider events, and backend failure have stable outcomes                                     |
+| `VAL-RESP-008` | browser application uses the new path by default and the old public task wire is removed only after parity                                    |
+
+`VAL-RESP-002` asserts `event:` equality locally. The upstream parser does not
+enforce that stronger contract, so it cannot be delegated to the compliance
+suite.
+
+`VAL-RESP-003` depends on the non-browser ingress profile decided in
+[ADR 0009](../decisions/0009-separate-ingress-owner-authentication-and-application-authorization.md).
+Until that lands, an ordinary server-side client is rejected before routing and
+this contract cannot pass.
+
+Upstream compliance is one component of the evidence, not a blanket conformance
+certificate. The pinned `tool-calling` compliance test checks that a function
+call is returned; it does not exercise the function-output continuation chain,
+two sequential calls, authorization, or recovery. Those remain local hard gates.
 
 Use the deterministic Omnigent integration as the main oracle. A real model run
 is one final composition check, not the routine test loop.
