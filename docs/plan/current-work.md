@@ -54,7 +54,9 @@ to implement the smallest end-to-end slice required by ADR 0010:
    ID through result submission;
 7. define cancellation, interruption, recovery, malformed-call, and harness
    failure behavior; and
-8. prove the slice with an ordinary Open Responses client.
+8. prove the protocol shape with an ordinary Open Responses client; and
+9. prove the full browser-to-gateway-to-Omnigent-to-real-Codex flow before
+   investing in the durability layer.
 
 Keep the passing Omnigent path until this evidence exists. After the replacement
 meets the ADR gates, remove the custom browser task/event protocol and

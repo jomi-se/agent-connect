@@ -19,7 +19,9 @@ The implementation has two decision gates:
 1. **Protocol-fit gate:** a standard Responses client can create and continue
    responses through multiple sequential application function calls while the
    same Omnigent/Codex execution remains alive.
-2. **Replacement gate:** the response and pending-call state is durable,
+2. **Real-flow gate:** the actual browser application completes that same loop
+   through the private gateway and a subscription-authenticated Codex runtime.
+3. **Replacement gate:** the response and pending-call state is durable,
    cancellation/recovery behavior is explicit, the browser SDK uses the new
    path, and the old public task/event wire can be deleted.
 
@@ -359,7 +361,49 @@ Checkpoint: the Canvas application completes its existing user flow through
 `/v1/responses`; no browser package imports Omnigent wire types for the new
 path.
 
-### Milestone 4: durability, recovery, and cancellation
+### Milestone 4: real browser-to-Codex composition
+
+Run the complete private deployment flow before investing in the durability
+layer:
+
+1. Start the source-installable gateway and Omnigent stack using the existing
+   private Tailscale Serve profile and the operator's real Codex login.
+2. From the actual browser application, verify gateway identity, complete the
+   existing authorization ceremony, approve the exact function snapshot, and
+   obtain an opaque application session.
+3. Create the first response through `/v1/responses`; require Codex to invoke
+   at least two sequential application-owned functions.
+4. Execute both functions in the browser, continue through
+   `previous_response_id` after each output, and receive final Codex text.
+5. Confirm the browser sees only standard Responses objects/events and opaque
+   Agent Connect identifiers—never Omnigent session IDs, `action_required`,
+   ACP messages, or provider request tokens.
+6. Capture a scrubbed transcript containing response IDs, public call IDs,
+   event ordering, continuation boundaries, final completion, gateway logs,
+   and the browser result. Do not retain prompts, credentials, authorization
+   codes, bearer capabilities, private tool results, or provider tokens.
+
+Checkpoint: one real human-visible browser interaction proves the entire path:
+
+```text
+browser application
+  -> gateway authorization and approved snapshot
+  -> POST /v1/responses
+  -> Omnigent
+  -> subscription-authenticated Codex
+  -> application function call
+  -> browser handler
+  -> function_call_output continuation
+  -> Codex final response
+  -> browser UI
+```
+
+This is the real-flow decision gate. If it fails, fix the narrow slice or
+reconsider the backend before implementing persistence. Because it consumes
+the operator's model allowance, run it once after deterministic integration is
+green rather than on every build.
+
+### Milestone 5: durability, recovery, and cancellation
 
 1. Replace the in-memory store with the narrow file-backed store and atomic
    updates.
@@ -379,16 +423,16 @@ Checkpoint: a disconnect or gateway restart cannot silently lose an already
 published unresolved call, duplicate output submission is deterministic, and
 cancellation reaches Omnigent/Codex where the backend supports it.
 
-### Milestone 5: conformance, replacement, and deletion
+### Milestone 6: conformance, replacement, and deletion
 
 1. Run the applicable upstream compliance tests: basic text, streaming, and
    function calling. Record the unsupported upstream cases as profile
    exclusions rather than failures hidden by test changes.
 2. Run the ordinary OpenAI/Responses JavaScript client against the gateway
    using a session capability as its API key and the gateway `/v1` base URL.
-3. Run `npm run verify:full` and
-   `npm run test:integration:omnigent`, then perform one manual real-Codex
-   browser composition.
+3. Run `npm run verify:full` and `npm run test:integration:omnigent`, then
+   repeat the Milestone 4 real browser-to-Codex composition as the final
+   replacement check.
 4. Update the capability inventory and accept ADR 0010 only if all replacement
    gates pass.
 5. Delete the browser-visible `/v1/sessions/:id/stream` and `/events` routes,
@@ -409,10 +453,11 @@ runtime behavior:
 | `VAL-RESP-001` | accepted/rejected profile matrix plus pinned-schema validation                                            |
 | `VAL-RESP-002` | exact JSON and SSE lifecycle for text and one function call                                               |
 | `VAL-RESP-003` | ordinary client completes two sequential calls and final text over `previous_response_id`                 |
-| `VAL-RESP-004` | wrong Origin, capability, model, snapshot, response chain, or call ID fails closed                        |
-| `VAL-RESP-005` | pending call is durable before publication; redelivery and same-output retry preserve its stable ID       |
-| `VAL-RESP-006` | disconnect, cancellation, revocation, malformed provider events, and backend failure have stable outcomes |
-| `VAL-RESP-007` | browser application uses the new path and the old public task wire is removed only after parity           |
+| `VAL-RESP-004` | real browser -> private gateway -> Omnigent -> Codex -> two browser functions -> final browser result     |
+| `VAL-RESP-005` | wrong Origin, capability, model, snapshot, response chain, or call ID fails closed                        |
+| `VAL-RESP-006` | pending call is durable before publication; redelivery and same-output retry preserve its stable ID       |
+| `VAL-RESP-007` | disconnect, cancellation, revocation, malformed provider events, and backend failure have stable outcomes |
+| `VAL-RESP-008` | browser application uses the new path and the old public task wire is removed only after parity           |
 
 Use the deterministic Omnigent integration as the main oracle. A real model run
 is one final composition check, not the routine test loop.

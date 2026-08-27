@@ -320,7 +320,10 @@ This ADR remains proposed until a time-boxed vertical slice demonstrates:
    Agent Connect-specific response payloads.
 2. A live Codex execution can make multiple sequential application function
    calls, receive their outputs through response continuation, and return final
-   text without losing harness continuity.
+   text without losing harness continuity. This must be proven through the
+   actual browser application, gateway authorization/session path, Omnigent,
+   and the operator's subscription-authenticated Codex runtime—not only a
+   deterministic backend or direct API client.
 3. The only public model profile is stable and honestly documented.
 4. Application functions require no permanently preinstalled
    application-specific MCP server.
