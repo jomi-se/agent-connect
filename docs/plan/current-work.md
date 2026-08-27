@@ -40,7 +40,9 @@ because it consumes the operator's credentials and model allowance.
 
 ## Priority 1: prove the Open Responses vertical slice
 
-Implement the smallest end-to-end slice required by ADR 0010:
+Follow the
+[Open Responses vertical-slice implementation plan](open-responses-vertical-slice.md)
+to implement the smallest end-to-end slice required by ADR 0010:
 
 1. expose the documented version 0 Open Responses HTTP/SSE profile;
 2. map `agent-connect/default` to one real Codex-backed execution;
