@@ -98,12 +98,16 @@ Version 0 supports only the portion required for the first real vertical slice:
 - sequential application function calls;
 - `previous_response_id` continuation;
 - persisted response and unresolved-call state;
-- cancellation; and
+- cancellation through a clearly labeled Agent Connect control operation; and
 - a stable, documented error taxonomy.
 
-The vertical slice must document the exact standard retrieval, reconnection,
-and cancellation operations it implements. Unsupported fields or combinations
-fail explicitly rather than being silently ignored.
+The Open Responses 2.3 specification defines response creation and
+continuation but does not define general HTTP retrieval, unresolved-call
+recovery, or cancellation endpoints. The vertical slice must therefore
+document which behavior is standard Open Responses and which narrowly scoped
+Agent Connect control operations provide recovery and cancellation.
+Unsupported fields or combinations fail explicitly rather than being silently
+ignored.
 
 Version 0 does not claim support for:
 
