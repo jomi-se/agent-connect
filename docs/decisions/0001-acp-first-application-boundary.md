@@ -1,13 +1,14 @@
 # ADR 0001: Use ACP as the application boundary
 
-Status: accepted as a long-term boundary; deferred from the hackathon critical path
+Status: superseded as the application-facing direction by proposed ADR 0010;
+ACP remains an optional harness-facing adapter
 
 Date: 2026-07-13
 
-Pending review: ADR 0006 records a compatibility spike for AG-UI as a more
-direct application-facing standard. ADR 0001 remains in force until that spike
-passes and a superseding decision is accepted. Even if AG-UI becomes the
-application boundary, ACP remains the preferred gateway-to-agent adapter.
+Amendment (2026-08-27): ADR 0010 makes a bounded Open Responses profile the
+leading proposed application boundary. New application-facing work should not
+target ACP or unstable MCP-over-ACP. ACP remains available behind the gateway
+where its stable harness-facing capabilities fit.
 
 ## Context
 

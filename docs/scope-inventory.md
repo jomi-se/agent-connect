@@ -1,6 +1,6 @@
 # Scope and capability inventory
 
-Updated: 2026-07-20
+Updated: 2026-08-27
 
 This inventory separates implemented behavior from explicit targets. The
 mission defines the product boundary; this file prevents future plans from
@@ -22,7 +22,8 @@ silently treating a target as a shipped guarantee.
 | Recover an unresolved tool request after disconnect    | Deferred                        | No durable pending-action broker yet                                                                 |
 | Provide generic exactly-once side effects              | Explicit non-goal               | Stable action IDs plus app-owned idempotency/deduplication are required                              |
 | Sender-bind grants with app-instance proof/DPoP        | Deferred                        | Current grants are scoped bearer capabilities                                                        |
-| Speak AG-UI between browser and gateway                | Exploration                     | See the compatibility spike; not part of the current public API                                      |
+| Speak Open Responses between application and gateway   | Proposed exploration            | ADR 0010; requires a live multi-call Codex compatibility slice and authorization audit               |
+| Speak AG-UI between browser and gateway                | Deprioritized exploration       | Optional edge adapter only unless Open Responses cannot meet a concrete UI requirement               |
 | Speak browser ACP/MCP-over-ACP                         | Experimental                    | Draft helpers remain isolated and are not the default transport                                      |
 
 ## Gateway and provider
@@ -33,6 +34,8 @@ silently treating a target as a shipped guarantee.
 | Provision one downstream runner and heal an unhealthy match                | Implemented                   | Grant-bound tool policy is written before launch                                              |
 | Restrict Codex's request-scoped relay tools to the authorized snapshot     | Implemented reference profile | Fail-closed manifest and `enabled_tools` compatibility wrapper, pinned to Omnigent 0.5.1      |
 | Keep provider IDs and wire types out of the normal browser API             | Implemented                   | `connectAgent` is the supported neutral entry point; legacy spike exports remain transitional |
+| Expose an OAuth-protected Open Responses endpoint                          | Proposed                      | ADR 0010; do not remove the passing Omnigent path before conformance evidence                 |
+| Bundle response translation with harness runtime supervision               | Proposed architecture         | Share standards machinery in source; avoid a separate private facade-to-supervisor protocol   |
 | Allocate a fresh workspace for each provider session                       | Implemented                   | Failed launches are cleaned immediately; successful-session expiry remains deferred           |
 | Persist gateway identity, devices, grants, revocations, and capability key | Implemented                   | Owner-only gateway state file                                                                 |
 | Persist pending authorization requests, codes, and provider mappings       | Deferred                      | These short-lived/session mappings are memory-only                                            |

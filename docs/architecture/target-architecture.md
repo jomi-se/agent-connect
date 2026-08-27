@@ -6,50 +6,43 @@ This page contains an "aspirational" target architecture that would be the end g
 
 ```text
 browser application
-  @agent-connect/web
-  define tools, run task, events, confirm app-owned changes
+  Open Responses client or @agent-connect/web convenience SDK
+  define functions, create/continue responses, execute app-owned changes
              |
-             | transport trust profile + runtime ID
-             | authenticated gateway/app session
-             | candidate payload: AG-UI
+             | Open Responses HTTP/SSE
+             | OAuth-protected gateway grant
              v
 Agent Connect gateway
-  enrolled gateway identity key
-  one-time runtime-card export
-  gateway-hosted OAuth + key-bound application capabilities
-  exact Origin (+ Tailscale identity in direct mode)
-  logical -> provider session mapping and health recovery
-  target: durable pending-action recovery
-  fixed tool snapshot + provider adapter
+  enrolled gateway identity and exact application-function consent
+  shared Open Responses transport, state, and recovery core
+  response chain -> harness session mapping and health recovery
+  fixed function snapshot + bundled harness backend
   requested/configured posture + observations
-  input event allowlist + resource ceilings
+  input allowlist + resource ceilings
              |
-             | Omnigent HTTP/SSE Sessions API
-             | request-scoped client tools
+             | backend-specific launch and response translation
              v
-Omnigent conductor
-  normalized sessions, policy, harness lifecycle
-             |
-             | generic ACP harness
-             v
-@agentclientprotocol/codex-acp
-             |
-             | Codex app-server
-             v
-Codex
+Codex / Claude Code / another coding harness
+  model loop, context, runtime-owned tools
 ```
+
+This proposed target is described by
+[ADR 0010](../decisions/0010-open-responses-gateway-pivot.md). The existing
+Omnigent -> ACP -> Codex chain remains the proven implementation baseline until
+the Open Responses compatibility and authorization gates pass.
 
 ## Ownership boundaries
 
 ### Web SDK
 
-Owns browser transport setup, application tool registration and execution,
-application-owned mutation confirmation, and reconnection orchestration. It
+Owns browser transport setup, application function registration and execution,
+application-owned mutation confirmation, and response-chain orchestration. It
 cannot approve gateway filesystem, shell, network, MCP, policy, or harness
-permission requests. It does not know Omnigent or Codex message shapes. AG-UI is
-the leading pending candidate for standard run, message, and frontend-tool
-payloads; the existing ACP/MCP browser prototype remains experimental until the
-comparison spike is decided.
+permission requests. It does not know Omnigent or Codex message shapes. Open
+Responses is the proposed request, item, streaming, function-call, function
+output, continuation, and error vocabulary. AG-UI is an optional future edge
+adapter rather than the core boundary; the ACP/MCP browser prototype remains
+experimental.
 
 The current package still exports `OmnigentProvider`, `connectOmnigent`, and
 Omnigent option types from the spike. Those are transitional provider entry
@@ -58,11 +51,14 @@ and task/tool types are the target application surface.
 
 ### Gateway
 
-Owns enrollment, authorization, mapping application sessions to Omnigent
-conversations, request-scoped tool-schema injection, and normalized events.
+Owns enrollment, authorization, Open Responses transport and state correctness,
+mapping response chains to harness sessions, request-scoped function policy,
+and pending-call recovery. A bundled harness backend owns both response
+translation and the supervisor mechanics required by its harness. The target
+does not introduce an independently deployed facade-to-supervisor protocol.
 Durable pending application actions are a required next reliability layer, not
-current behavior. Its provider interface contains no browser-facing Omnigent
-types.
+current behavior. Its public interface contains no browser-facing Omnigent,
+Codex, ACP, or MCP types.
 
 The enrolled profile prints one runtime card and generated high-entropy
 enrollment passphrase on first state creation. The user saves the bundle in a
@@ -169,7 +165,9 @@ public endpoint. See the
 
 ### Application
 
-Owns the actual side effect. It receives a stable action ID and must make consequential operations idempotent or journal their result. The conductor cannot infer whether an unacknowledged external side effect succeeded.
+Owns the actual side effect. It receives a stable action ID and must make
+consequential operations idempotent or journal their result. The gateway cannot
+infer whether an unacknowledged external side effect succeeded.
 
 ## Tool-call translation
 
@@ -200,22 +198,18 @@ future pending-action contract remain unchanged.
 
 ## Deferred ACP adapter
 
-ACP-over-WebSocket plus MCP-over-ACP remains the preferred future standardized
-wire candidate. It implements the same gateway/application API after the first
-working browser slice; it is not required to demonstrate the hackathon product.
+ACP remains an optional harness-facing adapter where its stable session and
+client capabilities fit. It is not the proposed application-facing wire, and
+unstable MCP-over-ACP is not required by the Open Responses target.
 
-## Pending AG-UI application adapter
+## Deprioritized AG-UI application adapter
 
-AG-UI appears to match the browser-facing run, streaming, and frontend-defined
-tool surface more directly than ACP. It does not replace Omnigent orchestration
-or downstream ACP. The proposed shape is:
-
-```text
-browser -- AG-UI + Agent Connect security --> gateway
-gateway -- Omnigent adapter --> Omnigent -- ACP --> codex-acp --> Codex
-```
-
-The gateway retains gateway enrollment, per-app authorization, opaque
-provider sessions, fixed tool policy, stable action IDs, and durable recovery.
-See the [AG-UI investigation](../research/2026-07-14-ag-ui-fit.md) and
-[compatibility spike](../plan/ag-ui-compatibility-spike.md).
+AG-UI remains relevant for applications that specifically need its shared UI
+state, activity, or ecosystem integrations. Open Responses already covers the
+core Agent Connect prompt, streaming, function-call, function-output, and
+continuation requirements, so AG-UI is no longer the leading application
+boundary. If later implemented, it should adapt at the edge to the Open
+Responses gateway rather than create a second core execution model. See the
+[AG-UI investigation](../research/2026-07-14-ag-ui-fit.md), the earlier
+[compatibility spike](../plan/ag-ui-compatibility-spike.md), and
+[ADR 0010](../decisions/0010-open-responses-gateway-pivot.md).

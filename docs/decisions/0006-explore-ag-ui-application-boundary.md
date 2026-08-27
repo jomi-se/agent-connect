@@ -1,9 +1,16 @@
 # 0006: Explore AG-UI as the application-facing boundary
 
-- Status: proposed; pending compatibility spike
+- Status: superseded as the leading exploration by proposed ADR 0010; retained
+  as historical analysis
 - Date: 2026-07-14
 
 ## Context
+
+Amendment (2026-08-27): the project selected a bounded Open Responses profile
+as the leading proposed application-facing protocol in
+[ADR 0010](0010-open-responses-gateway-pivot.md). The AG-UI spike is no longer
+active. AG-UI may be reconsidered only as an optional edge adapter for a
+concrete UI requirement that Open Responses does not cover.
 
 ADR 0001 selected ACP as the preferred long-term application boundary because
 ACP models agent sessions and its draft MCP-over-ACP work models

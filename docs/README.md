@@ -30,27 +30,34 @@ gateway, SDK example, supported platforms, and verification commands.
 The [experimental ACP/MCP-over-ACP profile](architecture/narrow-protocol-profile.md)
 documents an unstable prototype. It is not the default browser/gateway path.
 
-## Active design investigations
+## Current design direction
 
-- [AG-UI compatibility](plan/ag-ui-compatibility-spike.md)
+- [ADR 0010: Open Responses at the application boundary](decisions/0010-open-responses-gateway-pivot.md)
+  is the leading proposed protocol direction and defines its evidence gates.
 - [Containerized gateway deployment](plan/containerized-gateway-deployment.md)
+  remains supporting packaging research, not a required architecture.
 
-These are plans, not shipped capabilities.
+The older [AG-UI compatibility spike](plan/ag-ui-compatibility-spike.md) is
+historical. AG-UI is no longer an active core-protocol experiment.
 
-## Accepted decisions
+## Current accepted decisions
 
-- [ADR 0001: ACP-first application boundary](decisions/0001-acp-first-application-boundary.md)
 - [ADR 0002: Omnigent as the first provider](decisions/0002-omnigent-conductor.md)
 - [ADR 0003: Tailnet HTTPS gateway](decisions/0003-tailnet-https-gateway.md)
-- [ADR 0004: Pairing and session broker](decisions/0004-pairing-and-session-broker.md)
 - [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md)
-- [ADR 0006: Explore AG-UI application boundary](decisions/0006-explore-ag-ui-application-boundary.md)
 - [ADR 0007: Runtime card and gateway authorization](decisions/0007-runtime-card-and-gateway-authorization.md)
 - [ADR 0008: Control plane and runtime confinement boundary](decisions/0008-control-plane-and-runtime-confinement-boundary.md)
 
 ## Proposed decisions
 
 - [ADR 0009: Separate ingress, owner authentication, and application authorization](decisions/0009-separate-ingress-owner-authentication-and-application-authorization.md)
+- [ADR 0010: Open Responses at the application boundary](decisions/0010-open-responses-gateway-pivot.md)
+
+## Superseded and historical decisions
+
+- [ADR 0001: ACP-first application boundary](decisions/0001-acp-first-application-boundary.md)
+- [ADR 0004: Pairing and session broker](decisions/0004-pairing-and-session-broker.md)
+- [ADR 0006: Explore AG-UI application boundary](decisions/0006-explore-ag-ui-application-boundary.md)
 
 ## Evidence and research
 
@@ -64,6 +71,9 @@ These are plans, not shipped capabilities.
 - [Omnigent sandbox spike, 2026-07-14](research/2026-07-14-omnigent-vm-sandbox-spike.md)
 - [Build Week requirements snapshot, 2026-07-14](research/2026-07-14-openai-build-week-refresh.md)
 - [Live protocol animation research, 2026-07-18](research/2026-07-18-live-protocol-animation.md)
+- [Claude Code Remote Control internals, 2026-07-24](research/2026-07-24-claude-code-remote-control-internals.md)
+- [Open Responses and WebMCP handoff, 2026-08-27](research/2026-08-27-open-responses-webmcp-handoff.md)
+- [Ousterhout review of the Open Responses pivot, 2026-08-26](reviews/2026-08-26-ousterhout-open-responses-design-review.md)
 
 Research and handoff documents preserve dated evidence. Their recommendations
 may be superseded by the mission, accepted decisions, architecture, or current
