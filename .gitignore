@@ -34,6 +34,9 @@ test-results/
 deploy/judge-demo/.env
 deploy/real-connector/.env
 
+# Private, local research evidence (for example raw visitor telemetry).
+docs/research/local-evidence/
+
 # Secrets and operator-owned runtime state. Keep reviewed templates trackable.
 .env
 .env.*

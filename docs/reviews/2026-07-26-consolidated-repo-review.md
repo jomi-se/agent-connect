@@ -32,14 +32,14 @@ entirely unbuilt**, and is the natural post-judging workstream.
 
 ### Real bugs
 
-| # | Bug | Where |
-|---|-----|-------|
-| 1 | **Workspace leak** — session workspaces `.agent-connect-sessions/<uuid>` are removed only on the error path; every successful session and every health-repair leaves a directory behind forever. | `packages/gateway/src/omnigent-runtime.ts:111` |
-| 2 | **Unbounded session maps** — `managedSessions` / `sessionsByKey` are never evicted on grant revocation or expiry; expired grants are never pruned from the persisted `connector.json`. | `packages/gateway/src/gateway.ts:130-131` |
-| 3 | **Zero logging** — the gateway has no log output at all. Failed auth attempts and 502 causes are invisible to the operator. Highest-value small fix; unblocks debugging everything else. | `packages/gateway/src/gateway.ts` |
-| 4 | **SSE proxy robustness** — ignores `write()` backpressure and has no upstream timeout; grant revocation does not abort already-open streams. (Independently flagged in the Codex session — see §3.) | `packages/gateway/src/gateway.ts:424-448` |
-| 5 | **Error mapping** — a reserved-tool-name `TypeError` (and other handler throws) fall into the catch-all and surface as 502. | `packages/gateway/src/gateway.ts:474` |
-| 6 | **Dead guards** — `connectorAuth &&` conditions that are always truthy. | `gateway.ts:206, 221, 258, 281` |
+| #   | Bug                                                                                                                                                                                                 | Where                                          |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| 1   | **Workspace leak** — session workspaces `.agent-connect-sessions/<uuid>` are removed only on the error path; every successful session and every health-repair leaves a directory behind forever.    | `packages/gateway/src/omnigent-runtime.ts:111` |
+| 2   | **Unbounded session maps** — `managedSessions` / `sessionsByKey` are never evicted on grant revocation or expiry; expired grants are never pruned from the persisted `connector.json`.              | `packages/gateway/src/gateway.ts:130-131`      |
+| 3   | **Zero logging** — the gateway has no log output at all. Failed auth attempts and 502 causes are invisible to the operator. Highest-value small fix; unblocks debugging everything else.            | `packages/gateway/src/gateway.ts`              |
+| 4   | **SSE proxy robustness** — ignores `write()` backpressure and has no upstream timeout; grant revocation does not abort already-open streams. (Independently flagged in the Codex session — see §3.) | `packages/gateway/src/gateway.ts:424-448`      |
+| 5   | **Error mapping** — a reserved-tool-name `TypeError` (and other handler throws) fall into the catch-all and surface as 502.                                                                         | `packages/gateway/src/gateway.ts:474`          |
+| 6   | **Dead guards** — `connectorAuth &&` conditions that are always truthy.                                                                                                                             | `gateway.ts:206, 221, 258, 281`                |
 
 ### Security findings
 
@@ -49,14 +49,14 @@ Three real gaps:
 1. **The loopback trust boundary includes the agent itself.** Any local process — including the
    sandboxed Codex, because the bwrap profile sets `allow_network: true`
    (`omnigent-runtime.ts:227`) — can forge the `tailscale-user-login` header on the loopback
-   port (`gateway.ts:838-850`) to enumerate and *revoke* grants, and can reach the completely
+   port (`gateway.ts:838-850`) to enumerate and _revoke_ grants, and can reach the completely
    unauthenticated Omnigent API on `127.0.0.1:6767`. Under Tailscale Serve those headers are
    only trustworthy if nothing untrusted shares the loopback interface. Fix: network-namespace
    isolation for the agent, or a shared secret between Tailscale Serve and the gateway. This is
    exactly the trust-boundary question Sol confirmed in the Codex session (§3).
 2. **Attacker-resettable passphrase throttling** in the public demo — the failure counter is
    keyed per authorization request (`connector-auth.ts:276`), and attackers create those
-   requests themselves, so the effective budget is 5 attempts *per fresh request*. Safe with
+   requests themselves, so the effective budget is 5 attempts _per fresh request_. Safe with
    the random default passphrase; brute-forceable if an operator sets a weak one. Fix: a
    global attempt budget.
 3. **30-day grant token in `sessionStorage`** (`apps/firebase-canvas/src/main.ts:323`) —
@@ -128,9 +128,9 @@ The written outcome of this discussion is ADR 0009; the parts that live only in 
   audit, handler. Fixed execution pipeline. The route table doubles as an inspectable security
   matrix that can generate tests.
 - **Route access classes** (not a privilege ladder): `"public" | "prospective-application" |
-  "gateway-owner" | "authorized-application" | "active-session"`.
+"gateway-owner" | "authorized-application" | "active-session"`.
 - **SSE as a first-class route kind** (`response: { kind: "sse-proxy",
-  revocation: "abort-stream", … }`) — designed specifically to fix the revocation and
+revocation: "abort-stream", … }`) — designed specifically to fix the revocation and
   backpressure bugs the code review independently found (§1 #4).
 - **Framework decision deferred to two disposable vertical spikes** — Fastify + thin mandatory
   policy wrapper (leaning), Hapi (challenger) — each implementing 4 representative routes:

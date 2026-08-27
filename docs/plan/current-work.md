@@ -1,116 +1,153 @@
 # Current work
 
-Updated: 2026-07-20
+Updated: 2026-08-27
 
-This is the canonical backlog. It records only unfinished work and the smallest
-amount of completed context needed to understand it. Accepted architectural
-choices live in [`docs/decisions/`](../decisions/); reproducible operator flows
-live in [`deploy/`](../../deploy/).
+This is the canonical unfinished-work list. It records current priorities and
+only enough completed context to explain them. Product boundaries live in the
+[mission](../mission.md), capability status lives in the
+[scope inventory](../scope-inventory.md), and architectural choices live in
+[`docs/decisions/`](../decisions/).
 
 ## Working baseline
 
-The repository currently contains two end-to-end profiles:
+The hackathon MVP proved the core loop through two profiles:
 
-- a public, deterministic judge demo exposed through Tailscale Funnel;
-  it exercises enrollment, consent, PKCE, Omnigent, ACP, request-scoped MCP,
-  browser-owned tools, visible mutations, revocation, and reboot recovery
-  without a model credential; and
-- a source-installable Tailscale Serve profile that runs the same application
-  contract against a real user-owned Codex login through Omnigent.
+- a deterministic public judge demo; and
+- a source-installable Tailscale Serve gateway using a real user-owned Codex
+  login through Omnigent.
 
-`@agent-connect/web` can be packed and installed into an external npm project,
-but it is not yet published to npm. The Firebase Canvas accepts either
-profile's runtime card and demonstrates live-state reads plus project-board,
-document-review, and product-research mutations.
+The browser SDK verifies a selected gateway, obtains a revocable Origin-bound
+grant, supplies an exact user-approved application-tool snapshot, streams a
+task, executes requested application functions, returns correlated results,
+and hides raw Omnigent identifiers.
 
-The automated floor is:
+The public task/event protocol and browser-visible Omnigent provider are
+transitional. [ADR 0010](../decisions/0010-open-responses-gateway-pivot.md)
+proposes replacing that public wire with a bounded Open Responses profile while
+retaining Agent Connect's authorization, durability, and user-owned runtime
+behavior.
+
+The automated baseline remains:
 
 ```sh
 npm run verify:full
 npm run test:integration:omnigent
 ```
 
-The first command covers formatting, types, behavior tests, builds, a clean
-SDK-package consumer, and Canvas browser tests. The second starts disposable
-real Omnigent services with a deterministic ACP agent. A real Codex/browser
-composition remains a manual milestone because it consumes the operator's
-credentials and model allowance.
+The second command uses disposable Omnigent services and a deterministic ACP
+agent. A real Codex/browser composition remains a deliberate manual milestone
+because it consumes the operator's credentials and model allowance.
 
-## Submission critical
+## Priority 1: prove the Open Responses vertical slice
 
-The engineering MVP is complete. Before the Build Week deadline:
+Implement the smallest end-to-end slice required by ADR 0010:
 
-1. Rehearse the exact private judge instructions in a clean browser, including
-   enrollment, one useful Canvas task, grant revocation, logout, and reconnect.
-2. Record and publish a narrated video shorter than three minutes. Clearly
-   label the deterministic public fixture and the separate real-Codex proof.
-3. Confirm the Devpost entry contains the `/feedback` identifier, public demo
-   URL, private runtime card/passphrase delivery, repository access, and
-   developer-tool installation/testing path.
-4. Run both verification commands above, check the public demo after a
-   restart, and confirm the submission is actually submitted rather than saved.
-5. Keep the judge demo healthy through `2026-08-06T00:00:00Z`, then
-   disable Funnel and destroy its disposable state.
+1. expose the documented version 0 Open Responses HTTP/SSE profile;
+2. map `agent-connect/default` to one real Codex-backed execution;
+3. complete multiple sequential application function calls through
+   `previous_response_id` continuation;
+4. preserve the exact user-approved function snapshot;
+5. keep runtime-owned tools and application-owned functions distinct;
+6. persist each application call before publication and retain its stable call
+   ID through result submission;
+7. define cancellation, interruption, recovery, malformed-call, and harness
+   failure behavior; and
+8. prove the slice with an ordinary Open Responses client.
 
-The detailed presentation checklist is in
-[the submission guide](openai-build-week-submission.md). The deployment and
-kill-switch procedure is in [the judge demo runbook](../../deploy/judge-demo/README.md).
+Keep the passing Omnigent path until this evidence exists. After the replacement
+meets the ADR gates, remove the custom browser task/event protocol and
+browser-visible Omnigent path rather than maintaining two permanent public
+protocols.
 
-## Reliability and operator work
+WebMCP is not part of this milestone. Explicit browser tool registration is the
+version 0 source of the fixed approved snapshot.
 
-These are real product gaps, not submission blockers:
+## Priority 2: one-click user-owned deployment
 
-1. Persist unresolved application tool requests before notifying the app, and
-   recover them separately from conversation resumption.
-2. Persist logical-to-provider session mappings and short-lived authorization
-   transactions where restart recovery is required.
-3. Expire and remove successful session workspaces and replaced provider
-   sessions; failed launches are already cleaned immediately.
-4. Add operator commands for runtime-card re-export, device management,
+Turn the working source profile into an installation a normal technical user
+can launch without understanding Omnigent, ACP, MCP, or the internal service
+topology.
+
+The first proof should favor one reproducible deployment over a generalized
+deployment framework. GitHub Codespaces is a promising low-friction entry
+point, but private forwarded-port authentication, mobile browser behavior,
+sleep, and manual wake-up still need a focused prototype. Tailscale remains a
+power-user path. Do not make a founder-operated relay mandatory.
+
+The deployment must make credential injection, update, restart, gateway-card
+export, health, and teardown explicit. Packaging convenience is not a claim of
+process isolation, credential confinement, or multi-tenancy.
+
+## Priority 3: interruption durability and operator basics
+
+These are the most important reliability gaps after the protocol slice:
+
+1. recover unresolved application calls independently from conversation
+   resumption;
+2. make duplicate function-result submission idempotent;
+3. persist logical-run, response-chain, and provider-session mappings needed
+   across gateway restart;
+4. propagate revocation and cancellation to downstream work;
+5. expire successful workspaces and replaced provider sessions; and
+6. add small operator commands for runtime-card re-export, device management,
    gateway-key rotation, recovery, and audit history.
-5. Add one coherent public-endpoint usage policy. Transient authorization
-   state and passphrase verification are bounded today, but sustained request
-   budgets and downstream-work termination on revocation are not complete.
-6. Add app-instance proof/DPoP only if the copied-bearer-token threat justifies
-   its complexity.
-7. Remove the temporary Omnigent built-in-name collision policy by introducing
-   provider-owned tool namespacing or an upstream contract. The reference
-   profile remains pinned to Omnigent 0.5.1 meanwhile.
 
 Use stable action IDs and require idempotent application operations or
 application-owned deduplication. Do not claim generic exactly-once execution.
 
-## Packaging and compatibility
+## Priority 4: compelling applications
 
-1. Publish `@agent-connect/web` after its compatibility policy and security
-   claims match the tested package.
-2. Turn the source launcher into a reproducible gateway deployment with
-   deliberate credential injection and an explicit update path.
-3. Add another provider only after it proves the existing provider-neutral
-   application contract. Do not add a second proprietary session protocol
-   without an ADR.
+Once the Open Responses scaffold works, validate the product through real
+applications rather than further protocol invention. A useful application
+should:
 
-## Bounded experiments
+- solve a problem the user genuinely has;
+- benefit materially from a powerful user-owned runtime rather than a single
+  ordinary model request;
+- use application-owned functions in a way that justifies Agent Connect; and
+- make the gateway infrastructure mostly invisible.
 
-- [AG-UI compatibility](ag-ui-compatibility-spike.md): determine whether its
-  run/event/frontend-tool vocabulary can replace the custom browser/gateway
-  event language while Agent Connect retains identity, authorization, runtime
-  ownership, and recovery.
-- [Containerized gateway deployment](containerized-gateway-deployment.md):
-  distinguish a convenient shared appliance from a stronger per-session
-  runner boundary. Containerization alone is not credential confinement or
-  host attestation.
-- Direct browser ACP and MCP-over-ACP: revisit only when the unstable path is
-  supported end to end; keep draft-specific types out of the default API.
-- Runtime confinement: prefer disposable workspaces and container/managed
-  runner boundaries. The Bubblewrap experiment is evidence, not a supported
-  profile.
+A personalized study/tutoring system backed by user-provided technical sources
+is one candidate. Its product test is whether persistent progress, source-aware
+lessons, exercises, and agent-driven application actions produce something
+meaningfully better than an ordinary document-chat product. Select and build
+one narrow application before expanding into a generic application platform.
 
-## Explicitly deferred
+## Bounded maintenance
 
-- generalized multi-agent orchestration;
-- arbitrary MCP server support;
+Maintenance is justified when it unblocks one of the priorities above:
+
+- preserve provider-neutral browser APIs and keep Omnigent/Codex types internal;
+- resolve `gateway` versus legacy `connector` terminology when touching the
+  relevant surface;
+- add structured logging, SSE cancellation/backpressure, and stable error
+  mapping as required by the Open Responses slice;
+- remove obsolete scaffolding at the migration deletion point; and
+- publish `@agent-connect/web` only after its compatibility and security claims
+  match the tested package.
+
+Do not undertake broad route-framework rewrites, speculative harness
+frameworks, mass renaming, or generalized-provider refactors for architectural
+neatness alone.
+
+## Deferred or optional
+
+- AG-UI: optional future edge adapter only for a concrete UI need;
+- ACP: optional harness-facing adapter where stable capabilities fit;
+- MCP and harness-native dynamic tools: backend techniques, not public
+  requirements;
+- WebMCP: possible future browser-side source of candidate tool definitions,
+  still subject to exact snapshot approval;
+- a second backend: add after the Codex/Open Responses slice reveals the real
+  adapter seam;
+- arbitrary multi-agent orchestration;
 - Android automation;
-- hardware-attestation claims;
-- verification of a provider's self-reported sandbox posture; and
-- replacing Omnigent solely to make the architecture appear more neutral.
+- public multi-tenancy, billing, or a mandatory hosted relay;
+- hardware-attestation claims; and
+- replacing Omnigent solely to make the architecture look more neutral.
+
+## Historical material
+
+The Build Week submission, judge environment, AG-UI spike, sandbox experiment,
+and container deployment plan remain useful dated records. They are not the
+current backlog unless an item above links to them explicitly.

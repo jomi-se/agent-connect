@@ -2,12 +2,17 @@
 
 ## Objective
 
-Build a web-first SDK and user-owned conductor that let an arbitrary application use a long-running agent as its intelligence provider while temporarily exposing typed, scoped application capabilities back to that agent.
+Build a web-first SDK and user-owned gateway that let an arbitrary application
+use a long-running agent as its intelligence provider while temporarily
+exposing typed, scoped application capabilities back to that agent.
 
 The hackathon implementation uses Codex as the demonstrated downstream agent.
-Its provider boundary should remain compatible with other agent harnesses. ACP
-is the current preferred downstream harness interface; AG-UI is now the leading
-pending candidate for the application-facing standard.
+Its provider boundary should remain compatible with other agent harnesses. The
+leading proposed simplification is to expose an OAuth-protected Open Responses
+endpoint and bundle each harness's response translation with the runtime
+supervision needed to deploy it. The proven Omnigent path remains the baseline
+until that proposal passes its compatibility and authorization gates. See
+[ADR 0010](decisions/0010-open-responses-gateway-pivot.md).
 
 ## Product promise
 
@@ -28,17 +33,26 @@ That behavior is not part of the current MVP.
 
 ## Current strategy
 
-- Give web applications a harness-neutral tool and task API.
+- Replace the custom web task/event wire with standard Open Responses semantics
+  if the compatibility slice passes. A convenience `run()` may coordinate a
+  chain of Responses, but must not become another public protocol.
 - Use Omnigent's existing HTTP/SSE Sessions API as the first transport and
-  conductor implementation. Omnigent selects and launches the user's underlying
+  runtime-supervision implementation. Omnigent selects and launches the user's underlying
   agent harness; the application does not depend on that choice.
 - Supply a fixed tool snapshot on each task's first session message. Execute
   `action_required` calls in the application and return correlated results.
-- Keep Omnigent wire types behind a browser-safe adapter so ACP-over-WebSocket,
-  MCP-over-ACP, or another conductor can implement the same public API later.
-- Evaluate AG-UI as the standardized browser/gateway run and frontend-tool wire.
-  Keep the passing Omnigent path until an official AG-UI client completes the
-  same live Codex tool round trip without weakening security or recovery.
+- Keep Omnigent wire types behind the gateway while evaluating a Codex backend
+  that consumes and emits Open Responses types directly. Keep response
+  translation and harness supervision bundled; separating them at deployment
+  time would create another private protocol.
+- Treat AG-UI as an optional future edge integration rather than the leading
+  core protocol unless a concrete UI requirement is found that Open Responses
+  cannot satisfy. Keep ACP and dynamic MCP as backend techniques, not mandatory
+  application dependencies.
+- Audit the existing gateway authorization mechanism against OAuth PKCE,
+  protected-resource and authorization-server metadata, resource indicators,
+  Client ID Metadata Documents, and Rich Authorization Requests. Preserve
+  Agent Connect-specific consent policy only where standards do not replace it.
 - Model remote connectivity as named transport trust profiles. Implement
   Tailscale Serve first, bind its selected endpoint to an enrolled gateway
   key, and keep hostname recognition out of the trust decision.
@@ -79,8 +93,9 @@ surface changes.
 
 The reference gateway uses Omnigent, but applications integrate with Agent
 Connect rather than Omnigent. Adding another agent harness should normally
-require only a narrow runtime adapter; it must not require reimplementing
-enrollment, OAuth, application grants, or recovery.
+require a bundled harness backend that owns both runtime supervision and direct
+translation to Open Responses semantics; it must not require reimplementing
+the shared OAuth, application grants, response transport, or recovery core.
 
 The terminal is used once to export the gateway's runtime card and enrollment
 passphrase and thereafter only for recovery. New apps are approved through the
