@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
 
+// Narrower than the Open Responses `FunctionToolParam.name` pattern
+// `^[a-zA-Z0-9_-]+$` (maxLength 64), so an approvable tool is always
+// representable on the wire. The leading character stays restricted to a
+// letter or underscore; a dot is not permitted because the standard's pattern
+// cannot carry one.
+const TOOL_NAME = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
+
 export interface GatewayToolDefinition {
   readonly name: string;
   readonly description: string;
@@ -18,10 +25,7 @@ export function validateToolSnapshot(value: unknown): GatewayToolDefinition[] {
       throw new InvalidToolSnapshotError("each tool must be an object");
     }
     const { name, description, inputSchema } = candidate;
-    if (
-      typeof name !== "string" ||
-      !/^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(name)
-    ) {
+    if (typeof name !== "string" || !TOOL_NAME.test(name)) {
       throw new InvalidToolSnapshotError(`invalid tool name: ${String(name)}`);
     }
     if (names.has(name)) {
