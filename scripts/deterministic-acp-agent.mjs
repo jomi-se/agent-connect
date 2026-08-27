@@ -14,6 +14,12 @@ const targetToolArguments = parseTargetArguments(
   process.env.AGENT_CONNECT_DETERMINISTIC_TOOL_ARGUMENTS ?? "{}",
 );
 const scenarioMode = process.env.AGENT_CONNECT_DETERMINISTIC_SCENARIOS === "1";
+// An explicit multi-step plan, as JSON: [{ "name": "...", "arguments": {} }].
+// Lets a caller drive several sequential application-tool calls in one turn
+// without inventing a named scenario. Ignored when scenario mode is on.
+const explicitPlan = parseExplicitPlan(
+  process.env.AGENT_CONNECT_DETERMINISTIC_PLAN,
+);
 const sessions = new Map();
 
 const scenarioPlans = {
@@ -186,6 +192,26 @@ function parseTargetArguments(value) {
     );
   }
   return parsed;
+}
+
+function parseExplicitPlan(value) {
+  if (value === undefined) return undefined;
+  const parsed = JSON.parse(value);
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new TypeError(
+      "AGENT_CONNECT_DETERMINISTIC_PLAN must be a non-empty JSON array",
+    );
+  }
+  return parsed.map((step) => {
+    if (typeof step?.name !== "string") {
+      throw new TypeError("each plan step requires a string name");
+    }
+    const args = step.arguments ?? {};
+    if (typeof args !== "object" || args === null || Array.isArray(args)) {
+      throw new TypeError("each plan step's arguments must be a JSON object");
+    }
+    return { name: step.name, arguments: args };
+  });
 }
 
 function record(event) {
@@ -368,7 +394,9 @@ const app = agent({ name: "Agent Connect deterministic ACP test agent" })
     if (!session) throw new Error(`unknown ACP session ${params.sessionId}`);
     const plan = scenarioMode
       ? selectScenarioPlan(extractPromptText(params.prompt))
-      : [{ name: targetToolName, arguments: targetToolArguments }];
+      : (explicitPlan ?? [
+          { name: targetToolName, arguments: targetToolArguments },
+        ]);
     const results = [];
     for (const step of plan) {
       const selected = session.advertisedTools.find(

@@ -458,21 +458,31 @@ history and deduplicate by item id, then attach the live tail. Its
 the tail partition with no gap and no double-rendered delta. The backend must
 use that hook ordering rather than snapshot-then-subscribe.
 
-The snapshot endpoint carries everything the contract needs. Omnigent 0.5.1's
-`_build_session_response` returns:
+#### What the snapshot does and does not provide
 
+Measured against real Omnigent 0.5.1 by the Milestone 0.5 spike, not inferred
+from source. `GET /v1/sessions/{id}` provides:
+
+- `runner_online` and `status` (`idle | running | waiting | failed`) — reliable
+  liveness for the retained run; and
 - `items` — committed conversation items in chronological order, each with an
-  item id, which is the deduplication key;
-- `status` — `idle | running | waiting | failed`, which distinguishes a live
-  run from a dead one without guessing; and
-- `pending_elicitation_events` — the outstanding prompts, replayed with their
-  full payload specifically so a cold client can re-render them.
+  item id, which is the deduplication key for replaying missed output.
 
-The third field matters most: an unresolved application call is returned by the
-snapshot. The gateway does not have to infer a pending call from a truncated
-event stream, it reads it back. This makes `reconciled_from_snapshot` a
-straightforward mapping rather than a reconstruction, and it is why the
-recovery milestone is judged feasible.
+It does **not** provide the unresolved application call. While a call was
+parked, the spike observed `pending_elicitations: []`, `pending_inputs: []`,
+`active_response_id: null`, and no `function_call` item. `pending_elicitations`
+tracks approval prompts, not application MCP tool calls; an application call is
+an in-flight `tools/call` inside the runner and never becomes a committed item.
+
+An earlier revision of this plan claimed the opposite. It was wrong, and the
+spike exists to catch exactly that class of error.
+
+The consequence is not fatal, but it is load-bearing: **the gateway's own
+persist-before-publication record is the only source of truth for unresolved
+calls.** Omnigent cannot corroborate it. `reconciled_from_snapshot` therefore
+recovers _missed output items and liveness_, never the pending call itself, and
+the durable ledger must be treated as authoritative rather than as a cache to
+be validated against the provider.
 
 #### The limit of recovery, stated plainly
 
@@ -560,6 +570,43 @@ Prove, against real Omnigent and the deterministic ACP agent:
 Stop condition: if 1, 2, or 5 cannot be demonstrated, stop and evaluate the
 Codex app-server fallback before writing the engine. Do not distort the public
 profile around an Omnigent limitation.
+
+#### Spike results, run 2026-08-27 against Omnigent 0.5.1
+
+Implemented as `Omnigent ownership spike (Milestone 0.5)` in
+`packages/gateway/test/omnigent-real.integration.test.ts`. It drives Omnigent
+directly rather than through the gateway, because today's gateway still aborts
+the upstream stream on client close — the exact coupling the new backend
+removes. Passing.
+
+Demonstrated:
+
+1. **The run survives a deliberate mid-run stream detach.** After abandoning the
+   SSE reader while a call was parked and waiting 20 s, the session still
+   reported `status: running` and `runner_online: true`.
+2. **Two sequential application calls complete on one retained run**, with
+   distinct provider call IDs, followed by the run's own completion.
+3. **A private call ID is not bound to the connection that delivered it.** Each
+   output was submitted on a different HTTP connection from the one that
+   observed its call, and each was accepted. This is the property a restarted
+   gateway needs in order to redrive a persisted output.
+4. **A repeated output for an already-resolved call is accepted as a no-op**
+   (`202`) and does not double-apply.
+
+Not demonstrated, and still open:
+
+- explicit cancellation reaching the run (item 3 above);
+- gateway process kill with reconciliation (item 5); and
+- Omnigent process kill yielding a deterministic `interrupted` (item 6).
+
+The decisive negative finding — that the snapshot does not report the parked
+call — is recorded under
+[What the snapshot does and does not provide](#what-the-snapshot-does-and-does-not-provide)
+and is asserted by the spike so that a future Omnigent change fails the test.
+
+Verdict: **go.** The three properties the architecture actually depends on —
+retained run across a closed public segment, two sequential calls, and
+connection-independent call IDs — all hold.
 
 ### Milestone 1: executable profile contract
 
