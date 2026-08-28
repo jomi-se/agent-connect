@@ -503,6 +503,22 @@ Therefore:
 `interrupted` is a first-class terminal state of the version 0 profile, not an
 edge case. Milestone 5 must not promise recovery it cannot deliver.
 
+Say the resulting contract exactly, because "recovery" overstates it. After a
+gateway restart the gateway **reconstructs its own record** of a chain and
+**detects** whether the chain can go on. It does not reattach to a run it no
+longer holds: nothing in version 0 re-establishes an event stream over a
+pre-restart Omnigent run, so a chain whose parked call outlived the gateway
+process resolves `interrupted`, and the durability tests assert exactly that.
+What persistence buys is that the chain's outcome is _known_ and its unresolved
+call is _not silently replayed_ — not that the conversation continues. The four
+recovery outcomes are answers about state, not four ways of resuming.
+
+A chain is only ever counted as live if its harness run answers `isAlive()`.
+A non-terminal chain whose run did not survive is retired to `interrupted` at
+the moment anything asks — a new response, or the capability refresh that would
+repair the session. Leaving it standing would block both, permanently, since
+nothing else would ever look at it again.
+
 The gateway's generic provider-session repair (`ensureHealthy` in
 `packages/gateway/src/gateway.ts`) currently mints a replacement provider
 session in place. That is acceptable for today's stateless task route and
@@ -529,6 +545,28 @@ race. Version 0 fixes precedence:
   is documented to take effect at the next authorization boundary — version 0
   chooses one and tests it; and
 - exactly one durable public terminal status is committed per chain.
+
+Two admission rules follow from the same boundary, and both are enforced in
+`ResponseEngine`:
+
+- **One live chain per application session.** The session's provider session is
+  a single harness conversation; a second initial response would interleave two
+  conversations on it and hand the application call IDs from both. A second
+  initial response while a chain is live is `response_busy`.
+- **One operation at a time on a chain**, claimed in the same synchronous step
+  as the check that guards it. A claim taken after the intervening `await`s
+  would let two continuations pass together and deliver two outputs for one
+  parked call.
+
+Abandonment is decided by chain state, never by who is listening. A chain
+parked on a call keeps running whether or not a browser holds a request open,
+which is the entire point of separating run ownership from the HTTP request.
+What _is_ bounded is delivery: a call is offered to the application only while
+its chain is `running` or `waiting_for_output`. Once the chain is cancelling,
+cancelled or interrupted, the parked call stays in the ledger as an unresolved
+record but stops being redelivered, because its result could never be taken.
+An application that has already started the side effect may still finish it;
+the gateway's guarantee is that it will not _ask_ for one it cannot use.
 
 The file-backed store is defined as single-process, atomic, and fsync-backed.
 The existing auth store's temporary-file-plus-rename is not sufficient on its
@@ -722,8 +760,30 @@ checkpoint's own run through a real browser is Milestone 4.
 
 ### Milestone 4: real browser-to-Codex composition
 
-**Not started.** It consumes the operator's model allowance and needs a real
+**Run 2026-08-28 and passed, with one defect found and fixed; rerun before the
+default switch.** It consumes the operator's model allowance and needs a real
 browser, so it is a deliberate human-run gate rather than autonomous work.
+
+The run drove the Firebase canvas against the private Tailscale Serve profile
+and the operator's real Codex login. Codex called three application functions
+in sequence — `get_current_app_state`, `update_project_tasks`,
+`move_project_tasks` — each answered by the browser as a
+`function_call_output` continuation, ending in final Codex text and a visibly
+mutated board. The four `POST /v1/responses` requests carry the expected
+shapes: the first with the ten-function snapshot and no `previous_response_id`,
+the three continuations with `previous_response_id` and no tools. No
+Omnigent-shaped value reached the page. Evidence is kept out of the repository
+under `.agent-connect/evidence/`.
+
+The defect: `?protocol=open-responses` did not survive a **first-time**
+authorization. The gateway returns the browser to a callback URL it composes
+itself, carrying `code` and `state` and nothing of the application's, and the
+canvas then tidied the address bar down to `location.pathname`. A visitor who
+had never authorized therefore reconnected on the default wire, and the run
+only reached the Responses path because the grant already existed. The canvas
+now remembers the requested wire for the duration of the redirect and restores
+it on the callback only. Step 2 of this milestone has to be re-run from a
+cleared `sessionStorage` to close it.
 
 Run the complete private deployment flow before investing in the durability
 layer:
@@ -888,8 +948,9 @@ is one final composition check, not the routine test loop.
 
 In rough dependency order:
 
-1. **Milestone 4**, the real browser-to-Codex composition. Human-run; it spends
-   the operator's model allowance.
+1. **Milestone 4, step 2 only**: re-run the authorization ceremony from a
+   cleared `sessionStorage` and confirm a first-time visitor stays on the
+   Responses wire. The rest of the milestone passed on 2026-08-28.
 2. **Milestone 5, step 6**: crash-point tests that kill a real gateway process
    at each commit boundary, rather than restarting an engine in-process.
 3. **The last open spike scenario**: deterministic `interrupted` on real
@@ -897,6 +958,13 @@ In rough dependency order:
    not.
 4. **Milestone 5, step 7 and Milestone 6**: the default switch, the upstream
    compliance suite, and deleting the superseded task routes.
+5. **Two boundaries that are still coarser than they should be**, neither
+   blocking: a harness protocol failure and an unreachable harness both surface
+   as `backend_unavailable`, which tells a client to retry but not what to fix;
+   and function arguments produced by the model are carried to the application
+   as the opaque JSON string the standard defines, so a malformed argument
+   string is the application's rejection to make, not the gateway's. Both are
+   deliberate for version 0 and should be revisited with the error taxonomy.
 
 ## Stop conditions
 

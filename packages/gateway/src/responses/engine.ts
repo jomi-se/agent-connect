@@ -110,6 +110,7 @@ export class ResponseEngine {
     session: EngineSession,
     prompt: string,
   ): Promise<AsyncGenerator<ResponseStreamEvent>> {
+    await this.requireNoLiveChain(session.sessionId);
     const timestamp = this.seconds();
     const chain: ChainRecord = {
       chainId: `chain_${this.createId()}`,
@@ -170,43 +171,18 @@ export class ResponseEngine {
       session,
       previousResponseId,
     );
-    const call = await this.store.getCall(callId);
-    if (
-      !call ||
-      call.chainId !== chain.chainId ||
-      call.result === "provider_observed"
-    ) {
-      throw new ResponseApiError(
-        "function_call_not_found",
-        "call_id does not match the unresolved function call on this chain",
-        "input",
-      );
-    }
-    const fingerprint = fingerprintOf(output);
-    if (
-      call.result !== "none" &&
-      call.outputFingerprint !== null &&
-      call.outputFingerprint !== fingerprint
-    ) {
-      throw new ResponseApiError(
-        "function_output_conflict",
-        "a different output has already been recorded for this call",
-        "input",
-      );
-    }
-
-    state.busy = true;
     try {
-      await this.deliverOutput(state, call, output, fingerprint);
+      const call = await this.resolvableCall(chain, callId, output);
+      await this.deliverOutput(state, call, output, fingerprintOf(output));
+      await this.store.putChain({
+        ...chain,
+        status: "running",
+        updatedAt: this.seconds(),
+      });
     } catch (cause) {
       state.busy = false;
       throw cause;
     }
-    await this.store.putChain({
-      ...chain,
-      status: "running",
-      updatedAt: this.seconds(),
-    });
     return this.segment(chain.chainId, state, {
       previousResponseId,
       callId,
@@ -267,7 +243,47 @@ export class ResponseEngine {
         "another operation is already active on this response chain",
       );
     }
+    // Claimed here, in the same synchronous step as the check. Every caller
+    // awaits before it reaches the run, and a claim taken after those awaits
+    // would let two continuations pass the guard together and deliver two
+    // outputs for one parked call. The caller releases it if it then throws.
+    state.busy = true;
     return { chain, state };
+  }
+
+  /**
+   * The unresolved call a continuation names, proven to belong to this chain
+   * and to be answerable with this output.
+   */
+  private async resolvableCall(
+    chain: ChainRecord,
+    callId: string,
+    output: string,
+  ): Promise<CallRecord> {
+    const call = await this.store.getCall(callId);
+    if (
+      !call ||
+      call.chainId !== chain.chainId ||
+      call.result === "provider_observed"
+    ) {
+      throw new ResponseApiError(
+        "function_call_not_found",
+        "call_id does not match the unresolved function call on this chain",
+        "input",
+      );
+    }
+    if (
+      call.result !== "none" &&
+      call.outputFingerprint !== null &&
+      call.outputFingerprint !== fingerprintOf(output)
+    ) {
+      throw new ResponseApiError(
+        "function_output_conflict",
+        "a different output has already been recorded for this call",
+        "input",
+      );
+    }
+    return call;
   }
 
   /**
@@ -461,6 +477,13 @@ export class ResponseEngine {
   ): Promise<readonly PendingCallView[]> {
     this.requireGrant(session.authorizationGrantId);
     const { chain } = await this.requireOwnedResponse(session, responseId);
+    if (chain.status !== "running" && chain.status !== "waiting_for_output") {
+      // A cancelled, cancelling or interrupted chain cannot accept an output,
+      // so redelivering its parked call would only invite the application to
+      // run a side effect whose result the chain can never take. The record
+      // stays unresolved for the ledger; it just stops being deliverable.
+      return [];
+    }
     const calls = await this.store.unresolvedCalls(chain.chainId);
     return calls
       .filter((call) => call.publication === "published")
@@ -530,11 +553,42 @@ export class ResponseEngine {
    * old provider session, so a replacement would silently break it.
    */
   async hasLiveChain(appSessionId: string): Promise<boolean> {
-    const chains = await this.store.listChains();
-    return chains.some(
-      (chain) =>
-        chain.appSessionId === appSessionId && chain.status !== "terminal",
-    );
+    return (await this.liveChains(appSessionId)).length > 0;
+  }
+
+  /**
+   * The session's non-terminal chains whose harness run can still be reached.
+   * A chain whose run did not survive is retired to terminal here rather than
+   * counted: it can never continue, and leaving it standing would block both
+   * the next response and the capability refresh that would repair the
+   * session — permanently, since nothing else would ever look at it again.
+   */
+  private async liveChains(
+    appSessionId: string,
+  ): Promise<readonly ChainRecord[]> {
+    const live: ChainRecord[] = [];
+    for (const chain of await this.store.listChains()) {
+      if (chain.appSessionId !== appSessionId) continue;
+      if (chain.status === "terminal") continue;
+      if (this.liveRun(chain.chainId)) live.push(chain);
+      else await this.markInterrupted(chain);
+    }
+    return live;
+  }
+
+  /**
+   * One application session drives one chain at a time. Its provider session
+   * is a single harness conversation, so a second initial response would
+   * interleave two conversations on it and hand the application call IDs from
+   * both.
+   */
+  private async requireNoLiveChain(appSessionId: string): Promise<void> {
+    if ((await this.liveChains(appSessionId)).length > 0) {
+      throw new ResponseApiError(
+        "response_busy",
+        "this application session already has an active response chain",
+      );
+    }
   }
 
   /** Releases live runs; used on shutdown and by tests. */
