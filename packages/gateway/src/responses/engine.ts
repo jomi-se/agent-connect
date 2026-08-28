@@ -6,13 +6,13 @@ import { ResponseApiError, type ResponseErrorCode } from "./errors.js";
 import {
   buildResponseResource,
   projectTools,
-  SequenceCounter,
-  type ResponseFunctionTool,
+  type ResponseError,
   type ResponseOutputItem,
   type ResponseResource,
   type ResponseStatus,
   type ResponseStreamEvent,
 } from "./protocol.js";
+import { SegmentWriter } from "./segment-writer.js";
 import type {
   CallRecord,
   ChainRecord,
@@ -166,58 +166,10 @@ export class ResponseEngine {
     callId: string,
     output: string,
   ): Promise<AsyncGenerator<ResponseStreamEvent>> {
-    const previous = await this.store.getResponse(previousResponseId);
-    if (!previous) {
-      throw new ResponseApiError(
-        "previous_response_not_found",
-        "previous_response_id is unknown or no longer continuable",
-        "previous_response_id",
-      );
-    }
-    const chain = await this.store.getChain(previous.chainId);
-    if (!chain || !this.chainBelongsTo(chain, session)) {
-      throw new ResponseApiError(
-        "previous_response_not_found",
-        "previous_response_id is unknown or no longer continuable",
-        "previous_response_id",
-      );
-    }
-    if (chain.status === "terminal") {
-      // A terminal chain reports why it is terminal: `response_cancelled` and
-      // `backend_unavailable` (an interrupted chain) are materially different
-      // answers for a client deciding whether to retry.
-      throw new ResponseApiError(
-        terminalErrorCode(chain),
-        chain.terminalError?.message ??
-          "the response chain has already reached a terminal state",
-        "previous_response_id",
-      );
-    }
-    if (chain.latestResponseId !== previousResponseId) {
-      throw new ResponseApiError(
-        "previous_response_not_found",
-        "only the most recent response in a chain can be continued",
-        "previous_response_id",
-      );
-    }
-
-    const state = this.active.get(chain.chainId);
-    if (!state) {
-      // The live run did not survive. Persist-before-publication tells us the
-      // call existed; nothing restores the parked awaiter inside the harness.
-      await this.markInterrupted(chain);
-      throw new ResponseApiError(
-        "backend_unavailable",
-        "the harness run backing this chain is no longer available; the chain is interrupted",
-      );
-    }
-    if (state.busy) {
-      throw new ResponseApiError(
-        "response_busy",
-        "another operation is already active on this response chain",
-      );
-    }
-
+    const { chain, state } = await this.resumableChain(
+      session,
+      previousResponseId,
+    );
     const call = await this.store.getCall(callId);
     if (
       !call ||
@@ -245,28 +197,10 @@ export class ResponseEngine {
 
     state.busy = true;
     try {
-      // Persist the canonical output before the provider is contacted, so a
-      // crash between the two is recoverable as a same-output redrive.
-      const recorded: CallRecord = {
-        ...call,
-        result: "output_recorded",
-        output,
-        outputFingerprint: fingerprint,
-        updatedAt: this.seconds(),
-      };
-      await this.store.putCall(recorded);
-      await state.run.submitOutput(call.providerToken, output);
-      await this.store.putCall({
-        ...recorded,
-        result: "delivery_attempted",
-        updatedAt: this.seconds(),
-      });
+      await this.deliverOutput(state, call, output, fingerprint);
     } catch (cause) {
       state.busy = false;
-      throw new ResponseApiError(
-        "backend_unavailable",
-        `the function output could not be delivered: ${describe(cause)}`,
-      );
+      throw cause;
     }
     await this.store.putChain({
       ...chain,
@@ -280,6 +214,96 @@ export class ResponseEngine {
   }
 
   /**
+   * Resolves the chain a continuation targets and proves it is still
+   * continuable: owned by this session, not terminal, at its head, live, and
+   * not already executing another operation.
+   */
+  private async resumableChain(
+    session: EngineSession,
+    previousResponseId: string,
+  ): Promise<{ chain: ChainRecord; state: ActiveChain }> {
+    const previous = await this.store.getResponse(previousResponseId);
+    const chain = previous
+      ? await this.store.getChain(previous.chainId)
+      : undefined;
+    if (!previous || !chain || !this.chainBelongsTo(chain, session)) {
+      throw new ResponseApiError(
+        "previous_response_not_found",
+        "previous_response_id is unknown or no longer continuable",
+        "previous_response_id",
+      );
+    }
+    if (chain.status === "terminal") {
+      // A terminal chain reports why it is terminal: `response_cancelled` and
+      // `backend_unavailable` (an interrupted chain) are materially different
+      // answers for a client deciding whether to retry.
+      throw new ResponseApiError(
+        terminalErrorCode(chain),
+        chain.terminalError?.message ??
+          "the response chain has already reached a terminal state",
+        "previous_response_id",
+      );
+    }
+    if (chain.latestResponseId !== previousResponseId) {
+      throw new ResponseApiError(
+        "previous_response_not_found",
+        "only the most recent response in a chain can be continued",
+        "previous_response_id",
+      );
+    }
+    const state = this.active.get(chain.chainId);
+    if (!state) {
+      // The live run did not survive. Persist-before-publication tells us the
+      // call existed; nothing restores the parked awaiter inside the harness.
+      await this.markInterrupted(chain);
+      throw new ResponseApiError(
+        "backend_unavailable",
+        "the harness run backing this chain is no longer available; the chain is interrupted",
+      );
+    }
+    if (state.busy) {
+      throw new ResponseApiError(
+        "response_busy",
+        "another operation is already active on this response chain",
+      );
+    }
+    return { chain, state };
+  }
+
+  /**
+   * Persists the canonical output before the provider is contacted, so a crash
+   * between the two is recoverable as a same-output redrive.
+   */
+  private async deliverOutput(
+    state: ActiveChain,
+    call: CallRecord,
+    output: string,
+    fingerprint: string,
+  ): Promise<void> {
+    const recorded: CallRecord = {
+      ...call,
+      result: "output_recorded",
+      output,
+      outputFingerprint: fingerprint,
+      updatedAt: this.seconds(),
+    };
+    await this.store.putCall(recorded);
+    try {
+      await state.run.submitOutput(call.providerToken, output);
+    } catch (cause) {
+      throw new ResponseApiError(
+        "backend_unavailable",
+        `the function output could not be delivered: ${describe(cause)}`,
+      );
+    }
+    await this.store.putCall({
+      ...recorded,
+      result: "delivery_attempted",
+      updatedAt: this.seconds(),
+    });
+  }
+
+  /**
    * Emits one public response segment. A segment ends at the first application
    * function call or at the run's own terminal event; the underlying run is
    * deliberately retained in the former case.
@@ -289,88 +313,33 @@ export class ResponseEngine {
     state: ActiveChain,
     continuation: { previousResponseId: string; callId: string } | null,
   ): AsyncGenerator<ResponseStreamEvent> {
-    const sequence = new SequenceCounter();
     const responseId = `resp_${this.createId()}`;
     const createdAt = this.seconds();
     const chain = await this.requireChain(chainId);
-    const tools = projectTools(chain.tools);
-    const output: ResponseOutputItem[] = [];
-    let outputIndex = 0;
-    let text: { readonly id: string; value: string } | undefined;
+    const writer = new SegmentWriter({
+      responseId,
+      createdAt,
+      previousResponseId: continuation?.previousResponseId ?? null,
+      tools: projectTools(chain.tools),
+      now: this.now,
+      createId: this.createId,
+    });
     let resolvedCall = continuation === null;
 
-    const resource = (
+    const persist = (
       status: ResponseStatus,
-      error: ResponseResource["error"] = null,
-    ): ResponseResource =>
-      buildResponseResource({
-        id: responseId,
-        createdAt,
-        completedAt: status === "in_progress" ? null : this.seconds(),
-        status,
-        previousResponseId: continuation?.previousResponseId ?? null,
-        output: [...output],
-        error,
-        tools,
-      });
-
-    const persist = async (
-      status: ResponseStatus,
-      error: ResponseRecord["error"] = null,
-    ): Promise<void> => {
-      const record: ResponseRecord = {
+      error: ResponseError | null = null,
+    ): Promise<void> =>
+      this.store.putResponse({
         responseId,
         chainId,
         previousResponseId: continuation?.previousResponseId ?? null,
         status,
         createdAt,
         completedAt: status === "in_progress" ? null : this.seconds(),
-        output: [...output],
+        output: [...writer.output],
         error,
-      };
-      await this.store.putResponse(record);
-    };
-
-    const closeText = function* (): Generator<ResponseStreamEvent> {
-      if (!text) return;
-      const part = {
-        type: "output_text" as const,
-        text: text.value,
-        annotations: [] as readonly never[],
-      };
-      const item: ResponseOutputItem = {
-        type: "message",
-        id: text.id,
-        status: "completed",
-        role: "assistant",
-        content: [part],
-      };
-      yield {
-        type: "response.output_text.done",
-        sequence_number: sequence.take(),
-        item_id: text.id,
-        output_index: outputIndex,
-        content_index: 0,
-        text: text.value,
-      };
-      yield {
-        type: "response.content_part.done",
-        sequence_number: sequence.take(),
-        item_id: text.id,
-        output_index: outputIndex,
-        content_index: 0,
-        part,
-      };
-      output.push(item);
-      yield {
-        type: "response.output_item.done",
-        sequence_number: sequence.take(),
-        output_index: outputIndex,
-        item,
-      };
-      outputIndex += 1;
-      text = undefined;
-    };
+      });
 
     await persist("in_progress");
     await this.store.putChain({
@@ -379,166 +348,48 @@ export class ResponseEngine {
       latestResponseId: responseId,
       updatedAt: this.seconds(),
     });
-    yield {
-      type: "response.created",
-      sequence_number: sequence.take(),
-      response: resource("in_progress"),
-    };
-    yield {
-      type: "response.in_progress",
-      sequence_number: sequence.take(),
-      response: resource("in_progress"),
-    };
+    yield* writer.begin();
 
     try {
       for (;;) {
         const next = await state.events.next();
         if (!resolvedCall && continuation) {
-          // The provider produced something after the output was posted, which
-          // is the only evidence available that the result took effect. A 202
-          // acknowledgement alone is not.
           resolvedCall = true;
-          const call = await this.store.getCall(continuation.callId);
-          if (call) {
-            await this.store.putCall({
-              ...call,
-              result: "provider_observed",
-              updatedAt: this.seconds(),
-            });
-          }
+          await this.observeCallResult(continuation.callId);
         }
-        if (next.done) {
-          yield* closeText();
+        if (next.done || next.value.type === "completed") {
+          yield* writer.closeText();
           await this.finishChain(chainId, "terminal", null);
           await persist("completed");
-          yield {
-            type: "response.completed",
-            sequence_number: sequence.take(),
-            response: resource("completed"),
-          };
+          yield* writer.completed();
           return;
         }
         const event = next.value;
         if (event.type === "text.delta") {
-          if (!text) {
-            text = { id: `msg_${this.createId()}`, value: "" };
-            yield {
-              type: "response.output_item.added",
-              sequence_number: sequence.take(),
-              output_index: outputIndex,
-              item: {
-                type: "message",
-                id: text.id,
-                status: "in_progress",
-                role: "assistant",
-                content: [],
-              },
-            };
-            yield {
-              type: "response.content_part.added",
-              sequence_number: sequence.take(),
-              item_id: text.id,
-              output_index: outputIndex,
-              content_index: 0,
-              part: { type: "output_text", text: "", annotations: [] },
-            };
-          }
-          text.value += event.delta;
-          yield {
-            type: "response.output_text.delta",
-            sequence_number: sequence.take(),
-            item_id: text.id,
-            output_index: outputIndex,
-            content_index: 0,
-            delta: event.delta,
-          };
+          yield* writer.appendText(event.delta);
           continue;
         }
         if (event.type === "tool.call") {
-          yield* closeText();
-          const item = await this.recordCall(chainId, responseId, event, tools);
-          yield {
-            type: "response.output_item.added",
-            sequence_number: sequence.take(),
-            output_index: outputIndex,
-            item: { ...item, status: "in_progress" },
-          };
-          yield {
-            type: "response.function_call_arguments.done",
-            sequence_number: sequence.take(),
-            item_id: item.id,
-            output_index: outputIndex,
-            arguments: item.arguments,
-          };
-          output.push(item);
-          yield {
-            type: "response.output_item.done",
-            sequence_number: sequence.take(),
-            output_index: outputIndex,
-            item,
-          };
-          outputIndex += 1;
+          yield* writer.closeText();
+          const item = await this.recordCall(chainId, responseId, event, chain);
+          yield* writer.functionCall(item);
           await this.publishCall(item.call_id);
+          // The segment ends here; the harness run is deliberately retained.
           await this.finishChain(chainId, "waiting_for_output", null);
           await persist("completed");
-          yield {
-            type: "response.completed",
-            sequence_number: sequence.take(),
-            response: resource("completed"),
-          };
+          yield* writer.completed();
           return;
         }
-        if (event.type === "completed") {
-          yield* closeText();
-          await this.finishChain(chainId, "terminal", null);
-          await persist("completed");
-          yield {
-            type: "response.completed",
-            sequence_number: sequence.take(),
-            response: resource("completed"),
-          };
-          return;
-        }
-        if (event.type === "cancelled") {
-          yield* closeText();
-          const error = {
-            code: "response_cancelled",
-            message: "the response chain was cancelled",
-          };
-          await this.finishChain(chainId, "terminal", error);
-          await persist("cancelled", error);
-          // The pinned document has no `response.cancelled` event; a cancelled
-          // segment terminates as `response.incomplete` carrying the cancelled
-          // resource status.
-          yield {
-            type: "response.incomplete",
-            sequence_number: sequence.take(),
-            response: resource("cancelled", error),
-          };
-          return;
-        }
-        yield* closeText();
-        const error = {
-          code: "backend_protocol_error",
-          message: event.message,
-        };
+        yield* writer.closeText();
+        const cancelled = event.type === "cancelled";
+        const error = cancelled
+          ? CANCELLED_ERROR
+          : { code: "backend_protocol_error", message: event.message };
         await this.finishChain(chainId, "terminal", error);
-        await persist("failed", error);
-        yield {
-          type: "error",
-          sequence_number: sequence.take(),
-          error: {
-            type: "api_error",
-            code: "backend_protocol_error",
-            message: event.message,
-            param: null,
-          },
-        };
-        yield {
-          type: "response.failed",
-          sequence_number: sequence.take(),
-          response: resource("failed", error),
-        };
+        await persist(cancelled ? "cancelled" : "failed", error);
+        yield* cancelled
+          ? writer.cancelled(error)
+          : writer.failed(error, { type: "api_error", param: null });
         return;
       }
     } catch (cause) {
@@ -548,24 +399,24 @@ export class ResponseEngine {
       };
       await this.finishChain(chainId, "terminal", error);
       await persist("failed", error);
-      yield {
-        type: "error",
-        sequence_number: sequence.take(),
-        error: {
-          type: "api_error",
-          code: "backend_unavailable",
-          message: error.message,
-          param: null,
-        },
-      };
-      yield {
-        type: "response.failed",
-        sequence_number: sequence.take(),
-        response: resource("failed", error),
-      };
+      yield* writer.failed(error, { type: "api_error", param: null });
     } finally {
       state.busy = false;
     }
+  }
+
+  /**
+   * A provider event after an output was posted is the only evidence available
+   * that the result took effect. A 202 acknowledgement alone is not.
+   */
+  private async observeCallResult(callId: string): Promise<void> {
+    const call = await this.store.getCall(callId);
+    if (!call) return;
+    await this.store.putCall({
+      ...call,
+      result: "provider_observed",
+      updatedAt: this.seconds(),
+    });
   }
 
   /** Agent Connect extension: chain status plus the latest complete response. */
@@ -657,6 +508,21 @@ export class ResponseEngine {
     return this.describeChain(session, responseId);
   }
 
+  /**
+   * Best-effort cancellation requested by an HTTP client disconnect. It is not
+   * an authorization boundary: the request that opened the segment was already
+   * authorized, and the caller is the gateway itself. It never commits a
+   * terminal status; the open segment decides, so a completion that was
+   * already committed still wins.
+   */
+  async requestCancellation(responseId: string): Promise<void> {
+    const response = await this.store.getResponse(responseId);
+    if (!response) return;
+    const state = this.active.get(response.chainId);
+    if (!state || !state.busy) return;
+    await state.run.cancel().catch(() => {});
+  }
+
   /** Releases live runs; used on shutdown and by tests. */
   async closeAll(): Promise<void> {
     const runs = [...this.active.values()];
@@ -668,9 +534,9 @@ export class ResponseEngine {
     chainId: string,
     responseId: string,
     event: Extract<BackendEvent, { type: "tool.call" }>,
-    tools: readonly ResponseFunctionTool[],
+    chain: ChainRecord,
   ): Promise<Extract<ResponseOutputItem, { type: "function_call" }>> {
-    if (!tools.some((tool) => tool.name === event.name)) {
+    if (!chain.tools.some((tool) => tool.name === event.name)) {
       throw new ResponseApiError(
         "backend_protocol_error",
         `the runtime requested a function outside the approved snapshot: ${event.name}`,
@@ -808,6 +674,11 @@ export class ResponseEngine {
     return Math.floor(this.now() / 1000);
   }
 }
+
+const CANCELLED_ERROR: ResponseError = {
+  code: "response_cancelled",
+  message: "the response chain was cancelled",
+};
 
 const CONTINUABLE_TERMINAL_CODES: ReadonlySet<string> = new Set([
   "response_cancelled",
