@@ -107,16 +107,32 @@ const toolList = requireElement<HTMLElement>("tool-list");
 
 const STORED_CARD = "agent-connect.runtime-card";
 
+const STORED_PROTOCOL = "agent-connect.protocol";
+
 /**
  * Opt into the Open Responses wire with `?protocol=open-responses`. It is not
  * the default: the default switch belongs after durability and the real
  * browser-to-Codex composition, per Milestone 5 of
  * docs/plan/open-responses-vertical-slice.md.
+ *
+ * The choice has to survive the authorization redirect. A first-time visitor
+ * leaves for the gateway's consent page and comes back to a callback URL the
+ * gateway composed, which carries `code` and `state` and nothing of ours, so
+ * reading only `location.search` would silently drop a fresh authorization
+ * back onto the default wire. The request is remembered for the round trip
+ * and restored only on the callback, so a later visit without the parameter
+ * still means the default.
  */
-const requestedProtocol =
-  new URLSearchParams(location.search).get("protocol") === "open-responses"
-    ? ("open-responses" as const)
-    : undefined;
+function resolveRequestedProtocol(): "open-responses" | undefined {
+  const search = new URLSearchParams(location.search);
+  const returning = search.has("code") || search.has("error");
+  const asked =
+    search.get("protocol") ??
+    (returning ? sessionStorage.getItem(STORED_PROTOCOL) : null);
+  return asked === "open-responses" ? "open-responses" : undefined;
+}
+
+const requestedProtocol = resolveRequestedProtocol();
 const STORED_GRANT = "agent-connect.grant";
 const STORED_TRANSACTION = "agent-connect.authorization-transaction";
 const tools = createDemoTools();
@@ -206,6 +222,11 @@ async function connectRuntime(): Promise<void> {
         STORED_TRANSACTION,
         serializeAuthorizationTransaction(authorization.transaction),
       );
+      if (requestedProtocol) {
+        sessionStorage.setItem(STORED_PROTOCOL, requestedProtocol);
+      } else {
+        sessionStorage.removeItem(STORED_PROTOCOL);
+      }
       status.textContent = "Opening the gateway for approval…";
       connectionState.textContent = "Approval required";
       updateActivity(
@@ -336,7 +357,7 @@ async function resumeAuthorization(): Promise<void> {
     });
     sessionStorage.setItem(STORED_GRANT, grant.accessToken);
     sessionStorage.removeItem(STORED_TRANSACTION);
-    history.replaceState({}, "", callback.pathname);
+    history.replaceState({}, "", connectedUri());
     await establishConnection(runtimeCard, grant.accessToken);
   } catch (error) {
     handleConnectionError(error);
@@ -378,6 +399,7 @@ function handleConnectionError(error: unknown): void {
 function clearLocalAuthorization(): void {
   sessionStorage.removeItem(STORED_GRANT);
   sessionStorage.removeItem(STORED_TRANSACTION);
+  sessionStorage.removeItem(STORED_PROTOCOL);
   connection = undefined;
   syncAuthorizationControls();
 }
@@ -1411,6 +1433,17 @@ function moveScenarioFocus(
 
 function callbackUri(): string {
   return `${location.origin}${location.pathname}`;
+}
+
+/**
+ * Where to leave the address bar once the authorization code is spent: the
+ * callback path, minus `code` and `state`, but still naming the wire in use so
+ * a reload or a shared link stays on it.
+ */
+function connectedUri(): string {
+  return requestedProtocol
+    ? `${location.pathname}?protocol=${requestedProtocol}`
+    : location.pathname;
 }
 
 function updateRuntimeSummary(): void {
