@@ -18,7 +18,11 @@ on-disk chain file directly and asserts the persisted publication state,
 provider token, grant id, and origin, then reconstructs completed and parked
 chains with a second engine that shares no process memory;
 `responses-route.test.ts` restarts a real gateway over the same state
-directories and retrieves both outcomes over HTTP.
+directories and retrieves both outcomes over HTTP;
+`responses-process-crash.integration.test.ts` spawns and SIGKILLs an actual
+gateway child at all four commit boundaries, restarts over the same files, and
+asserts the durable call state, provider-side observation ledger, terminal
+reconstruction, empty delivery set, valid JSON, and absence of temporary files.
 Fail: a call is published before it is durable, an output reaches the provider
 before it is persisted, a restart loses an unresolved call, or a completed
 response is unretrievable after an outage.
@@ -28,5 +32,5 @@ the gateway's own ledger is the only source of truth for unresolved calls.
 
 ## Current status
 
-Passed on 2026-08-28 for gateway restart. Crash-point tests that kill a live
-gateway process at each commit boundary are not yet implemented.
+Passed on 2026-08-28 for gateway restart and four real-process crash points.
+Run the latter with `npm run test:integration:response-crash`.

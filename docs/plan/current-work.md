@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-08-27
+Updated: 2026-08-28
 
 This is the canonical unfinished-work list. It records current priorities and
 only enough completed context to explain them. Product boundaries live in the
@@ -21,28 +21,30 @@ grant, supplies an exact user-approved application-tool snapshot, streams a
 task, executes requested application functions, returns correlated results,
 and hides raw Omnigent identifiers.
 
-The public task/event protocol and browser-visible Omnigent provider are
-transitional. [ADR 0010](../decisions/0010-open-responses-gateway-pivot.md)
-proposes replacing that public wire with a bounded Open Responses profile while
-retaining Agent Connect's authorization, durability, and user-owned runtime
-behavior.
+The bounded Open Responses profile now passes its standard-client, real-Codex
+browser, gateway-process-death, and Omnigent-process-death gates. The old public
+task/event protocol and browser-visible Omnigent provider remain transitional
+until the final conformance/default/deletion gate in
+[ADR 0010](../decisions/0010-open-responses-gateway-pivot.md).
 
 The automated baseline remains:
 
 ```sh
 npm run verify:full
+npm run test:integration:response-crash
 npm run test:integration:omnigent
 ```
 
-The second command uses disposable Omnigent services and a deterministic ACP
-agent. A real Codex/browser composition remains a deliberate manual milestone
-because it consumes the operator's credentials and model allowance.
+The crash suite kills disposable gateway subprocesses. The Omnigent command
+uses isolated services and a deterministic ACP agent. A real Codex/browser
+composition remains a deliberate manual milestone because it consumes the
+operator's credentials and model allowance.
 
-## Priority 1: prove the Open Responses vertical slice
+## Priority 1: finish the Open Responses replacement
 
 Follow the
 [Open Responses vertical-slice implementation plan](open-responses-vertical-slice.md)
-to implement the smallest end-to-end slice required by ADR 0010:
+for the implemented slice and its evidence. The following now pass:
 
 1. expose the documented version 0 Open Responses HTTP/SSE profile;
 2. map `agent-connect/default` to one real Codex-backed execution;
@@ -55,13 +57,15 @@ to implement the smallest end-to-end slice required by ADR 0010:
 7. define cancellation, interruption, recovery, malformed-call, and harness
    failure behavior; and
 8. prove the protocol shape with an ordinary Open Responses client; and
-9. prove the full browser-to-gateway-to-Omnigent-to-real-Codex flow before
-   investing in the durability layer.
+9. prove the full browser-to-gateway-to-Omnigent-to-real-Codex flow from fresh
+   authorization; and
+10. kill real gateway and Omnigent processes at the declared durability
+    boundaries and recover deterministically.
 
-Keep the passing Omnigent path until this evidence exists. After the replacement
-meets the ADR gates, remove the custom browser task/event protocol and
-browser-visible Omnigent path rather than maintaining two permanent public
-protocols.
+What remains is the applicable upstream compliance run, making Responses the
+browser SDK default, repeating the real composition check, accepting ADR 0010,
+and deleting the custom browser task/event protocol and browser-visible
+Omnigent path rather than maintaining two permanent public protocols.
 
 WebMCP is not part of this milestone. Explicit browser tool registration is the
 version 0 source of the fixed approved snapshot.
@@ -82,18 +86,14 @@ The deployment must make credential injection, update, restart, gateway-card
 export, health, and teardown explicit. Packaging convenience is not a claim of
 process isolation, credential confinement, or multi-tenancy.
 
-## Priority 3: interruption durability and operator basics
+## Priority 3: remaining operator basics
 
-These are the most important reliability gaps after the protocol slice:
+Pending-call persistence, stable call IDs, same-output retry, capability
+refresh, cancellation, restart reconstruction, and deterministic process-loss
+outcomes are implemented for the bounded slice. The remaining operator work is:
 
-1. recover unresolved application calls independently from conversation
-   resumption;
-2. make duplicate function-result submission idempotent;
-3. persist logical-run, response-chain, and provider-session mappings needed
-   across gateway restart;
-4. propagate revocation and cancellation to downstream work;
-5. expire successful workspaces and replaced provider sessions; and
-6. add small operator commands for runtime-card re-export, device management,
+1. expire successful workspaces and replaced provider sessions; and
+2. add small operator commands for runtime-card re-export, device management,
    gateway-key rotation, recovery, and audit history.
 
 Use stable action IDs and require idempotent application operations or

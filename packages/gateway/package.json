@@ -10,6 +10,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "test": "vitest run",
+    "test:integration:response-crash": "npm run build && RUN_RESPONSE_CRASH_INTEGRATION=1 vitest run responses-process-crash.integration.test.ts",
     "test:integration:omnigent": "RUN_OMNIGENT_INTEGRATION=1 vitest run omnigent-real.integration.test.ts",
     "typecheck": "tsc --noEmit"
   },

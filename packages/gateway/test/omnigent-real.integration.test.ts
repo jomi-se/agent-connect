@@ -370,6 +370,7 @@ interface HarnessContext {
   readonly processGroupIds: readonly number[];
   readonly activePids: () => number[];
   readonly serviceOutput: () => string;
+  readonly stopOmnigentServer: () => Promise<void>;
   readonly operatorCanaryBefore: Record<string, string>;
 }
 
@@ -468,6 +469,7 @@ async function withIsolatedOmnigent<T>(
   const serverPort = await freePort();
   const serverUrl = `http://127.0.0.1:${serverPort}`;
   const processes: LoggedProcess[] = [];
+  let serverProcess: LoggedProcess | undefined;
   let value!: T;
   let operationError: unknown;
   let cleanupError: unknown;
@@ -487,6 +489,7 @@ async function withIsolatedOmnigent<T>(
       ],
       env,
     );
+    serverProcess = server;
     processes.push(server);
     await waitFor(
       "Omnigent server",
@@ -533,6 +536,10 @@ async function withIsolatedOmnigent<T>(
       ),
       activePids: () => findProcessesReferencing(root),
       serviceOutput: () => processes.map((item) => item.output()).join("\n"),
+      stopOmnigentServer: async () => {
+        if (!serverProcess) throw new Error("Omnigent server is not running");
+        await stopProcess(serverProcess.child);
+      },
       operatorCanaryBefore,
     });
   } catch (error) {
@@ -908,6 +915,150 @@ integration("Open Responses through the gateway", () => {
     expect(observed.providerStatus).not.toBe("running");
     expect(observed.continueStatus).toBe(409);
     expect(observed.continueCode).toBe("response_cancelled");
+  }, 240_000);
+
+  it("reports interrupted after the real Omnigent process dies", async () => {
+    const result = await withIsolatedOmnigent(
+      async (harness) => {
+        assertIsolatedEnvironment(harness);
+        const omnigent = new OmnigentRuntime({
+          baseUrl: harness.serverUrl,
+          workspace: harness.workspace,
+          launchTimeoutMs: 30_000,
+          pollIntervalMs: 100,
+        });
+        const runtime = {
+          createSession: (request: RuntimeSessionRequest) =>
+            omnigent.createSession(request),
+          isHealthy: (id: string) => omnigent.isHealthy(id),
+        };
+        const gateway = createGateway({
+          allowedOrigins: new Set(["https://integration.example"]),
+          allowedTailscaleUsers: new Set(["owner@example.com"]),
+          omnigentBaseUrl: harness.serverUrl,
+          runtime,
+          authStatePath: join(harness.root, "gateway-death-auth.json"),
+          responseStatePath: join(harness.root, "gateway-death-responses"),
+          publicEndpoint: "https://integration-runtime.example",
+          enrollmentPassphrase: "integration enrollment phrase",
+        });
+        liveGateways.push(gateway);
+        await new Promise<void>((resolve) =>
+          gateway.listen(0, "127.0.0.1", resolve),
+        );
+        const gatewayUrl = `http://127.0.0.1:${(gateway.address() as AddressInfo).port}`;
+        const capability = await authorizeApplication(
+          gatewayUrl,
+          responseTools,
+        );
+        const headers = {
+          Origin: "https://integration.example",
+          "Tailscale-User-Login": "owner@example.com",
+          Authorization: `Bearer ${capability}`,
+        };
+
+        const created = await fetch(`${gatewayUrl}/v1/responses`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "agent-connect/default",
+            stream: true,
+            input: "Run the two-step spike plan",
+            tools: responseTools.map((item) => ({
+              type: "function",
+              name: item.name,
+              description: item.description,
+              parameters: item.inputSchema,
+            })),
+          }),
+        });
+        expect(created.status).toBe(200);
+        const events: Record<string, unknown>[] = [];
+        for await (const event of parseSse(created.body!)) {
+          events.push(event);
+          if (event["type"] === "response.completed") break;
+        }
+        const parkedCall = functionCallOf(events);
+        const responseId = responseIdOf(events);
+
+        // Kill the real isolated Omnigent server process while its harness run
+        // is parked on the application call. The gateway itself stays alive.
+        await harness.stopOmnigentServer();
+
+        let recovery = "";
+        let chainStatus = "";
+        const deadline = Date.now() + 30_000;
+        while (Date.now() < deadline) {
+          const response = await fetch(
+            `${gatewayUrl}/v1/agent-connect/responses/${responseId}`,
+            { headers },
+          );
+          expect(response.status).toBe(200);
+          const body = (await response.json()) as {
+            recovery: string;
+            chain_status: string;
+          };
+          recovery = body.recovery;
+          chainStatus = body.chain_status;
+          if (recovery === "interrupted") break;
+          await delay(100);
+        }
+
+        const pending = await fetch(
+          `${gatewayUrl}/v1/agent-connect/responses/${responseId}/pending-function-calls`,
+          { headers },
+        );
+        const pendingBody = (await pending.json()) as {
+          pending_function_calls: unknown[];
+        };
+        const continued = await fetch(`${gatewayUrl}/v1/responses`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "agent-connect/default",
+            previous_response_id: responseId,
+            input: [
+              {
+                type: "function_call_output",
+                call_id: parkedCall["call_id"],
+                output: "{}",
+              },
+            ],
+          }),
+        });
+        const continuedBody = (await continued.json()) as {
+          error: { code: string };
+        };
+
+        return {
+          recovery,
+          chainStatus,
+          pendingStatus: pending.status,
+          pendingCount: pendingBody.pending_function_calls.length,
+          continueStatus: continued.status,
+          continueCode: continuedBody.error.code,
+        };
+      },
+      {
+        extraEnv: {
+          AGENT_CONNECT_DETERMINISTIC_PLAN: JSON.stringify([
+            { name: "get_test_nonce", arguments: {} },
+            { name: "confirm_test_nonce", arguments: {} },
+          ]),
+        },
+      },
+    );
+
+    const observed = result.value;
+    process.stdout.write(
+      `\n[responses-omnigent-death] ${JSON.stringify(observed, null, 2)}\n\n`,
+    );
+    expect(observed.recovery).toBe("interrupted");
+    expect(observed.chainStatus).toBe("terminal");
+    expect(observed.pendingStatus).toBe(200);
+    expect(observed.pendingCount).toBe(0);
+    expect(observed.continueStatus).toBe(502);
+    expect(observed.continueCode).toBe("backend_unavailable");
   }, 240_000);
 });
 

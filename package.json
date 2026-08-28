@@ -26,6 +26,7 @@
     "test:package:web": "node scripts/smoke-web-sdk-package.mjs",
     "test:codex-acp-policy": "node scripts/test-codex-acp-tool-policy.mjs",
     "test:integration:omnigent": "npm run test:integration:omnigent --workspace @agent-connect/gateway",
+    "test:integration:response-crash": "npm run test:integration:response-crash --workspace @agent-connect/gateway",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "verify": "npm run format:check && npm run typecheck && npm test && npm run test:codex-acp-policy && npm run build",
     "verify:full": "npm run verify && npm run test:package:web && npm run test:e2e --workspace @agent-connect/firebase-canvas"

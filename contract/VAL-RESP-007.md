@@ -24,12 +24,11 @@ Evidence, real harness: `Open Responses through the gateway` in
 `packages/gateway/test/omnigent-real.integration.test.ts` cancels a chain parked
 on an unanswered call and observes the Omnigent session move from `running` to
 `idle`, which is evidence the cancellation reached the run rather than only the
-gateway's record of it.
-Scope: killing the Omnigent process and observing `interrupted` end to end is
-not yet proven. The engine path for it is, and Omnigent documents that parked
-awaiters die with the process.
+gateway's record of it. The same suite kills the real isolated Omnigent server
+while a chain is parked and observes `interrupted`, no pending delivery, and a
+`backend_unavailable` continuation rather than a hang.
 
 ## Current status
 
-Passed on 2026-08-28, including explicit cancellation against real Omnigent
-0.5.1.
+Passed on 2026-08-28, including explicit cancellation and real Omnigent
+server-process death against version 0.5.1.
