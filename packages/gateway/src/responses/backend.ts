@@ -55,11 +55,12 @@ export interface ResponseBackend {
 }
 
 /**
- * An unbounded queue that lets a backend pump its transport independently of
+ * A bounded queue that lets a backend pump its transport independently of
  * whoever is consuming events. This is the mechanic that decouples run
- * ownership from one browser request.
+ * ownership from one browser request. Overflow fails the run explicitly.
  */
 export class BackendEventQueue {
+  private readonly maximumBufferedEvents: number;
   private readonly buffered: BackendEvent[] = [];
   private readonly waiting: ((result: IteratorResult<BackendEvent>) => void)[] =
     [];
@@ -68,12 +69,20 @@ export class BackendEventQueue {
 
   private readonly rejecting: ((reason: Error) => void)[] = [];
 
+  constructor(maximumBufferedEvents = 1024) {
+    this.maximumBufferedEvents = maximumBufferedEvents;
+  }
+
   push(event: BackendEvent): void {
     if (this.ended) return;
     const waiter = this.waiting.shift();
     this.rejecting.shift();
     if (waiter) {
       waiter({ value: event, done: false });
+      return;
+    }
+    if (this.buffered.length >= this.maximumBufferedEvents) {
+      this.fail(new Error("backend event buffer capacity exceeded"));
       return;
     }
     this.buffered.push(event);

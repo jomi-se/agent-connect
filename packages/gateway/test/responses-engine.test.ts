@@ -554,7 +554,17 @@ describe("response engine protocol fit", () => {
       await engine.createResponse(session, initial),
     );
     expect(types.at(-1)).toBe("response.failed");
-    expect(final?.error?.code).toBe("backend_unavailable");
+    expect(final?.error?.code).toBe("backend_protocol_error");
+  });
+
+  it("fails rather than completing when the backend stream ends without a terminal event", async () => {
+    const { engine, backend } = harness([[text("truncated")]]);
+    const stream = await engine.createResponse(session, initial);
+    backend.runs[0]?.endTransport();
+    const { final } = await drain(stream);
+    expect(final?.status).toBe("failed");
+    expect(final?.error?.code).toBe("backend_protocol_error");
+    expect(textOf(final)).toBe("truncated");
   });
 
   it("reports a backend that cannot be started as 502 before any event", async () => {
@@ -627,6 +637,25 @@ describe("Agent Connect control extensions", () => {
         ),
       ),
     ).toBe("response_cancelled");
+  });
+
+  it("cancels a busy segment without waiting for a backend cancellation event", async () => {
+    const { engine, backend } = harness([[]]);
+    const stream = await engine.createResponse(session, initial);
+    const created = await stream.next();
+    expect(created.done).toBe(false);
+    const responseId =
+      created.value && "response" in created.value
+        ? created.value.response.id
+        : "";
+
+    const view = await engine.cancelChain(session, responseId);
+    const rest = await drain(stream);
+
+    expect(view.chainStatus).toBe("terminal");
+    expect(backend.runs[0]?.cancelled).toBe(true);
+    expect(rest.types.at(-1)).toBe("response.incomplete");
+    expect(rest.final?.status).toBe("cancelled");
   });
 
   it("resolves a chain whose harness died while parked as interrupted", async () => {
@@ -702,10 +731,10 @@ describe("one chain at a time, and no calls a chain can no longer take", () => {
     );
     backend.runs[0]?.killTransport(new Error("omnigent process died"));
 
-    expect(await engine.describeChain(session, final!.id)).toMatchObject({
-      recovery: "interrupted",
-    });
     expect(await engine.pendingFunctionCalls(session, final!.id)).toEqual([]);
+    expect(await engine.describeChain(session, final!.id)).toMatchObject({
+      recovery: "terminal_reconstructed",
+    });
   });
 
   it("refuses a second initial response while a chain is live", async () => {

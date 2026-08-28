@@ -7,9 +7,10 @@ import {
 } from "../../src/responses/backend.js";
 
 /**
- * A deterministic harness stand-in for protocol-fit tests. Each turn is the
- * event burst the harness produces before it either parks on an application
- * call or terminates; `submitOutput` releases the next turn.
+ * A controllable contract double for engine-owned state-machine tests. It does
+ * not model Omnigent: cancellation records the request but emits nothing, and
+ * tests inject only the backend events relevant to the invariant under test.
+ * Dependency-sensitive behavior belongs in the real-Omnigent suite.
  */
 export type FakeTurn = readonly BackendEvent[];
 
@@ -69,7 +70,6 @@ export class FakeBackendRun implements BackendRun {
 
   async cancel(): Promise<void> {
     this.cancelled = true;
-    this.queue.push({ type: "cancelled" });
   }
 
   async close(): Promise<void> {
@@ -80,6 +80,14 @@ export class FakeBackendRun implements BackendRun {
   /** Simulates the harness transport dying under an otherwise healthy gateway. */
   killTransport(error: Error): void {
     this.queue.fail(error);
+  }
+
+  endTransport(): void {
+    this.queue.end();
+  }
+
+  emit(event: BackendEvent): void {
+    this.queue.push(event);
   }
 
   private emitTurn(): void {

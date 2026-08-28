@@ -14,6 +14,10 @@ const targetToolArguments = parseTargetArguments(
   process.env.AGENT_CONNECT_DETERMINISTIC_TOOL_ARGUMENTS ?? "{}",
 );
 const scenarioMode = process.env.AGENT_CONNECT_DETERMINISTIC_SCENARIOS === "1";
+const promptDelayMs = parseNonNegativeInteger(
+  process.env.AGENT_CONNECT_DETERMINISTIC_PROMPT_DELAY_MS ?? "0",
+  "AGENT_CONNECT_DETERMINISTIC_PROMPT_DELAY_MS",
+);
 // An explicit multi-step plan, as JSON: [{ "name": "...", "arguments": {} }].
 // Lets a caller drive several sequential application-tool calls in one turn
 // without inventing a named scenario. Ignored when scenario mode is on.
@@ -190,6 +194,14 @@ function parseTargetArguments(value) {
     throw new TypeError(
       "AGENT_CONNECT_DETERMINISTIC_TOOL_ARGUMENTS must be a JSON object",
     );
+  }
+  return parsed;
+}
+
+function parseNonNegativeInteger(value, name) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new TypeError(`${name} must be a non-negative integer`);
   }
   return parsed;
 }
@@ -392,6 +404,9 @@ const app = agent({ name: "Agent Connect deterministic ACP test agent" })
     });
     const session = sessions.get(params.sessionId);
     if (!session) throw new Error(`unknown ACP session ${params.sessionId}`);
+    if (promptDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, promptDelayMs));
+    }
     const plan = scenarioMode
       ? selectScenarioPlan(extractPromptText(params.prompt))
       : (explicitPlan ?? [

@@ -283,6 +283,22 @@ describe("version 0 request profile", () => {
           "input",
         ],
         [
+          "a function output larger than the reachable profile maximum",
+          {
+            model: AGENT_CONNECT_MODEL,
+            previous_response_id: "resp_1",
+            input: [
+              {
+                type: "function_call_output",
+                call_id: "c1",
+                output: "x".repeat(128 * 1024 + 1),
+              },
+            ],
+          },
+          "invalid_request",
+          "input",
+        ],
+        [
           "a call_id longer than the pinned maximum",
           {
             model: AGENT_CONNECT_MODEL,

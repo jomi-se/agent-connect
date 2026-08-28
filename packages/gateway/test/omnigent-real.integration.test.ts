@@ -774,7 +774,7 @@ integration("Open Responses through the gateway", () => {
     ).toBe(true);
   }, 240_000);
 
-  it("cancels a chain parked on an unanswered call", async () => {
+  it("cancels a busy chain without waiting for Omnigent to emit a terminal event", async () => {
     const result = await withIsolatedOmnigent(
       async (harness) => {
         assertIsolatedEnvironment(harness);
@@ -834,16 +834,16 @@ integration("Open Responses through the gateway", () => {
           }),
         });
         expect(created.status).toBe(200);
-        const events: Record<string, unknown>[] = [];
-        for await (const event of parseSse(created.body!)) {
-          events.push(event);
-          if (event["type"] === "response.completed") break;
-        }
-        const parkedCall = functionCallOf(events);
-        const responseId = responseIdOf(events);
+        expect(created.body).not.toBeNull();
+        const eventStream = parseSse(created.body!);
+        const first = await eventStream.next();
+        expect(first.done).toBe(false);
+        expect(first.value["type"]).toBe("response.created");
+        const responseId = responseIdOf([first.value]);
 
-        // The chain is now parked on an unanswered application call, which is
-        // the state a client cancels from.
+        // The deterministic ACP agent is still inside its prompt delay. This
+        // leaves the response segment busy and proves cancellation does not
+        // depend on Omnigent synthesising a response.cancelled event.
         const cancelled = await fetch(
           `${gatewayUrl}/v1/agent-connect/responses/${responseId}/cancel`,
           { method: "POST", headers },
@@ -852,6 +852,8 @@ integration("Open Responses through the gateway", () => {
         const cancelledBody = (await cancelled.json()) as {
           chain_status: string;
         };
+        const remainingEvents: Record<string, unknown>[] = [];
+        for await (const event of eventStream) remainingEvents.push(event);
 
         // Evidence that the cancellation reached the run, not only the
         // gateway's own record of it.
@@ -870,30 +872,16 @@ integration("Open Responses through the gateway", () => {
           await delay(500);
         }
 
-        const afterCancel = await fetch(`${gatewayUrl}/v1/responses`, {
-          method: "POST",
-          headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "agent-connect/default",
-            previous_response_id: responseId,
-            input: [
-              {
-                type: "function_call_output",
-                call_id: parkedCall["call_id"],
-                output: "{}",
-              },
-            ],
-          }),
-        });
-        const afterCancelBody = (await afterCancel.json()) as {
-          error: { code: string };
-        };
-
         return {
           chainStatus: cancelledBody.chain_status,
           providerStatus,
-          continueStatus: afterCancel.status,
-          continueCode: afterCancelBody.error.code,
+          finalEventType: String(remainingEvents.at(-1)?.["type"]),
+          finalStatus: String(
+            (
+              remainingEvents.at(-1)?.["response"] as
+                Record<string, unknown> | undefined
+            )?.["status"],
+          ),
         };
       },
       {
@@ -902,6 +890,7 @@ integration("Open Responses through the gateway", () => {
             { name: "get_test_nonce", arguments: {} },
             { name: "confirm_test_nonce", arguments: {} },
           ]),
+          AGENT_CONNECT_DETERMINISTIC_PROMPT_DELAY_MS: "5000",
         },
       },
     );
@@ -911,10 +900,10 @@ integration("Open Responses through the gateway", () => {
       `\n[responses-cancel] ${JSON.stringify(observed, null, 2)}\n\n`,
     );
     expect(observed.chainStatus).toBe("terminal");
-    // The parked Omnigent run stopped running rather than waiting forever.
+    expect(observed.finalEventType).toBe("response.incomplete");
+    expect(observed.finalStatus).toBe("cancelled");
+    // The busy Omnigent run stopped running rather than waiting forever.
     expect(observed.providerStatus).not.toBe("running");
-    expect(observed.continueStatus).toBe(409);
-    expect(observed.continueCode).toBe("response_cancelled");
   }, 240_000);
 
   it("reports interrupted after the real Omnigent process dies", async () => {
