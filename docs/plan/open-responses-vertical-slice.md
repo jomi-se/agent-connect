@@ -79,9 +79,10 @@ The profile is pinned for implementation and tests to:
   `92c12d96d7b61d6d15e2214daa5e9c6000ab6e1c`;
 - the document `public/openapi/openapi.json` at that commit, which declares
   OpenAPI `3.1.0` and `info.version` `2026-04-24`;
-- vendored fixture checksum
-  `sha256:693f26090d206230ed22b336681f547a2882cf5b131e86743966cf71bbdeedab`;
-  and
+- the vendored fixture
+  `contract/open-responses/openapi.json`, checksum
+  `sha256:693f26090d206230ed22b336681f547a2882cf5b131e86743966cf71bbdeedab`,
+  asserted by `packages/gateway/test/open-responses-fixture.test.ts`; and
 - the specification, reference, and compliance suite available on 2026-08-27.
 
 There is no upstream artifact numbered `2.3.0`. Earlier drafts of this plan and
@@ -535,6 +536,9 @@ own for the persistence-before-publication guarantee.
 
 ## Implementation sequence
 
+Milestones 0 through 3 and the durability core of Milestone 5 are implemented.
+What remains is listed under [Remaining work](#remaining-work).
+
 ### Milestone 0: narrow the tool-name charset
 
 `packages/gateway/src/tool-snapshot.ts` accepts `^[A-Za-z_][A-Za-z0-9_.-]{0,63}$`,
@@ -548,6 +552,10 @@ cannot carry; afterwards the same change would require migrating user consent.
 
 Checkpoint: the snapshot validator rejects names outside the pinned charset and
 existing tests still pass.
+
+**Done** in `packages/gateway/src/tool-snapshot.ts`, covered by
+`packages/gateway/test/tool-snapshot.test.ts`, which cross-checks every accepted
+name against the pinned `FunctionToolParam.name` pattern.
 
 ### Milestone 0.5: disposable Omnigent ownership spike
 
@@ -620,6 +628,15 @@ connection-independent call IDs — all hold.
 Checkpoint: deterministic unit tests prove that the gateway emits standard
 shapes and fails unsupported features explicitly. No Omnigent code changes yet.
 
+**Done.** The document is vendored at `contract/open-responses/openapi.json` and
+its checksum asserted. `packages/gateway/src/responses/` holds `profile.ts`,
+`protocol.ts`, `segment-writer.ts`, `sse.ts`, and `errors.ts`; the accept/reject
+matrix is `test/responses-profile.test.ts`, and produced resources and events
+are validated against the pinned schemas by the evaluator in
+`test/support/openapi-schema.ts`. See
+[VAL-RESP-001](../../contract/VAL-RESP-001.md) and
+[VAL-RESP-002](../../contract/VAL-RESP-002.md).
+
 ### Milestone 2: in-memory protocol-fit slice
 
 1. Implement `ResponseEngine` with an in-memory store and a deterministic fake
@@ -637,6 +654,22 @@ shapes and fails unsupported features explicitly. No Omnigent code changes yet.
 Checkpoint: an ordinary Responses client completes the deterministic
 multi-call scenario. This is the protocol-fit decision gate, not production
 readiness; the old routes remain the default.
+
+**Done, and the gate is passed.** `responses/engine.ts` and
+`responses/store.ts` hold the state machine; `omnigent-response-backend.ts` owns
+the upstream stream independently of any browser request; `response-routes.ts`
+mounts `POST /v1/responses` from `gateway.ts`. Run on 2026-08-28 against real
+Omnigent 0.5.1, `Open Responses through the gateway` in
+`test/omnigent-real.integration.test.ts` completed three response segments
+joined only by `previous_response_id`, with two sequential application calls and
+final model text, on **one** provider session, and with no `action_required`,
+provider session id, or ACP event reaching the client.
+
+One translation rule was needed and is not obvious: Omnigent emits
+`response.completed` when a _provider_ response ends, including the one that
+parked an application call. The backend suppresses it while a call is
+outstanding, because forwarding it would complete the public chain while the
+browser still owes a function output.
 
 If Omnigent cannot safely retain or reattach the waiting stream, stop here and
 test the same engine against the documented Codex app-server fallback. Do not
@@ -662,7 +695,16 @@ Checkpoint: the Canvas application completes its existing user flow through
 `/v1/responses` with the flag enabled; no browser package imports Omnigent wire
 types for the new path.
 
+**Done for the SDK.** `packages/web-sdk/src/responses-provider.ts` is selected
+by `connectAgent({ protocol: "open-responses" })` and is not the default. The
+package smoke test now scans the browser sources for `node:` imports; the
+package tsconfig omits Node types, which catches globals but not an explicit
+`node:` specifier. The Canvas application has not yet been switched to the flag.
+
 ### Milestone 4: real browser-to-Codex composition
+
+**Not started.** It consumes the operator's model allowance and needs a real
+browser, so it is a deliberate human-run gate rather than autonomous work.
 
 Run the complete private deployment flow before investing in the durability
 layer:
@@ -744,6 +786,19 @@ retrievable, duplicate output submission is deterministic, Omnigent process
 loss yields a deterministic `interrupted`, and cancellation reaches
 Omnigent/Codex where the backend supports it.
 
+**Steps 1, 2, 3, and 4 are done.** `responses/file-store.ts` is single-process,
+atomic, and fsync-backed on both the file and its directory entry; the index is
+rebuilt from the chain files at startup. `gateway.ts` rehydrates the application
+sessions that chains belong to from those records alone, including terminal
+chains, so a capability for an existing chain no longer gets a bare 401 that
+hides whether the chain is recoverable, complete, or interrupted. The response
+routes never call `ensureHealthy`, so no active chain is handed a replacement
+provider session. See [VAL-RESP-006](../../contract/VAL-RESP-006.md).
+
+Steps 5, 6, and 7 remain: capability refresh for a long chain, crash-point tests
+that kill a live gateway process at each commit boundary, and the default
+switch.
+
 ### Milestone 6: conformance, replacement, and deletion
 
 1. Run the applicable upstream compliance tests: basic text, streaming, and
@@ -768,6 +823,11 @@ cancellation responsibilities that Open Responses does not standardize.
 
 Implementation work should add the following compact contracts before changing
 runtime behavior:
+
+Written contracts live in `contract/`. Status as of 2026-08-28: `VAL-RESP-000`
+partly proven (see the spike results above), `VAL-RESP-001`, `002`, `005`, and
+`007` passed, `VAL-RESP-006` passed for gateway restart, `VAL-RESP-003`, `004`,
+and `008` not yet run.
 
 | Contract       | Required proof                                                                                                                                |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -797,6 +857,25 @@ two sequential calls, authorization, or recovery. Those remain local hard gates.
 
 Use the deterministic Omnigent integration as the main oracle. A real model run
 is one final composition check, not the routine test loop.
+
+## Remaining work
+
+In rough dependency order:
+
+1. **Milestone 4**, the real browser-to-Codex composition. Human-run; it spends
+   the operator's model allowance.
+2. **`VAL-RESP-003`**: an unmodified OpenAI/Responses JavaScript client against
+   the gateway, which needs the non-browser consent bit switched on for the
+   grant it uses.
+3. **Milestone 5, step 5**: capability refresh for a live chain, or a declared
+   bounded maximum chain lifetime that fails explicitly. The current one-hour
+   capability with no refresh path is not sufficient for a long chain.
+4. **Milestone 5, step 6**: crash-point tests that kill a real gateway process
+   at each commit boundary, rather than restarting an engine in-process.
+5. **The three open spike scenarios**: explicit cancellation reaching a real
+   run, and deterministic `interrupted` on Omnigent process death.
+6. **Milestone 5, step 7 and Milestone 6**: the default switch, the compliance
+   suite, and deleting the superseded task routes.
 
 ## Stop conditions
 

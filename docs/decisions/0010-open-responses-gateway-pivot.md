@@ -2,7 +2,7 @@
 
 - Status: proposed; pending vertical-slice evidence
 - Date: 2026-08-26
-- Revised: 2026-08-27
+- Revised: 2026-08-28
 
 ## Context
 
@@ -328,6 +328,20 @@ may be used behind a backend; none is required by applications.
 ## Validation gates before acceptance
 
 This ADR remains proposed until a time-boxed vertical slice demonstrates:
+
+Gate status as of 2026-08-28, after the deterministic and real-Omnigent slice:
+gates 3, 4, 5, 6, 8, 9, and 10 are met and covered by
+[VAL-RESP-001](../../contract/VAL-RESP-001.md),
+[VAL-RESP-002](../../contract/VAL-RESP-002.md),
+[VAL-RESP-005](../../contract/VAL-RESP-005.md),
+[VAL-RESP-006](../../contract/VAL-RESP-006.md), and
+[VAL-RESP-007](../../contract/VAL-RESP-007.md). Gate 7 is met for gateway
+restart and for the `interrupted` outcome, but cancellation is proven only
+against a deterministic backend. Gate 1 is unblocked — the non-browser ingress
+profile is implemented — but has not been run with a real OpenAI client. Gate 2
+is the outstanding one: multiple sequential calls are proven end to end against
+real Omnigent, but not yet against a real browser and a
+subscription-authenticated Codex run. Gates 11, 12, and 13 wait on that.
 
 1. An ordinary Open Responses client can use the documented profile without
    Agent Connect-specific response payloads. This gate depends on the

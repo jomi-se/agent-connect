@@ -163,6 +163,16 @@ profile today, so this is not a regression — but it does mean the current
 one-hour capability lifetime with no refresh path is the only bound, and
 ADR 0010's long response chains need a refresh mechanism regardless.
 
+#### Implementation state
+
+Implemented on 2026-08-28 for the response routes. `ConnectorAuth` grants carry
+a `nonBrowserClients` bit, defaulted off and asked for on the consent page as a
+separate checkbox; `grantAllowsNonBrowserClients` gates the standard-client
+profile. An originless request reaches only `matchResponseRoute` targets, still
+requires a transport principal, and is refused when the grant withholds
+consent. Dynamic enrollment and the public-demo profile stay closed to it.
+Covered by [VAL-RESP-005](../../contract/VAL-RESP-005.md).
+
 ## Semantic route access classes
 
 Routes declare the principal or authority they require, not a transport:
