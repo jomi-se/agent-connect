@@ -83,6 +83,11 @@ export interface GrantView {
   readonly toolNames: readonly string[];
   readonly createdAt: string;
   readonly expiresAt: string;
+  /**
+   * Whether the user consented to this application being reachable by callers
+   * that present no browser Origin. Default off; see ADR 0009.
+   */
+  readonly nonBrowserClients: boolean;
   readonly revokedAt?: string;
 }
 
@@ -96,6 +101,7 @@ interface StoredGrant {
   readonly toolNames: readonly string[];
   readonly createdAt: number;
   readonly expiresAt: number;
+  readonly nonBrowserClients?: boolean;
   revokedAt?: number;
 }
 
@@ -123,6 +129,7 @@ interface StoredConnectorState {
 interface AuthorizationCode {
   readonly value: string;
   readonly request: PendingAuthorization;
+  readonly nonBrowserClients: boolean;
   readonly createdAt: number;
   readonly expiresAt: number;
 }
@@ -328,7 +335,10 @@ export class ConnectorAuth {
     }
   }
 
-  approve(requestId: string): { request: PendingAuthorization; code: string } {
+  approve(
+    requestId: string,
+    consent: { readonly nonBrowserClients?: boolean } = {},
+  ): { request: PendingAuthorization; code: string } {
     const request = this.getPending(requestId);
     if (!request) throw new ConnectorAuthError("authorization_request_expired");
     if (this.codes.size >= MAX_AUTHORIZATION_CODES) {
@@ -341,6 +351,7 @@ export class ConnectorAuth {
     this.codes.set(code, {
       value: code,
       request,
+      nonBrowserClients: consent.nonBrowserClients === true,
       createdAt: now,
       expiresAt: now + CODE_TTL_MS,
     });
@@ -390,6 +401,7 @@ export class ConnectorAuth {
       toolNames: request.toolNames,
       createdAt: now,
       expiresAt: now + this.grantTtlSeconds * 1000,
+      nonBrowserClients: record.nonBrowserClients,
     };
     this.state.grants.push(grant);
     this.persist();
@@ -418,6 +430,21 @@ export class ConnectorAuth {
         candidate.revokedAt === undefined,
     );
     return grant ? grantView(grant) : undefined;
+  }
+
+  /**
+   * Whether an active grant carries the explicit non-browser consent bit. The
+   * standard-client ingress profile is admitted only for these grants.
+   */
+  grantAllowsNonBrowserClients(id: string): boolean {
+    const now = this.now();
+    return this.state.grants.some(
+      (grant) =>
+        grant.id === id &&
+        grant.nonBrowserClients === true &&
+        grant.expiresAt > now &&
+        grant.revokedAt === undefined,
+    );
   }
 
   isGrantActive(id: string): boolean {
@@ -642,6 +669,7 @@ function grantView(grant: StoredGrant): GrantView {
     toolNames: grant.toolNames,
     createdAt: new Date(grant.createdAt).toISOString(),
     expiresAt: new Date(grant.expiresAt).toISOString(),
+    nonBrowserClients: grant.nonBrowserClients === true,
     ...(grant.revokedAt
       ? { revokedAt: new Date(grant.revokedAt).toISOString() }
       : {}),

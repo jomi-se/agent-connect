@@ -17,9 +17,18 @@ import {
   type EnrollmentBundle,
   type PendingAuthorization,
 } from "./connector-auth.js";
+import { OmnigentResponseBackend } from "./omnigent-response-backend.js";
 import { OmnigentRuntime } from "./omnigent-runtime.js";
+import { handleResponseRoute, matchResponseRoute } from "./response-routes.js";
+import type { ResponseBackend } from "./responses/backend.js";
+import { ResponseEngine } from "./responses/engine.js";
+import {
+  InMemoryResponseStore,
+  type ResponseStore,
+} from "./responses/store.js";
 import type { OmnigentSandboxOptions } from "./omnigent-runtime.js";
 import type { AgentRuntime } from "./runtime.js";
+import type { EngineSession } from "./responses/engine.js";
 import {
   hashOmnigentToolEnvelope,
   hashToolSnapshot,
@@ -47,6 +56,8 @@ export interface GatewayOptions {
   }[];
   readonly enrollmentPassphrase?: string;
   readonly runtime?: AgentRuntime;
+  readonly responseBackend?: ResponseBackend;
+  readonly responseStore?: ResponseStore;
   readonly fetch?: typeof globalThis.fetch;
   readonly now?: () => number;
   readonly onEnrollmentBundle?: (bundle: EnrollmentBundle) => void;
@@ -58,6 +69,7 @@ interface ManagedSession {
   readonly origin: string;
   readonly toolHash: string;
   readonly approvedToolNames: readonly string[];
+  readonly tools: readonly GatewayToolDefinition[];
   readonly authorizationGrantId: string;
   providerSessionId: string;
 }
@@ -131,6 +143,17 @@ export function createGateway(options: GatewayOptions) {
   const sessionsByKey = new Map<string, ManagedSession>();
   const pendingSessions = new Map<string, Promise<ManagedSession>>();
   const pendingRepairs = new Map<string, Promise<ManagedSession>>();
+  const responseEngine = new ResponseEngine({
+    store: options.responseStore ?? new InMemoryResponseStore(),
+    backend:
+      options.responseBackend ??
+      new OmnigentResponseBackend({
+        baseUrl: omnigentBaseUrl,
+        fetch: fetchImplementation,
+      }),
+    isGrantActive: (grantId) => connectorAuth.isGrantActive(grantId),
+    now,
+  });
   return createServer(async (request, response) => {
     try {
       if (request.url === "/healthz" && request.method === "GET") {
@@ -179,6 +202,37 @@ export function createGateway(options: GatewayOptions) {
       }
 
       const origin = header(request, "origin");
+      const responseRoute = matchResponseRoute(pathname);
+      // Two ingress profiles, decided in ADR 0009. A browser always attaches an
+      // ambient Origin and stays bound to it, so the absence of one reliably
+      // selects a non-browser caller. That profile is admitted only on the
+      // response routes, only with a transport principal, and only when the
+      // grant carries the explicit non-browser consent bit. Dynamic enrollment
+      // and the public demo are closed to it.
+      if (
+        origin === undefined &&
+        responseRoute &&
+        !publicDemo &&
+        !dynamicAppEnrollment
+      ) {
+        const principal = requireTransportPrincipal(
+          request,
+          response,
+          options.allowedTailscaleUsers,
+          publicDemo,
+        );
+        if (!principal) return;
+        const session = authorizeResponseSession(request, response, undefined);
+        if (!session) return;
+        await handleResponseRoute(
+          responseRoute,
+          request,
+          response,
+          responseEngine,
+          session,
+        );
+        return;
+      }
       if (
         !origin ||
         (!options.allowedOrigins.has(origin) &&
@@ -365,6 +419,19 @@ export function createGateway(options: GatewayOptions) {
         return;
       }
 
+      if (responseRoute) {
+        const session = authorizeResponseSession(request, response, origin);
+        if (!session) return;
+        await handleResponseRoute(
+          responseRoute,
+          request,
+          response,
+          responseEngine,
+          session,
+        );
+        return;
+      }
+
       const match = PROVIDER_SESSION_ROUTE.exec(pathname);
       if (!match) {
         sendJson(response, 404, { error: "route_not_found" });
@@ -476,6 +543,52 @@ export function createGateway(options: GatewayOptions) {
     }
   });
 
+  /**
+   * Resolves the application session behind a response request. `origin` is
+   * undefined for the standard-client profile, which is bound to the
+   * capability's own signed origin claim instead of an ambient one, and which
+   * additionally requires the grant's non-browser consent bit.
+   *
+   * Deliberately does not call `ensureHealthy`: transparent provider-session
+   * replacement is invalid for an active response chain, whose private call IDs
+   * belong to the old provider session.
+   */
+  function authorizeResponseSession(
+    request: IncomingMessage,
+    response: ServerResponse,
+    origin: string | undefined,
+  ): EngineSession | undefined {
+    const claims = bearerClaims(
+      header(request, "authorization") ?? "",
+      signingSecret,
+      Math.floor(now() / 1000),
+    );
+    const managed = claims ? managedSessions.get(claims.sessionId) : undefined;
+    if (
+      !claims ||
+      !managed ||
+      !claimsMatchSession(claims, managed, origin) ||
+      !connectorAuth.isGrantActive(managed.authorizationGrantId) ||
+      (origin === undefined &&
+        !connectorAuth.grantAllowsNonBrowserClients(
+          managed.authorizationGrantId,
+        ))
+    ) {
+      response.setHeader("WWW-Authenticate", "Bearer");
+      sendJson(response, 401, { error: "invalid_session_capability" });
+      return undefined;
+    }
+    return {
+      sessionId: managed.id,
+      appId: managed.appId,
+      origin: managed.origin,
+      toolHash: managed.toolHash,
+      tools: managed.tools,
+      authorizationGrantId: managed.authorizationGrantId,
+      providerSessionId: managed.providerSessionId,
+    };
+  }
+
   async function getOrCreateSession(
     input: CreateSessionInput,
     origin: string,
@@ -504,6 +617,7 @@ export function createGateway(options: GatewayOptions) {
         origin,
         toolHash: input.toolHash,
         approvedToolNames: input.tools.map((tool) => tool.name),
+        tools: input.tools,
         authorizationGrantId,
         providerSessionId,
       };
@@ -596,10 +710,12 @@ function requireExistingSession(
 function claimsMatchSession(
   claims: CapabilityClaims,
   session: ManagedSession,
-  origin: string,
+  origin: string | undefined,
 ): boolean {
   return (
-    claims.origin === origin &&
+    // The standard-client profile has no ambient origin to compare against, so
+    // it relies on the capability's signed origin claim alone.
+    (origin === undefined || claims.origin === origin) &&
     claims.origin === session.origin &&
     claims.appId === session.appId &&
     claims.sessionId === session.id &&
@@ -937,7 +1053,9 @@ async function handleAuthorizationPage(
       `${DEVICE_COOKIE}=${encodeURIComponent(deviceToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`,
     );
   }
-  const approved = auth.approve(requestId);
+  const approved = auth.approve(requestId, {
+    nonBrowserClients: form.get("non_browser_clients") === "yes",
+  });
   redirect(
     response,
     authorizationRedirect(approved.request, { code: approved.code }),
@@ -995,6 +1113,7 @@ ${
     ? '<p class="ok">This browser device is enrolled.</p>'
     : '<label>Enrollment passphrase<input name="passphrase" type="password" autocomplete="current-password" required><small>Enter the passphrase saved when you installed this gateway. It stays on this gateway-owned page.</small></label>'
 }
+<label class="choice"><input type="checkbox" name="non_browser_clients" value="yes"><span>Also allow non-browser clients (scripts, servers, CLI tools) to use this authorization.<small>Leave this off unless you need it. With it off, only the browser application at ${escapeHtml(request.origin)} can use this authorization; a caller that presents no browser origin is refused.</small></span></label>
 <div class="actions"><button name="decision" value="approve">Allow</button><button class="secondary" name="decision" value="deny" formnovalidate>Deny</button></div>
 </form></main>`,
   );
@@ -1007,13 +1126,14 @@ function grantsPage(
     appId: string;
     toolNames: readonly string[];
     expiresAt: string;
+    nonBrowserClients: boolean;
     revokedAt?: string;
   }[],
 ): string {
   const entries = grants
     .map(
       (grant) =>
-        `<article><h2>${escapeHtml(grant.appId)}</h2><p>${escapeHtml(grant.origin)}</p><p>Tools: ${escapeHtml(grant.toolNames.join(", ") || "none")}</p><p>${grant.revokedAt ? `Revoked ${escapeHtml(grant.revokedAt)}` : `Expires ${escapeHtml(grant.expiresAt)}`}</p>${grant.revokedAt ? "" : `<form method="post"><input type="hidden" name="grant" value="${escapeHtml(grant.id)}"><button>Revoke</button></form>`}</article>`,
+        `<article><h2>${escapeHtml(grant.appId)}</h2><p>${escapeHtml(grant.origin)}</p><p>Tools: ${escapeHtml(grant.toolNames.join(", ") || "none")}</p><p>Non-browser clients: ${grant.nonBrowserClients ? "allowed" : "not allowed"}</p><p>${grant.revokedAt ? `Revoked ${escapeHtml(grant.revokedAt)}` : `Expires ${escapeHtml(grant.expiresAt)}`}</p>${grant.revokedAt ? "" : `<form method="post"><input type="hidden" name="grant" value="${escapeHtml(grant.id)}"><button>Revoke</button></form>`}</article>`,
     )
     .join("");
   return htmlPage(
@@ -1030,7 +1150,7 @@ function consentErrorPage(message: string): string {
 }
 
 function htmlPage(title: string, body: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>body{font:16px/1.5 system-ui;background:#f4f1ea;color:#182019;margin:0}main{max-width:38rem;margin:8vh auto;background:white;padding:2rem;border-radius:1rem;box-shadow:0 1rem 4rem #16201620}.eyebrow{color:#42664b;text-transform:uppercase;letter-spacing:.12em;font-weight:700}h1{font-size:2rem}h2{font-size:1.15rem;margin:.1rem 0}.warning{padding:1rem;margin:1.5rem 0;background:#fff1df;border:2px solid #b14f18;border-radius:.6rem;color:#59280d}.warning p{margin:.35rem 0 0}dt{font-weight:700;margin-top:1rem}dd{margin-left:0}label{display:grid;gap:.4rem;margin:1.5rem 0}input{font:inherit;padding:.8rem}small{color:#526057}.actions{display:flex;gap:.75rem;margin-top:1.5rem}button{font:inherit;font-weight:700;padding:.8rem 1.2rem;border:0;border-radius:.6rem;background:#245c35;color:white}.secondary{background:#dce5dd;color:#182019}.ok{padding:.8rem;background:#e4f2e7;border-radius:.5rem}article{border-top:1px solid #ddd;padding:1rem 0}</style></head><body>${body}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>body{font:16px/1.5 system-ui;background:#f4f1ea;color:#182019;margin:0}main{max-width:38rem;margin:8vh auto;background:white;padding:2rem;border-radius:1rem;box-shadow:0 1rem 4rem #16201620}.eyebrow{color:#42664b;text-transform:uppercase;letter-spacing:.12em;font-weight:700}h1{font-size:2rem}h2{font-size:1.15rem;margin:.1rem 0}.warning{padding:1rem;margin:1.5rem 0;background:#fff1df;border:2px solid #b14f18;border-radius:.6rem;color:#59280d}.warning p{margin:.35rem 0 0}dt{font-weight:700;margin-top:1rem}dd{margin-left:0}label{display:grid;gap:.4rem;margin:1.5rem 0}input{font:inherit;padding:.8rem}small{color:#526057}.actions{display:flex;gap:.75rem;margin-top:1.5rem}button{font:inherit;font-weight:700;padding:.8rem 1.2rem;border:0;border-radius:.6rem;background:#245c35;color:white}.secondary{background:#dce5dd;color:#182019}.ok{padding:.8rem;background:#e4f2e7;border-radius:.5rem}.choice{grid-template-columns:auto 1fr;align-items:start;margin:1.25rem 0}.choice small{display:block;margin-top:.25rem}article{border-top:1px solid #ddd;padding:1rem 0}</style></head><body>${body}</body></html>`;
 }
 
 function sendHtml(

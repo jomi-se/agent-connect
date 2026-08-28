@@ -83,20 +83,7 @@ export function parseResponseRequest(
     throw new ResponseApiError("invalid_request", "body must be a JSON object");
   }
 
-  for (const key of Object.keys(value)) {
-    if (ACCEPTED_FIELDS.has(key)) continue;
-    // An explicit null is treated as absent: several standard clients serialize
-    // unset options as null rather than omitting them.
-    if (value[key] === null && KNOWN_UNSUPPORTED_FIELDS.has(key)) continue;
-    if (KNOWN_UNSUPPORTED_FIELDS.has(key)) {
-      throw new ResponseApiError(
-        "unsupported_feature",
-        `${key} is outside the Agent Connect version 0 profile`,
-        key,
-      );
-    }
-    throw new ResponseApiError("invalid_request", `unknown field: ${key}`, key);
-  }
+  rejectFieldsOutsideTheProfile(value);
 
   if (value["model"] !== AGENT_CONNECT_MODEL) {
     throw new ResponseApiError(
@@ -107,8 +94,50 @@ export function parseResponseRequest(
   }
 
   const stream = optionalBoolean(value, "stream") ?? false;
-  const store = optionalBoolean(value, "store");
-  if (store === false) {
+  requireSupportedDefaults(value);
+  requireApprovedTools(value["tools"], approved);
+
+  const previousResponseId = value["previous_response_id"];
+  if (previousResponseId === undefined || previousResponseId === null) {
+    return { kind: "initial", stream, prompt: parsePrompt(value["input"]) };
+  }
+  if (typeof previousResponseId !== "string" || previousResponseId === "") {
+    throw new ResponseApiError(
+      "invalid_request",
+      "previous_response_id must be a non-empty string",
+      "previous_response_id",
+    );
+  }
+  const output = parseFunctionCallOutput(value["input"]);
+  return { kind: "continuation", stream, previousResponseId, ...output };
+}
+
+/**
+ * Separates "misspelled" from "known but outside the profile". An explicit null
+ * counts as absent: several standard clients serialize unset options as null.
+ */
+function rejectFieldsOutsideTheProfile(value: Record<string, unknown>): void {
+  for (const key of Object.keys(value)) {
+    if (ACCEPTED_FIELDS.has(key)) continue;
+    if (!KNOWN_UNSUPPORTED_FIELDS.has(key)) {
+      throw new ResponseApiError(
+        "invalid_request",
+        `unknown field: ${key}`,
+        key,
+      );
+    }
+    if (value[key] === null) continue;
+    throw new ResponseApiError(
+      "unsupported_feature",
+      `${key} is outside the Agent Connect version 0 profile`,
+      key,
+    );
+  }
+}
+
+/** The accepted fields whose only permitted values are the profile defaults. */
+function requireSupportedDefaults(value: Record<string, unknown>): void {
+  if (optionalBoolean(value, "store") === false) {
     throw new ResponseApiError(
       "unsupported_feature",
       "store: false is outside the Agent Connect version 0 profile",
@@ -127,30 +156,13 @@ export function parseResponseRequest(
       "tool_choice",
     );
   }
-  const parallel = optionalBoolean(value, "parallel_tool_calls");
-  if (parallel === true) {
+  if (optionalBoolean(value, "parallel_tool_calls") === true) {
     throw new ResponseApiError(
       "unsupported_feature",
       "parallel_tool_calls must be omitted, null, or false",
       "parallel_tool_calls",
     );
   }
-
-  requireApprovedTools(value["tools"], approved);
-
-  const previousResponseId = value["previous_response_id"];
-  if (previousResponseId === undefined || previousResponseId === null) {
-    return { kind: "initial", stream, prompt: parsePrompt(value["input"]) };
-  }
-  if (typeof previousResponseId !== "string" || previousResponseId === "") {
-    throw new ResponseApiError(
-      "invalid_request",
-      "previous_response_id must be a non-empty string",
-      "previous_response_id",
-    );
-  }
-  const output = parseFunctionCallOutput(value["input"]);
-  return { kind: "continuation", stream, previousResponseId, ...output };
 }
 
 function requireApprovedTools(
