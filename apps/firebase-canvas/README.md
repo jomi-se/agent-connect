@@ -5,15 +5,12 @@ snapshot spanning a shared live-state read plus project-board, document-review,
 and product-research writes. When
 the runtime calls those tools, the loaded page mutates immediately. The tools
 are defined by the page and are not installed into Codex or Omnigent in
-advance. The same SDK path has been proven with Codex through Omnigent and with
-the deterministic public judge runtime.
+advance. The same SDK path has been proven with Codex through Omnigent.
 
 The Build Week surface is also a self-explaining product demo. Real connection,
 task, tool-call, result, and completion events append to a live activity feed;
 there is no predefined execution path. The architecture and integration
 sections explain the application, gateway, runtime, and security boundaries.
-The public judge runtime is labeled as deterministic; the page does not present
-that capability-limited environment as a live Codex session.
 
 Product and visual direction are scoped to this application in
 [`PRODUCT.md`](PRODUCT.md) and [`DESIGN.md`](DESIGN.md). Impeccable live-mode

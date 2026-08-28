@@ -23,17 +23,6 @@ export function configFromEnv(
       "tailscale-serve and dynamic enrollment require a loopback gateway host",
     );
   }
-  const publicDemoAuthorities =
-    transportProfile === "public-demo"
-      ? csvValues(
-          env.AGENT_CONNECT_PUBLIC_DEMO_REDIRECT_URIS ||
-            requiredEnv(env, "AGENT_CONNECT_PUBLIC_DEMO_REDIRECT_URI"),
-        ).map((redirectUri) => ({
-          appId: requiredEnv(env, "AGENT_CONNECT_PUBLIC_DEMO_APP_ID"),
-          redirectUri,
-          toolHash: requiredEnv(env, "AGENT_CONNECT_PUBLIC_DEMO_TOOL_HASH"),
-        }))
-      : undefined;
   return {
     host,
     port: parsePort(env.AGENT_CONNECT_PORT ?? "8787"),
@@ -52,10 +41,6 @@ export function configFromEnv(
       : {}),
     publicEndpoint: requiredEnv(env, "AGENT_CONNECT_PUBLIC_ENDPOINT"),
     ...(transportProfile ? { transportProfile } : {}),
-    ...(publicDemoAuthorities ? { publicDemoAuthorities } : {}),
-    ...(env.AGENT_CONNECT_ENROLLMENT_PASSPHRASE
-      ? { enrollmentPassphrase: env.AGENT_CONNECT_ENROLLMENT_PASSPHRASE }
-      : {}),
     capabilityTtlSeconds: parsePositiveInteger(
       env.AGENT_CONNECT_CAPABILITY_TTL_SECONDS ?? "3600",
       "AGENT_CONNECT_CAPABILITY_TTL_SECONDS",

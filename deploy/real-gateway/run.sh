@@ -4,6 +4,12 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 env_file=${AGENT_CONNECT_REAL_CONNECTOR_ENV:-"$repo_root/deploy/real-gateway/.env"}
+action=${1:-serve}
+
+if test "$#" -gt 1; then
+  echo "Usage: deploy/real-gateway/run.sh [initialize]" >&2
+  exit 64
+fi
 
 if test ! -f "$env_file"; then
   echo "Agent Connect: missing $env_file" >&2
@@ -47,6 +53,37 @@ require_absolute_directory() {
 }
 
 require_env AGENT_CONNECT_PUBLIC_ENDPOINT
+
+state_dir=${AGENT_CONNECT_STATE_DIR:-"$repo_root/.agent-connect/real-connector"}
+case "$state_dir" in
+  /*) ;;
+  *) state_dir="$repo_root/$state_dir" ;;
+esac
+connector_state="$state_dir/connector.json"
+gateway="$repo_root/packages/gateway/dist/main.js"
+initializer="$repo_root/packages/gateway/dist/initialize-main.js"
+
+if test "$action" = initialize; then
+  require_command node
+  require_command npm
+  mkdir -p "$state_dir"
+  chmod 700 "$state_dir"
+  if test ! -f "$initializer"; then
+    echo "Agent Connect: building the gateway..."
+    npm run build --workspace @agent-connect/gateway --prefix "$repo_root"
+  fi
+  export AGENT_CONNECT_HOST=127.0.0.1
+  export AGENT_CONNECT_STATE_PATH="$connector_state"
+  export AGENT_CONNECT_TRANSPORT_PROFILE=tailscale-serve
+  node "$initializer"
+  exit
+fi
+
+if test "$action" != serve; then
+  echo "Usage: deploy/real-gateway/run.sh [initialize]" >&2
+  exit 64
+fi
+
 require_env AGENT_CONNECT_ALLOWED_TAILSCALE_USERS
 require_env CODEX_HOME
 require_env AGENT_CONNECT_WORKSPACE
@@ -93,20 +130,13 @@ if test ! -f "$CODEX_HOME/auth.json"; then
   exit 78
 fi
 
-state_dir=${AGENT_CONNECT_STATE_DIR:-"$repo_root/.agent-connect/real-connector"}
 gateway_port=${AGENT_CONNECT_GATEWAY_PORT:-8787}
 omnigent_port=${OMNIGENT_PORT:-6767}
-
-case "$state_dir" in
-  /*) ;;
-  *) state_dir="$repo_root/$state_dir" ;;
-esac
 
 config_dir="$state_dir/omnigent-config"
 data_dir="$state_dir/omnigent-data"
 log_dir="$state_dir/logs"
 operator_home="$state_dir/operator-home"
-connector_state="$state_dir/connector.json"
 omnigent_url="http://127.0.0.1:$omnigent_port"
 
 mkdir -p "$config_dir" "$data_dir/artifacts" "$log_dir" "$operator_home"
@@ -122,7 +152,6 @@ chmod 600 "$CODEX_HOME/auth.json"
 launcher="$repo_root/scripts/omnigent-codex-private-demo.sh"
 adapter="$repo_root/node_modules/@agentclientprotocol/codex-acp/dist/index.js"
 prepared_adapter="$state_dir/codex-acp-agent-connect.mjs"
-gateway="$repo_root/packages/gateway/dist/main.js"
 
 if test ! -f "$adapter"; then
   echo "Agent Connect: dependencies are missing; run npm install at $repo_root" >&2
@@ -136,6 +165,12 @@ node "$repo_root/scripts/prepare-codex-acp-adapter.mjs" \
 if test ! -f "$gateway"; then
   echo "Agent Connect: building the gateway..."
   npm run build --workspace @agent-connect/gateway --prefix "$repo_root"
+fi
+
+if test ! -f "$connector_state"; then
+  echo "Agent Connect: gateway state is not initialized." >&2
+  echo "Run deploy/real-gateway/run.sh initialize and save the one-time secret first." >&2
+  exit 78
 fi
 
 node -e '

@@ -25,6 +25,7 @@ export AGENT_CONNECT_STATE_PATH='/owner-only/path/agent-connect.json'
 export AGENT_CONNECT_PUBLIC_ENDPOINT='https://MACHINE.TAILNET.ts.net:8443'
 export AGENT_CONNECT_TRANSPORT_PROFILE='tailscale-serve'
 npm run build --workspace @agent-connect/gateway
+node packages/gateway/dist/initialize-main.js
 npm run start --workspace @agent-connect/gateway
 ```
 
@@ -40,10 +41,12 @@ authenticated Tailscale identity headers:
 tailscale serve --bg --https=8443 http://127.0.0.1:8787
 ```
 
-The browser base URL is then `https://MACHINE.TAILNET.ts.net:8443`. On the first
-state creation, the gateway prints a runtime card and generated enrollment
-secret as clearly separated outputs. Save the secret in a password manager. Import only the public card
-into the app; enter the passphrase only on the gateway-owned consent page.
+The browser base URL is then `https://MACHINE.TAILNET.ts.net:8443`. The one-shot
+initializer prints a runtime card and generated enrollment secret as clearly
+separated outputs. Save the secret in a password manager. It persists only a
+salted verifier and refuses to overwrite existing state; normal gateway startup
+refuses uninitialized state. Import only the public card into the app; enter the
+passphrase only on the gateway-owned consent page.
 The app verifies a signed gateway challenge before sending its tools and uses
 S256 PKCE to obtain a revocable origin/app/tool-bound grant.
 
@@ -52,19 +55,11 @@ reach the signed-challenge and authorization endpoints. This is not ambient
 agent access: Tailscale must authenticate the configured operator, the
 gateway-owned page requires explicit consent, redirects must remain on the
 requesting Origin, and all later requests require the exact bound grant. This
-mode is accepted only with `AGENT_CONNECT_TRANSPORT_PROFILE=tailscale-serve`;
-the anonymous public-demo profile rejects it.
+mode is accepted only with `AGENT_CONNECT_TRANSPORT_PROFILE=tailscale-serve`.
 Applications may revoke their own grant through bearer-authenticated
 `POST /oauth/revoke`; the response deliberately does not reveal whether the
 submitted token existed. Gateway-owned grant listing and administrative
 revocation remain on `/v1/grants`.
-
-For the isolated public judge profile, use the
-[judge demo runbook](../../deploy/judge-demo/README.md). The `public-demo`
-transport does not require or fabricate a Tailscale identity. It instead
-requires an exact configured app id, callback URI, and tool hash, and protects
-grant listing and revocation with the enrolled-device cookie. It is intentionally
-not a general anonymous deployment profile.
 
 The gateway uploads its narrow Codex ACP agent bundle, selects the one online
 Omnigent host, launches the runner, and replaces an unhealthy runner

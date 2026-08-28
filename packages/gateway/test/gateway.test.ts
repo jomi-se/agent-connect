@@ -41,6 +41,16 @@ describe("gateway", () => {
     );
   });
 
+  it("does not accept an enrollment passphrase from the process environment", () => {
+    const config = configFromEnv({
+      AGENT_CONNECT_STATE_PATH: "/tmp/agent-connect-test-state.json",
+      AGENT_CONNECT_PUBLIC_ENDPOINT: "https://gateway.example",
+      AGENT_CONNECT_ENROLLMENT_PASSPHRASE: "must not enter runtime config",
+    });
+
+    expect(config).not.toHaveProperty("enrollmentPassphrase");
+  });
+
   it("answers an allowed CORS preflight without requiring identity", async () => {
     const { baseUrl } = await start();
     const response = await fetch(`${baseUrl}/v1/sessions/session-1/events`, {
@@ -844,189 +854,6 @@ describe("dynamic application enrollment", () => {
     });
     expect(insecureOrigin.status).toBe(403);
   });
-
-  it("cannot be enabled for the anonymous public-demo profile", () => {
-    expect(() =>
-      createGateway({
-        allowedOrigins: new Set(),
-        dynamicAppEnrollment: true,
-        allowedTailscaleUsers: new Set(),
-        omnigentBaseUrl: "http://127.0.0.1:6767",
-        authStatePath: "/tmp/unused-agent-connect-state.json",
-        publicEndpoint: "https://runtime.example",
-        transportProfile: "public-demo",
-        publicDemoAuthorities: [demoAuthority()],
-      }),
-    ).toThrow(
-      "dynamic app enrollment requires the tailscale-serve transport profile",
-    );
-  });
-});
-
-describe("public-demo transport profile", () => {
-  it("uses connector enrollment without requiring or trusting a Tailscale identity", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "agent-connect-public-demo-"));
-    temporaryDirectories.push(directory);
-    const runtime = new FakeRuntime();
-    const { baseUrl } = await start({
-      runtime,
-      allowedTailscaleUsers: new Set(),
-      authStatePath: join(directory, "connector.json"),
-      publicEndpoint: "https://runtime.example",
-      transportProfile: "public-demo",
-      publicDemoAuthorities: [demoAuthority()],
-      enrollmentPassphrase: "public demo enrollment phrase",
-    });
-
-    const challenge = await fetch(`${baseUrl}/v1/runtime-challenges`, {
-      method: "POST",
-      headers: {
-        Origin: "https://preview.example",
-        "Tailscale-User-Login": "attacker@example.com",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ nonce: "0123456789abcdef" }),
-    });
-    expect(challenge.status).toBe(200);
-
-    const pushed = await pushPublicDemoAuthorization(baseUrl);
-    expect(pushed.status).toBe(201);
-    const authorization = await pushed.json();
-    const consent = await fetch(
-      `${baseUrl}/authorize?request=${encodeURIComponent(authorization.requestId as string)}`,
-    );
-    expect(consent.status).toBe(200);
-
-    const approval = await fetch(`${baseUrl}/authorize`, {
-      method: "POST",
-      redirect: "manual",
-      headers: {
-        Origin: "https://runtime.example",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        request: authorization.requestId as string,
-        decision: "approve",
-        passphrase: "public demo enrollment phrase",
-      }),
-    });
-    expect(approval.status).toBe(303);
-    const deviceCookie = approval.headers.get("set-cookie")?.split(";")[0];
-    expect(deviceCookie).toMatch(/^agent_connect_device=/);
-
-    const anonymousGrants = await fetch(`${baseUrl}/v1/grants`, {
-      headers: { "Tailscale-User-Login": "owner@example.com" },
-    });
-    expect(anonymousGrants.status).toBe(401);
-    expect(await anonymousGrants.json()).toEqual({
-      error: "device_not_enrolled",
-    });
-
-    const enrolledGrants = await fetch(`${baseUrl}/v1/grants`, {
-      headers: { Cookie: deviceCookie ?? "" },
-    });
-    expect(enrolledGrants.status).toBe(200);
-
-    const code = new URL(
-      approval.headers.get("location") ?? "",
-    ).searchParams.get("code");
-    const token = await fetch(`${baseUrl}/oauth/token`, {
-      method: "POST",
-      headers: {
-        Origin: "https://preview.example",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        code,
-        codeVerifier: "v".repeat(43),
-        appId: "agent-connect-demo",
-        redirectUri: "https://preview.example/",
-      }),
-    });
-    expect(token.status).toBe(200);
-    const granted = await token.json();
-
-    const session = await fetch(`${baseUrl}/v1/app-sessions`, {
-      method: "POST",
-      headers: {
-        Origin: "https://preview.example",
-        Authorization: `Bearer ${granted.accessToken as string}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ appId: "agent-connect-demo", tools: [tool()] }),
-    });
-    expect(session.status).toBe(201);
-    expect(runtime.created).toHaveLength(1);
-  });
-
-  it.each([
-    ["app id", { appId: "another-app" }],
-    ["redirect URI", { redirectUri: "https://preview.example/other" }],
-    [
-      "tool snapshot",
-      { tools: [{ ...tool(), description: "Changed authority" }] },
-    ],
-  ])("rejects a mismatched fixed %s before consent", async (_case, change) => {
-    const directory = mkdtempSync(join(tmpdir(), "agent-connect-public-demo-"));
-    temporaryDirectories.push(directory);
-    const { baseUrl } = await start({
-      allowedTailscaleUsers: new Set(),
-      authStatePath: join(directory, "connector.json"),
-      publicEndpoint: "https://runtime.example",
-      transportProfile: "public-demo",
-      publicDemoAuthorities: [demoAuthority()],
-      enrollmentPassphrase: "public demo enrollment phrase",
-    });
-
-    const response = await pushPublicDemoAuthorization(baseUrl, change);
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({
-      error: "public_demo_authority_mismatch",
-    });
-  });
-
-  it("requires explicit fixed authority configuration", () => {
-    expect(() =>
-      createGateway({
-        allowedOrigins: new Set(["https://preview.example"]),
-        allowedTailscaleUsers: new Set(),
-        omnigentBaseUrl: "http://127.0.0.1:6767",
-        authStatePath: "/tmp/unused-agent-connect-test-state.json",
-        publicEndpoint: "https://runtime.example",
-        transportProfile: "public-demo",
-      }),
-    ).toThrow("public-demo requires an exact configured application authority");
-  });
-
-  it("accepts a second explicitly configured preview callback", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "agent-connect-public-demo-"));
-    temporaryDirectories.push(directory);
-    const { baseUrl } = await start({
-      allowedOrigins: new Set([
-        "https://preview.example",
-        "https://second-preview.example",
-      ]),
-      allowedTailscaleUsers: new Set(),
-      authStatePath: join(directory, "connector.json"),
-      publicEndpoint: "https://runtime.example",
-      transportProfile: "public-demo",
-      publicDemoAuthorities: [
-        demoAuthority(),
-        {
-          ...demoAuthority(),
-          redirectUri: "https://second-preview.example/",
-        },
-      ],
-      enrollmentPassphrase: "public demo enrollment phrase",
-    });
-
-    const response = await pushPublicDemoAuthorization(
-      baseUrl,
-      { redirectUri: "https://second-preview.example/" },
-      "https://second-preview.example",
-    );
-    expect(response.status).toBe(201);
-  });
 });
 
 async function start(
@@ -1069,14 +896,6 @@ function tool() {
       required: ["message"],
       additionalProperties: false,
     },
-  };
-}
-
-function demoAuthority() {
-  return {
-    appId: "agent-connect-demo",
-    redirectUri: "https://preview.example/",
-    toolHash: hashToolSnapshot([tool()]),
   };
 }
 
@@ -1194,29 +1013,6 @@ async function authorizeApp(baseUrl: string): Promise<string> {
   expect(token.status).toBe(200);
   const grant = await token.json();
   return grant.accessToken as string;
-}
-
-async function pushPublicDemoAuthorization(
-  baseUrl: string,
-  overrides: Record<string, unknown> = {},
-  origin = "https://preview.example",
-) {
-  return fetch(`${baseUrl}/v1/authorization-requests`, {
-    method: "POST",
-    headers: {
-      Origin: origin,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      appId: "agent-connect-demo",
-      redirectUri: "https://preview.example/",
-      state: "state_state_state_state",
-      codeChallenge: await sha256Base64Url("v".repeat(43)),
-      scopes: ["agent:prompt", "agent:result", "tools:invoke"],
-      tools: [tool()],
-      ...overrides,
-    }),
-  });
 }
 
 function exchangeAuthorizationCode(

@@ -857,10 +857,6 @@ function architectureStoryMarkup(layout: "desktop" | "mobile"): string {
             <p>Reasons, streams events, and calls the tools lent by the app.</p>
           </article>
         </div>
-        <aside class="judge-substitution">
-          <strong>Public judge demo</strong>
-          <span>At the agent layer, this Codex box is replaced by a deterministic ACP agent replaying Codex-authored tool plans. The public transport uses Tailscale Funnel; the SDK, gateway, grants, sessions, and browser tool loop remain live.</span>
-        </aside>
       </div>
     </div>
 
@@ -1465,9 +1461,7 @@ function showRuntimeSummary(runtimeCard: RuntimeCard): void {
 }
 
 function runtimeLabel(runtimeCard: RuntimeCard): string {
-  return runtimeCard.transportProfile === "public-demo"
-    ? "Recorded Codex plan · deterministic ACP"
-    : "Codex through Omnigent";
+  return `Codex through Omnigent · ${runtimeCard.transportProfile}`;
 }
 
 async function copySnippet(button: HTMLButtonElement): Promise<void> {

@@ -1,6 +1,6 @@
 # Documentation
 
-Start with the root [README](../README.md) for the product, public demo, real
+Start with the root [README](../README.md) for the product, Canvas app, real
 gateway, SDK example, supported platforms, and verification commands.
 
 ## Current sources of truth
@@ -18,14 +18,12 @@ gateway, SDK example, supported platforms, and verification commands.
   access.
 - [Real Omnigent + Codex gateway](../deploy/real-gateway/README.md): install
   and operate the source reference profile.
-- [Public judge demo](../deploy/judge-demo/README.md): build, validate,
-  expose, recover, and tear down the deterministic demo profile.
 - [Firebase deployment](guides/firebase-demo-deployment.md): deploy the static
   Canvas without placing Firebase credentials on the gateway.
 - [Local code-quality analysis](guides/code-quality-analysis.md): ESLint,
   dependency-cruiser, Knip, and jscpd commands, scope, and baseline policy.
-- [Build Week submission](plan/openai-build-week-submission.md): presentation,
-  judge instructions checklist, video outline, and deadline.
+- [Build Week submission](plan/openai-build-week-submission.md): historical
+  presentation, judge instructions checklist, video outline, and deadline.
 
 The [experimental ACP/MCP-over-ACP profile](architecture/narrow-protocol-profile.md)
 documents an unstable prototype. It is not the default browser/gateway path.

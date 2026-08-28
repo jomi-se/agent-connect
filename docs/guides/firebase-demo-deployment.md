@@ -23,9 +23,8 @@ does not need to exist on the gateway host.
 
 ## Connect a runtime
 
-The hosted app is independent of the runtime profile. Paste either the
-deterministic judge demo's public runtime card or a card from a real
-gateway created with the
+The hosted app is independent of the runtime profile. Paste a runtime card from
+a real gateway created with the
 [real gateway guide](../../deploy/real-gateway/README.md). The app verifies
 the gateway key, redirects to gateway-owned authorization, and stores the
 resulting app grant only in the tab's `sessionStorage`.

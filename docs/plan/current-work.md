@@ -10,11 +10,11 @@ only enough completed context to explain them. Product boundaries live in the
 
 ## Working baseline
 
-The hackathon MVP proved the core loop through two profiles:
-
-- a deterministic public judge demo; and
-- a source-installable Tailscale Serve gateway using a real user-owned Codex
-  login through Omnigent.
+The hackathon MVP proved the core loop through a deterministic public fixture
+and a source-installable Tailscale Serve gateway using a real user-owned Codex
+login through Omnigent. The judge-only deployment and anonymous transport
+profile were removed after judging; the private real-Codex profile is the sole
+supported deployment.
 
 The browser SDK verifies a selected gateway, obtains a revocable Origin-bound
 grant, supplies an exact user-approved application-tool snapshot, streams a

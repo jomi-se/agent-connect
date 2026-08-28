@@ -10,17 +10,16 @@ to support any agent that has an ACP interface.
 
 Agent Connect was designed and implemented through Codex using GPT-5.6 Sol Medium for the most part. Codex
 researched Omnigent and ACP, shaped the provider-neutral boundary, implemented
-the SDK, gateway, authorization flow, test layers, public demo, and real
+the SDK, gateway, authorization flow, test layers, Canvas demo, and real
 browser-to-Codex composition, and debugged the deployed mobile flow.
 
 The primary `/feedback` build thread is
 `019f5c47-a462-73d0-a329-39013786bae4`.
 
-## Try the public demo
+## Try the Canvas application
 
-Open [agent-connect-demo.web.app](https://agent-connect-demo.web.app/), paste
-the runtime card supplied in the judge instructions, and connect with the
-private enrollment passphrase on the gateway authorization page.
+Open [agent-connect-demo.web.app](https://agent-connect-demo.web.app/) and
+connect it to a gateway you operate using that gateway's public runtime card.
 
 The demo includes three example apps: a project-board app with bulk editing,
 in-place document review in a document editor, and product research in a
@@ -29,16 +28,9 @@ uses [Omnigent](https://omnigent.ai/) as an agent orchestrator, Codex as the
 agent, and [Tailscale](https://tailscale.com/) as the network path between the
 demo web app and a live Agent Connect gateway.
 
-The demo's runtime card targets an Agent Connect gateway in front of a
-fixture-based agent behind an ACP interface, so anyone can test it without
-consuming a model account. Codex with GPT-5.6 was used to author these
-scenarios.
-
-The separate reference profile below runs the same path with a real Codex
-instance and the user's own account. The same demo web app accepts either
-profile's runtime card: use the public judge demo on port `10000` for the
-deterministic evaluation path, or a user-owned gateway you set up for live
-model reasoning.
+The reference profile below runs the complete path with a real Codex instance
+and the user's own account. The retired anonymous judge profile has been
+removed now that the hackathon is over.
 
 ## Run the real Codex reference profile
 
@@ -56,6 +48,7 @@ npm run build
 
 cp deploy/real-gateway/.env.example deploy/real-gateway/.env
 # Configure Tailscale endpoint, user, dedicated CODEX_HOME, and workspace.
+deploy/real-gateway/run.sh initialize
 deploy/real-gateway/run.sh
 ```
 
@@ -67,8 +60,7 @@ authenticated HTTPS.
 On a first connection, the gateway shows the exact
 Origin, callback, scopes, and tools before approval. The resulting grant is
 bound to that Origin, app id, redirect URI, scope set, and tool
-snapshot. The frozen anonymous judge profile deliberately keeps its fixed
-application allowlist.
+snapshot.
 
 ## Add Agent Connect to a web app
 
@@ -154,8 +146,7 @@ and tool snapshot. These mechanisms authorize an application.
 Treat every authorized app as a potentially adversarial principal. The real
 reference profile is not a hardened sandbox for arbitrary hostile apps: Codex
 can use its configured native capabilities inside the selected workspace, and
-the runtime operator owns the machine's security posture. The public judge demo
-contains no Codex credential or general agent shell.
+the runtime operator owns the machine's security posture.
 
 See [the architecture documentation](docs/architecture/),
 [the runtime threat model](docs/research/2026-07-14-malicious-application-runtime-threat-model.md),

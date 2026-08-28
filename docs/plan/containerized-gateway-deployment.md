@@ -133,12 +133,11 @@ with an identity provider, a local enrolled-device credential, or another
 explicit presence mechanism. CORS and gateway-key proof do not authorize a
 person to spend the user's agent subscription.
 
-For the hackathon, the concrete lowest-cost profile keeps this appliance on the
-existing VM and exposes a separate judge gateway through Tailscale Funnel on
-port 10000. Funnel supplies public HTTPS but no trusted tailnet-user identity;
-the gateway therefore uses a separately named `public-demo` enrollment and
-authorization profile while leaving private `tailscale-serve` enforcement
-unchanged. See the [judge demo environment plan](judge-demo-environment.md).
+The hackathon temporarily used a separate anonymous gateway through Tailscale
+Funnel. That judge-only deployment and its `public-demo` transport profile were
+removed after judging. This plan now concerns future user-owned packaging only;
+see the [archived judge environment plan](judge-demo-environment.md) for the
+historical experiment.
 
 ## Pending work
 
