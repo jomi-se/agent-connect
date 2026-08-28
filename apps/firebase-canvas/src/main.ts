@@ -106,6 +106,17 @@ const toolDialogTitle = requireElement<HTMLElement>("tool-dialog-title");
 const toolList = requireElement<HTMLElement>("tool-list");
 
 const STORED_CARD = "agent-connect.runtime-card";
+
+/**
+ * Opt into the Open Responses wire with `?protocol=open-responses`. It is not
+ * the default: the default switch belongs after durability and the real
+ * browser-to-Codex composition, per Milestone 5 of
+ * docs/plan/open-responses-vertical-slice.md.
+ */
+const requestedProtocol =
+  new URLSearchParams(location.search).get("protocol") === "open-responses"
+    ? ("open-responses" as const)
+    : undefined;
 const STORED_GRANT = "agent-connect.grant";
 const STORED_TRANSACTION = "agent-connect.authorization-transaction";
 const tools = createDemoTools();
@@ -223,6 +234,7 @@ async function establishConnection(
     appId: "agent-connect-demo",
     tools,
     accessToken,
+    ...(requestedProtocol ? { protocol: requestedProtocol } : {}),
   });
   if (activeConnectionActivity) {
     updateActivity(
@@ -240,7 +252,9 @@ async function establishConnection(
     );
   }
   activeConnectionActivity = undefined;
-  connectionState.textContent = runtimeLabel(runtimeCard);
+  connectionState.textContent = requestedProtocol
+    ? `${runtimeLabel(runtimeCard)} · Open Responses`
+    : runtimeLabel(runtimeCard);
   status.textContent = "";
   traceSummary.textContent = "Runtime connected";
   document.body.dataset["demo"] = "connected";

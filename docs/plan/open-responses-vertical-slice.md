@@ -699,7 +699,9 @@ types for the new path.
 by `connectAgent({ protocol: "open-responses" })` and is not the default. The
 package smoke test now scans the browser sources for `node:` imports; the
 package tsconfig omits Node types, which catches globals but not an explicit
-`node:` specifier. The Canvas application has not yet been switched to the flag.
+`node:` specifier. The Canvas application reaches the flag with
+`?protocol=open-responses` and labels the connection when it is on; the
+checkpoint's own run through a real browser is Milestone 4.
 
 ### Milestone 4: real browser-to-Codex composition
 
