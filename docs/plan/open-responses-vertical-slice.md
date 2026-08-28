@@ -647,20 +647,13 @@ Demonstrated afterwards, once the engine existed to drive it:
    `running` to `idle`, and the continuation was refused with
    `response_cancelled`.
 6. **Gateway restart reconstruction** (item 5) is proven at the HTTP layer by
-   restarting a real gateway over the same durable state, though not yet by
-   killing a live process mid-commit.
-
-Not demonstrated, and still open:
-
-- killing the Omnigent process yielding a deterministic `interrupted` against
-  the real harness (item 6). The engine path is proven deterministically — a
-  run that dies while its chain is parked now reports `interrupted` rather than
-  `reattached_live`, because recovery asks the run whether it is still
-  reachable instead of assuming a retained object means a retained run — and
-  Omnigent's own source states that parked awaiters die with the process. What
-  is missing is the end-to-end demonstration, which would have to kill the
-  harness inside the isolation fixture that is also responsible for cleaning it
-  up.
+   restarting a real gateway over the same durable state. A later process
+   fixture SIGKILLs an actual gateway child at all four output/call commit
+   boundaries and proves deterministic reconstruction from the durable files.
+7. **Real Omnigent process death is deterministic.** The isolated integration
+   fixture kills the Omnigent server while a gateway chain is parked. The live
+   gateway reports `interrupted`, offers no stale call, and rejects continuation
+   with `backend_unavailable` instead of hanging or replacing the session.
 
 The decisive negative finding — that the snapshot does not report the parked
 call — is recorded under
@@ -760,9 +753,9 @@ checkpoint's own run through a real browser is Milestone 4.
 
 ### Milestone 4: real browser-to-Codex composition
 
-**Run 2026-08-28 and passed, with one defect found and fixed; rerun before the
-default switch.** It consumes the operator's model allowance and needs a real
-browser, so it is a deliberate human-run gate rather than autonomous work.
+**Run twice on 2026-08-28 and passed.** It consumes the operator's model
+allowance and needs a real browser, so it is a deliberate human-run gate rather
+than a routine build check.
 
 The run drove the Firebase canvas against the private Tailscale Serve profile
 and the operator's real Codex login. Codex called three application functions
@@ -775,15 +768,18 @@ the three continuations with `previous_response_id` and no tools. No
 Omnigent-shaped value reached the page. Evidence is kept out of the repository
 under `.agent-connect/evidence/`.
 
-The defect: `?protocol=open-responses` did not survive a **first-time**
+The first run found that `?protocol=open-responses` did not survive a **first-time**
 authorization. The gateway returns the browser to a callback URL it composes
 itself, carrying `code` and `state` and nothing of the application's, and the
 canvas then tidied the address bar down to `location.pathname`. A visitor who
 had never authorized therefore reconnected on the default wire, and the run
 only reached the Responses path because the grant already existed. The canvas
 now remembers the requested wire for the duration of the redirect and restores
-it on the callback only. Step 2 of this milestone has to be re-run from a
-cleared `sessionStorage` to close it.
+it on the callback only. The second run explicitly cleared both local and
+session storage, completed consent once, returned directly on Open Responses,
+then completed three real Codex function calls and the visible board mutation
+with no fallback reconnect, console error, or page error. See
+[VAL-RESP-004](../../contract/VAL-RESP-004.md).
 
 Run the complete private deployment flow before investing in the durability
 layer:
@@ -881,8 +877,9 @@ the transparent replacement a chain cannot survive. It now skips the repair when
 the session still has a non-terminal chain, so a long chain can refresh its
 capability without losing its call IDs.
 
-Steps 6 and 7 remain: crash-point tests that kill a live gateway process at each
-commit boundary, and the default switch.
+Step 6 is done by `responses-process-crash.integration.test.ts`, which kills an
+actual gateway child at each of the four named commit boundaries and restarts
+over the same durable state. Step 7, the default switch, remains.
 
 ### Milestone 6: conformance, replacement, and deletion
 
@@ -910,9 +907,8 @@ Implementation work should add the following compact contracts before changing
 runtime behavior:
 
 Written contracts live in `contract/`. Status as of 2026-08-28: `VAL-RESP-000`
-partly proven (see the spike results above), `VAL-RESP-001`, `002`, `003`, `005`,
-and `007` passed, `VAL-RESP-006` passed for gateway restart, `VAL-RESP-004` and
-`008` not yet run.
+through `007` passed; `VAL-RESP-008` remains pending for the default switch and
+legacy-wire deletion.
 
 | Contract       | Required proof                                                                                                                                |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -948,17 +944,9 @@ is one final composition check, not the routine test loop.
 
 In rough dependency order:
 
-1. **Milestone 4, step 2 only**: re-run the authorization ceremony from a
-   cleared `sessionStorage` and confirm a first-time visitor stays on the
-   Responses wire. The rest of the milestone passed on 2026-08-28.
-2. **Milestone 5, step 6**: crash-point tests that kill a real gateway process
-   at each commit boundary, rather than restarting an engine in-process.
-3. **The last open spike scenario**: deterministic `interrupted` on real
-   Omnigent process death. The engine path is proven; the end-to-end kill is
-   not.
-4. **Milestone 5, step 7 and Milestone 6**: the default switch, the upstream
+1. **Milestone 5, step 7 and Milestone 6**: the default switch, the upstream
    compliance suite, and deleting the superseded task routes.
-5. **Two boundaries that are still coarser than they should be**, neither
+2. **Two boundaries that are still coarser than they should be**, neither
    blocking: a harness protocol failure and an unreachable harness both surface
    as `backend_unavailable`, which tells a client to retry but not what to fix;
    and function arguments produced by the model are carried to the application
