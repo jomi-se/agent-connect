@@ -53,6 +53,10 @@ export class FakeBackendRun implements BackendRun {
     this.emitTurn();
   }
 
+  isAlive(): boolean {
+    return !this.closed && this.queue.open;
+  }
+
   events(): AsyncIterator<BackendEvent> {
     return this.queue.iterator();
   }

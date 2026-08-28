@@ -629,6 +629,30 @@ describe("Agent Connect control extensions", () => {
     ).toBe("response_cancelled");
   });
 
+  it("resolves a chain whose harness died while parked as interrupted", async () => {
+    const { engine, backend } = harness([
+      [call("provider_a", "set_page_message")],
+    ]);
+    const { final } = await drain(
+      await engine.createResponse(session, initial),
+    );
+    // Nobody is reading the run's events while the chain waits for the browser,
+    // so a harness that dies here is invisible unless recovery asks.
+    backend.runs[0]?.killTransport(new Error("omnigent process died"));
+
+    const view = await engine.describeChain(session, final!.id);
+    expect(view.recovery).toBe("interrupted");
+    expect(view.chainStatus).toBe("terminal");
+    expect(
+      await failureCode(
+        engine.createResponse(
+          session,
+          continuation(final!.id, callIdOf(final), "{}"),
+        ),
+      ),
+    ).toBe("backend_unavailable");
+  });
+
   it("resolves a chain whose live run was lost as interrupted", async () => {
     const { engine } = harness([[call("provider_a", "set_page_message")]]);
     const { final } = await drain(

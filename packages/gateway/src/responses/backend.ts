@@ -25,6 +25,13 @@ export type BackendEvent =
 export interface BackendRun {
   readonly providerSessionId: string;
   /**
+   * Whether the underlying harness run can still be reached. A chain parked on
+   * an unanswered call has nobody reading its event stream, so a run that dies
+   * while parked is otherwise invisible until the next continuation. Recovery
+   * asks this instead of assuming that a retained object means a retained run.
+   */
+  isAlive(): boolean;
+  /**
    * The run's event stream. Called once per run. The implementation must read
    * its upstream transport continuously and buffer, so that events published
    * while no segment is open are not lost.
@@ -58,6 +65,7 @@ export class BackendEventQueue {
     [];
   private ended = false;
   private failure: Error | undefined;
+
   private readonly rejecting: ((reason: Error) => void)[] = [];
 
   push(event: BackendEvent): void {
@@ -86,6 +94,11 @@ export class BackendEventQueue {
     this.failure = error;
     this.waiting.splice(0);
     for (const reject of this.rejecting.splice(0)) reject(error);
+  }
+
+  /** False once the queue has ended or failed; see `BackendRun.isAlive`. */
+  get open(): boolean {
+    return !this.ended;
   }
 
   iterator(): AsyncIterator<BackendEvent> {
