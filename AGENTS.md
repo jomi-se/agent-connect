@@ -47,6 +47,30 @@ remain hard failures.
 
 Add or update tests for public SDK behavior. Keep browser packages free of Node-only runtime imports.
 
+### Low-output command execution
+
+For routine non-interactive commands whose successful output carries no useful
+information beyond the exit code—builds, typechecks, tests, lint, and similar
+checks—use `scripts/quiet-run.sh` by default:
+
+```sh
+./scripts/quiet-run.sh "gateway tests" npm test --workspace @agent-connect/gateway
+./scripts/quiet-run.sh "build" npm run build
+```
+
+On success, the wrapper prints one short line. On failure, it prints a bounded
+tail and preserves the complete log under `/tmp` for focused follow-up. This
+keeps repetitive success logs out of the agent context: they consume tokens
+and displace useful evidence without improving a decision, while the full
+failure detail remains available when it is actually needed.
+
+Do not use the wrapper when a command needs interactive input, live progress is
+operationally important, or its normal output is itself the requested evidence.
+During implementation, prefer the narrowest relevant check. Run the formatter
+once after the code has stabilized and immediately before final verification,
+diff review, and commit; do not interleave repeated formatting passes with
+ordinary edit/test iterations.
+
 ## Protocol and reliability rules
 
 - Persist an application tool request before notifying the application.
