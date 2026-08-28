@@ -363,7 +363,7 @@ subscription-authenticated Codex run. Gates 11, 12, and 13 wait on that.
 6. Stable call IDs survive reconnect, redelivery, and duplicate result
    submission without claiming generic exactly-once execution.
 7. Cancellation propagates through response, durable run, and harness layers,
-   and a gateway restart resolves every chain to one of the four declared
+   and a gateway restart resolves every chain to one of the three declared
    recovery outcomes. Loss of the harness process is a declared `interrupted`
    terminal state, not a recoverable one: the parked application call is an
    in-process awaiter inside Omnigent and does not survive it.

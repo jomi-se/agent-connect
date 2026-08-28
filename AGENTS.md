@@ -71,6 +71,26 @@ once after the code has stabilized and immediately before final verification,
 diff review, and commit; do not interleave repeated formatting passes with
 ordinary edit/test iterations.
 
+### Test the dependency you actually ship
+
+If a test's expected result would become meaningless when Omnigent changes,
+run it against real Omnigent. Do not encode assumed Omnigent HTTP/SSE,
+cancellation, session, or event behavior in a fake backend or a recording and
+then treat the passing test as compatibility evidence.
+
+Use the deterministic ACP agent behind a disposable real Omnigent service for
+routine compatibility tests. This exercises the real provider boundary without
+spending model allowance or depending on nondeterministic model choices. Keep a
+small real-Codex smoke test only for final composition evidence.
+
+In-process doubles remain appropriate for Agent Connect-owned state-machine
+invariants and deliberate faults that are impractical to create through a real
+service, such as a failed disk write, an abruptly ended iterator, a wedged HTTP
+request, or an exact race schedule. Such doubles must be controllable contract
+fixtures: they must not synthesize events merely because Omnigent happens to
+emit—or was once believed to emit—them. See
+[`docs/architecture/testing-strategy.md`](docs/architecture/testing-strategy.md).
+
 ## Protocol and reliability rules
 
 - Persist an application tool request before notifying the application.

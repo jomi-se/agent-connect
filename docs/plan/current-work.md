@@ -27,6 +27,16 @@ task/event protocol and browser-visible Omnigent provider remain transitional
 until the final conformance/default/deletion gate in
 [ADR 0010](../decisions/0010-open-responses-gateway-pivot.md).
 
+A 2026-08-28 clean-context
+[implementation review](../reviews/2026-08-28-open-responses-implementation-review.md)
+found and closed silent persistence, cancellation, dead-run delivery, stream
+termination, rehydration, and provider-timeout failures. Provider-sensitive
+claims now use the
+[real-dependency testing strategy](../architecture/testing-strategy.md): real
+Omnigent plus a deterministic ACP agent is the routine compatibility oracle;
+in-process backends prove only Agent Connect-owned invariants and injected
+fault handling.
+
 The automated baseline remains:
 
 ```sh
@@ -126,6 +136,9 @@ Maintenance is justified when it unblocks one of the priorities above:
   relevant surface;
 - add structured logging, SSE cancellation/backpressure, and stable error
   mapping as required by the Open Responses slice;
+- decide browser handler deadlines, malformed-argument correction behavior,
+  and whether recovery control routes become automatic SDK behavior before
+  claiming those product semantics;
 - remove obsolete scaffolding at the migration deletion point; and
 - publish `@agent-connect/web` only after its compatibility and security claims
   match the tested package.

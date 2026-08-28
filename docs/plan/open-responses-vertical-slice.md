@@ -441,23 +441,19 @@ deduplication, is still required.
 ### Recovery contract
 
 "Reattach when possible" is not an algorithm. Every recovery attempt must
-resolve to exactly one of four declared outcomes:
+resolve to exactly one of three outcomes the version 0 implementation can
+actually produce:
 
-| Outcome                    | Meaning                                                              |
-| -------------------------- | -------------------------------------------------------------------- |
-| `reattached_live`          | live tail resumed with a monotonic provider cursor                   |
-| `reconciled_from_snapshot` | provider snapshot replayed and deduplicated, then live tail attached |
-| `terminal_reconstructed`   | a persisted complete public response resource is returned            |
-| `interrupted`              | stable terminal error; never a silent provider replacement           |
+| Outcome                  | Meaning                                                    |
+| ------------------------ | ---------------------------------------------------------- |
+| `reattached_live`        | the original in-process run is still alive                 |
+| `terminal_reconstructed` | a persisted terminal public response resource is returned  |
+| `interrupted`            | stable terminal error; never a silent provider replacement |
 
-For the Omnigent backend the algorithm is the one Omnigent documents for
-itself. `omnigent/runtime/session_stream.py` is a live fan-out broadcaster with
-no buffer and no replay: events published while no subscriber is attached are
-lost. Its own guidance is to fetch `GET /v1/sessions/{id}` for persisted
-history and deduplicate by item id, then attach the live tail. Its
-`subscribe(pre_ready_snapshot=...)` hook exists precisely so the snapshot and
-the tail partition with no gap and no double-rendered delta. The backend must
-use that hook ordering rather than snapshot-then-subscribe.
+`reconciled_from_snapshot` was removed after implementation review because no
+code path could produce it. Omnigent exposes useful history and liveness, but
+version 0 does not reconstruct a lost gateway-side event subscription from
+that snapshot. A documented recovery outcome that cannot occur is misleading.
 
 #### What the snapshot does and does not provide
 
@@ -478,12 +474,10 @@ an in-flight `tools/call` inside the runner and never becomes a committed item.
 An earlier revision of this plan claimed the opposite. It was wrong, and the
 spike exists to catch exactly that class of error.
 
-The consequence is not fatal, but it is load-bearing: **the gateway's own
+The consequence is load-bearing: **the gateway's own
 persist-before-publication record is the only source of truth for unresolved
-calls.** Omnigent cannot corroborate it. `reconciled_from_snapshot` therefore
-recovers _missed output items and liveness_, never the pending call itself, and
-the durable ledger must be treated as authoritative rather than as a cache to
-be validated against the provider.
+calls.** Omnigent cannot corroborate it, and the durable ledger must be treated
+as authoritative rather than as a cache to be validated against the provider.
 
 #### The limit of recovery, stated plainly
 
@@ -493,12 +487,10 @@ states that the index "lives alongside the underlying parked awaiter ... and
 shares its lifecycle: when the Omnigent process dies, both the index and every
 parked awaiter die together." It is in-memory only.
 
-Therefore:
-
-- **gateway restart is recoverable** — the parked run survives in Omnigent and
-  the snapshot-plus-live-tail procedure above restores the public chain; and
-- **Omnigent process death is terminal** — no amount of gateway-side durability
-  restores the awaiter. That chain resolves `interrupted`.
+Therefore both a gateway process restart and an Omnigent process death are
+terminal for an in-flight version 0 run. No amount of gateway-side durability
+restores the lost event iterator or the provider's parked awaiter. The chain
+resolves `interrupted` rather than being silently replaced.
 
 `interrupted` is a first-class terminal state of the version 0 profile, not an
 edge case. Milestone 5 must not promise recovery it cannot deliver.
@@ -510,8 +502,8 @@ longer holds: nothing in version 0 re-establishes an event stream over a
 pre-restart Omnigent run, so a chain whose parked call outlived the gateway
 process resolves `interrupted`, and the durability tests assert exactly that.
 What persistence buys is that the chain's outcome is _known_ and its unresolved
-call is _not silently replayed_ — not that the conversation continues. The four
-recovery outcomes are answers about state, not four ways of resuming.
+call is _not silently replayed_ — not that the conversation continues. The
+three recovery outcomes are answers about state, not three ways of resuming.
 
 A chain is only ever counted as live if its harness run answers `isAlive()`.
 A non-terminal chain whose run did not survive is retired to `interrupted` at
@@ -641,11 +633,12 @@ Demonstrated:
 
 Demonstrated afterwards, once the engine existed to drive it:
 
-5. **Explicit cancellation reaches the run** (item 3 above). Run on 2026-08-28
-   through the gateway's cancel extension against real Omnigent: a chain parked
-   on an unanswered call committed `terminal`, the Omnigent session moved from
-   `running` to `idle`, and the continuation was refused with
-   `response_cancelled`.
+5. **Explicit cancellation reaches the run without depending on a provider
+   terminal event** (item 3 above). Re-run on 2026-08-28 through the gateway's
+   cancel extension against real Omnigent while the deterministic ACP agent was
+   deliberately still busy. The public SSE stream ended as cancelled and the
+   Omnigent session stopped running. The engine also proves locally that a
+   parked call cannot be resurrected or offered after cancellation.
 6. **Gateway restart reconstruction** (item 5) is proven at the HTTP layer by
    restarting a real gateway over the same durable state. A later process
    fixture SIGKILLs an actual gateway child at all four output/call commit
@@ -826,7 +819,7 @@ green rather than on every build.
 1. Replace the in-memory store with the narrow file-backed store and atomic
    updates.
 2. Reconstruct chain authority on gateway restart from the durable record
-   alone, and implement the four declared recovery outcomes. Forbid transparent
+   alone, and implement the three declared recovery outcomes. Forbid transparent
    provider-session replacement for an active chain.
 3. Add three explicitly Agent Connect control operations, addressed by an
    opaque response ID:
@@ -937,8 +930,11 @@ certificate. The pinned `tool-calling` compliance test checks that a function
 call is returned; it does not exercise the function-output continuation chain,
 two sequential calls, authorization, or recovery. Those remain local hard gates.
 
-Use the deterministic Omnigent integration as the main oracle. A real model run
-is one final composition check, not the routine test loop.
+Use the deterministic real-Omnigent integration as the main compatibility
+oracle. Pure engine fixtures prove only Agent Connect-owned invariants and
+fault handling; they do not model Omnigent. A real model run is one final
+composition check, not the routine test loop. The full evidence policy lives in
+[the testing strategy](../architecture/testing-strategy.md).
 
 ## Remaining work
 
@@ -946,13 +942,12 @@ In rough dependency order:
 
 1. **Milestone 5, step 7 and Milestone 6**: the default switch, the upstream
    compliance suite, and deleting the superseded task routes.
-2. **Two boundaries that are still coarser than they should be**, neither
-   blocking: a harness protocol failure and an unreachable harness both surface
-   as `backend_unavailable`, which tells a client to retry but not what to fix;
-   and function arguments produced by the model are carried to the application
-   as the opaque JSON string the standard defines, so a malformed argument
-   string is the application's rejection to make, not the gateway's. Both are
-   deliberate for version 0 and should be revisited with the error taxonomy.
+2. **Bounded follow-ups from implementation review**, tracked in the dated
+   [review disposition](../reviews/2026-08-28-open-responses-implementation-review.md):
+   HTTP backpressure and last-resort post-header SSE errors, browser handler
+   deadlines, malformed-argument correction semantics, and an SDK consumer for
+   the recovery control routes. These do not reopen the resolved silent
+   persistence, cancellation, liveness, or protocol-error bugs.
 
 ## Stop conditions
 
