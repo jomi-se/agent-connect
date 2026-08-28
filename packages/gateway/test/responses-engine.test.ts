@@ -676,6 +676,105 @@ describe("Agent Connect control extensions", () => {
   });
 });
 
+describe("one chain at a time, and no calls a chain can no longer take", () => {
+  it("stops redelivering a parked call once the chain is cancelled", async () => {
+    const { engine } = harness([[call("provider_a", "set_page_message")]]);
+    const { final } = await drain(
+      await engine.createResponse(session, initial),
+    );
+    expect(await engine.pendingFunctionCalls(session, final!.id)).toHaveLength(
+      1,
+    );
+
+    await engine.cancelChain(session, final!.id);
+
+    // The application must not run the side effect after the user cancelled:
+    // its result could never be taken by the chain.
+    expect(await engine.pendingFunctionCalls(session, final!.id)).toEqual([]);
+  });
+
+  it("stops redelivering a parked call once the harness is gone", async () => {
+    const { engine, backend } = harness([
+      [call("provider_a", "read_page_message")],
+    ]);
+    const { final } = await drain(
+      await engine.createResponse(session, initial),
+    );
+    backend.runs[0]?.killTransport(new Error("omnigent process died"));
+
+    expect(await engine.describeChain(session, final!.id)).toMatchObject({
+      recovery: "interrupted",
+    });
+    expect(await engine.pendingFunctionCalls(session, final!.id)).toEqual([]);
+  });
+
+  it("refuses a second initial response while a chain is live", async () => {
+    const { engine } = harness([
+      [call("provider_a", "set_page_message")],
+      [{ type: "completed" }],
+    ]);
+    await drain(await engine.createResponse(session, initial));
+
+    expect(await failureCode(engine.createResponse(session, initial))).toBe(
+      "response_busy",
+    );
+  });
+
+  it("lets a new chain start once the live one is terminal", async () => {
+    const { engine, backend } = harness([
+      [call("provider_a", "set_page_message")],
+    ]);
+    const { final } = await drain(
+      await engine.createResponse(session, initial),
+    );
+    await engine.cancelChain(session, final!.id);
+
+    const second = await drain(await engine.createResponse(session, initial));
+    expect(second.final!.id).not.toBe(final!.id);
+    expect(backend.runs).toHaveLength(2);
+  });
+
+  it("retires a chain whose harness died so the session is not blocked", async () => {
+    const { engine, backend } = harness([
+      [call("provider_a", "set_page_message")],
+    ]);
+    const first = await drain(await engine.createResponse(session, initial));
+    backend.runs[0]?.killTransport(new Error("omnigent process died"));
+
+    // The dead chain is still `running` in the ledger; nothing else would ever
+    // look at it, so admission retires it rather than blocking forever.
+    const second = await drain(await engine.createResponse(session, initial));
+    expect(second.final!.id).not.toBe(first.final!.id);
+    expect(await engine.hasLiveChain(session.sessionId)).toBe(true);
+  });
+
+  it("admits only one of two continuations racing on the same call", async () => {
+    const { engine, backend } = harness([
+      [call("provider_a", "set_page_message")],
+      [text("after"), { type: "completed" }],
+    ]);
+    const { final } = await drain(
+      await engine.createResponse(session, initial),
+    );
+    const body = continuation(final!.id, callIdOf(final), '{"ok":true}');
+
+    // Both start before either has awaited its way to the run. The claim has
+    // to be taken in the same synchronous step as the check, or both pass.
+    const [first, second] = await Promise.allSettled([
+      engine.createResponse(session, body),
+      engine.createResponse(session, body),
+    ]);
+    const rejected = [first, second].filter(
+      (outcome) => outcome.status === "rejected",
+    );
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0]!.reason as ResponseApiError).code).toBe(
+      "response_busy",
+    );
+    expect(backend.runs[0]?.submitted).toHaveLength(1);
+  });
+});
+
 function callIdOf(resource: ResponseResource | undefined): string {
   const item = resource?.output.at(-1);
   if (!item || item.type !== "function_call") {
