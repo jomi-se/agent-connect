@@ -10,6 +10,7 @@ export {
   serializeAuthorizationTransaction,
 } from "./authorization.js";
 export { OmnigentProvider } from "./omnigent-provider.js";
+export { ResponsesProvider } from "./responses-provider.js";
 export { connectOmnigent } from "./omnigent-session.js";
 export type { ConnectOmnigentOptions } from "./omnigent-session.js";
 export {
@@ -43,7 +44,9 @@ export type {
   JsonObject,
   JsonSchema,
   JsonValue,
+  AgentConnectProtocol,
   OmnigentProviderOptions,
+  ResponsesProviderOptions,
   RuntimeCard,
   McpContent,
   SingleMcpServerOptions,
