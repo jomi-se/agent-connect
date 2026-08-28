@@ -72,6 +72,7 @@ interface Harness {
   readonly baseUrl: string;
   readonly backend: FakeBackend;
   readonly capability: string;
+  readonly directory: string;
 }
 
 async function start(
@@ -105,7 +106,33 @@ async function start(
   });
   expect(session.status).toBe(201);
   const body = (await session.json()) as { accessToken: string };
-  return { baseUrl, backend, capability: body.accessToken };
+  return { baseUrl, backend, capability: body.accessToken, directory };
+}
+
+/**
+ * Restarts a gateway over the same state directories. The new server shares no
+ * process memory with the old one, so anything it can still answer came from
+ * durable state.
+ */
+async function restart(harness: Harness): Promise<string> {
+  await new Promise<void>((resolve, reject) =>
+    servers
+      .splice(servers.length - 1, 1)[0]
+      ?.close((error) => (error ? reject(error) : resolve())),
+  );
+  const server = createGateway({
+    allowedOrigins: new Set([APP_ORIGIN]),
+    allowedTailscaleUsers: new Set(["owner@example.com"]),
+    omnigentBaseUrl: "http://127.0.0.1:6767",
+    authStatePath: join(harness.directory, "gateway.json"),
+    publicEndpoint: "https://runtime.example",
+    enrollmentPassphrase: "test enrollment phrase",
+    runtime: new FakeRuntime(),
+    responseBackend: new FakeBackend({ turns: [] }),
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
 function browserHeaders(
@@ -470,6 +497,58 @@ describe("Agent Connect control extensions", () => {
     expect(
       ((await afterCancel.json()) as { error: { code: string } }).error.code,
     ).toBe("response_cancelled");
+  });
+
+  it("retrieves a response that completed while the gateway was down", async () => {
+    const harness = await start([
+      [{ type: "text.delta", delta: "done" }, { type: "completed" }],
+    ]);
+    const created = (await (
+      await post(harness, { model: MODEL, input: "hi" })
+    ).json()) as ResponseBody;
+    const baseUrl = await restart(harness);
+
+    const chain = await fetch(
+      `${baseUrl}/v1/agent-connect/responses/${created.id}`,
+      {
+        headers: browserHeaders({
+          Authorization: `Bearer ${harness.capability}`,
+        }),
+      },
+    );
+    expect(chain.status).toBe(200);
+    expect(await chain.json()).toMatchObject({
+      response_id: created.id,
+      recovery: "terminal_reconstructed",
+      response: { status: "completed" },
+    });
+  });
+
+  it("reports a chain parked across a restart as interrupted", async () => {
+    const harness = await start([[call("provider_a")]]);
+    const created = (await (
+      await post(harness, { model: MODEL, input: "hi" })
+    ).json()) as ResponseBody;
+    const callId = callIdOf(created);
+    const baseUrl = await restart(harness);
+    const headers = browserHeaders({
+      Authorization: `Bearer ${harness.capability}`,
+    });
+
+    // The published call is still redeliverable from the durable ledger.
+    const pending = await fetch(
+      `${baseUrl}/v1/agent-connect/responses/${created.id}/pending-function-calls`,
+      { headers },
+    );
+    expect(await pending.json()).toMatchObject({
+      pending_function_calls: [{ call_id: callId }],
+    });
+
+    const chain = await fetch(
+      `${baseUrl}/v1/agent-connect/responses/${created.id}`,
+      { headers },
+    );
+    expect(await chain.json()).toMatchObject({ recovery: "interrupted" });
   });
 
   it("refuses a chain that belongs to a different capability", async () => {

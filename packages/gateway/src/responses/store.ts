@@ -72,6 +72,8 @@ export interface CallRecord {
 export interface ResponseStore {
   putChain(chain: ChainRecord): Promise<void>;
   getChain(chainId: string): Promise<ChainRecord | undefined>;
+  /** Every known chain, for reconstructing authority after a restart. */
+  listChains(): Promise<readonly ChainRecord[]>;
   putResponse(response: ResponseRecord): Promise<void>;
   getResponse(responseId: string): Promise<ResponseRecord | undefined>;
   putCall(call: CallRecord): Promise<void>;
@@ -91,6 +93,10 @@ export class InMemoryResponseStore implements ResponseStore {
 
   async getChain(chainId: string): Promise<ChainRecord | undefined> {
     return this.chains.get(chainId);
+  }
+
+  async listChains(): Promise<readonly ChainRecord[]> {
+    return [...this.chains.values()];
   }
 
   async putResponse(response: ResponseRecord): Promise<void> {

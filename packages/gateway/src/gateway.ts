@@ -4,6 +4,7 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
+import { dirname, join } from "node:path";
 
 import {
   issueCapability,
@@ -22,10 +23,8 @@ import { OmnigentRuntime } from "./omnigent-runtime.js";
 import { handleResponseRoute, matchResponseRoute } from "./response-routes.js";
 import type { ResponseBackend } from "./responses/backend.js";
 import { ResponseEngine } from "./responses/engine.js";
-import {
-  InMemoryResponseStore,
-  type ResponseStore,
-} from "./responses/store.js";
+import { FileResponseStore } from "./responses/file-store.js";
+import type { ResponseStore } from "./responses/store.js";
 import type { OmnigentSandboxOptions } from "./omnigent-runtime.js";
 import type { AgentRuntime } from "./runtime.js";
 import type { EngineSession } from "./responses/engine.js";
@@ -58,6 +57,7 @@ export interface GatewayOptions {
   readonly runtime?: AgentRuntime;
   readonly responseBackend?: ResponseBackend;
   readonly responseStore?: ResponseStore;
+  readonly responseStatePath?: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly now?: () => number;
   readonly onEnrollmentBundle?: (bundle: EnrollmentBundle) => void;
@@ -143,8 +143,14 @@ export function createGateway(options: GatewayOptions) {
   const sessionsByKey = new Map<string, ManagedSession>();
   const pendingSessions = new Map<string, Promise<ManagedSession>>();
   const pendingRepairs = new Map<string, Promise<ManagedSession>>();
+  const responseStore =
+    options.responseStore ??
+    new FileResponseStore(
+      options.responseStatePath ??
+        join(dirname(options.authStatePath), "responses"),
+    );
   const responseEngine = new ResponseEngine({
-    store: options.responseStore ?? new InMemoryResponseStore(),
+    store: responseStore,
     backend:
       options.responseBackend ??
       new OmnigentResponseBackend({
@@ -154,6 +160,40 @@ export function createGateway(options: GatewayOptions) {
     isGrantActive: (grantId) => connectorAuth.isGrantActive(grantId),
     now,
   });
+  /**
+   * Rebuilds the application sessions that live response chains belong to, from
+   * the durable chain records alone. Without this a restarted gateway answers a
+   * capability for an existing chain with a bare 401, hiding the fact that the
+   * chain is recoverable, complete, or terminally interrupted rather than
+   * unknown.
+   *
+   * Provider sessions are deliberately not revived for reuse: `sessionsByKey`
+   * stays empty, so a new application session provisions a fresh provider
+   * session instead of adopting one whose run is gone.
+   */
+  const responseSessionsReady = (async () => {
+    const chains = [...(await responseStore.listChains())].sort(
+      (left, right) => right.updatedAt - left.updatedAt,
+    );
+    for (const chain of chains) {
+      // Terminal chains are rehydrated too: a response that completed during an
+      // outage must stay retrievable, and that is the reason the chain resource
+      // exists at all. When one application session has several chains, the
+      // most recently updated one supplies the provider session.
+      if (managedSessions.has(chain.appSessionId)) continue;
+      managedSessions.set(chain.appSessionId, {
+        id: chain.appSessionId,
+        appId: chain.appId,
+        origin: chain.origin,
+        toolHash: chain.toolHash,
+        approvedToolNames: chain.tools.map((tool) => tool.name),
+        tools: chain.tools,
+        authorizationGrantId: chain.authorizationGrantId,
+        providerSessionId: chain.providerSessionId,
+      });
+    }
+  })();
+
   return createServer(async (request, response) => {
     try {
       if (request.url === "/healthz" && request.method === "GET") {
@@ -222,6 +262,7 @@ export function createGateway(options: GatewayOptions) {
           publicDemo,
         );
         if (!principal) return;
+        await responseSessionsReady;
         const session = authorizeResponseSession(request, response, undefined);
         if (!session) return;
         await handleResponseRoute(
@@ -420,6 +461,7 @@ export function createGateway(options: GatewayOptions) {
       }
 
       if (responseRoute) {
+        await responseSessionsReady;
         const session = authorizeResponseSession(request, response, origin);
         if (!session) return;
         await handleResponseRoute(
