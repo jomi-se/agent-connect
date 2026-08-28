@@ -1,7 +1,8 @@
 # VAL-RESP-007: Disconnect, cancellation, and failure have stable outcomes
 
-Surface: protocol.
-Needs: a deterministic backend and the response engine.
+Surface: protocol and provider compatibility.
+Needs: the response engine plus disposable real Omnigent with the deterministic
+ACP agent.
 Behavior: a client close after a committed function boundary does not cancel
 anything, because the parked run is the point of the design. A close during
 ordinary generation requests best-effort cancellation and never forces a
@@ -20,13 +21,14 @@ cancellation of a chain parked on an unanswered call.
 Fail: a disconnect after a function boundary destroys the run, a cancel
 overrides a committed completion, a failure leaves the stream without a
 terminal event, or a lost run is transparently replaced.
-Evidence, real harness: `Open Responses through the gateway` in
-`packages/gateway/test/omnigent-real.integration.test.ts` cancels a chain parked
-on an unanswered call and observes the Omnigent session move from `running` to
-`idle`, which is evidence the cancellation reached the run rather than only the
-gateway's record of it. The same suite kills the real isolated Omnigent server
-while a chain is parked and observes `interrupted`, no pending delivery, and a
-`backend_unavailable` continuation rather than a hang.
+Evidence, real provider: `Open Responses through the gateway` in
+`packages/gateway/test/omnigent-real.integration.test.ts` cancels a busy chain
+while the deterministic ACP agent is deliberately delayed. The public stream
+ends as cancelled and the Omnigent session stops running without the engine
+depending on an Omnigent terminal cancellation event. The same suite kills the
+real isolated Omnigent server while a chain is parked and observes
+`interrupted`, no pending delivery, and a `backend_unavailable` continuation
+rather than a hang.
 
 ## Current status
 
