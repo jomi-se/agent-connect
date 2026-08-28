@@ -766,6 +766,149 @@ integration("Open Responses through the gateway", () => {
       observed.allTypes.every((type) => type.startsWith("response.")),
     ).toBe(true);
   }, 240_000);
+
+  it("cancels a chain parked on an unanswered call", async () => {
+    const result = await withIsolatedOmnigent(
+      async (harness) => {
+        assertIsolatedEnvironment(harness);
+        const omnigent = new OmnigentRuntime({
+          baseUrl: harness.serverUrl,
+          workspace: harness.workspace,
+          launchTimeoutMs: 30_000,
+          pollIntervalMs: 100,
+        });
+        const providerSessionIds: string[] = [];
+        const runtime = {
+          createSession: async (request: RuntimeSessionRequest) => {
+            const id = await omnigent.createSession(request);
+            providerSessionIds.push(id);
+            return id;
+          },
+          isHealthy: (id: string) => omnigent.isHealthy(id),
+        };
+        const gateway = createGateway({
+          allowedOrigins: new Set(["https://integration.example"]),
+          allowedTailscaleUsers: new Set(["owner@example.com"]),
+          omnigentBaseUrl: harness.serverUrl,
+          runtime,
+          authStatePath: join(harness.root, "gateway-cancel-auth.json"),
+          responseStatePath: join(harness.root, "gateway-cancel"),
+          publicEndpoint: "https://integration-runtime.example",
+          enrollmentPassphrase: "integration enrollment phrase",
+        });
+        liveGateways.push(gateway);
+        await new Promise<void>((resolve) =>
+          gateway.listen(0, "127.0.0.1", resolve),
+        );
+        const gatewayUrl = `http://127.0.0.1:${(gateway.address() as AddressInfo).port}`;
+        const capability = await authorizeApplication(
+          gatewayUrl,
+          responseTools,
+        );
+        const headers = {
+          Origin: "https://integration.example",
+          "Tailscale-User-Login": "owner@example.com",
+          Authorization: `Bearer ${capability}`,
+        };
+
+        const created = await fetch(`${gatewayUrl}/v1/responses`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "agent-connect/default",
+            stream: true,
+            input: "Run the two-step spike plan",
+            tools: responseTools.map((item) => ({
+              type: "function",
+              name: item.name,
+              description: item.description,
+              parameters: item.inputSchema,
+            })),
+          }),
+        });
+        expect(created.status).toBe(200);
+        const events: Record<string, unknown>[] = [];
+        for await (const event of parseSse(created.body!)) {
+          events.push(event);
+          if (event["type"] === "response.completed") break;
+        }
+        const parkedCall = functionCallOf(events);
+        const responseId = responseIdOf(events);
+
+        // The chain is now parked on an unanswered application call, which is
+        // the state a client cancels from.
+        const cancelled = await fetch(
+          `${gatewayUrl}/v1/agent-connect/responses/${responseId}/cancel`,
+          { method: "POST", headers },
+        );
+        expect(cancelled.status).toBe(200);
+        const cancelledBody = (await cancelled.json()) as {
+          chain_status: string;
+        };
+
+        // Evidence that the cancellation reached the run, not only the
+        // gateway's own record of it.
+        const providerSessionId = providerSessionIds[0] ?? "";
+        let providerStatus = "";
+        const deadline = Date.now() + 30_000;
+        while (Date.now() < deadline) {
+          const snapshot = await fetch(
+            `${harness.serverUrl}/v1/sessions/${encodeURIComponent(providerSessionId)}`,
+            { headers: { Origin: "omnigent://internal" } },
+          );
+          providerStatus = String(
+            ((await snapshot.json()) as Record<string, unknown>)["status"],
+          );
+          if (providerStatus !== "running") break;
+          await delay(500);
+        }
+
+        const afterCancel = await fetch(`${gatewayUrl}/v1/responses`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "agent-connect/default",
+            previous_response_id: responseId,
+            input: [
+              {
+                type: "function_call_output",
+                call_id: parkedCall["call_id"],
+                output: "{}",
+              },
+            ],
+          }),
+        });
+        const afterCancelBody = (await afterCancel.json()) as {
+          error: { code: string };
+        };
+
+        return {
+          chainStatus: cancelledBody.chain_status,
+          providerStatus,
+          continueStatus: afterCancel.status,
+          continueCode: afterCancelBody.error.code,
+        };
+      },
+      {
+        extraEnv: {
+          AGENT_CONNECT_DETERMINISTIC_PLAN: JSON.stringify([
+            { name: "get_test_nonce", arguments: {} },
+            { name: "confirm_test_nonce", arguments: {} },
+          ]),
+        },
+      },
+    );
+
+    const observed = result.value;
+    process.stdout.write(
+      `\n[responses-cancel] ${JSON.stringify(observed, null, 2)}\n\n`,
+    );
+    expect(observed.chainStatus).toBe("terminal");
+    // The parked Omnigent run stopped running rather than waiting forever.
+    expect(observed.providerStatus).not.toBe("running");
+    expect(observed.continueStatus).toBe(409);
+    expect(observed.continueCode).toBe("response_cancelled");
+  }, 240_000);
 });
 
 /** The full authorization ceremony, returning a session capability. */

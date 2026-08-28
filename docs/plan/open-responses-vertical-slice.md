@@ -601,11 +601,28 @@ Demonstrated:
 4. **A repeated output for an already-resolved call is accepted as a no-op**
    (`202`) and does not double-apply.
 
+Demonstrated afterwards, once the engine existed to drive it:
+
+5. **Explicit cancellation reaches the run** (item 3 above). Run on 2026-08-28
+   through the gateway's cancel extension against real Omnigent: a chain parked
+   on an unanswered call committed `terminal`, the Omnigent session moved from
+   `running` to `idle`, and the continuation was refused with
+   `response_cancelled`.
+6. **Gateway restart reconstruction** (item 5) is proven at the HTTP layer by
+   restarting a real gateway over the same durable state, though not yet by
+   killing a live process mid-commit.
+
 Not demonstrated, and still open:
 
-- explicit cancellation reaching the run (item 3 above);
-- gateway process kill with reconciliation (item 5); and
-- Omnigent process kill yielding a deterministic `interrupted` (item 6).
+- killing the Omnigent process yielding a deterministic `interrupted` against
+  the real harness (item 6). The engine path is proven deterministically — a
+  run that dies while its chain is parked now reports `interrupted` rather than
+  `reattached_live`, because recovery asks the run whether it is still
+  reachable instead of assuming a retained object means a retained run — and
+  Omnigent's own source states that parked awaiters die with the process. What
+  is missing is the end-to-end demonstration, which would have to kill the
+  harness inside the isolation fixture that is also responsible for cleaning it
+  up.
 
 The decisive negative finding — that the snapshot does not report the parked
 call — is recorded under
@@ -875,8 +892,9 @@ In rough dependency order:
    the operator's model allowance.
 2. **Milestone 5, step 6**: crash-point tests that kill a real gateway process
    at each commit boundary, rather than restarting an engine in-process.
-3. **The open spike scenarios**: explicit cancellation reaching a real run, and
-   deterministic `interrupted` on Omnigent process death.
+3. **The last open spike scenario**: deterministic `interrupted` on real
+   Omnigent process death. The engine path is proven; the end-to-end kill is
+   not.
 4. **Milestone 5, step 7 and Milestone 6**: the default switch, the upstream
    compliance suite, and deleting the superseded task routes.
 

@@ -251,7 +251,7 @@ export class ResponseEngine {
         "previous_response_id",
       );
     }
-    const state = this.active.get(chain.chainId);
+    const state = this.liveRun(chain.chainId);
     if (!state) {
       // The live run did not survive. Persist-before-publication tells us the
       // call existed; nothing restores the parked awaiter inside the harness.
@@ -429,7 +429,7 @@ export class ResponseEngine {
       session,
       responseId,
     );
-    const live = this.active.get(chain.chainId);
+    const live = this.liveRun(chain.chainId);
     const recovery: RecoveryOutcome =
       chain.status === "terminal"
         ? "terminal_reconstructed"
@@ -542,6 +542,19 @@ export class ResponseEngine {
     const runs = [...this.active.values()];
     this.active.clear();
     await Promise.all(runs.map((state) => state.run.close().catch(() => {})));
+  }
+
+  /**
+   * The chain's run, only if the harness can still be reached. A run that died
+   * while the chain was parked is not a recovery path, and treating it as one
+   * would report `reattached_live` for a chain that can never continue.
+   */
+  private liveRun(chainId: string): ActiveChain | undefined {
+    const state = this.active.get(chainId);
+    if (!state) return undefined;
+    if (state.run.isAlive()) return state;
+    this.active.delete(chainId);
+    return undefined;
   }
 
   private async recordCall(
