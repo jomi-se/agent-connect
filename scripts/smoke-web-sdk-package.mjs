@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,6 +21,7 @@ rmSync(smokeRoot, { recursive: true, force: true });
 mkdirSync(packagesDir, { recursive: true });
 mkdirSync(consumerDir, { recursive: true });
 
+requireBrowserSafeSources();
 run("npm", ["run", "build", "--workspace", "@agent-connect/web"]);
 const packed = run(
   "npm",
@@ -114,4 +121,29 @@ function run(command, args, capture = false, options = {}) {
     throw new Error(`${command} ${args.join(" ")} failed`);
   }
   return result.stdout ?? "";
+}
+
+/**
+ * The browser SDK must not reach for a Node built-in. The package tsconfig
+ * omits Node types, which catches globals; this catches an explicit
+ * `node:` import, which would only fail once a bundler tried to resolve it.
+ */
+function requireBrowserSafeSources() {
+  const sourceRoot = join(repoRoot, "packages", "web-sdk", "src");
+  const offenders = [];
+  for (const entry of readdirSync(sourceRoot, {
+    recursive: true,
+    withFileTypes: true,
+  })) {
+    if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
+    const path = join(entry.parentPath ?? sourceRoot, entry.name);
+    if (/\bfrom "node:/.test(readFileSync(path, "utf8"))) {
+      offenders.push(path);
+    }
+  }
+  if (offenders.length > 0) {
+    throw new Error(
+      `Browser SDK sources import Node built-ins: ${offenders.join(", ")}`,
+    );
+  }
 }

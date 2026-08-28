@@ -1,5 +1,6 @@
 import { AgentConnectError, AgentSession } from "./agent-session.js";
 import { OmnigentProvider } from "./omnigent-provider.js";
+import { ResponsesProvider } from "./responses-provider.js";
 import type {
   AgentConnection,
   ApplicationTool,
@@ -68,17 +69,30 @@ export async function connectAgent(
     );
   }
   const created = parseCreateResponse(await response.json());
+  const providerHeaders = {
+    ...options.headers,
+    Authorization: `Bearer ${created.accessToken}`,
+  };
   const session = new AgentSession({
-    provider: new OmnigentProvider({
-      baseUrl,
-      sessionId: created.sessionId,
-      fetch: fetchImplementation,
-      headers: {
-        ...options.headers,
-        Authorization: `Bearer ${created.accessToken}`,
-      },
-      ...(options.credentials ? { credentials: options.credentials } : {}),
-    }),
+    provider:
+      options.protocol === "open-responses"
+        ? new ResponsesProvider({
+            baseUrl,
+            fetch: fetchImplementation,
+            headers: providerHeaders,
+            ...(options.credentials
+              ? { credentials: options.credentials }
+              : {}),
+          })
+        : new OmnigentProvider({
+            baseUrl,
+            sessionId: created.sessionId,
+            fetch: fetchImplementation,
+            headers: providerHeaders,
+            ...(options.credentials
+              ? { credentials: options.credentials }
+              : {}),
+          }),
     tools,
   });
   return {

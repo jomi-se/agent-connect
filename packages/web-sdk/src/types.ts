@@ -121,11 +121,26 @@ export interface OmnigentProviderOptions {
   readonly credentials?: RequestCredentials;
 }
 
+export interface ResponsesProviderOptions {
+  readonly baseUrl: string;
+  readonly fetch?: typeof globalThis.fetch;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly credentials?: RequestCredentials;
+}
+
+/**
+ * Which gateway wire the connection speaks. `open-responses` is opt-in while
+ * the durability and recovery work lands; see Milestone 3 of
+ * docs/plan/open-responses-vertical-slice.md.
+ */
+export type AgentConnectProtocol = "agent-connect-task" | "open-responses";
+
 export interface ConnectAgentOptions {
   readonly baseUrl: string;
   readonly appId: string;
   readonly tools: readonly ApplicationTool[];
   readonly accessToken: string;
+  readonly protocol?: AgentConnectProtocol;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: Readonly<Record<string, string>>;
   readonly credentials?: RequestCredentials;
