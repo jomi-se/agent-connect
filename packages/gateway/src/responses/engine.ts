@@ -523,6 +523,20 @@ export class ResponseEngine {
     await state.run.cancel().catch(() => {});
   }
 
+  /**
+   * Whether an application session still has a chain that is not terminal.
+   * The session-refresh path uses this to refuse repairing a provider session
+   * out from under an active chain: the chain's private call IDs belong to the
+   * old provider session, so a replacement would silently break it.
+   */
+  async hasLiveChain(appSessionId: string): Promise<boolean> {
+    const chains = await this.store.listChains();
+    return chains.some(
+      (chain) =>
+        chain.appSessionId === appSessionId && chain.status !== "terminal",
+    );
+  }
+
   /** Releases live runs; used on shutdown and by tests. */
   async closeAll(): Promise<void> {
     const runs = [...this.active.values()];

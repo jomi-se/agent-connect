@@ -58,13 +58,16 @@ const wireTools = [
 ];
 
 class FakeRuntime implements AgentRuntime {
-  private count = 0;
+  createdSessions = 0;
+  healthy = true;
+
   async createSession(): Promise<string> {
-    this.count += 1;
-    return `provider-${this.count}`;
+    this.createdSessions += 1;
+    return `provider-${this.createdSessions}`;
   }
+
   async isHealthy(): Promise<boolean> {
-    return true;
+    return this.healthy;
   }
 }
 
@@ -73,6 +76,7 @@ interface Harness {
   readonly backend: FakeBackend;
   readonly capability: string;
   readonly directory: string;
+  readonly runtime: FakeRuntime;
 }
 
 async function start(
@@ -82,6 +86,7 @@ async function start(
   const directory = mkdtempSync(join(tmpdir(), "agent-connect-responses-"));
   temporaryDirectories.push(directory);
   const backend = new FakeBackend({ turns });
+  const runtime = new FakeRuntime();
   const server = createGateway({
     allowedOrigins: new Set([APP_ORIGIN]),
     allowedTailscaleUsers: new Set(["owner@example.com"]),
@@ -89,7 +94,7 @@ async function start(
     authStatePath: join(directory, "gateway.json"),
     publicEndpoint: "https://runtime.example",
     enrollmentPassphrase: "test enrollment phrase",
-    runtime: new FakeRuntime(),
+    runtime,
     responseBackend: backend,
   });
   servers.push(server);
@@ -106,7 +111,7 @@ async function start(
   });
   expect(session.status).toBe(201);
   const body = (await session.json()) as { accessToken: string };
-  return { baseUrl, backend, capability: body.accessToken, directory };
+  return { baseUrl, backend, capability: body.accessToken, directory, runtime };
 }
 
 /**
@@ -549,6 +554,51 @@ describe("Agent Connect control extensions", () => {
       { headers },
     );
     expect(await chain.json()).toMatchObject({ recovery: "interrupted" });
+  });
+
+  it("refreshes a capability without replacing the provider session under a live chain", async () => {
+    const harness = await start([
+      [call("provider_a")],
+      [{ type: "completed" }],
+    ]);
+    const created = (await (
+      await post(harness, { model: MODEL, input: "hi" })
+    ).json()) as ResponseBody;
+    const callId = callIdOf(created);
+
+    // A capability refresh mid-chain: the runtime reports the provider session
+    // as unhealthy, which on the old task route would mint a replacement.
+    harness.runtime.healthy = false;
+    const refreshed = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.capability}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()] }),
+    });
+    expect(refreshed.status).toBe(201);
+    const renewed = (await refreshed.json()) as { accessToken: string };
+    expect(harness.runtime.createdSessions).toBe(1);
+
+    // The chain continues under the refreshed capability, on the same run.
+    const continued = await fetch(`${harness.baseUrl}/v1/responses`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${renewed.accessToken}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({
+        model: MODEL,
+        previous_response_id: created.id,
+        input: [
+          { type: "function_call_output", call_id: callId, output: "{}" },
+        ],
+      }),
+    });
+    expect(continued.status).toBe(200);
+    expect(((await continued.json()) as ResponseBody).status).toBe("completed");
+    expect(harness.backend.runs).toHaveLength(1);
   });
 
   it("refuses a chain that belongs to a different capability", async () => {

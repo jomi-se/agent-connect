@@ -795,9 +795,15 @@ hides whether the chain is recoverable, complete, or interrupted. The response
 routes never call `ensureHealthy`, so no active chain is handed a replacement
 provider session. See [VAL-RESP-006](../../contract/VAL-RESP-006.md).
 
-Steps 5, 6, and 7 remain: capability refresh for a long chain, crash-point tests
-that kill a live gateway process at each commit boundary, and the default
-switch.
+Step 5 is done by making the existing capability refresh safe rather than by
+adding a new mechanism: `POST /v1/app-sessions` already re-issues a capability
+for a live session, but it also repaired the provider session, which is exactly
+the transparent replacement a chain cannot survive. It now skips the repair when
+the session still has a non-terminal chain, so a long chain can refresh its
+capability without losing its call IDs.
+
+Steps 6 and 7 remain: crash-point tests that kill a live gateway process at each
+commit boundary, and the default switch.
 
 ### Milestone 6: conformance, replacement, and deletion
 
@@ -825,9 +831,9 @@ Implementation work should add the following compact contracts before changing
 runtime behavior:
 
 Written contracts live in `contract/`. Status as of 2026-08-28: `VAL-RESP-000`
-partly proven (see the spike results above), `VAL-RESP-001`, `002`, `005`, and
-`007` passed, `VAL-RESP-006` passed for gateway restart, `VAL-RESP-003`, `004`,
-and `008` not yet run.
+partly proven (see the spike results above), `VAL-RESP-001`, `002`, `003`, `005`,
+and `007` passed, `VAL-RESP-006` passed for gateway restart, `VAL-RESP-004` and
+`008` not yet run.
 
 | Contract       | Required proof                                                                                                                                |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -846,9 +852,10 @@ enforce that stronger contract, so it cannot be delegated to the compliance
 suite.
 
 `VAL-RESP-003` depends on the non-browser ingress profile decided in
-[ADR 0009](../decisions/0009-separate-ingress-owner-authentication-and-application-authorization.md).
-Until that lands, an ordinary server-side client is rejected before routing and
-this contract cannot pass.
+[ADR 0009](../decisions/0009-separate-ingress-owner-authentication-and-application-authorization.md),
+which is now implemented. It passed on 2026-08-28 with the real `openai` 7.8.0
+client, which needed no Agent Connect-specific field and parsed both the JSON
+resources and the SSE stream with its own code.
 
 Upstream compliance is one component of the evidence, not a blanket conformance
 certificate. The pinned `tool-calling` compliance test checks that a function
@@ -864,18 +871,12 @@ In rough dependency order:
 
 1. **Milestone 4**, the real browser-to-Codex composition. Human-run; it spends
    the operator's model allowance.
-2. **`VAL-RESP-003`**: an unmodified OpenAI/Responses JavaScript client against
-   the gateway, which needs the non-browser consent bit switched on for the
-   grant it uses.
-3. **Milestone 5, step 5**: capability refresh for a live chain, or a declared
-   bounded maximum chain lifetime that fails explicitly. The current one-hour
-   capability with no refresh path is not sufficient for a long chain.
-4. **Milestone 5, step 6**: crash-point tests that kill a real gateway process
+2. **Milestone 5, step 6**: crash-point tests that kill a real gateway process
    at each commit boundary, rather than restarting an engine in-process.
-5. **The three open spike scenarios**: explicit cancellation reaching a real
-   run, and deterministic `interrupted` on Omnigent process death.
-6. **Milestone 5, step 7 and Milestone 6**: the default switch, the compliance
-   suite, and deleting the superseded task routes.
+3. **The open spike scenarios**: explicit cancellation reaching a real run, and
+   deterministic `interrupted` on Omnigent process death.
+4. **Milestone 5, step 7 and Milestone 6**: the default switch, the upstream
+   compliance suite, and deleting the superseded task routes.
 
 ## Stop conditions
 

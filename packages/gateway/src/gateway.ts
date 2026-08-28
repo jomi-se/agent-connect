@@ -418,7 +418,13 @@ export function createGateway(options: GatewayOptions) {
             sendJson(response, 401, { error: "grant_revoked" });
             return;
           }
-          session = await ensureHealthy(session);
+          // Refreshing the capability of a session that still has a live
+          // response chain must not repair the provider session underneath it:
+          // the chain's private call IDs belong to the old one. The chain
+          // reports its own recovery outcome through the control extensions.
+          if (!(await responseEngine.hasLiveChain(session.id))) {
+            session = await ensureHealthy(session);
+          }
         } else {
           const bearer = bearerCredential(authorization);
           const grant = bearer
