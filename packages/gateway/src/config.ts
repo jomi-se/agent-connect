@@ -47,6 +47,9 @@ export function configFromEnv(
     dynamicAppEnrollment,
     allowedTailscaleUsers: csvSet(env.AGENT_CONNECT_ALLOWED_TAILSCALE_USERS),
     authStatePath: requiredEnv(env, "AGENT_CONNECT_STATE_PATH"),
+    ...(env.AGENT_CONNECT_RESPONSE_STATE_PATH
+      ? { responseStatePath: env.AGENT_CONNECT_RESPONSE_STATE_PATH }
+      : {}),
     publicEndpoint: requiredEnv(env, "AGENT_CONNECT_PUBLIC_ENDPOINT"),
     ...(transportProfile ? { transportProfile } : {}),
     ...(publicDemoAuthorities ? { publicDemoAuthorities } : {}),
