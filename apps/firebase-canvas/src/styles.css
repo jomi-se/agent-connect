@@ -1282,48 +1282,9 @@ body[data-layout="desktop"] {
   min-height: 58px;
 }
 
-.judge-substitution {
-  position: absolute;
-  right: 48px;
-  bottom: -68px;
-  z-index: 2;
-  width: min(430px, calc(100% - 96px));
-  display: grid;
-  gap: 5px;
-  padding: 13px 16px;
-  border-radius: var(--radius-md);
-  color: var(--agent-ink);
-  background: var(--agent-soft);
-}
-
-.judge-substitution::before {
-  content: "";
-  position: absolute;
-  right: 28px;
-  top: -9px;
-  width: 18px;
-  height: 18px;
-  background: var(--agent-soft);
-  transform: rotate(45deg);
-}
-
-.judge-substitution strong,
-.judge-substitution span {
-  position: relative;
-}
-
-.judge-substitution strong {
-  font-size: 0.76rem;
-}
-
-.judge-substitution span {
-  font-size: 0.7rem;
-  line-height: 1.45;
-}
-
 .future-intro {
   align-items: start;
-  margin: 150px 0 20px;
+  margin: 72px 0 20px;
 }
 
 .future-intro p {
@@ -2411,14 +2372,6 @@ body[data-layout="mobile"] {
   line-height: 1.7;
 }
 
-.mobile-runtime-note {
-  margin: 0;
-  padding: 24px 0 52px;
-  color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1.55;
-}
-
 body[data-layout="mobile"] .architecture-story {
   padding: 54px 0 18px;
 }
@@ -2488,14 +2441,6 @@ body[data-layout="mobile"] .architecture-layer > div {
   align-items: flex-start;
   flex-direction: column;
   gap: 6px;
-}
-
-body[data-layout="mobile"] .judge-substitution {
-  position: relative;
-  right: auto;
-  bottom: auto;
-  width: auto;
-  margin: 24px 4px 0;
 }
 
 body[data-layout="mobile"] .future-intro {

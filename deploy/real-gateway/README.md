@@ -6,8 +6,8 @@ and a small compatibility wrapper around the published `codex-acp` adapter on
 one Linux machine. A separate HTTPS web application can authorize through
 Tailscale Serve, lend task-scoped tools, and receive real Codex tool calls.
 
-This is distinct from the deterministic public judge demo. This profile is the
-usable MVP and uses the user's own Codex account.
+This is the usable reference MVP and uses the user's own Codex account. The
+hackathon's anonymous judge deployment has been retired and removed.
 
 ## Supported reference platform
 
@@ -114,22 +114,36 @@ JSON is merged over that file for each ACP process.
 In this MVP, the calling web application cannot yet approve Codex tool requests
 through Agent Connect.
 
-## 4. Start the real gateway
+## 4. Initialize, then start the real gateway
+
+Create the gateway identity in a one-shot foreground command:
+
+```sh
+deploy/real-gateway/run.sh initialize
+```
+
+It prints two deliberately separate values exactly once:
+
+- a public runtime card: this is how a web app knows how to target and verify an
+  Agent Connect gateway. Enter it in the web app using the Agent Connect SDK;
+  and
+- a private enrollment passphrase: save it immediately in a password manager.
+  It is requested only on the gateway-owned authorization page and cannot be
+  recovered from the durable state.
+
+The initializer stores the gateway keys and only a salted scrypt verifier for
+the passphrase. It refuses to overwrite an existing identity. Normal startup
+does not accept or retain a plaintext passphrase and refuses to create state
+implicitly.
+
+Then start the stack:
 
 ```sh
 deploy/real-gateway/run.sh
 ```
 
 This command starts and supervises all downstream actors: the Agent Connect
-gateway, the Omnigent server, and the Omnigent execution host. On first state
-creation it prints two deliberately separate values:
-
-- a public runtime card: this is how a web app knows how to target and verify an
-  Agent Connect gateway. Enter it in the web app using the Agent Connect SDK;
-  and
-- a private enrollment passphrase: this secret is requested during
-  authorization after redirecting to a gateway-owned page served by the Agent
-  Connect gateway itself.
+gateway, the Omnigent server, and the Omnigent execution host.
 
 The durable gateway identity, grants, and enrollment state live in the
 gitignored `.agent-connect/real-connector` directory by default. This legacy
@@ -192,6 +206,5 @@ Codex task.
 
 Only authorize applications you trust. The consent screen restricts which
 application Origin and tool snapshot receive access but it cannot make malicious
-prompts suddenly safe. This reference profile is not an arbitrary-app
-sandbox. The deterministic public demo is the safer profile for anonymous
-judge demo because it contains no Codex credential or general agent shell.
+prompts suddenly safe. This reference profile is not an arbitrary-app sandbox
+and must not be exposed anonymously.

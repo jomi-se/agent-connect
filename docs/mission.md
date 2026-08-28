@@ -97,10 +97,13 @@ require a bundled harness backend that owns both runtime supervision and direct
 translation to Open Responses semantics; it must not require reimplementing
 the shared OAuth, application grants, response transport, or recovery core.
 
-The terminal is used once to export the gateway's runtime card and enrollment
-passphrase and thereafter only for recovery. New apps are approved through the
+The one-shot initializer uses the terminal once to export the gateway's runtime
+card and enrollment passphrase, persists only a salted verifier, and thereafter
+the terminal is needed only for recovery. Normal serving does not accept the
+plaintext passphrase. New apps are approved through the
 gateway's Tailscale-hosted OAuth-style page. The private Tailscale Serve flow
-and isolated public Funnel flow have both passed from remote mobile browsers.
+has passed from a remote mobile browser; the historically proven isolated
+public Funnel profile was removed after the hackathon.
 App-instance sender binding, recovery/key rotation, durable provider mappings,
 and durable unresolved-tool delivery remain outstanding.
 

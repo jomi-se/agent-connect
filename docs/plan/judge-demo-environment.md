@@ -1,6 +1,12 @@
-# Judge demo environment
+# Archived judge demo environment
 
-Status: public Funnel/browser and revocation proven; final judge-instruction rehearsal pending
+> Historical record: the judge deployment, anonymous `public-demo` transport
+> profile, fixed-authority configuration, and operational scripts were removed
+> on 2026-08-28 after the hackathon. Nothing in this document is a current
+> deployment instruction.
+
+Status: archived; deployment removed after its public Funnel/browser and
+revocation flow had been proven
 
 ## Purpose
 
@@ -149,10 +155,10 @@ not reuse the owner's private-gateway browser. A distinct public hostname is
 the durable fix after the hackathon; changing only the cookie name does not
 prevent the old cookie from being sent.
 
-The judge passphrase belongs only in Devpost's private testing instructions. It
-must not appear in Firebase assets, the public repository, screenshots, video,
-logs, or runtime card. A failed or missing public-demo identity must never be
-replaced with a fabricated Tailscale identity header.
+The judge passphrase belonged only in Devpost's private testing instructions. It
+was not permitted in Firebase assets, the public repository, screenshots,
+video, logs, or the runtime card. A failed or missing public-demo identity could
+never be replaced with a fabricated Tailscale identity header.
 
 ## Minimum abuse and resource containment
 

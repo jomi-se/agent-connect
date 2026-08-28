@@ -3,6 +3,11 @@
 - Status: proposed
 - Date: 2026-07-23
 
+Implementation note (2026-08-28): the anonymous Funnel `public-demo` profile
+used as a motivating contrast was removed after the hackathon. The separation
+between transport, owner authentication, application grants, and session
+authorization remains the proposed design for supported profiles.
+
 ## Context
 
 The current gateway combines several distinct security mechanisms:

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "bin": {
-    "agent-connect-gateway": "dist/main.js"
+    "agent-connect-gateway": "dist/main.js",
+    "agent-connect-gateway-init": "dist/initialize-main.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

@@ -3,9 +3,11 @@
 Surface: public library and API.
 Needs: a first-run gateway state path, exact public endpoint, allowlisted
 Tailscale requester, and public runtime card imported by the browser app.
-Behavior: first run creates a durable Ed25519 identity and high-entropy
-enrollment passphrase, stores only an scrypt verifier, and emits the bundle
-once. For every new application authorization, the SDK verifies a signature
+Behavior: an explicit one-shot initializer creates a durable Ed25519 identity
+and high-entropy enrollment passphrase, stores only an scrypt verifier, and
+emits the bundle once. Normal serving refuses uninitialized state and never
+accepts the plaintext passphrase through deployment configuration. For every
+new application authorization, the SDK verifies a signature
 over a fresh nonce, runtime id, and endpoint using the pinned card before it
 sends tool schemas.
 Evidence: API/library tests proving state reload, valid challenge, invalid

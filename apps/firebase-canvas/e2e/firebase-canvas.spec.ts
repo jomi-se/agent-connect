@@ -9,7 +9,7 @@ const runtimeCard = {
     crv: "Ed25519",
     x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   },
-  transportProfile: "public-demo",
+  transportProfile: "tailscale-serve",
   authorizationServer: "https://gateway.example",
 };
 
@@ -353,13 +353,8 @@ test("the architecture story distinguishes today's proof from the north star", a
     page.getByRole("heading", { name: "How it works today" }),
   ).toBeVisible();
   await expect(
-    page.getByText("Public judge demo", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("At the agent layer, this Codex box is replaced", {
-      exact: false,
-    }),
-  ).toBeVisible();
+    page.locator(".current-architecture .architecture-layer-agent strong"),
+  ).toHaveText("Codex");
 
   const story = page.locator("[data-future-story]");
   const storyMetrics = await story.evaluate((element) => ({
@@ -412,7 +407,7 @@ async function openAndConnect(
   ).toBeDisabled();
   await page.getByRole("button", { name: "Connect runtime" }).click();
   await expect(page.locator("#connection-state")).toContainText(
-    "Recorded Codex plan",
+    "Codex through Omnigent",
   );
   await expect(
     page.getByRole("button", { name: "Connect runtime" }),

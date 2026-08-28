@@ -4,6 +4,11 @@
   hardening deferred
 - Date: 2026-07-14
 
+Implementation note (2026-08-28): the hackathon-only anonymous `public-demo`
+transport was removed after judging. The accepted runtime-card, enrollment,
+consent, PKCE, and grant design continues through the private Tailscale Serve
+profile.
+
 ## Context
 
 The prototype prints a one-time pairing code in the gateway terminal for each

@@ -60,10 +60,13 @@ Durable pending application actions are a required next reliability layer, not
 current behavior. Its public interface contains no browser-facing Omnigent,
 Codex, ACP, or MCP types.
 
-The enrolled profile prints one runtime card and generated high-entropy
-enrollment passphrase on first state creation. The user saves the bundle in a
-password manager, imports only the public card into applications, and enters
-the passphrase only on the gateway origin. The application accepts the
+An explicit one-shot initializer prints one runtime card and generated
+high-entropy enrollment passphrase on first state creation. It persists only a
+salted verifier and refuses to re-export or overwrite an existing identity;
+normal gateway startup refuses uninitialized state and never receives the
+plaintext passphrase. The user saves the bundle in a password manager, imports
+only the public card into applications, and enters the passphrase only on the
+gateway origin. The application accepts the
 destination only after it proves possession of the enrolled gateway key.
 
 Each new application then redirects to a top-level gateway-owned OAuth
@@ -86,8 +89,7 @@ result, and tool traffic remain unavailable until that grant exists. Dynamic
 CORS decisions follow the same boundary: bootstrap endpoints may reflect the
 validated initiating Origin, while protected endpoints require an active grant
 bound to that Origin. An environment-based Origin allowlist remains an
-optional stricter operator policy and is mandatory for the frozen public judge
-profile.
+optional stricter operator policy.
 
 Direct URLs and relay addresses are transport hints, not runtime identity. See
 the [mutual runtime identity investigation](../research/2026-07-14-mutual-runtime-identity.md)
@@ -126,9 +128,8 @@ and [malicious-application threat model](../research/2026-07-14-malicious-applic
 The deployed gateway listens only on loopback. Tailscale Serve terminates HTTPS
 and supplies authenticated identity headers. The gateway checks those headers
 and requires an exact Origin-bound application grant before accepting a session
-request. The hardened public judge profile may additionally retain a static
-Origin allowlist. Firebase hosts application assets, not the gateway or the
-user-owned runtime.
+request. Firebase hosts application assets, not the gateway or the user-owned
+runtime.
 
 ### Omnigent
 

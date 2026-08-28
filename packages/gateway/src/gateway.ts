@@ -48,11 +48,7 @@ export interface GatewayOptions {
   readonly authStatePath: string;
   readonly publicEndpoint: string;
   readonly transportProfile?: string;
-  readonly publicDemoAuthorities?: readonly {
-    readonly appId: string;
-    readonly redirectUri: string;
-    readonly toolHash: string;
-  }[];
+  /** Internal deterministic-test seam; production startup never reads this from configuration. */
   readonly enrollmentPassphrase?: string;
   readonly runtime?: AgentRuntime;
   readonly responseBackend?: ResponseBackend;
@@ -78,35 +74,19 @@ const PROVIDER_SESSION_ROUTE = /^\/v1\/sessions\/([^/]+)\/(stream|events)$/;
 const MAX_EVENT_BYTES = 1024 * 1024;
 const MAX_CREATE_BYTES = 64 * 1024;
 const DEVICE_COOKIE = "agent_connect_device";
-const PUBLIC_DEMO_PROFILE = "public-demo";
-const PUBLIC_DEMO_PRINCIPAL = "agent-connect-public-demo";
 
 export function createGateway(options: GatewayOptions) {
-  const publicDemo = options.transportProfile === PUBLIC_DEMO_PROFILE;
   const dynamicAppEnrollment = options.dynamicAppEnrollment === true;
   if (options.allowedOrigins.size === 0 && !dynamicAppEnrollment) {
     throw new TypeError("At least one allowed browser origin is required");
   }
-  if (
-    dynamicAppEnrollment &&
-    (publicDemo || options.transportProfile !== "tailscale-serve")
-  ) {
+  if (dynamicAppEnrollment && options.transportProfile !== "tailscale-serve") {
     throw new TypeError(
       "dynamic app enrollment requires the tailscale-serve transport profile",
     );
   }
-  if (!publicDemo && options.allowedTailscaleUsers.size === 0) {
+  if (options.allowedTailscaleUsers.size === 0) {
     throw new TypeError("At least one allowed Tailscale login is required");
-  }
-  if (publicDemo && !options.publicDemoAuthorities?.length) {
-    throw new TypeError(
-      "public-demo requires an exact configured application authority",
-    );
-  }
-  if (!publicDemo && options.publicDemoAuthorities?.length) {
-    throw new TypeError(
-      "publicDemoAuthorities is valid only for the public-demo profile",
-    );
   }
   const publicEndpoint = canonicalPublicEndpoint(options.publicEndpoint);
 
@@ -209,7 +189,6 @@ export function createGateway(options: GatewayOptions) {
           request,
           response,
           options.allowedTailscaleUsers,
-          publicDemo,
         );
         if (!principal) return;
         if (pathname === "/authorize") {
@@ -221,16 +200,6 @@ export function createGateway(options: GatewayOptions) {
             publicEndpoint,
           );
         } else {
-          if (
-            publicDemo &&
-            !connectorAuth.isDeviceEnrolled(
-              cookie(request, DEVICE_COOKIE),
-              principal,
-            )
-          ) {
-            sendJson(response, 401, { error: "device_not_enrolled" });
-            return;
-          }
           await handleGrantPage(
             request,
             response,
@@ -248,18 +217,12 @@ export function createGateway(options: GatewayOptions) {
       // selects a non-browser caller. That profile is admitted only on the
       // response routes, only with a transport principal, and only when the
       // grant carries the explicit non-browser consent bit. Dynamic enrollment
-      // and the public demo are closed to it.
-      if (
-        origin === undefined &&
-        responseRoute &&
-        !publicDemo &&
-        !dynamicAppEnrollment
-      ) {
+      // is closed to it.
+      if (origin === undefined && responseRoute && !dynamicAppEnrollment) {
         const principal = requireTransportPrincipal(
           request,
           response,
           options.allowedTailscaleUsers,
-          publicDemo,
         );
         if (!principal) return;
         await responseSessionsReady;
@@ -294,7 +257,6 @@ export function createGateway(options: GatewayOptions) {
         request,
         response,
         options.allowedTailscaleUsers,
-        publicDemo,
       );
       if (!principal) return;
 
@@ -323,16 +285,6 @@ export function createGateway(options: GatewayOptions) {
         const appId = requireString(value, "appId");
         const redirectUri = requireString(value, "redirectUri");
         const tools = validateToolSnapshot(value["tools"]);
-        if (
-          publicDemo &&
-          !matchesPublicDemoAuthority(
-            { appId, redirectUri, toolHash: hashToolSnapshot(tools) },
-            options.publicDemoAuthorities,
-          )
-        ) {
-          sendJson(response, 403, { error: "public_demo_authority_mismatch" });
-          return;
-        }
         const authorization = connectorAuth.createAuthorizationRequest({
           origin,
           appId,
@@ -1003,9 +955,7 @@ function requireTransportPrincipal(
   request: IncomingMessage,
   response: ServerResponse,
   allowedTailscaleUsers: ReadonlySet<string>,
-  publicDemo: boolean,
 ): string | undefined {
-  if (publicDemo) return PUBLIC_DEMO_PRINCIPAL;
   if (!isLoopbackAddress(request.socket.localAddress)) {
     sendJson(response, 403, { error: "trusted_proxy_required" });
     return undefined;
@@ -1018,24 +968,6 @@ function isLoopbackAddress(address: string | undefined): boolean {
     address === "127.0.0.1" ||
     address === "::1" ||
     address === "::ffff:127.0.0.1"
-  );
-}
-
-function matchesPublicDemoAuthority(
-  requested: {
-    readonly appId: string;
-    readonly redirectUri: string;
-    readonly toolHash: string;
-  },
-  configured: GatewayOptions["publicDemoAuthorities"],
-): boolean {
-  return Boolean(
-    configured?.some(
-      (authority) =>
-        requested.appId === authority.appId &&
-        requested.redirectUri === authority.redirectUri &&
-        requested.toolHash === authority.toolHash,
-    ),
   );
 }
 

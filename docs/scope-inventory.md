@@ -1,6 +1,6 @@
 # Scope and capability inventory
 
-Updated: 2026-08-27
+Updated: 2026-08-28
 
 This inventory separates implemented behavior from explicit targets. The
 mission defines the product boundary; this file prevents future plans from
@@ -45,14 +45,13 @@ silently treating a target as a shipped guarantee.
 
 ## Deployment profiles
 
-| Profile                              | Status                            | Assurance boundary                                                                                                                  |
-| ------------------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Private Tailscale Serve + real Codex | Implemented and manually proven   | Loopback gateway trusts Serve-injected allowlisted user identity; runtime card pins gateway key; not a hostile-app sandbox          |
-| Public Funnel judge demo             | Implemented and externally proven | Fixed app/tool authority, enrolled device, deterministic ACP agent, no model credential or general shell, hardened single container |
-| Localhost development                | Implemented building block        | Reachability is local; production enrollment UX is not defined                                                                      |
-| General gateway deployment           | Planned                           | Packaging convenience must not be described as process, credential, or tenant isolation                                             |
-| Per-session container/managed runner | Exploration                       | Potential stronger runtime boundary; no accepted implementation                                                                     |
-| Custom URL, relay, or other tunnel   | Deferred                          | Must define destination identity, caller identity, enrollment, and assurance rather than inheriting Tailscale claims                |
+| Profile                              | Status                          | Assurance boundary                                                                                                         |
+| ------------------------------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Private Tailscale Serve + real Codex | Implemented and manually proven | Loopback gateway trusts Serve-injected allowlisted user identity; runtime card pins gateway key; not a hostile-app sandbox |
+| Localhost development                | Implemented building block      | Reachability is local; production enrollment UX is not defined                                                             |
+| General gateway deployment           | Planned                         | Packaging convenience must not be described as process, credential, or tenant isolation                                    |
+| Per-session container/managed runner | Exploration                     | Potential stronger runtime boundary; no accepted implementation                                                            |
+| Custom URL, relay, or other tunnel   | Deferred                        | Must define destination identity, caller identity, enrollment, and assurance rather than inheriting Tailscale claims       |
 
 ## Security and reliability invariants
 
@@ -70,8 +69,6 @@ silently treating a target as a shipped guarantee.
   approval requests.
 - Unknown provider events, unknown tools, malformed inputs, policy-manifest
   drift, and ambiguous trusted-proxy identities fail closed.
-- The public judge demo is a reproducible protocol/application proof, not
-  evidence that the private real-Codex runtime is sandboxed.
 - Stable action IDs support app-owned idempotency; unresolved-action durability
   is still pending.
 
@@ -85,8 +82,6 @@ silently treating a target as a shipped guarantee.
    and a deterministic ACP/MCP agent without model credentials.
 4. The real Tailscale Serve + Omnigent + Codex + deployed-browser flow is a
    manual composition milestone.
-5. The public Funnel profile is tested from a clean external browser and has a
-   documented reboot and teardown path.
 
 Gateway tests validate how Agent Connect consumes trusted-proxy identity;
 they do not attempt to reimplement or prove Tailscale/WireGuard. Runtime posture
