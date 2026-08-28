@@ -41,12 +41,9 @@ export interface ResponseEngineOptions {
   readonly createId?: () => string;
 }
 
-/** One of the four declared outcomes of a recovery attempt. */
+/** One of the three declared outcomes of a recovery attempt. */
 export type RecoveryOutcome =
-  | "reattached_live"
-  | "reconciled_from_snapshot"
-  | "terminal_reconstructed"
-  | "interrupted";
+  "reattached_live" | "terminal_reconstructed" | "interrupted";
 
 export interface ChainView {
   readonly responseId: string;
@@ -66,6 +63,7 @@ interface ActiveChain {
   readonly run: BackendRun;
   readonly events: AsyncIterator<BackendEvent>;
   busy: boolean;
+  cancelRequested: boolean;
 }
 
 export class ResponseEngine {
@@ -156,6 +154,7 @@ export class ResponseEngine {
       run,
       events: run.events(),
       busy: true,
+      cancelRequested: false,
     };
     this.active.set(chain.chainId, state);
     return this.segment(chain.chainId, state, null);
@@ -174,6 +173,12 @@ export class ResponseEngine {
     try {
       const call = await this.resolvableCall(chain, callId, output);
       await this.deliverOutput(state, call, output, fingerprintOf(output));
+      if (state.cancelRequested) {
+        throw new ResponseApiError(
+          "response_cancelled",
+          "the response chain was cancelled while its output was being delivered",
+        );
+      }
       await this.store.putChain({
         ...chain,
         status: "running",
@@ -296,6 +301,11 @@ export class ResponseEngine {
     output: string,
     fingerprint: string,
   ): Promise<void> {
+    // A successful provider post was already durably recorded. Re-entering a
+    // continuation must observe the retained run, not post the same output a
+    // second time. `output_recorded` remains an intentionally uncertain
+    // at-least-once boundary if the process died around the provider request.
+    if (call.result === "delivery_attempted") return;
     const recorded: CallRecord = {
       ...call,
       result: "output_recorded",
@@ -369,11 +379,30 @@ export class ResponseEngine {
     try {
       for (;;) {
         const next = await state.events.next();
-        if (!resolvedCall && continuation) {
-          resolvedCall = true;
-          await this.observeCallResult(continuation.callId);
+        if (state.cancelRequested) {
+          yield* writer.closeText();
+          await this.finishChain(chainId, "terminal", CANCELLED_ERROR);
+          await persist("cancelled", CANCELLED_ERROR);
+          yield* writer.cancelled(CANCELLED_ERROR);
+          return;
         }
-        if (next.done || next.value.type === "completed") {
+        if (next.done) {
+          const error = {
+            code: "backend_protocol_error",
+            message:
+              "the user-owned runtime stream ended without a terminal event",
+          };
+          yield* writer.closeText();
+          await this.finishChain(chainId, "terminal", error);
+          await persist("failed", error);
+          yield* writer.failed(error, { type: "api_error", param: null });
+          return;
+        }
+        if (next.value.type === "completed") {
+          if (!resolvedCall && continuation) {
+            resolvedCall = true;
+            await this.observeCallResult(continuation.callId);
+          }
           yield* writer.closeText();
           await this.finishChain(chainId, "terminal", null);
           await persist("completed");
@@ -382,12 +411,26 @@ export class ResponseEngine {
         }
         const event = next.value;
         if (event.type === "text.delta") {
+          if (!resolvedCall && continuation) {
+            resolvedCall = true;
+            await this.observeCallResult(continuation.callId);
+          }
           yield* writer.appendText(event.delta);
           continue;
         }
         if (event.type === "tool.call") {
+          if (!resolvedCall && continuation) {
+            resolvedCall = true;
+            await this.observeCallResult(continuation.callId);
+          }
           yield* writer.closeText();
           const item = await this.recordCall(chainId, responseId, event, chain);
+          if (state.cancelRequested) {
+            await this.finishChain(chainId, "terminal", CANCELLED_ERROR);
+            await persist("cancelled", CANCELLED_ERROR);
+            yield* writer.cancelled(CANCELLED_ERROR);
+            return;
+          }
           yield* writer.functionCall(item);
           await this.publishCall(item.call_id);
           // The segment ends here; the harness run is deliberately retained.
@@ -409,10 +452,14 @@ export class ResponseEngine {
         return;
       }
     } catch (cause) {
-      const error = {
-        code: "backend_unavailable",
-        message: `the user-owned runtime stream failed: ${describe(cause)}`,
-      };
+      const error =
+        cause instanceof ResponseApiError &&
+        cause.code === "backend_protocol_error"
+          ? { code: cause.code, message: cause.message }
+          : {
+              code: "backend_unavailable",
+              message: `the user-owned runtime stream failed: ${describe(cause)}`,
+            };
       await this.finishChain(chainId, "terminal", error);
       await persist("failed", error);
       yield* writer.failed(error, { type: "api_error", param: null });
@@ -484,6 +531,10 @@ export class ResponseEngine {
       // stays unresolved for the ledger; it just stops being deliverable.
       return [];
     }
+    if (!this.liveRun(chain.chainId)) {
+      await this.markInterrupted(chain);
+      return [];
+    }
     const calls = await this.store.unresolvedCalls(chain.chainId);
     return calls
       .filter((call) => call.publication === "published")
@@ -504,29 +555,19 @@ export class ResponseEngine {
     const { chain } = await this.requireOwnedResponse(session, responseId);
     const live = this.active.get(chain.chainId);
     if (chain.status !== "terminal") {
+      if (live) live.cancelRequested = true;
       await this.store.putChain({
         ...chain,
         status: "cancelling",
         updatedAt: this.seconds(),
       });
       if (live) {
-        await live.run.cancel();
-        if (!live.busy) {
-          // Nothing is consuming the run, so no segment will observe the
-          // cancellation; commit the terminal state here.
-          await live.run.close();
-          this.active.delete(chain.chainId);
-          await this.finishChain(chain.chainId, "terminal", {
-            code: "response_cancelled",
-            message: "the response chain was cancelled",
-          });
-        }
-      } else {
-        await this.finishChain(chain.chainId, "terminal", {
-          code: "response_cancelled",
-          message: "the response chain was cancelled",
-        });
+        await live.run.cancel().catch(() => {});
       }
+      // Cancellation is an engine-owned decision. Omnigent does not promise a
+      // follow-up cancellation event, so waiting for one can hang the open
+      // segment and allow a later tool call to resurrect the chain.
+      await this.finishChain(chain.chainId, "terminal", CANCELLED_ERROR);
     }
     return this.describeChain(session, responseId);
   }
@@ -677,6 +718,11 @@ export class ResponseEngine {
     const chain = await this.store.getChain(chainId);
     if (!chain) return;
     if (chain.status === "terminal") return;
+    const state = this.active.get(chainId);
+    if (state?.cancelRequested && status !== "terminal") {
+      status = "terminal";
+      terminalError = CANCELLED_ERROR;
+    }
     await this.store.putChain({
       ...chain,
       status,
@@ -684,7 +730,6 @@ export class ResponseEngine {
       updatedAt: this.seconds(),
     });
     if (status === "terminal") {
-      const state = this.active.get(chainId);
       this.active.delete(chainId);
       await state?.run.close().catch(() => {});
     }

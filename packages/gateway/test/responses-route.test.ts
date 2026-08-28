@@ -328,6 +328,23 @@ describe("POST /v1/responses", () => {
     expect(types.at(-1)).toBe("response.completed");
   });
 
+  it("returns a produced failed response resource as HTTP 200", async () => {
+    const harness = await start([
+      [{ type: "failed", message: "provider rejected the run" }],
+    ]);
+    const response = await post(harness, { model: MODEL, input: "hi" });
+    const body = (await response.json()) as {
+      status: string;
+      error: { code: string } | null;
+    };
+
+    // Open Responses distinguishes a produced failed resource from an API
+    // request that failed before a response resource could be created.
+    expect(response.status).toBe(200);
+    expect(body.status).toBe("failed");
+    expect(body.error?.code).toBe("backend_protocol_error");
+  });
+
   it("rejects an unsupported field with the standard error envelope", async () => {
     const harness = await start([[{ type: "completed" }]]);
     const failed = await post(harness, {
@@ -534,26 +551,29 @@ describe("Agent Connect control extensions", () => {
     const created = (await (
       await post(harness, { model: MODEL, input: "hi" })
     ).json()) as ResponseBody;
-    const callId = callIdOf(created);
     const baseUrl = await restart(harness);
     const headers = browserHeaders({
       Authorization: `Bearer ${harness.capability}`,
     });
 
-    // The published call is still redeliverable from the durable ledger.
+    // The ledger retains the call for diagnosis, but the gateway must not ask
+    // the browser to execute a side effect for a run that cannot accept it.
     const pending = await fetch(
       `${baseUrl}/v1/agent-connect/responses/${created.id}/pending-function-calls`,
       { headers },
     );
-    expect(await pending.json()).toMatchObject({
-      pending_function_calls: [{ call_id: callId }],
-    });
+    expect(await pending.json()).toEqual({ pending_function_calls: [] });
 
     const chain = await fetch(
       `${baseUrl}/v1/agent-connect/responses/${created.id}`,
       { headers },
     );
-    expect(await chain.json()).toMatchObject({ recovery: "interrupted" });
+    // The pending-call lookup retired the dead run to interrupted. A later
+    // status lookup reconstructs that now-terminal resource from the ledger.
+    expect(await chain.json()).toMatchObject({
+      recovery: "terminal_reconstructed",
+      chain_status: "terminal",
+    });
   });
 
   it("refreshes a capability without replacing the provider session under a live chain", async () => {

@@ -43,15 +43,19 @@ export class FileResponseStore implements ResponseStore {
   private readonly files = new Map<string, ChainFile>();
   private readonly chainOfResponse = new Map<string, string>();
   private readonly chainOfCall = new Map<string, string>();
+  private readonly durableWrite: typeof writeDurably;
   private writes = Promise.resolve();
 
-  constructor(directory: string) {
+  constructor(
+    directory: string,
+    options: { readonly durableWrite?: typeof writeDurably } = {},
+  ) {
     this.directory = directory;
+    this.durableWrite = options.durableWrite ?? writeDurably;
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     for (const entry of readdirSync(directory)) {
       if (!entry.endsWith(".json")) continue;
-      const loaded = this.load(join(directory, entry));
-      if (loaded) this.index(loaded);
+      this.index(this.load(join(directory, entry)));
     }
   }
 
@@ -60,12 +64,14 @@ export class FileResponseStore implements ResponseStore {
   }
 
   async putChain(chain: ChainRecord): Promise<void> {
-    const existing = this.files.get(chain.chainId);
-    await this.write({
-      version: 1,
-      chain,
-      responses: existing?.responses ?? {},
-      calls: existing?.calls ?? {},
+    await this.write(() => {
+      const existing = this.files.get(chain.chainId);
+      return {
+        version: 1,
+        chain,
+        responses: existing?.responses ?? {},
+        calls: existing?.calls ?? {},
+      };
     });
   }
 
@@ -74,10 +80,12 @@ export class FileResponseStore implements ResponseStore {
   }
 
   async putResponse(response: ResponseRecord): Promise<void> {
-    const file = this.require(response.chainId);
-    await this.write({
-      ...file,
-      responses: { ...file.responses, [response.responseId]: response },
+    await this.write(() => {
+      const file = this.require(response.chainId);
+      return {
+        ...file,
+        responses: { ...file.responses, [response.responseId]: response },
+      };
     });
   }
 
@@ -87,10 +95,12 @@ export class FileResponseStore implements ResponseStore {
   }
 
   async putCall(call: CallRecord): Promise<void> {
-    const file = this.require(call.chainId);
-    await this.write({
-      ...file,
-      calls: { ...file.calls, [call.callId]: call },
+    await this.write(() => {
+      const file = this.require(call.chainId);
+      return {
+        ...file,
+        calls: { ...file.calls, [call.callId]: call },
+      };
     });
   }
 
@@ -121,24 +131,28 @@ export class FileResponseStore implements ResponseStore {
     }
   }
 
-  private write(file: ChainFile): Promise<void> {
-    this.index(file);
-    const path = join(this.directory, `${file.chain.chainId}.json`);
-    const body = `${JSON.stringify(file, null, 2)}\n`;
+  private write(createFile: () => ChainFile): Promise<void> {
     // Serialized so two concurrent updates to one chain cannot interleave a
-    // rename between another writer's write and its own.
-    this.writes = this.writes.then(() => {
-      writeDurably(path, body, this.directory);
+    // rename between another writer's write and its own. A failed operation is
+    // not retained as the queue tail: later writes must still be attempted.
+    const operation = this.writes.then(() => {
+      const file = createFile();
+      const path = join(this.directory, `${file.chain.chainId}.json`);
+      const body = `${JSON.stringify(file, null, 2)}\n`;
+      this.durableWrite(path, body, this.directory);
+      // Reads never observe state that was not durably committed.
+      this.index(file);
     });
-    return this.writes;
+    this.writes = operation.catch(() => {});
+    return operation;
   }
 
-  private load(path: string): ChainFile | undefined {
+  private load(path: string): ChainFile {
     let parsed: unknown;
     try {
       parsed = JSON.parse(readFileSync(path, "utf8"));
-    } catch {
-      return undefined;
+    } catch (cause) {
+      throw new Error(`Cannot load response state ${path}`, { cause });
     }
     if (
       typeof parsed !== "object" ||
@@ -146,7 +160,7 @@ export class FileResponseStore implements ResponseStore {
       (parsed as ChainFile).version !== 1 ||
       typeof (parsed as ChainFile).chain?.chainId !== "string"
     ) {
-      return undefined;
+      throw new Error(`Invalid response state ${path}`);
     }
     const file = parsed as ChainFile;
     return {

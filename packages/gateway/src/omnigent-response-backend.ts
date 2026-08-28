@@ -11,6 +11,7 @@ const INTERNAL_ORIGIN = "omnigent://internal";
 export interface OmnigentResponseBackendOptions {
   readonly baseUrl: string;
   readonly fetch?: typeof globalThis.fetch;
+  readonly postTimeoutMs?: number;
 }
 
 /**
@@ -23,11 +24,13 @@ export class OmnigentResponseBackend implements ResponseBackend {
   readonly kind = "omnigent";
   private readonly baseUrl: string;
   private readonly fetchImplementation: typeof globalThis.fetch;
+  private readonly postTimeoutMs: number;
 
   constructor(options: OmnigentResponseBackendOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.fetchImplementation =
       options.fetch ?? globalThis.fetch.bind(globalThis);
+    this.postTimeoutMs = options.postTimeoutMs ?? 15_000;
   }
 
   async start(request: BackendStartRequest): Promise<BackendRun> {
@@ -35,6 +38,7 @@ export class OmnigentResponseBackend implements ResponseBackend {
       `${this.baseUrl}/v1/sessions/${encodeURIComponent(request.providerSessionId)}`,
       request.providerSessionId,
       this.fetchImplementation,
+      this.postTimeoutMs,
     );
     await run.open(request);
     return run;
@@ -45,6 +49,7 @@ class OmnigentBackendRun implements BackendRun {
   readonly providerSessionId: string;
   private readonly sessionUrl: string;
   private readonly fetchImplementation: typeof globalThis.fetch;
+  private readonly postTimeoutMs: number;
   private readonly queue = new BackendEventQueue();
   private readonly controller = new AbortController();
   /**
@@ -59,10 +64,12 @@ class OmnigentBackendRun implements BackendRun {
     sessionUrl: string,
     providerSessionId: string,
     fetchImplementation: typeof globalThis.fetch,
+    postTimeoutMs: number,
   ) {
     this.sessionUrl = sessionUrl;
     this.providerSessionId = providerSessionId;
     this.fetchImplementation = fetchImplementation;
+    this.postTimeoutMs = postTimeoutMs;
   }
 
   async open(request: BackendStartRequest): Promise<void> {
@@ -75,24 +82,29 @@ class OmnigentBackendRun implements BackendRun {
         `Omnigent stream for ${this.providerSessionId} failed: HTTP ${stream.status}`,
       );
     }
-    // The pump is deliberately not awaited: it outlives every client-facing
-    // segment and buffers events published while no segment is open.
-    void this.pump(stream.body);
-    await this.post({
-      type: "message",
-      data: {
-        role: "user",
-        content: [{ type: "input_text", text: request.prompt }],
-      },
-      tools: request.tools.map((tool) => ({
-        type: "function",
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.inputSchema,
+    try {
+      // The pump is deliberately not awaited: it outlives every client-facing
+      // segment and buffers events published while no segment is open.
+      void this.pump(stream.body);
+      await this.post({
+        type: "message",
+        data: {
+          role: "user",
+          content: [{ type: "input_text", text: request.prompt }],
         },
-      })),
-    });
+        tools: request.tools.map((tool) => ({
+          type: "function",
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema,
+          },
+        })),
+      });
+    } catch (cause) {
+      await this.close();
+      throw cause;
+    }
   }
 
   isAlive(): boolean {
@@ -112,6 +124,7 @@ class OmnigentBackendRun implements BackendRun {
   }
 
   async cancel(): Promise<void> {
+    this.parked = 0;
     await this.post({ type: "interrupt", data: {} });
   }
 
@@ -178,9 +191,11 @@ class OmnigentBackendRun implements BackendRun {
         return this.parked > 0 ? undefined : { type: "completed" };
       case "response.failed":
       case "response.incomplete":
+        this.parked = 0;
         return { type: "failed", message: terminalMessage(event) };
       case "response.cancelled":
       case "session.interrupted":
+        this.parked = 0;
         return { type: "cancelled" };
       default:
         return undefined;
@@ -192,6 +207,10 @@ class OmnigentBackendRun implements BackendRun {
       method: "POST",
       headers: { Origin: INTERNAL_ORIGIN, "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.any([
+        this.controller.signal,
+        AbortSignal.timeout(this.postTimeoutMs),
+      ]),
     });
     const text = await result.text();
     if (!result.ok) {

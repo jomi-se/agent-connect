@@ -1,4 +1,10 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -93,6 +99,39 @@ function callIdOf(resource: ResponseResource): string {
 }
 
 describe("file-backed response store", () => {
+  it("recovers after one durable write failure without exposing phantom state", async () => {
+    const directory = stateDirectory();
+    const first = engineOn(directory, [[{ type: "completed" }]]);
+    await drain(await first.engine.createResponse(session, initial));
+    const [original] = await first.store.listChains();
+    expect(original).toBeDefined();
+
+    let failNext = true;
+    const store = new FileResponseStore(directory, {
+      durableWrite: (path, body) => {
+        if (failNext) {
+          failNext = false;
+          throw new Error("transient disk failure");
+        }
+        writeFileSync(path, body, { encoding: "utf8", mode: 0o600 });
+      },
+    });
+    const phantom = { ...original!, updatedAt: original!.updatedAt + 1 };
+    await expect(store.putChain(phantom)).rejects.toThrow(
+      "transient disk failure",
+    );
+    expect(await store.getChain(original!.chainId)).toEqual(original);
+
+    const recovered = { ...original!, updatedAt: original!.updatedAt + 2 };
+    await store.putChain(recovered);
+    expect(await store.getChain(original!.chainId)).toEqual(recovered);
+    expect(
+      JSON.parse(
+        readFileSync(join(directory, `${original!.chainId}.json`), "utf8"),
+      ).chain.updatedAt,
+    ).toBe(recovered.updatedAt);
+  });
+
   it("persists a published call before the process that published it is gone", async () => {
     const directory = stateDirectory();
     const first = engineOn(directory, [
@@ -176,22 +215,17 @@ describe("file-backed response store", () => {
     // The published call is still redeliverable from the durable ledger, which
     // is the only source of truth for it: the harness snapshot never reports a
     // parked call.
+    // A restarted engine has no live harness run. It must retire the chain
+    // before offering the side effect for redelivery.
     expect(
       await restarted.engine.pendingFunctionCalls(session, created.id),
-    ).toEqual([
-      {
-        callId,
-        name: "set_page_message",
-        arguments: "{}",
-        responseId: created.id,
-      },
-    ]);
+    ).toEqual([]);
 
     // But the parked awaiter lived in the harness process, so the chain cannot
     // continue. It resolves to the declared terminal outcome, not a hang and
     // not a silently replaced provider session.
     const view = await restarted.engine.describeChain(session, created.id);
-    expect(view.recovery).toBe("interrupted");
+    expect(view.recovery).toBe("terminal_reconstructed");
     await expect(
       restarted.engine.createResponse(session, {
         kind: "continuation",
@@ -223,19 +257,16 @@ describe("file-backed response store", () => {
     ).rejects.toBeInstanceOf(ResponseApiError);
   });
 
-  it("survives a corrupt chain file without losing the others", async () => {
+  it("fails startup loudly when a chain file is corrupt", async () => {
     const directory = stateDirectory();
     const first = engineOn(directory, [[{ type: "completed" }]]);
     const completed = await drain(
       await first.engine.createResponse(session, initial),
     );
     rmSync(join(directory, "not-a-chain.json"), { force: true });
-    const { writeFileSync } = await import("node:fs");
     writeFileSync(join(directory, "not-a-chain.json"), "{ broken", "utf8");
 
-    const restarted = engineOn(directory, []);
-    expect(
-      (await restarted.engine.describeChain(session, completed.id)).recovery,
-    ).toBe("terminal_reconstructed");
+    expect(() => engineOn(directory, [])).toThrow("Cannot load response state");
+    expect(completed.status).toBe("completed");
   });
 });

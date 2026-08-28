@@ -48,7 +48,9 @@ const KNOWN_UNSUPPORTED_FIELDS = new Set([
 /** Pinned `FunctionCallOutputItemParam.call_id`. */
 const CALL_ID_MAX_LENGTH = 64;
 const MAX_PROMPT_LENGTH = 100_000;
-const MAX_OUTPUT_LENGTH = 1_000_000;
+// Keep the declared output limit reachable after JSON string escaping and the
+// continuation envelope are counted against the 1 MiB HTTP body limit.
+const MAX_OUTPUT_LENGTH = 128 * 1024;
 
 export interface ParsedInitialRequest {
   readonly kind: "initial";

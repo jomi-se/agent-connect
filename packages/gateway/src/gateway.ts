@@ -350,6 +350,7 @@ export function createGateway(options: GatewayOptions) {
           sendJson(response, 405, { error: "method_not_allowed" });
           return;
         }
+        await responseSessionsReady;
         const input = await readCreateRequest(request);
         const authorization = header(request, "authorization") ?? "";
         const existingClaims = bearerClaims(
