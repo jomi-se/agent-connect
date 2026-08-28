@@ -149,7 +149,38 @@ tailscale serve status
 curl -fsS https://YOUR-MACHINE.YOUR-TAILNET.ts.net:8443/healthz
 ```
 
-## 6. Connect a web application
+## 6. Run the private Canvas demo
+
+Start the Canvas in a second terminal:
+
+```sh
+npm run dev --workspace @agent-connect/firebase-canvas -- --port 5173
+```
+
+Publish both local services to the tailnet. The second target must match
+`AGENT_CONNECT_GATEWAY_PORT` when the `.env` overrides its default of `8787`:
+
+```sh
+sudo tailscale serve --bg --https=443 http://127.0.0.1:5173
+sudo tailscale serve --bg --https=8443 http://127.0.0.1:8787
+tailscale serve status
+```
+
+Open the Canvas with the version 0 wire explicitly selected until the default
+switch is complete:
+
+```text
+https://YOUR-MACHINE.YOUR-TAILNET.ts.net/?protocol=open-responses
+```
+
+These routes use Tailscale Serve and should appear as `tailnet only`. The real
+Codex profile does not require Tailscale Funnel and should not have a public
+Funnel listener. `tailscale funnel reset` removes the combined Serve
+configuration as well as Funnel configuration on current Tailscale versions,
+so re-add these private routes afterwards if that command was used as a public
+demo kill switch.
+
+## 7. Connect a web application
 
 Follow the [web application integration guide](../../docs/guides/web-app-integration.md).
 The application imports the runtime card, verifies a fresh signed gateway
