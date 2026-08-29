@@ -41,6 +41,11 @@ npm run verify
 npm run analyze
 ```
 
+`npm run verify` includes the deterministic real-Omnigent compatibility suite
+and therefore requires the pinned Omnigent version from
+`config/omnigent-test-compat.json` on `PATH`. This is intentional: provider
+compatibility is a default gate, not an optional check someone must remember.
+
 `npm run analyze` is initially report-first. Treat its metrics as investigation
 inputs, not automatic refactoring instructions; dependency boundary violations
 remain hard failures.

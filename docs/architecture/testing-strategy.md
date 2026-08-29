@@ -50,12 +50,15 @@ runner, HTTP, SSE, and bridge behavior. This gives deterministic tests without
 model usage. Do not replace it with captured event fixtures: recordings prove
 only what an old version did once and cannot detect a changed dependency.
 
-The normal gate is:
+The compatibility command is:
 
 ```sh
 ./scripts/quiet-run.sh "real Omnigent compatibility suite" \
   npm run test:integration:omnigent --workspace @agent-connect/gateway
 ```
+
+It is included by `npm run verify`. A missing or mismatched pinned Omnigent is a
+failed verification setup, not a reason to silently skip provider evidence.
 
 When adding a new Omnigent-sensitive behavior, first try to extend the existing
 isolated integration fixture. Keep scenarios deterministic and amortize service

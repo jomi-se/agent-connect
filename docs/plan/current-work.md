@@ -37,18 +37,25 @@ Omnigent plus a deterministic ACP agent is the routine compatibility oracle;
 in-process backends prove only Agent Connect-owned invariants and injected
 fault handling.
 
+The 2026-08-29
+[re-review](../reviews/2026-08-29-open-responses-re-review.md) independently
+confirmed those fixes and found a separate disconnect-cancellation hang. That
+path now terminalizes without a provider event, corrupt chain files are
+quarantined without blocking healthy startup, continuation cancellation is
+checked before provider delivery, and real Omnigent is enforced by the default
+`verify` command.
+
 The automated baseline remains:
 
 ```sh
 npm run verify:full
 npm run test:integration:response-crash
-npm run test:integration:omnigent
 ```
 
-The crash suite kills disposable gateway subprocesses. The Omnigent command
-uses isolated services and a deterministic ACP agent. A real Codex/browser
-composition remains a deliberate manual milestone because it consumes the
-operator's credentials and model allowance.
+`verify:full` includes the real-Omnigent compatibility gate through `verify`.
+The crash suite separately kills disposable gateway subprocesses. A real
+Codex/browser composition remains a deliberate manual milestone because it
+consumes the operator's credentials and model allowance.
 
 ## Priority 1: finish the Open Responses replacement
 

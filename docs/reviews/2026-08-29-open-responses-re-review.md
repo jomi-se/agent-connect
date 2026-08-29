@@ -54,6 +54,25 @@ One blocker remains, and it is the same defect as H5 surviving on a different
 code path: `requestCancellation`, the path taken when a browser disconnects, was
 not given the engine-owned cancellation that `cancelChain` received.
 
+## Resolution status
+
+Resolved on 2026-08-29 by the implementation pass following this review:
+
+- the HTTP-disconnect path marks cancellation before interrupting the provider
+  and terminalizes the retained run without waiting for an Omnigent event;
+- continuation delivery rechecks cancellation after persisting the canonical
+  output and before contacting the provider;
+- unreadable chain files are preserved under `.corrupt-*`, reported with their
+  original and quarantine paths, and no longer prevent healthy state loading;
+- the existing route-level failed non-streaming test now says
+  `stream: false` explicitly; and
+- `npm run verify` now includes the deterministic real-Omnigent suite.
+
+Fresh evidence includes an actual HTTP response-body disconnect against real
+Omnigent while the deterministic ACP agent is delayed. The chain becomes
+terminal/cancelled and the provider session stops running. The findings below
+remain the historical evidence that motivated these changes.
+
 ## Confirmed fixed
 
 | Finding                                                 | Evidence                                                                                                                                                                                                                                                                                                                                           |

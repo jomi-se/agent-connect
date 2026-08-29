@@ -75,11 +75,12 @@ silently treating a target as a shipped guarantee.
 ## Validation surfaces
 
 1. `npm run verify` covers formatting, type checks, behavior tests, policy
-   checks, and builds.
+   checks, builds, and the deterministic real-Omnigent compatibility suite.
 2. `npm run verify:full` additionally packs/installs the SDK in a clean
    consumer and runs Canvas browser tests.
-3. `npm run test:integration:omnigent` starts disposable real Omnigent services
-   and a deterministic ACP/MCP agent without model credentials.
+3. `npm run test:integration:omnigent` runs that provider gate directly,
+   starting disposable real Omnigent services and a deterministic ACP/MCP agent
+   without model credentials.
 4. The real Tailscale Serve + Omnigent + Codex + deployed-browser flow is a
    manual composition milestone.
 

@@ -36,7 +36,7 @@ the chosen standard.
 | H2: tool-snapshot escape is laundered into `backend_unavailable`                 | Fixed       | Engine-generated `backend_protocol_error` survives the stream catch boundary. Snapshot escape is no longer reported as a network failure.                                                                                                                     |
 | H3: provider stream EOF is treated as success                                    | Fixed       | EOF without an explicit terminal event produces a failed response with `backend_protocol_error`; partial text is not called a successful completion.                                                                                                          |
 | H4: any first continuation event records `provider_observed`                     | Fixed       | Observation advances only on positive provider progress: text, another function call, or completion. Cancellation, failure, and EOF are not evidence of effect.                                                                                               |
-| H5: busy cancellation can hang waiting for an Omnigent event                     | Fixed       | The engine terminalizes cancellation without requiring Omnigent to synthesize a terminal event. A deterministic ACP delay behind real Omnigent proves cancellation while the segment is busy and the SSE stream ends as cancelled.                            |
+| H5: busy cancellation can hang waiting for an Omnigent event                     | Fixed       | Explicit cancellation and HTTP-disconnect cancellation are engine-owned terminal decisions. A deterministic ACP delay behind real Omnigent proves a disconnected busy segment becomes cancelled without a provider terminal event.                            |
 | H6: Omnigent event posts have no deadline                                        | Fixed       | Initial messages, outputs, and interrupts share a bounded request signal. A deliberate wedged-transport test proves the deadline; a failed initial prompt also closes the upstream pump.                                                                      |
 
 The compatibility evidence for H5 is intentionally a real Omnigent
@@ -47,7 +47,7 @@ longer invents a cancellation event.
 
 | Finding                                                         | Disposition                                                                                                                                                                                                                                            |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| M1: corrupt chain files disappear silently                      | Fixed. Startup fails loudly with the corrupt path instead of turning durable state loss into a 404.                                                                                                                                                    |
+| M1: corrupt chain files disappear silently                      | Fixed. Startup quarantines the unreadable file under a `.corrupt-*` name, reports both paths, and continues loading healthy chains instead of silently losing state or taking down the whole gateway.                                                  |
 | M2: whole-file rewrites and no retention/GC                     | Deferred. The version 0 one-chain files favor inspectability and atomicity. Successful-workspace expiry and cleanup remain operator work in `docs/plan/current-work.md`; optimize only with measured pressure.                                         |
 | M3: prompt-post failure leaks the stream pump                   | Fixed. `open()` closes the run on initial-post failure.                                                                                                                                                                                                |
 | M4: `parked` survives terminal provider states                  | Fixed. Cancel, failure, incomplete, and interruption clear the counter.                                                                                                                                                                                |
@@ -87,6 +87,6 @@ fault injection, but are forbidden from serving as a compatibility oracle.
 
 The corrected engine/durability/transport tests, gateway typecheck, and the
 complete deterministic real-Omnigent integration suite passed on 2026-08-28.
-The real-Omnigent cancellation scenario cancels a response while the ACP agent
-is deliberately still busy, then observes a terminal cancelled public stream
-without relying on a provider cancellation event.
+The real-Omnigent cancellation scenario disconnects a response while the ACP
+agent is deliberately still busy, then observes a terminal cancelled public
+resource without relying on a provider cancellation event.
