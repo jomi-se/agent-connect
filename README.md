@@ -64,11 +64,12 @@ snapshot.
 
 ## Add Agent Connect to a web app
 
-`@open-agent-connect/web` is a browser-safe TypeScript package. It is currently
-distributed from source until it is more stable for normal npm package. The
+`@open-agent-connect/web` is a browser-safe TypeScript package published to
+npm as [`@open-agent-connect/web`](https://www.npmjs.com/package/@open-agent-connect/web).
+It is versioned `0.0.x` while the wire format settles. The
 [web application integration guide](docs/guides/web-app-integration.md) shows
-how to build and install its npm tarball in another application, authorize a
-runtime, send a prompt, and handle live tool calls.
+how to install it in another application, authorize a runtime, send a prompt,
+and handle live tool calls.
 
 The application-facing shape is meant to be agent- and harness-neutral:
 

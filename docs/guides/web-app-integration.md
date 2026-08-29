@@ -5,10 +5,23 @@ Omnigent/Codex reference gateway. The app declares tools implemented in its
 own JavaScript, asks the user to authorize their gateway, and sends tasks
 through an Agent Connect session.
 
-## Install the current source package
+## Install the package
 
-`@open-agent-connect/web` has not yet been published to npm. Build a normal npm
-tarball from the repository and install it into another application:
+`@open-agent-connect/web` is published to npm:
+
+```sh
+cd /path/to/your-web-app
+npm install @open-agent-connect/web
+```
+
+The package ships browser ESM and TypeScript declarations. It is versioned
+`0.0.x` while the wire format settles, so `^0.0.1` resolves to that exact
+version and every upgrade has to be requested deliberately.
+
+### Installing from source instead
+
+To develop against unreleased changes, build a tarball from the repository and
+install that:
 
 ```sh
 cd /path/to/agent-connect
@@ -23,7 +36,7 @@ cd /path/to/your-web-app
 npm install /path/to/agent-connect/.agent-connect/packages/open-agent-connect-web-0.0.1.tgz
 ```
 
-The tarball contains browser ESM and TypeScript declarations.
+The tarball filename tracks the version in `packages/web-sdk/package.json`.
 
 ## Declare an application-owned tool
 
