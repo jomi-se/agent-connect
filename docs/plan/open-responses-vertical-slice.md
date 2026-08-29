@@ -881,9 +881,9 @@ over the same durable state. Step 7, the default switch, remains.
    exclusions rather than failures hidden by test changes.
 2. Run the ordinary OpenAI/Responses JavaScript client against the gateway
    using a session capability as its API key and the gateway `/v1` base URL.
-3. Run `npm run verify:full` and `npm run test:integration:omnigent`, then
-   repeat the Milestone 4 real browser-to-Codex composition as the final
-   replacement check.
+3. Run `npm run verify:full`—which includes the real-Omnigent compatibility
+   gate—and then repeat the Milestone 4 real browser-to-Codex composition as
+   the final replacement check.
 4. Update the capability inventory and accept ADR 0010 only if all replacement
    gates pass.
 5. Delete the browser-visible `/v1/sessions/:id/stream` and `/events` routes,
