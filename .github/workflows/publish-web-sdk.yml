@@ -55,4 +55,4 @@ jobs:
 
       - name: Publish to npm
         if: inputs.dry-run == false
-        run: npm publish --workspace @open-agent-connect/web
+        run: npm publish --provenance --workspace @open-agent-connect/web
