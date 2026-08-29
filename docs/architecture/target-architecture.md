@@ -26,10 +26,10 @@ Codex / Claude Code / another coding harness
   model loop, context, runtime-owned tools
 ```
 
-This proposed target is described by
-[ADR 0010](../decisions/0010-open-responses-gateway-pivot.md). The existing
-Omnigent -> ACP -> Codex chain remains the proven implementation baseline until
-the Open Responses compatibility and authorization gates pass.
+This target architecture is described by
+[ADR 0010](../decisions/0010-open-responses-gateway-pivot.md). Open Responses is
+the sole public browser wire, with the bundled Omnigent backend operating
+internally behind the gateway.
 
 ## Ownership boundaries
 
@@ -52,12 +52,10 @@ Omnigent is confined to the gateway's bundled backend.
 
 Owns enrollment, authorization, Open Responses transport and state correctness,
 mapping response chains to harness sessions, request-scoped function policy,
-and pending-call recovery. A bundled harness backend owns both response
-translation and the supervisor mechanics required by its harness. The target
-does not introduce an independently deployed facade-to-supervisor protocol.
-Durable pending application actions are a required next reliability layer, not
-current behavior. Its public interface contains no browser-facing Omnigent,
-Codex, ACP, or MCP types.
+persistence before publication, and pending-call recovery. A bundled harness backend
+owns both response translation and the supervisor mechanics required by its harness.
+The target does not introduce an independently deployed facade-to-supervisor protocol.
+Its public interface contains no browser-facing Omnigent, Codex, ACP, or MCP types.
 
 An explicit one-shot initializer prints one runtime card and generated
 high-entropy enrollment passphrase on first state creation. It persists only a
@@ -172,23 +170,25 @@ infer whether an unacknowledged external side effect succeeded.
 ## Tool-call translation
 
 ```text
-1. Browser registers a fixed tool snapshot while creating the application session.
+1. Browser registers a fixed tool snapshot while creating the application session via POST /v1/app-sessions.
 2. Gateway validates, canonically hashes, authorizes, and records the snapshot.
-3. Gateway writes the exact authorized tool names into a private session policy manifest.
-4. Gateway provisions and binds a healthy Omnigent runner for that snapshot.
-5. The internal Codex adapter enables and preapproves only those granted relay tools.
-6. Omnigent provider attaches the schemas to the first session message event.
-7. Codex calls a tool through Omnigent's downstream MCP relay.
-8. Omnigent emits action_required.
-9. Gateway sends the normalized tool call to the browser.
-10. Browser executes the application-owned handler and returns its result.
-11. Gateway posts the correlated tool result to Omnigent.
-12. Codex resumes and completes the turn.
+3. Gateway writes the exact authorized tool names into a private session policy manifest and provisions the Omnigent runner.
+4. Browser SDK sends POST /v1/responses with model: "agent-connect/default", prompt input, and tool declarations.
+5. Response engine validates the request against the approved snapshot and delegates to the bundled backend.
+6. Omnigent runs Codex with request-scoped MCP relay tools for the authorized snapshot.
+7. When Codex calls an application tool, Omnigent emits action_required.
+8. Gateway persists the pending call before publication and emits response.output_item.done with the function_call.
+9. Browser SDK validates tool arguments, executes the local handler, and continues the chain with POST /v1/responses (previous_response_id + function_call_output).
+10. Gateway correlates the result to the parked run and resumes the turn.
+11. Codex finishes execution and the gateway streams the final response.completed event.
 ```
 
-The target recovery layer inserts durable `pending`, `delivered`, `applied`,
-and `acknowledged` state before step 9. That layer is not implemented, so a
-disconnect can still lose an unresolved tool request.
+Pending function calls are persisted before publication (`FileResponseStore`),
+and stable call IDs survive reconnect and redelivery. A streaming client that
+disconnects during active generation triggers engine-side cancellation; a
+non-streaming request runs to completion and its recorded result stays
+retrievable. A gateway restart resolves chains to their declared recovery
+states.
 
 ## Fallback architecture
 

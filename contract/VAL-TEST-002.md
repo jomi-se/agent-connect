@@ -29,8 +29,9 @@ transcript, workspace, database, and artifact paths are under the temporary
 root; verifies canaries in the operator's normal Omnigent and Codex homes remain
 unchanged; and
 proves child PIDs stop and selected ports close. A deliberate post-start failure
-cleanup test proves the same process cleanup path. The normal repository test
-command skips this service test unless explicitly requested.
+cleanup test proves the same process cleanup path. `npm run verify` runs this
+deterministic compatibility suite by default; `npm run test:integration:omnigent`
+runs it in isolation.
 Fail: the test bypasses the Agent Connect HTTP surface after provisioning; the
 agent can pass without a tools/list and tools/call round trip; it reads a real
 Codex login or makes a model request; any service writes into the operator's

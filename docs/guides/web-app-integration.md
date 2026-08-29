@@ -220,10 +220,13 @@ async function runPrompt(connection: AgentConnection, prompt: string) {
 }
 ```
 
-`AgentSession` validates requested arguments against the declared schema and
-executes the matching browser handler. The tool result is correlated back to
-the same agent turn. Stable action ids support application-owned deduplication;
-Agent Connect does not claim generic exactly-once side effects.
+Under the hood, `AgentSession` drives standard Open Responses (`POST /v1/responses`)
+streams. When the agent requests an approved application tool, the response
+segment ends with a function call. `AgentSession` validates requested arguments
+against the declared schema, executes the matching browser handler, and continues
+the chain with `previous_response_id` and the correlated function output. Stable
+action ids support application-owned deduplication; Agent Connect does not claim
+generic exactly-once side effects.
 
 ## Gateway requirements
 

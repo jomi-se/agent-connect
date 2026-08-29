@@ -11,6 +11,8 @@ gateway, SDK example, supported platforms, and verification commands.
   unsupported capabilities plus their validation surfaces.
 - [Target architecture](architecture/target-architecture.md): component and
   trust boundaries, current provider path, and future adapter seams.
+- [Testing strategy](architecture/testing-strategy.md): rule for provider truth,
+  three evidence layers, and verification commands.
 - [Current work](plan/current-work.md): canonical unfinished work and bounded
   experiments.
 - [Web application integration](guides/web-app-integration.md): package the SDK,

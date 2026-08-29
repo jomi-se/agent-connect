@@ -1,13 +1,15 @@
 # Agent Connect gateway
 
 The gateway is the narrow HTTPS-facing envelope for browser applications. It
-binds to loopback, authenticates the configured Tailscale user, and brokers only
-the application sessions and Omnigent stream/event routes used by the web SDK.
-The private reference profile can enroll previously unknown HTTPS Origins
-through gateway-owned consent; a static Origin allowlist remains available
-as an operator policy.
+binds to loopback, authenticates the configured Tailscale user, and exposes
+OAuth authorization, application session provisioning (`POST /v1/app-sessions`),
+and the standard Open Responses endpoint (`POST /v1/responses`) along with
+namespaced Agent Connect response control routes. The private reference profile
+can enroll previously unknown HTTPS Origins through gateway-owned consent; a
+static Origin allowlist remains available as an operator policy.
 
-It is intentionally not a general Omnigent reverse proxy.
+It is intentionally not a general Omnigent reverse proxy and never exposes raw
+provider session or stream routes to the client.
 
 ## Run locally
 
