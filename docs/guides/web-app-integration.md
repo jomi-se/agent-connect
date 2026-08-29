@@ -20,7 +20,7 @@ npm_config_cache=.agent-connect/npm-cache \
   --pack-destination .agent-connect/packages
 
 cd /path/to/your-web-app
-npm install /path/to/agent-connect/.agent-connect/packages/open-agent-connect-web-0.1.0.tgz
+npm install /path/to/agent-connect/.agent-connect/packages/open-agent-connect-web-0.0.1.tgz
 ```
 
 The tarball contains browser ESM and TypeScript declarations.
