@@ -1,0 +1,258 @@
+/**
+ * Throwaway reproduction probe for the 2026-08-29 Open Responses re-review.
+ *
+ * Every test asserts the DESIRED behavior. Tests that pass confirm a previous
+ * finding is genuinely fixed. Tests that fail are the open findings, and the
+ * failure message is the reproduction.
+ *
+ * Copy to packages/gateway/test/zz-review-probe.test.ts, run, then DELETE it:
+ *   npx vitest run --root packages/gateway zz-review-probe --disable-console-intercept
+ */
+import { describe, expect, it } from "vitest";
+import { chmodSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { ResponseEngine, type EngineSession } from "../src/responses/engine.js";
+import { FileResponseStore } from "../src/responses/file-store.js";
+import type { ParsedResponseRequest } from "../src/responses/profile.js";
+import { InMemoryResponseStore } from "../src/responses/store.js";
+import { hashToolSnapshot, validateToolSnapshot } from "../src/tool-snapshot.js";
+import { FakeBackend, type FakeTurn } from "./support/fake-backend.js";
+
+const tools = validateToolSnapshot([
+  {
+    name: "set_page_message",
+    description: "Replace the visible page message",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+]);
+
+const session: EngineSession = {
+  sessionId: "acs_1",
+  appId: "canvas",
+  origin: "https://app.example",
+  toolHash: hashToolSnapshot(tools),
+  tools,
+  authorizationGrantId: "grant_1",
+  providerSessionId: "provider_1",
+};
+
+function harness(turns: readonly FakeTurn[]) {
+  const store = new InMemoryResponseStore();
+  const backend = new FakeBackend({ turns });
+  let counter = 0;
+  const engine = new ResponseEngine({
+    store,
+    backend,
+    isGrantActive: () => true,
+    now: () => 1_700_000_000_000,
+    createId: () => `${(counter += 1)}`.padStart(8, "0"),
+  });
+  return { engine, store, backend };
+}
+
+const initial = { kind: "initial", stream: true, prompt: "hello" } as ParsedResponseRequest;
+const toolCall = { type: "tool.call", providerToken: "p1", name: "set_page_message", arguments: "{}" } as const;
+
+/** Drains a stream, or resolves "TIMEOUT" if it never terminates. */
+function drainOrTimeout(iterator: AsyncIterator<unknown>, ms: number) {
+  return Promise.race([
+    (async () => {
+      const seen: string[] = [];
+      for (;;) {
+        const next = await iterator.next();
+        if (next.done) break;
+        seen.push((next.value as { type: string }).type);
+      }
+      return seen;
+    })(),
+    new Promise<string>((resolve) => setTimeout(() => resolve("TIMEOUT"), ms)),
+  ]);
+}
+
+async function startAndTakeResponseId(engine: ResponseEngine) {
+  const stream = await engine.createResponse(session, initial);
+  const iterator = stream[Symbol.asyncIterator]();
+  const created = await iterator.next();
+  return { iterator, responseId: (created.value as { response: { id: string } }).response.id };
+}
+
+// ---------------------------------------------------------------- open findings
+
+describe("open findings (these are expected to FAIL on 069f1c5)", () => {
+  it("H-NEW a: a disconnect-cancelled busy segment terminates", async () => {
+    // A backend that emits nothing after start models a harness still thinking,
+    // and a real Omnigent that answers `interrupt` without a terminal event.
+    const { engine, store } = harness([[]]);
+    const { iterator, responseId } = await startAndTakeResponseId(engine);
+
+    await engine.requestCancellation(responseId); // what response-routes.ts:154 does on socket close
+
+    const drained = await drainOrTimeout(iterator, 400);
+    const chain = (await store.listChains())[0];
+    console.log(
+      `[H-NEW a] drained=${JSON.stringify(drained)} response=${(await store.getResponse(responseId))?.status} chain=${chain?.status}`,
+    );
+    expect(drained).not.toBe("TIMEOUT");
+  });
+
+  it("H-NEW b: the application session is usable again after a disconnect", async () => {
+    const { engine } = harness([[]]);
+    const { iterator, responseId } = await startAndTakeResponseId(engine);
+    void drainOrTimeout(iterator, 10_000); // the route's `for await`, still running
+
+    await engine.requestCancellation(responseId);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    let outcome = "started";
+    try {
+      await engine.createResponse(session, initial);
+    } catch (cause) {
+      outcome = (cause as { code?: string }).code ?? String(cause);
+    }
+    console.log(`[H-NEW b] next request=${outcome} hasLiveChain=${await engine.hasLiveChain("acs_1")}`);
+    expect(outcome).toBe("started");
+  });
+
+  it("M-NEW-1: cancelling during a continuation does not post the output", async () => {
+    const { engine, backend } = harness([[toolCall], [{ type: "completed" }]]);
+    const stream = await engine.createResponse(session, initial);
+    let responseId = "";
+    let callId = "";
+    for await (const event of stream) {
+      const value = event as { type: string; response?: { id: string }; item?: { type: string; call_id: string } };
+      if (value.type === "response.created") responseId = value.response!.id;
+      if (value.type === "response.output_item.done" && value.item?.type === "function_call") {
+        callId = value.item.call_id;
+      }
+    }
+
+    const continuation = engine.createResponse(session, {
+      kind: "continuation", stream: true, previousResponseId: responseId, callId, output: "done",
+    } as ParsedResponseRequest);
+    const cancel = engine.cancelChain(session, responseId);
+    const [settledContinuation] = await Promise.allSettled([continuation, cancel]);
+
+    console.log(
+      `[M-NEW-1] continuation=${settledContinuation.status}/${(settledContinuation as { reason?: { code?: string } }).reason?.code ?? ""} submitted=${JSON.stringify(backend.runs[0]?.submitted)}`,
+    );
+    expect(backend.runs[0]?.submitted ?? []).toHaveLength(0);
+  });
+
+  it("M-NEW-2: one unreadable chain file does not prevent construction", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "ac-review-corrupt-"));
+    const store = new FileResponseStore(directory);
+    await store.putChain(chainRecord("c1"));
+    writeFileSync(join(directory, "c2.json"), "{ truncated");
+
+    let outcome = "constructed";
+    try {
+      new FileResponseStore(directory);
+    } catch (cause) {
+      outcome = (cause as Error).message;
+    }
+    console.log(`[M-NEW-2] files=${JSON.stringify(readdirSync(directory))} outcome=${outcome}`);
+    expect(outcome).toBe("constructed");
+  });
+});
+
+// ------------------------------------------------------------- confirmed fixes
+
+describe("previous findings (these are expected to PASS on 069f1c5)", () => {
+  it("B1: a real filesystem write fault neither poisons the store nor leaks phantom state", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "ac-review-eacces-"));
+    const store = new FileResponseStore(directory);
+    const chain = chainRecord("c1");
+
+    chmodSync(directory, 0o500); // deny writes without the injectable durableWrite seam
+    let firstFailed = false;
+    try {
+      await store.putChain(chain);
+    } catch {
+      firstFailed = true;
+    }
+    const phantom = await store.getChain("c1");
+    chmodSync(directory, 0o700);
+
+    let second = "ok";
+    try {
+      await store.putChain(chain);
+    } catch (cause) {
+      second = String(cause);
+    }
+    console.log(`[B1] firstFailed=${firstFailed} phantomVisible=${phantom !== undefined} second=${second}`);
+    expect(firstFailed).toBe(true);
+    expect(phantom).toBeUndefined();
+    expect(second).toBe("ok");
+  });
+
+  it("B2: an explicit cancel terminates a busy segment with no provider event", async () => {
+    const { engine, store } = harness([[]]);
+    const { iterator, responseId } = await startAndTakeResponseId(engine);
+    const drained = drainOrTimeout(iterator, 400);
+
+    await engine.cancelChain(session, responseId);
+
+    const result = await drained;
+    const chain = (await store.listChains())[0];
+    console.log(
+      `[B2] drained=${JSON.stringify(result)} response=${(await store.getResponse(responseId))?.status} chain=${chain?.status}`,
+    );
+    expect(result).not.toBe("TIMEOUT");
+    expect(chain?.status).toBe("terminal");
+  });
+
+  it("B4: a dead run offers no pending call, with no priming describeChain", async () => {
+    const { engine, backend } = harness([[toolCall]]);
+    const stream = await engine.createResponse(session, initial);
+    let responseId = "";
+    for await (const event of stream) {
+      const value = event as { type: string; response?: { id: string } };
+      if (value.type === "response.created") responseId = value.response!.id;
+    }
+
+    backend.runs[0]!.killTransport(new Error("omnigent process died"));
+
+    const pending = await engine.pendingFunctionCalls(session, responseId);
+    console.log(`[B4] pending=${JSON.stringify(pending)}`);
+    expect(pending).toHaveLength(0);
+  });
+
+  it("B3: a non-streaming failure is a 200-shaped resource that carries its error", async () => {
+    const { engine } = harness([[{ type: "failed", message: "harness exploded" }]]);
+    const stream = await engine.createResponse(session, {
+      kind: "initial", stream: false, prompt: "hello",
+    } as ParsedResponseRequest);
+
+    // Exactly the drain in response-routes.ts:124-127.
+    let resource: { status?: string; error?: unknown } | undefined;
+    const types: string[] = [];
+    for await (const event of stream) {
+      const value = event as { type: string; response?: typeof resource };
+      types.push(value.type);
+      if ("response" in value) resource = value.response;
+    }
+    console.log(`[B3] events=${types.join(",")} resource=${JSON.stringify(resource && { status: resource.status, error: resource.error })}`);
+    expect(resource?.status).toBe("failed");
+    expect(resource?.error).toBeTruthy();
+  });
+});
+
+function chainRecord(chainId: string) {
+  return {
+    chainId,
+    appSessionId: "acs_1",
+    appId: "canvas",
+    origin: "https://app.example",
+    toolHash: "h",
+    authorizationGrantId: "grant_1",
+    providerSessionId: "provider_1",
+    backendKind: "fake",
+    status: "running",
+    latestResponseId: null,
+    terminalError: null,
+    createdAt: 1,
+    updatedAt: 1,
+  } as Parameters<InMemoryResponseStore["putChain"]>[0];
+}
