@@ -26,6 +26,12 @@ interface ChainFile {
   readonly calls: Record<string, CallRecord>;
 }
 
+export interface QuarantinedResponseState {
+  readonly originalPath: string;
+  readonly quarantinePath: string;
+  readonly reason: string;
+}
+
 /**
  * Single-process, atomic, fsync-backed persistence for response chains.
  *
@@ -44,18 +50,28 @@ export class FileResponseStore implements ResponseStore {
   private readonly chainOfResponse = new Map<string, string>();
   private readonly chainOfCall = new Map<string, string>();
   private readonly durableWrite: typeof writeDurably;
+  private readonly onCorruptFile: (event: QuarantinedResponseState) => void;
   private writes = Promise.resolve();
 
   constructor(
     directory: string,
-    options: { readonly durableWrite?: typeof writeDurably } = {},
+    options: {
+      readonly durableWrite?: typeof writeDurably;
+      readonly onCorruptFile?: (event: QuarantinedResponseState) => void;
+    } = {},
   ) {
     this.directory = directory;
     this.durableWrite = options.durableWrite ?? writeDurably;
+    this.onCorruptFile = options.onCorruptFile ?? reportCorruptFile;
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     for (const entry of readdirSync(directory)) {
       if (!entry.endsWith(".json")) continue;
-      this.index(this.load(join(directory, entry)));
+      const path = join(directory, entry);
+      try {
+        this.index(this.load(path));
+      } catch (cause) {
+        this.quarantine(path, cause);
+      }
     }
   }
 
@@ -170,6 +186,23 @@ export class FileResponseStore implements ResponseStore {
       calls: file.calls ?? {},
     };
   }
+
+  private quarantine(path: string, cause: unknown): void {
+    const quarantinePath = `${path}.corrupt-${randomBytes(6).toString("hex")}`;
+    renameSync(path, quarantinePath);
+    fsyncPath(this.directory);
+    this.onCorruptFile({
+      originalPath: path,
+      quarantinePath,
+      reason: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+}
+
+function reportCorruptFile(event: QuarantinedResponseState): void {
+  process.stderr.write(
+    `Quarantined corrupt response state ${event.originalPath} as ${event.quarantinePath}: ${event.reason}\n`,
+  );
 }
 
 function writeDurably(path: string, body: string, directory: string): void {

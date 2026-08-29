@@ -172,6 +172,12 @@ export class ResponseEngine {
     );
     try {
       const call = await this.resolvableCall(chain, callId, output);
+      if (state.cancelRequested) {
+        throw new ResponseApiError(
+          "response_cancelled",
+          "the response chain was cancelled before its output was delivered",
+        );
+      }
       await this.deliverOutput(state, call, output, fingerprintOf(output));
       if (state.cancelRequested) {
         throw new ResponseApiError(
@@ -314,6 +320,12 @@ export class ResponseEngine {
       updatedAt: this.seconds(),
     };
     await this.store.putCall(recorded);
+    if (state.cancelRequested) {
+      throw new ResponseApiError(
+        "response_cancelled",
+        "the response chain was cancelled before its output was delivered",
+      );
+    }
     try {
       await state.run.submitOutput(call.providerToken, output);
     } catch (cause) {
@@ -575,16 +587,19 @@ export class ResponseEngine {
   /**
    * Best-effort cancellation requested by an HTTP client disconnect. It is not
    * an authorization boundary: the request that opened the segment was already
-   * authorized, and the caller is the gateway itself. It never commits a
-   * terminal status; the open segment decides, so a completion that was
-   * already committed still wins.
+   * authorized, and the caller is the gateway itself. A completion already
+   * committed wins; otherwise the engine commits cancellation and closes the
+   * retained run itself. Omnigent does not promise a cancellation event that
+   * would wake the segment.
    */
   async requestCancellation(responseId: string): Promise<void> {
     const response = await this.store.getResponse(responseId);
     if (!response) return;
     const state = this.active.get(response.chainId);
     if (!state || !state.busy) return;
+    state.cancelRequested = true;
     await state.run.cancel().catch(() => {});
+    await this.finishChain(response.chainId, "terminal", CANCELLED_ERROR);
   }
 
   /**

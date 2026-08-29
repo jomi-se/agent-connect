@@ -332,7 +332,11 @@ describe("POST /v1/responses", () => {
     const harness = await start([
       [{ type: "failed", message: "provider rejected the run" }],
     ]);
-    const response = await post(harness, { model: MODEL, input: "hi" });
+    const response = await post(harness, {
+      model: MODEL,
+      input: "hi",
+      stream: false,
+    });
     const body = (await response.json()) as {
       status: string;
       error: { code: string } | null;

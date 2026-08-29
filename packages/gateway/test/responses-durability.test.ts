@@ -257,16 +257,39 @@ describe("file-backed response store", () => {
     ).rejects.toBeInstanceOf(ResponseApiError);
   });
 
-  it("fails startup loudly when a chain file is corrupt", async () => {
+  it("quarantines a corrupt chain file and loads the healthy chains", async () => {
     const directory = stateDirectory();
     const first = engineOn(directory, [[{ type: "completed" }]]);
     const completed = await drain(
       await first.engine.createResponse(session, initial),
     );
-    rmSync(join(directory, "not-a-chain.json"), { force: true });
-    writeFileSync(join(directory, "not-a-chain.json"), "{ broken", "utf8");
+    const corruptPath = join(directory, "not-a-chain.json");
+    rmSync(corruptPath, { force: true });
+    writeFileSync(corruptPath, "{ broken", "utf8");
+    const quarantined: Array<{
+      originalPath: string;
+      quarantinePath: string;
+      reason: string;
+    }> = [];
 
-    expect(() => engineOn(directory, [])).toThrow("Cannot load response state");
+    const store = new FileResponseStore(directory, {
+      onCorruptFile: (event) => quarantined.push(event),
+    });
+    expect(await store.getResponse(completed.id)).toMatchObject({
+      status: "completed",
+    });
+    expect(quarantined).toEqual([
+      expect.objectContaining({
+        originalPath: corruptPath,
+        reason: expect.stringContaining("Cannot load response state"),
+      }),
+    ]);
+    expect(readdirSync(directory)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^not-a-chain\.json\.corrupt-[0-9a-f]+$/),
+      ]),
+    );
+    expect(readdirSync(directory)).not.toContain("not-a-chain.json");
     expect(completed.status).toBe("completed");
   });
 });
