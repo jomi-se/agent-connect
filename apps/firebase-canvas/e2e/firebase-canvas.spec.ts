@@ -93,7 +93,7 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
   test(`${scenario} reads live state and executes its write tools`, async ({
     page,
   }) => {
-    const postedEvents = await mockConnectedRuntime(page, plans[scenario]);
+    const responseRequests = await mockConnectedRuntime(page, plans[scenario]);
     await openAndConnect(page, "desktop");
     await page.getByRole("tab", { name: scenarioTabName(scenario) }).click();
     await page.getByRole("button", { name: "Send prompt" }).click();
@@ -118,12 +118,11 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
         '#activity-feed li[data-kind="result"][data-state="complete"]',
       ),
     ).toHaveCount(4);
-    const submittedNames = postedEvents
-      .filter(isFunctionOutput)
-      .map((event) => event.data.call_id);
+    const submittedOutputs = responseRequests.flatMap(functionOutputs);
+    const submittedNames = submittedOutputs.map((event) => event.call_id);
     expect(submittedNames).toEqual(["call-1", "call-2", "call-3", "call-4"]);
-    const stateResult = postedEvents.find(
-      (event) => isFunctionOutput(event) && event.data.call_id === "call-1",
+    const stateResult = submittedOutputs.find(
+      (event) => event.call_id === "call-1",
     );
     expect(stateResult).toBeDefined();
     expect(JSON.stringify(stateResult)).toContain(
@@ -445,7 +444,8 @@ async function mockConnectedRuntime(
   page: Page,
   plan: readonly ReturnType<typeof call>[],
 ): Promise<unknown[]> {
-  const postedEvents: unknown[] = [];
+  const responseRequests: unknown[] = [];
+  let nextStep = 0;
   await page.route("https://gateway.example/**", async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -473,32 +473,96 @@ async function mockConnectedRuntime(
       });
       return;
     }
-    if (request.method() === "GET") {
+    if (pathname === "/v1/responses" && request.method() === "POST") {
+      expect(request.headers()["authorization"]).toBe("Bearer scoped-token");
+      const body = request.postDataJSON() as {
+        previous_response_id?: string;
+        input?: unknown;
+        tools?: unknown[];
+      };
+      responseRequests.push(body);
+      if (!body.previous_response_id) {
+        nextStep = 0;
+        expect(body.tools).toHaveLength(10);
+      } else {
+        expect(body).not.toHaveProperty("tools");
+      }
+      const responseId = `resp-${responseRequests.length}`;
+      const step = plan[nextStep];
+      if (step) nextStep += 1;
       await route.fulfill({
         contentType: "text/event-stream",
         body: [
-          ...plan.map((step, index) =>
-            sse({
-              type: "response.output_item.done",
-              item: {
-                type: "function_call",
-                status: "action_required",
-                call_id: `call-${index + 1}`,
-                name: step.name,
-                arguments: JSON.stringify(step.arguments),
-              },
-            }),
-          ),
-          sse({ type: "response.output_text.delta", delta: "App updated." }),
-          sse({ type: "response.completed" }),
+          sse({
+            type: "response.created",
+            response: responseResource(responseId, "in_progress"),
+          }),
+          ...(step
+            ? [
+                sse({
+                  type: "response.output_item.done",
+                  item: {
+                    type: "function_call",
+                    status: "completed",
+                    call_id: `call-${nextStep}`,
+                    name: step.name,
+                    arguments: JSON.stringify(step.arguments),
+                  },
+                }),
+              ]
+            : [
+                sse({
+                  type: "response.output_text.delta",
+                  delta: "App updated.",
+                }),
+              ]),
+          sse({
+            type: "response.completed",
+            response: responseResource(responseId, "completed"),
+          }),
+          "data: [DONE]\n\n",
         ].join(""),
       });
       return;
     }
-    postedEvents.push(request.postDataJSON());
-    await route.fulfill({ status: 202, body: "{}" });
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "unexpected_fixture_request" }),
+    });
   });
-  return postedEvents;
+  return responseRequests;
+}
+
+function responseResource(id: string, status: string): object {
+  return { id, object: "response", status, output: [] };
+}
+
+function functionOutputs(value: unknown): FunctionOutput[] {
+  if (typeof value !== "object" || value === null) return [];
+  const input = (value as { input?: unknown }).input;
+  return Array.isArray(input) ? input.filter(isFunctionOutput) : [];
+}
+
+interface FunctionOutput {
+  readonly type: "function_call_output";
+  readonly call_id: string;
+  readonly output: string;
+}
+
+function isFunctionOutput(event: unknown): event is FunctionOutput {
+  return (
+    typeof event === "object" &&
+    event !== null &&
+    (event as { type?: unknown }).type === "function_call_output" &&
+    typeof (event as { call_id?: unknown }).call_id === "string" &&
+    typeof (event as { output?: unknown }).output === "string"
+  );
+}
+
+function sse(event: unknown): string {
+  const type = (event as { type: string }).type;
+  return `event: ${type}\ndata: ${JSON.stringify(event)}\n\n`;
 }
 
 function call(name: string, arguments_: Record<string, unknown>) {
@@ -515,18 +579,4 @@ function selectedStateEvidence(scenario: keyof typeof plans): string {
   if (scenario === "project-board") return "Decide launch pricing";
   if (scenario === "document-review") return "exactly twice as productive";
   return "Sony WH-CH720N";
-}
-
-function isFunctionOutput(
-  event: unknown,
-): event is { type: "function_call_output"; data: { call_id: string } } {
-  return (
-    typeof event === "object" &&
-    event !== null &&
-    (event as { type?: unknown }).type === "function_call_output"
-  );
-}
-
-function sse(event: unknown): string {
-  return `data: ${JSON.stringify(event)}\n\n`;
 }

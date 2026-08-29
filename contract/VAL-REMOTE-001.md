@@ -5,12 +5,13 @@
 A browser application loaded from an allowlisted Firebase Hosting preview
 origin can run a dynamic application tool through the tailnet-only Agent Connect
 gateway and receive the same-turn Codex result. A disallowed origin or
-Tailscale login cannot access the session routes.
+Tailscale login cannot access the application or response routes.
 
 ## Required evidence
 
 - gateway unit tests prove preflight behavior, exact Origin enforcement,
-  Tailscale login enforcement, optional bearer enforcement, and narrow proxying;
+  Tailscale login enforcement, optional bearer enforcement, and bounded
+  response routing;
 - Tailscale Serve status shows a dedicated HTTPS mapping to the loopback
   gateway without replacing unrelated mappings;
 - a real browser loaded from the Firebase preview completes the unpredictable

@@ -31,26 +31,37 @@ describe("connectAgent", () => {
           { status: 201 },
         );
       }
-      if (url.endsWith("/stream")) {
-        return new Response(
-          [
-            sse({
-              type: "response.output_item.done",
-              item: {
-                type: "function_call",
-                status: "action_required",
-                call_id: "action-1",
-                name: "read_page",
-                arguments: "{}",
-              },
-            }),
-            sse({ type: "response.output_text.delta", delta: "page value" }),
-            sse({ type: "response.completed" }),
-          ].join(""),
-          { headers: { "Content-Type": "text/event-stream" } },
-        );
+      if (url.endsWith("/v1/responses")) {
+        const continuation = requests.filter((request) =>
+          request.url.endsWith("/v1/responses"),
+        ).length;
+        const responseId = `resp_${continuation}`;
+        const events =
+          continuation === 1
+            ? [
+                created(responseId),
+                {
+                  type: "response.output_item.done",
+                  item: {
+                    type: "function_call",
+                    status: "completed",
+                    call_id: "action-1",
+                    name: "read_page",
+                    arguments: "{}",
+                  },
+                },
+                completed(responseId),
+              ]
+            : [
+                created(responseId),
+                { type: "response.output_text.delta", delta: "page value" },
+                completed(responseId),
+              ];
+        return new Response(events.map(sse).join("") + "data: [DONE]\n\n", {
+          headers: { "Content-Type": "text/event-stream" },
+        });
       }
-      return Response.json({ accepted: true }, { status: 202 });
+      return Response.json({ error: "unexpected_request" }, { status: 500 });
     });
 
     const connection = await connectAgent({
@@ -84,13 +95,33 @@ describe("connectAgent", () => {
         tools: [expect.objectContaining({ name: "read_page" })],
       },
     });
+    const responseRequests = requests.filter((request) =>
+      request.url.endsWith("/v1/responses"),
+    );
+    expect(responseRequests).toHaveLength(2);
     expect(
-      requests
-        .filter((request) => request.url.includes("/v1/sessions/"))
-        .every(
-          (request) => request.authorization === "Bearer scoped-capability",
-        ),
+      responseRequests.every(
+        (request) => request.authorization === "Bearer scoped-capability",
+      ),
     ).toBe(true);
+    expect(responseRequests[0]?.body).toMatchObject({
+      model: "agent-connect/default",
+      input: "Read it",
+      tools: [expect.objectContaining({ name: "read_page" })],
+    });
+    expect(responseRequests[1]?.body).toMatchObject({
+      model: "agent-connect/default",
+      previous_response_id: "resp_1",
+      input: [
+        expect.objectContaining({
+          type: "function_call_output",
+          call_id: "action-1",
+        }),
+      ],
+    });
+    expect(
+      requests.some((request) => request.url.includes("/v1/sessions/")),
+    ).toBe(false);
     expect(requests.some((request) => request.url.includes("provider"))).toBe(
       false,
     );
@@ -143,5 +174,20 @@ describe("connectAgent", () => {
 });
 
 function sse(event: unknown): string {
-  return `data: ${JSON.stringify(event)}\n\n`;
+  const type = (event as { type: string }).type;
+  return `event: ${type}\ndata: ${JSON.stringify(event)}\n\n`;
+}
+
+function created(id: string): object {
+  return {
+    type: "response.created",
+    response: { id, object: "response", status: "in_progress", output: [] },
+  };
+}
+
+function completed(id: string): object {
+  return {
+    type: "response.completed",
+    response: { id, object: "response", status: "completed", output: [] },
+  };
 }

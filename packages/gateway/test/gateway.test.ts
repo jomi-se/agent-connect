@@ -53,7 +53,7 @@ describe("gateway", () => {
 
   it("answers an allowed CORS preflight without requiring identity", async () => {
     const { baseUrl } = await start();
-    const response = await fetch(`${baseUrl}/v1/sessions/session-1/events`, {
+    const response = await fetch(`${baseUrl}/v1/responses`, {
       method: "OPTIONS",
       headers: { Origin: "https://preview.example" },
     });
@@ -68,7 +68,7 @@ describe("gateway", () => {
   it("rejects an unlisted origin before proxying", async () => {
     const upstream = vi.fn<typeof fetch>();
     const { baseUrl } = await start({ fetch: upstream });
-    const response = await fetch(`${baseUrl}/v1/sessions/session-1/stream`, {
+    const response = await fetch(`${baseUrl}/v1/responses`, {
       headers: {
         Origin: "https://evil.example",
         "Tailscale-User-Login": "owner@example.com",
@@ -88,7 +88,7 @@ describe("gateway", () => {
     async (_case, tailscaleUser) => {
       const upstream = vi.fn<typeof fetch>();
       const { baseUrl } = await start({ fetch: upstream });
-      const response = await fetch(`${baseUrl}/v1/sessions/session-1/stream`, {
+      const response = await fetch(`${baseUrl}/v1/responses`, {
         headers: {
           Origin: "https://preview.example",
           ...(tailscaleUser ? { "Tailscale-User-Login": tailscaleUser } : {}),
@@ -160,71 +160,70 @@ describe("managed application sessions", () => {
     const grant = await authorizeApp(baseUrl);
     const paired = await createAppSession(baseUrl, `Bearer ${grant}`);
     const created = await paired.json();
-    const sessionUrl = `${baseUrl}/v1/sessions/${created.sessionId as string}`;
-
-    const stream = await fetch(`${sessionUrl}/stream`, {
-      headers: allowedHeaders({
-        Authorization: `Bearer ${created.accessToken as string}`,
-      }),
+    const responseBody = JSON.stringify({
+      model: "agent-connect/default",
+      stream: true,
+      input: "Use the approved tool",
+      tools: [
+        {
+          type: "function",
+          name: tool().name,
+          description: tool().description,
+          parameters: tool().inputSchema,
+        },
+      ],
     });
-    expect(stream.status).toBe(200);
-    expect(upstream).toHaveBeenCalledWith(
-      "http://127.0.0.1:6767/v1/sessions/provider-1/stream",
-      expect.anything(),
-    );
-
-    const wrongOrigin = await fetch(`${sessionUrl}/stream`, {
+    const wrongOrigin = await fetch(`${baseUrl}/v1/responses`, {
+      method: "POST",
       headers: {
         ...allowedHeaders({
           Authorization: `Bearer ${created.accessToken as string}`,
+          "Content-Type": "application/json",
         }),
         Origin: "https://other.example",
       },
+      body: responseBody,
     });
     expect(wrongOrigin.status).toBe(401);
 
-    const tampered = await fetch(`${sessionUrl}/stream`, {
+    const tampered = await fetch(`${baseUrl}/v1/responses`, {
+      method: "POST",
       headers: allowedHeaders({
         Authorization: `Bearer ${created.accessToken as string}x`,
+        "Content-Type": "application/json",
       }),
+      body: responseBody,
     });
     expect(tampered.status).toBe(401);
 
     upstream.mockClear();
-    const mismatch = await fetch(`${sessionUrl}/events`, {
+    const mismatch = await fetch(`${baseUrl}/v1/responses`, {
       method: "POST",
       headers: allowedHeaders({
         Authorization: `Bearer ${created.accessToken as string}`,
         "Content-Type": "application/json",
       }),
-      body: JSON.stringify(messageEvent([{ ...tool(), name: "other_tool" }])),
+      body: JSON.stringify({
+        model: "agent-connect/default",
+        stream: true,
+        input: "Use a different tool",
+        tools: [
+          {
+            type: "function",
+            name: "other_tool",
+            description: tool().description,
+            parameters: tool().inputSchema,
+          },
+        ],
+      }),
     });
     expect(mismatch.status).toBe(403);
-    expect(upstream).not.toHaveBeenCalled();
-
-    const unknown = await fetch(`${sessionUrl}/events`, {
-      method: "POST",
-      headers: allowedHeaders({
-        Authorization: `Bearer ${created.accessToken as string}`,
-        "Content-Type": "application/json",
-      }),
-      body: JSON.stringify({ type: "approval", data: { approved: true } }),
-    });
-    expect(unknown.status).toBe(403);
     expect(upstream).not.toHaveBeenCalled();
   });
 
   it("reuses a healthy match and heals it when the provider goes offline", async () => {
     const runtime = new FakeRuntime();
-    const upstream = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response("data: [DONE]\n\n", {
-        headers: { "Content-Type": "text/event-stream" },
-      }),
-    );
-    const { baseUrl } = await start({
-      runtime,
-      fetch: upstream,
-    });
+    const { baseUrl } = await start({ runtime });
     const grant = await authorizeApp(baseUrl);
     const first = await createAppSession(baseUrl, `Bearer ${grant}`);
     const created = await first.json();
@@ -238,25 +237,13 @@ describe("managed application sessions", () => {
     expect(runtime.created).toHaveLength(1);
 
     runtime.healthy = false;
-    const [stream, concurrentStream] = await Promise.all([
-      fetch(`${baseUrl}/v1/sessions/${created.sessionId as string}/stream`, {
-        headers: allowedHeaders({
-          Authorization: `Bearer ${created.accessToken as string}`,
-        }),
-      }),
-      fetch(`${baseUrl}/v1/sessions/${created.sessionId as string}/stream`, {
-        headers: allowedHeaders({
-          Authorization: `Bearer ${created.accessToken as string}`,
-        }),
-      }),
+    const [refreshed, concurrentRefresh] = await Promise.all([
+      createAppSession(baseUrl, `Bearer ${created.accessToken as string}`),
+      createAppSession(baseUrl, `Bearer ${created.accessToken as string}`),
     ]);
-    expect(stream.status).toBe(200);
-    expect(concurrentStream.status).toBe(200);
+    expect(refreshed.status).toBe(201);
+    expect(concurrentRefresh.status).toBe(201);
     expect(runtime.created).toHaveLength(2);
-    expect(upstream).toHaveBeenCalledWith(
-      "http://127.0.0.1:6767/v1/sessions/provider-2/stream",
-      expect.anything(),
-    );
   });
 
   it("rejects expired capabilities and changed snapshots", async () => {
@@ -279,14 +266,19 @@ describe("managed application sessions", () => {
     expect(changed.status).toBe(401);
 
     clock += 11_000;
-    const expired = await fetch(
-      `${baseUrl}/v1/sessions/${created.sessionId as string}/stream`,
-      {
-        headers: allowedHeaders({
-          Authorization: `Bearer ${created.accessToken as string}`,
-        }),
-      },
-    );
+    const expired = await fetch(`${baseUrl}/v1/responses`, {
+      method: "POST",
+      headers: allowedHeaders({
+        Authorization: `Bearer ${created.accessToken as string}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({
+        model: "agent-connect/default",
+        stream: true,
+        input: "hello",
+        tools: [],
+      }),
+    });
     expect(expired.status).toBe(401);
   });
 });
@@ -632,14 +624,19 @@ describe("connector enrollment and app authorization", () => {
     expect(revoke.status).toBe(303);
 
     upstream.mockClear();
-    const revoked = await fetch(
-      `${baseUrl}/v1/sessions/${applicationSession.sessionId as string}/stream`,
-      {
-        headers: allowedHeaders({
-          Authorization: `Bearer ${applicationSession.accessToken as string}`,
-        }),
-      },
-    );
+    const revoked = await fetch(`${baseUrl}/v1/responses`, {
+      method: "POST",
+      headers: allowedHeaders({
+        Authorization: `Bearer ${applicationSession.accessToken as string}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({
+        model: "agent-connect/default",
+        stream: true,
+        input: "hello",
+        tools: [],
+      }),
+    });
     expect(revoked.status).toBe(401);
     expect(upstream).not.toHaveBeenCalled();
 
@@ -896,24 +893,6 @@ function tool() {
       required: ["message"],
       additionalProperties: false,
     },
-  };
-}
-
-function messageEvent(tools: readonly ReturnType<typeof tool>[]) {
-  return {
-    type: "message",
-    data: {
-      role: "user",
-      content: [{ type: "input_text", text: "Update the page" }],
-    },
-    tools: tools.map((item) => ({
-      type: "function",
-      function: {
-        name: item.name,
-        description: item.description,
-        parameters: item.inputSchema,
-      },
-    })),
   };
 }
 

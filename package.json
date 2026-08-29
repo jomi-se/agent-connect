@@ -16,7 +16,7 @@
     "analyze:dead-code": "knip --no-exit-code",
     "analyze:dependencies": "depcruise apps packages",
     "analyze:duplicates": "jscpd apps packages",
-    "build": "npm run build --workspace @agent-connect/web && npm run build --workspace @agent-connect/gateway && npm run build --workspace @agent-connect/browser-nonce && npm run build --workspace @agent-connect/firebase-canvas",
+    "build": "npm run build --workspace @agent-connect/web && npm run build --workspace @agent-connect/gateway && npm run build --workspace @agent-connect/firebase-canvas",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
@@ -29,7 +29,7 @@
     "test:integration:response-crash": "npm run test:integration:response-crash --workspace @agent-connect/gateway",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "verify": "npm run format:check && npm run typecheck && npm test && npm run test:codex-acp-policy && npm run build && npm run test:integration:omnigent",
-    "verify:full": "npm run verify && npm run test:package:web && npm run test:e2e --workspace @agent-connect/firebase-canvas"
+    "verify:full": "npm run verify && npm run test:integration:response-crash && npm run test:package:web && npm run test:e2e --workspace @agent-connect/firebase-canvas"
   },
   "devDependencies": {
     "@agentclientprotocol/codex-acp": "1.1.2",

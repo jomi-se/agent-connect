@@ -22,10 +22,10 @@ task, executes requested application functions, returns correlated results,
 and hides raw Omnigent identifiers.
 
 The bounded Open Responses profile now passes its standard-client, real-Codex
-browser, gateway-process-death, and Omnigent-process-death gates. The old public
-task/event protocol and browser-visible Omnigent provider remain transitional
-until the final conformance/default/deletion gate in
-[ADR 0010](../decisions/0010-open-responses-gateway-pivot.md).
+browser, gateway-process-death, and Omnigent-process-death gates. It is the sole
+browser task wire. The old public task/event routes and browser-visible
+Omnigent provider have been deleted; Omnigent remains the first internal
+backend.
 
 A 2026-08-28 clean-context
 [implementation review](../reviews/2026-08-28-open-responses-implementation-review.md)
@@ -49,13 +49,12 @@ The automated baseline remains:
 
 ```sh
 npm run verify:full
-npm run test:integration:response-crash
 ```
 
-`verify:full` includes the real-Omnigent compatibility gate through `verify`.
-The crash suite separately kills disposable gateway subprocesses. A real
-Codex/browser composition remains a deliberate manual milestone because it
-consumes the operator's credentials and model allowance.
+`verify:full` includes the real-Omnigent compatibility gate and the crash suite
+that kills disposable gateway subprocesses. A real Codex/browser composition
+remains a deliberate manual milestone because it consumes the operator's
+credentials and model allowance.
 
 ## Priority 1: finish the Open Responses replacement
 
@@ -79,10 +78,10 @@ for the implemented slice and its evidence. The following now pass:
 10. kill real gateway and Omnigent processes at the declared durability
     boundaries and recover deterministically.
 
-What remains is the applicable upstream compliance run, making Responses the
-browser SDK default, repeating the real composition check, accepting ADR 0010,
-and deleting the custom browser task/event protocol and browser-visible
-Omnigent path rather than maintaining two permanent public protocols.
+The default switch and deletion are implemented under
+[VAL-RESP-008](../../contract/VAL-RESP-008.md). What remains before accepting
+ADR 0010 is the final private real-Codex browser composition on the resulting
+single-wire build, followed by recording that evidence.
 
 WebMCP is not part of this milestone. Explicit browser tool registration is the
 version 0 source of the fixed approved snapshot.

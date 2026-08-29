@@ -39,15 +39,14 @@ Owns browser transport setup, application function registration and execution,
 application-owned mutation confirmation, and response-chain orchestration. It
 cannot approve gateway filesystem, shell, network, MCP, policy, or harness
 permission requests. It does not know Omnigent or Codex message shapes. Open
-Responses is the proposed request, item, streaming, function-call, function
+Responses is the request, item, streaming, function-call, function
 output, continuation, and error vocabulary. AG-UI is an optional future edge
 adapter rather than the core boundary; the ACP/MCP browser prototype remains
 experimental.
 
-The current package still exports `OmnigentProvider`, `connectOmnigent`, and
-Omnigent option types from the spike. Those are transitional provider entry
-points, not the intended default public integration. The neutral `connectAgent`
-and task/tool types are the target application surface.
+The package exposes the neutral `connectAgent` and task/tool types. The former
+browser-visible Omnigent provider and direct session routes have been removed;
+Omnigent is confined to the gateway's bundled backend.
 
 ### Gateway
 
