@@ -109,21 +109,23 @@ authorization redirect.
 ```text
 Web application
   @agent-connect/web + application-owned tools
-        │ HTTPS task/events and scoped tool results
+        │ Open Responses HTTP/SSE (POST /v1/responses)
+        │ sequential calls & previous_response_id continuation
         ▼
 User-owned Agent Connect gateway
-  gateway identity, consent, grants, opaque sessions
-        │ internal provider adapter
+  gateway identity, consent, grants, response engine
+        │ internal bundled backend
         ▼
 Omnigent ──ACP──> codex-acp ──> Codex
         │
         └── request-scoped MCP tool calls return to the web application
 ```
 
-Omnigent HTTP/SSE is the first working provider transport. ACP is the preferred
-downstream harness boundary. Neither Omnigent nor Codex types are part of the
-application API. Future runtime and transport adapters
-should preserve the web integration.
+Open Responses HTTP/SSE is the standard public wire between applications and the
+gateway. Omnigent is the first working provider backend bundled internally behind
+the gateway. ACP is the preferred downstream harness boundary. Neither Omnigent
+nor Codex types are part of the application API. Future runtime backends should
+preserve the Open Responses web integration.
 
 ## Supported platforms
 
@@ -165,8 +167,12 @@ npm install
 npm run verify
 ```
 
-`npm run verify` runs formatting, type checks, gateway and SDK behavior tests,
-and all builds without Omnigent, Tailscale, Codex credentials, or model usage.
+`npm run verify` runs formatting checks, type checks, unit and behavior tests,
+all package builds, and the deterministic real-Omnigent compatibility suite
+without requiring Tailscale, Codex credentials, or model credits. It requires
+the pinned Omnigent CLI version from `config/omnigent-test-compat.json` on `PATH`
+so provider compatibility assertions are verified against the real dependency
+rather than assumed mock behavior.
 
 For local maintainability diagnostics, run `npm run analyze`. It reports
 complexity, dependency boundaries, unused code, and production duplication
@@ -177,21 +183,23 @@ rules and ratcheting policy.
 Additional real-boundary checks:
 
 ```sh
+# Run the isolated real-Omnigent compatibility suite directly.
+npm run test:integration:omnigent
+
+# Test gateway response durability across process death.
+npm run test:integration:response-crash
+
 # Pack the SDK, install it into a clean external npm project, and import it.
 npm run test:package:web
-
-# Start disposable real Omnigent services with a deterministic ACP agent.
-npm run test:integration:omnigent
 ```
 
-`npm run verify:full` adds the clean external SDK-package consumer and Canvas
-Playwright suites to the default fast gate. It still does not consume model
-credits. The real Omnigent provider test remains explicit because it starts
-local services.
+`npm run verify:full` adds the response-crash durability suite, clean external
+SDK-package consumer fixture, and Canvas Playwright browser suites to the
+default verification gate.
 
-The provider-contract test exercises gateway → Omnigent → ACP → request-scoped
-MCP → application result without using a model. The real gateway guide is the
-manual milestone path using the user's Codex instance.
+See the [testing strategy guide](docs/architecture/testing-strategy.md) for how
+Agent Connect separates pure state-machine invariants, deterministic real-dependency
+compatibility tests, and real-Codex composition smoke tests.
 
 ## Project status
 

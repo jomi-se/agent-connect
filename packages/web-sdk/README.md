@@ -4,13 +4,14 @@ Browser SDK to implement AI features leveraging a user owned AI agent behind an 
 
 The package provides:
 
-- Signed runtime-card verification
-- Gateway authorization;
-- Agent Connect sessions and task events
-- JSON Schema validation before browser tool execution
+- Signed runtime-card verification;
+- Gateway authorization and token management;
+- Open Responses (`/v1/responses`) HTTP/SSE communication with multi-turn response continuation (`previous_response_id`);
+- Provider-neutral `AgentSession` and task event streaming;
+- JSON Schema validation before browser tool execution;
 - Correlated tool results returned to the same agent turn.
 
-Omnigent is the current lone provider behind the gateway.
+Communication with the gateway uses the standard Open Responses protocol profile. Harness orchestrators like Omnigent remain internal backends behind the user's Agent Connect gateway and are never exposed directly to the browser.
 
 ```ts
 import {

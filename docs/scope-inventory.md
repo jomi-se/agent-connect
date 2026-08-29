@@ -8,23 +8,23 @@ silently treating a target as a shipped guarantee.
 
 ## Application and SDK
 
-| Capability                                             | Status                          | Current evidence or boundary                                                                         |
-| ------------------------------------------------------ | ------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Define typed application-owned tools                   | Implemented                     | Browser-safe `defineTool`; schemas are fixed for the logical session                                 |
-| Connect with an opaque application session             | Implemented                     | Browser APIs never expose Omnigent session IDs                                                       |
-| Verify a selected gateway before disclosure            | Implemented                     | Runtime card pins an Ed25519 key; SDK verifies a fresh signed challenge                              |
-| Authorize an HTTPS application without terminal access | Implemented                     | Gateway-owned consent and S256 PKCE grant bind Origin, redirect, app id, scopes, and canonical tools |
-| Dynamically enroll a previously unknown app Origin     | Implemented for Tailscale Serve | The Origin may begin authorization but receives no operational access before approval                |
-| Stream task, text, lifecycle, and tool events          | Implemented                     | Provider-neutral `AgentTaskEvent` surface                                                            |
-| Execute and return a correlated browser tool result    | Implemented                     | Unknown tools and malformed arguments fail closed                                                    |
-| Revoke an application's grant                          | Implemented                     | Self-revocation and gateway-owned grant management invalidate later use                              |
-| Install the SDK from a clean package artifact          | Implemented from source         | `npm run test:package:web`; package is not published to npm                                          |
-| Recover an unresolved tool request after disconnect    | Deferred                        | No durable pending-action broker yet                                                                 |
-| Provide generic exactly-once side effects              | Explicit non-goal               | Stable action IDs plus app-owned idempotency/deduplication are required                              |
-| Sender-bind grants with app-instance proof/DPoP        | Deferred                        | Current grants are scoped bearer capabilities                                                        |
-| Speak Open Responses between application and gateway   | Implemented                     | Bounded v0 profile; standard client, real Omnigent, crash, and real-Codex browser evidence           |
-| Speak AG-UI between browser and gateway                | Deprioritized exploration       | Optional edge adapter only unless Open Responses cannot meet a concrete UI requirement               |
-| Speak browser ACP/MCP-over-ACP                         | Experimental                    | Draft helpers remain isolated and are not the default transport                                      |
+| Capability                                             | Status                          | Current evidence or boundary                                                                                                               |
+| ------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Define typed application-owned tools                   | Implemented                     | Browser-safe `defineTool`; schemas are fixed for the logical session                                                                       |
+| Connect with an opaque application session             | Implemented                     | Browser APIs never expose Omnigent session IDs                                                                                             |
+| Verify a selected gateway before disclosure            | Implemented                     | Runtime card pins an Ed25519 key; SDK verifies a fresh signed challenge                                                                    |
+| Authorize an HTTPS application without terminal access | Implemented                     | Gateway-owned consent and S256 PKCE grant bind Origin, redirect, app id, scopes, and canonical tools                                       |
+| Dynamically enroll a previously unknown app Origin     | Implemented for Tailscale Serve | The Origin may begin authorization but receives no operational access before approval                                                      |
+| Stream task, text, lifecycle, and tool events          | Implemented                     | Provider-neutral `AgentTaskEvent` surface                                                                                                  |
+| Execute and return a correlated browser tool result    | Implemented                     | Unknown tools and malformed arguments fail closed                                                                                          |
+| Revoke an application's grant                          | Implemented                     | Self-revocation and gateway-owned grant management invalidate later use                                                                    |
+| Install the SDK from a clean package artifact          | Implemented from source         | `npm run test:package:web`; package is not published to npm                                                                                |
+| Recover an unresolved tool request after disconnect    | Implemented (gateway)           | Namespaced `/v1/agent-connect/responses/:id/pending-function-calls` control endpoint; the SDK does not re-fetch pending calls on reconnect |
+| Provide generic exactly-once side effects              | Explicit non-goal               | Stable action IDs plus app-owned idempotency/deduplication are required                                                                    |
+| Sender-bind grants with app-instance proof/DPoP        | Deferred                        | Current grants are scoped bearer capabilities                                                                                              |
+| Speak Open Responses between application and gateway   | Implemented                     | Bounded v0 profile; standard client, real Omnigent, crash, and real-Codex browser evidence                                                 |
+| Speak AG-UI between browser and gateway                | Deprioritized exploration       | Optional edge adapter only unless Open Responses cannot meet a concrete UI requirement                                                     |
+| Speak browser ACP/MCP-over-ACP                         | Experimental                    | Draft helpers remain isolated and are not the default transport                                                                            |
 
 ## Gateway and provider
 
@@ -39,7 +39,7 @@ silently treating a target as a shipped guarantee.
 | Allocate a fresh workspace for each provider session                       | Implemented                   | Failed launches are cleaned immediately; successful-session expiry remains deferred         |
 | Persist gateway identity, devices, grants, revocations, and capability key | Implemented                   | Owner-only gateway state file                                                               |
 | Persist pending authorization requests, codes, and provider mappings       | Deferred                      | These short-lived/session mappings are memory-only                                          |
-| Persist unresolved application actions                                     | Deferred                      | A disconnect can lose an in-flight app-tool request                                         |
+| Persist unresolved application actions                                     | Implemented                   | Durable `FileResponseStore` writes pending calls before publication                         |
 | Enforce a hardened real-agent sandbox                                      | Not implemented               | The source profile runs Codex as the gateway's Unix user; runtime posture is operator-owned |
 | Support multiple users, hosts, agents, or concurrent tasks per session     | Explicit non-goal for MVP     | One online host, one downstream agent, one active task per app session                      |
 

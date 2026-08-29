@@ -7,11 +7,10 @@ use a long-running agent as its intelligence provider while temporarily
 exposing typed, scoped application capabilities back to that agent.
 
 The hackathon implementation uses Codex as the demonstrated downstream agent.
-Its provider boundary should remain compatible with other agent harnesses. The
-leading proposed simplification is to expose an OAuth-protected Open Responses
-endpoint and bundle each harness's response translation with the runtime
-supervision needed to deploy it. The proven Omnigent path remains the baseline
-until that proposal passes its compatibility and authorization gates. See
+Its provider boundary is compatible with other agent harnesses. Agent Connect
+exposes an OAuth-protected Open Responses endpoint (`POST /v1/responses`) and
+bundles the harness's response translation with the runtime supervision needed
+to deploy it. Omnigent is the first working bundled backend. See
 [ADR 0010](decisions/0010-open-responses-gateway-pivot.md).
 
 ## Product promise
@@ -27,24 +26,22 @@ An application can:
 7. revoke the application's gateway grant without knowing provider session
    identifiers.
 
-The target reliability layer will also recover an unresolved application
-action after a network interruption without blindly duplicating a mutation.
-That behavior is not part of the current MVP.
+Stable call IDs and persistence before publication ensure reliable multi-turn
+continuation; applications remain responsible for idempotent operations.
 
 ## Current strategy
 
-- Replace the custom web task/event wire with standard Open Responses semantics
-  if the compatibility slice passes. A convenience `run()` may coordinate a
-  chain of Responses, but must not become another public protocol.
-- Use Omnigent's existing HTTP/SSE Sessions API as the first transport and
-  runtime-supervision implementation. Omnigent selects and launches the user's underlying
-  agent harness; the application does not depend on that choice.
-- Supply a fixed tool snapshot on each task's first session message. Execute
-  `action_required` calls in the application and return correlated results.
-- Keep Omnigent wire types behind the gateway while evaluating a Codex backend
-  that consumes and emits Open Responses types directly. Keep response
-  translation and harness supervision bundled; separating them at deployment
-  time would create another private protocol.
+- Use standard Open Responses semantics (`POST /v1/responses`) as the sole public
+  wire. A convenience `streamTask()` coordinates multi-turn response chains
+  (`previous_response_id`) without creating a separate public protocol.
+- Use Omnigent internally behind the gateway as the first runtime-supervision
+  and execution backend; the application does not depend on that choice.
+- Supply a fixed tool snapshot on the initial response request. Execute
+  `function_call` requests in the application and return correlated outputs
+  via response continuation.
+- Keep Omnigent wire types behind the gateway while response translation and
+  harness supervision remain bundled in the backend; separating them at
+  deployment time would create another private protocol.
 - Treat AG-UI as an optional future edge integration rather than the leading
   core protocol unless a concrete UI requirement is found that Open Responses
   cannot satisfy. Keep ACP and dynamic MCP as backend techniques, not mandatory
@@ -80,22 +77,22 @@ That behavior is not part of the current MVP.
 ## Current acceptance boundary
 
 The browser tool loop has passed against an automatically provisioned
-Omnigent/Codex session. The enrolled gateway slice is now implemented: the
-SDK verifies a pinned gateway key before tool disclosure, the user enrolls a
-browser device with a generated passphrase only on the gateway origin, and a
-top-level gateway page issues a PKCE-protected revocable grant bound to the
-exact origin, app id, scopes, and tool snapshot.
+Omnigent/Codex session speaking the bounded Open Responses profile. The enrolled
+gateway slice is implemented: the SDK verifies a pinned gateway key before tool
+disclosure, the user enrolls a browser device with a generated passphrase only
+on the gateway origin, and a top-level gateway page issues a PKCE-protected
+revocable grant bound to the exact origin, app id, scopes, and tool snapshot.
 
 Raw Omnigent session identifiers are an internal provider detail. A user starts
-the gateway once; normal application use must not require opening Omnigent,
+the gateway once; normal application use does not require opening Omnigent,
 copying a conversation id, or restarting a runner when the application tool
 surface changes.
 
-The reference gateway uses Omnigent, but applications integrate with Agent
-Connect rather than Omnigent. Adding another agent harness should normally
-require a bundled harness backend that owns both runtime supervision and direct
-translation to Open Responses semantics; it must not require reimplementing
-the shared OAuth, application grants, response transport, or recovery core.
+The reference gateway uses Omnigent internally, but applications integrate with
+Agent Connect's Open Responses endpoint. Adding another agent harness requires a
+bundled harness backend that owns runtime supervision and direct translation to
+Open Responses semantics; it does not require reimplementing OAuth, application
+grants, response transport, or the recovery core.
 
 The one-shot initializer uses the terminal once to export the gateway's runtime
 card and enrollment passphrase, persists only a salted verifier, and thereafter
@@ -104,8 +101,8 @@ plaintext passphrase. New apps are approved through the
 gateway's Tailscale-hosted OAuth-style page. The private Tailscale Serve flow
 has passed from a remote mobile browser; the historically proven isolated
 public Funnel profile was removed after the hackathon.
-App-instance sender binding, recovery/key rotation, durable provider mappings,
-and durable unresolved-tool delivery remain outstanding.
+App-instance sender binding, recovery/key rotation, and durable provider mappings
+remain outstanding.
 
 ## Non-goals for the first slice
 
