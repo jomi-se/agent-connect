@@ -28,7 +28,7 @@
     "test:integration:omnigent": "npm run test:integration:omnigent --workspace @agent-connect/gateway",
     "test:integration:response-crash": "npm run test:integration:response-crash --workspace @agent-connect/gateway",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "verify": "npm run format:check && npm run typecheck && npm test && npm run test:codex-acp-policy && npm run build",
+    "verify": "npm run format:check && npm run typecheck && npm test && npm run test:codex-acp-policy && npm run build && npm run test:integration:omnigent",
     "verify:full": "npm run verify && npm run test:package:web && npm run test:e2e --workspace @agent-connect/firebase-canvas"
   },
   "devDependencies": {

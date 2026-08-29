@@ -658,6 +658,81 @@ describe("Agent Connect control extensions", () => {
     expect(rest.final?.status).toBe("cancelled");
   });
 
+  it("terminalizes a busy segment after the client disconnects", async () => {
+    const { engine, backend } = harness([[]]);
+    const stream = await engine.createResponse(session, initial);
+    const created = await stream.next();
+    expect(created.done).toBe(false);
+    const responseId =
+      created.value && "response" in created.value
+        ? created.value.response.id
+        : "";
+
+    await engine.requestCancellation(responseId);
+    const rest = await drain(stream);
+
+    expect(backend.runs[0]?.cancelled).toBe(true);
+    expect(rest.types.at(-1)).toBe("response.incomplete");
+    expect(rest.final?.status).toBe("cancelled");
+    expect(await engine.hasLiveChain(session.sessionId)).toBe(false);
+
+    // The disconnected run no longer locks the application session.
+    await expect(
+      engine.createResponse(session, initial),
+    ).resolves.toBeDefined();
+    await engine.closeAll();
+  });
+
+  it("does not post a function output after cancellation wins the continuation race", async () => {
+    let reachedOutputPersist!: () => void;
+    let releaseOutputPersist!: () => void;
+    const outputPersisted = new Promise<void>((resolve) => {
+      reachedOutputPersist = resolve;
+    });
+    const mayContinue = new Promise<void>((resolve) => {
+      releaseOutputPersist = resolve;
+    });
+    class PausingStore extends InMemoryResponseStore {
+      override async putCall(
+        record: Parameters<InMemoryResponseStore["putCall"]>[0],
+      ): Promise<void> {
+        await super.putCall(record);
+        if (record.result === "output_recorded") {
+          reachedOutputPersist();
+          await mayContinue;
+        }
+      }
+    }
+    const store = new PausingStore();
+    const backend = new FakeBackend({
+      turns: [
+        [call("provider_a", "set_page_message")],
+        [{ type: "completed" }],
+      ],
+    });
+    const engine = new ResponseEngine({
+      store,
+      backend,
+      isGrantActive: () => true,
+    });
+    const { final } = await drain(
+      await engine.createResponse(session, initial),
+    );
+
+    const continuing = engine.createResponse(
+      session,
+      continuation(final!.id, callIdOf(final), "done"),
+    );
+    await outputPersisted;
+    await engine.cancelChain(session, final!.id);
+    releaseOutputPersist();
+
+    await expect(continuing).rejects.toMatchObject({
+      code: "response_cancelled",
+    });
+    expect(backend.runs[0]?.submitted).toEqual([]);
+  });
+
   it("resolves a chain whose harness died while parked as interrupted", async () => {
     const { engine, backend } = harness([
       [call("provider_a", "set_page_message")],
