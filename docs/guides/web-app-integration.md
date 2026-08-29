@@ -7,20 +7,20 @@ through an Agent Connect session.
 
 ## Install the current source package
 
-`@agent-connect/web` has not yet been published to npm. Build a normal npm
+`@open-agent-connect/web` has not yet been published to npm. Build a normal npm
 tarball from the repository and install it into another application:
 
 ```sh
 cd /path/to/agent-connect
 npm install
-npm run build --workspace @agent-connect/web
+npm run build --workspace @open-agent-connect/web
 mkdir -p .agent-connect/packages
 npm_config_cache=.agent-connect/npm-cache \
-  npm pack --workspace @agent-connect/web \
+  npm pack --workspace @open-agent-connect/web \
   --pack-destination .agent-connect/packages
 
 cd /path/to/your-web-app
-npm install /path/to/agent-connect/.agent-connect/packages/agent-connect-web-0.0.0.tgz
+npm install /path/to/agent-connect/.agent-connect/packages/open-agent-connect-web-0.1.0.tgz
 ```
 
 The tarball contains browser ESM and TypeScript declarations.
@@ -39,7 +39,7 @@ import {
   revokeAgentAuthorization,
   serializeAuthorizationTransaction,
   type AgentConnection,
-} from "@agent-connect/web";
+} from "@open-agent-connect/web";
 
 const APP_ID = "my-shopping-list";
 const REDIRECT_URI = `${location.origin}${location.pathname}`;

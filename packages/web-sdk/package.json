@@ -1,15 +1,24 @@
 {
-  "name": "@agent-connect/web",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@open-agent-connect/web",
+  "version": "0.1.0",
   "description": "Harness-neutral browser SDK for lending application tools to user-owned agents",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jomi-se/agent-connect.git",
+    "directory": "packages/web-sdk"
+  },
+  "homepage": "https://github.com/jomi-se/agent-connect/tree/main/packages/web-sdk#readme",
   "type": "module",
   "sideEffects": false,
   "files": [
     "dist",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -18,6 +27,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

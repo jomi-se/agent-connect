@@ -16,7 +16,7 @@
     "analyze:dead-code": "knip --no-exit-code",
     "analyze:dependencies": "depcruise apps packages",
     "analyze:duplicates": "jscpd apps packages",
-    "build": "npm run build --workspace @agent-connect/web && npm run build --workspace @agent-connect/gateway && npm run build --workspace @agent-connect/firebase-canvas",
+    "build": "npm run build --workspace @open-agent-connect/web && npm run build --workspace @agent-connect/gateway && npm run build --workspace @agent-connect/firebase-canvas",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",

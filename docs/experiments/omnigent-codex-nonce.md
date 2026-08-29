@@ -177,7 +177,7 @@ durability, mutation authorization, or multi-session behavior.
 ## Browser result — 2026-07-13
 
 The follow-up browser slice also passed. An ordinary Vite application imported
-the built `@agent-connect/web` package, created a provider-neutral
+the built `@open-agent-connect/web` package, created a provider-neutral
 `AgentSession`, and supplied `get_browser_nonce` through the Omnigent adapter.
 A real Chromium run observed exactly one `tool.requested`, one
 `tool.completed`, and a terminal `task.completed`; the final Codex text

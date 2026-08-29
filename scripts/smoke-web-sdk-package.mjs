@@ -22,14 +22,14 @@ mkdirSync(packagesDir, { recursive: true });
 mkdirSync(consumerDir, { recursive: true });
 
 requireBrowserSafeSources();
-run("npm", ["run", "build", "--workspace", "@agent-connect/web"]);
+run("npm", ["run", "build", "--workspace", "@open-agent-connect/web"]);
 const packed = run(
   "npm",
   [
     "pack",
     "--json",
     "--workspace",
-    "@agent-connect/web",
+    "@open-agent-connect/web",
     "--pack-destination",
     packagesDir,
   ],
@@ -49,7 +49,7 @@ writeFileSync(
       name: "agent-connect-external-consumer-smoke",
       private: true,
       type: "module",
-      dependencies: { "@agent-connect/web": `file:${tarball}` },
+      dependencies: { "@open-agent-connect/web": `file:${tarball}` },
     },
     null,
     2,
@@ -57,7 +57,7 @@ writeFileSync(
 );
 writeFileSync(
   join(consumerDir, "check.mjs"),
-  `import { defineTool, parseRuntimeCard } from "@agent-connect/web";
+  `import { defineTool, parseRuntimeCard } from "@open-agent-connect/web";
 
 const tool = defineTool({
   name: "external_consumer_tool",
@@ -93,7 +93,13 @@ if (result !== "external-consumer-ok") {
 
 const installedPackage = JSON.parse(
   readFileSync(
-    join(consumerDir, "node_modules", "@agent-connect", "web", "package.json"),
+    join(
+      consumerDir,
+      "node_modules",
+      "@open-agent-connect",
+      "web",
+      "package.json",
+    ),
     "utf8",
   ),
 );

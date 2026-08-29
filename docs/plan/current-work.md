@@ -146,7 +146,7 @@ Maintenance is justified when it unblocks one of the priorities above:
   and whether recovery control routes become automatic SDK behavior before
   claiming those product semantics;
 - remove obsolete scaffolding at the migration deletion point; and
-- publish `@agent-connect/web` only after its compatibility and security claims
+- publish `@open-agent-connect/web` only after its compatibility and security claims
   match the tested package.
 
 Do not undertake broad route-framework rewrites, speculative harness
