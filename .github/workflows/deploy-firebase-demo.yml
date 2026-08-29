@@ -16,7 +16,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build --workspace @agent-connect/web
+      - run: npm run build --workspace @open-agent-connect/web
       - run: npm run build --workspace @agent-connect/firebase-canvas
       - uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
         with:

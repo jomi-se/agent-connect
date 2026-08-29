@@ -10,7 +10,7 @@ import {
   type AgentConnection,
   type AgentTaskEvent,
   type RuntimeCard,
-} from "@agent-connect/web";
+} from "@open-agent-connect/web";
 import {
   createDemoTools,
   DEFAULT_PROMPTS,
@@ -785,7 +785,7 @@ function architectureStoryMarkup(layout: "desktop" | "mobile"): string {
       <article class="architecture-app">
         <div class="architecture-browser-bar" aria-hidden="true"><i></i><i></i><i></i><span>yourapp.com</span></div>
         <div class="architecture-app-body">
-          <code>@agent-connect/web</code>
+          <code>@open-agent-connect/web</code>
           <p>Typed tools are declared for the session. Their handlers run here.</p>
           <ul>
             <li><i></i><code>create_project_tasks</code></li>

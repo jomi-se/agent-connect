@@ -1,4 +1,4 @@
-# `@agent-connect/web`
+# `@open-agent-connect/web`
 
 Browser SDK to implement AI features leveraging a user owned AI agent behind an Agent Connect Gateway
 
@@ -20,7 +20,7 @@ import {
   connectAgent,
   defineTool,
   parseRuntimeCard,
-} from "@agent-connect/web";
+} from "@open-agent-connect/web";
 
 const tools = [
   defineTool({

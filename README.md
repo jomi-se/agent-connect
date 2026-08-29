@@ -64,7 +64,7 @@ snapshot.
 
 ## Add Agent Connect to a web app
 
-`@agent-connect/web` is a browser-safe TypeScript package. It is currently
+`@open-agent-connect/web` is a browser-safe TypeScript package. It is currently
 distributed from source until it is more stable for normal npm package. The
 [web application integration guide](docs/guides/web-app-integration.md) shows
 how to build and install its npm tarball in another application, authorize a
@@ -108,7 +108,7 @@ authorization redirect.
 
 ```text
 Web application
-  @agent-connect/web + application-owned tools
+  @open-agent-connect/web + application-owned tools
         │ Open Responses HTTP/SSE (POST /v1/responses)
         │ sequential calls & previous_response_id continuation
         ▼

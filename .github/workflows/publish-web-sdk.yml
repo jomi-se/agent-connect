@@ -1,0 +1,58 @@
+name: Publish web SDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Pack and validate without publishing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      # Mints the short-lived OIDC token npm exchanges for publish rights and
+      # attaches build provenance. Without it, publishing needs a long-lived
+      # token, which is exactly what trusted publishing removes.
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      # Node 22 ships an npm that predates OIDC trusted publishing.
+      - name: Install an npm that supports trusted publishing
+        run: npm install --global npm@latest
+
+      - run: npm ci
+
+      # The real-Omnigent suite in `npm run verify` needs the pinned provider
+      # binary, which no hosted runner has. Everything that does not need it
+      # still gates the publish.
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:package:web
+
+      - name: Pack the exact tarball that would be published
+        run: npm pack --workspace @open-agent-connect/web --pack-destination "${RUNNER_TEMP}"
+
+      - name: Show tarball contents
+        run: tar -tzf "${RUNNER_TEMP}"/open-agent-connect-web-*.tgz
+
+      - name: Publish to npm
+        if: inputs.dry-run == false
+        run: npm publish --workspace @open-agent-connect/web

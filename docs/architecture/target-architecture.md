@@ -6,7 +6,7 @@ This page contains an "aspirational" target architecture that would be the end g
 
 ```text
 browser application
-  Open Responses client or @agent-connect/web convenience SDK
+  Open Responses client or @open-agent-connect/web convenience SDK
   define functions, create/continue responses, execute app-owned changes
              |
              | Open Responses HTTP/SSE

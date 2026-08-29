@@ -2,7 +2,7 @@ import {
   defineTool,
   type ApplicationTool,
   type JsonObject,
-} from "@agent-connect/web";
+} from "@open-agent-connect/web";
 
 export type DemoScenario =
   "project-board" | "document-review" | "product-research";
