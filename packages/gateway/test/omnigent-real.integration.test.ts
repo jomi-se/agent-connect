@@ -1251,80 +1251,71 @@ async function exerciseToolLoop(
     accessToken: string;
   };
 
-  const sessionUrl = `${gatewayUrl}/v1/sessions/${created.sessionId}`;
-  const streamResponse = await fetch(`${sessionUrl}/stream`, {
-    headers: {
-      ...headers,
-      Authorization: `Bearer ${created.accessToken}`,
-      Accept: "text/event-stream",
-    },
-  });
-  expect(streamResponse.status).toBe(200);
-  expect(streamResponse.body).not.toBeNull();
-
-  const postMessage = await fetch(`${sessionUrl}/events`, {
+  const firstSegment = await fetch(`${gatewayUrl}/v1/responses`, {
     method: "POST",
     headers: {
       ...headers,
       Authorization: `Bearer ${created.accessToken}`,
       "Content-Type": "application/json",
+      Accept: "text/event-stream",
     },
     body: JSON.stringify({
-      type: "message",
-      data: {
-        role: "user",
-        content: [{ type: "input_text", text: "Call get_test_nonce once" }],
-      },
+      model: "agent-connect/default",
+      stream: true,
+      input: "Call get_test_nonce once",
       tools: [
         {
           type: "function",
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.inputSchema,
-          },
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema,
         },
       ],
     }),
   });
-  expect(postMessage.status).toBe(202);
+  expect(firstSegment.status).toBe(200);
+  expect(firstSegment.body).not.toBeNull();
+  const firstEvents: Record<string, unknown>[] = [];
+  for await (const event of parseSse(firstSegment.body!)) {
+    firstEvents.push(event);
+  }
+  const call = functionCallOf(firstEvents);
+  expect(call["name"]).toBe("get_test_nonce");
+  expect(parseArguments(call["arguments"])).toEqual({});
+  options.onActionRequired?.();
 
-  let nonce = "";
+  const nonce = `app-${randomUUID()}`;
+  const secondSegment = await fetch(`${gatewayUrl}/v1/responses`, {
+    method: "POST",
+    headers: {
+      ...headers,
+      Authorization: `Bearer ${created.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify({
+      model: "agent-connect/default",
+      stream: true,
+      previous_response_id: responseIdOf(firstEvents),
+      input: [
+        {
+          type: "function_call_output",
+          call_id: call["call_id"],
+          output: JSON.stringify({ nonce }),
+        },
+      ],
+    }),
+  });
+  expect(secondSegment.status).toBe(200);
+  expect(secondSegment.body).not.toBeNull();
   let text = "";
   let completed = false;
-  for await (const event of parseSse(streamResponse.body!)) {
+  for await (const event of parseSse(secondSegment.body!)) {
     if (event["type"] === "response.output_text.delta") {
       text += String(event["delta"] ?? "");
     }
-    if (event["type"] === "response.output_item.done") {
-      const item = event["item"] as Record<string, unknown> | undefined;
-      if (item?.["status"] === "action_required") {
-        expect(item["name"]).toBe("get_test_nonce");
-        expect(parseArguments(item["arguments"])).toEqual({});
-        expect(nonce).toBe("");
-        options.onActionRequired?.();
-        nonce = `app-${randomUUID()}`;
-        const toolResult = await fetch(`${sessionUrl}/events`, {
-          method: "POST",
-          headers: {
-            ...headers,
-            Authorization: `Bearer ${created.accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            type: "function_call_output",
-            data: {
-              call_id: item["call_id"],
-              output: JSON.stringify({ nonce }),
-            },
-          }),
-        });
-        expect(toolResult.status).toBe(202);
-      }
-    }
     if (event["type"] === "response.completed") {
       completed = true;
-      break;
     }
   }
 

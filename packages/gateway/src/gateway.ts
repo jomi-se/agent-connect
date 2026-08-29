@@ -29,7 +29,6 @@ import type { OmnigentSandboxOptions } from "./omnigent-runtime.js";
 import type { AgentRuntime } from "./runtime.js";
 import type { EngineSession } from "./responses/engine.js";
 import {
-  hashOmnigentToolEnvelope,
   hashToolSnapshot,
   InvalidToolSnapshotError,
   validateToolSnapshot,
@@ -70,8 +69,6 @@ interface ManagedSession {
   providerSessionId: string;
 }
 
-const PROVIDER_SESSION_ROUTE = /^\/v1\/sessions\/([^/]+)\/(stream|events)$/;
-const MAX_EVENT_BYTES = 1024 * 1024;
 const MAX_CREATE_BYTES = 64 * 1024;
 const DEVICE_COOKIE = "agent_connect_device";
 
@@ -433,87 +430,7 @@ export function createGateway(options: GatewayOptions) {
         return;
       }
 
-      const match = PROVIDER_SESSION_ROUTE.exec(pathname);
-      if (!match) {
-        sendJson(response, 404, { error: "route_not_found" });
-        return;
-      }
-      const requestedId = decodeURIComponent(match[1] ?? "");
-      const operation = match[2];
-      if (!isSafeSessionId(requestedId)) {
-        sendJson(response, 400, { error: "invalid_session_id" });
-        return;
-      }
-      if (
-        (operation === "stream" && request.method !== "GET") ||
-        (operation === "events" && request.method !== "POST")
-      ) {
-        response.setHeader("Allow", operation === "stream" ? "GET" : "POST");
-        sendJson(response, 405, { error: "method_not_allowed" });
-        return;
-      }
-
-      const managed = managedSessions.get(requestedId);
-      if (!managed) {
-        sendJson(response, 404, { error: "session_not_found" });
-        return;
-      }
-      let providerSessionId = managed.providerSessionId;
-      let body: string | undefined;
-      const claims = bearerClaims(
-        header(request, "authorization") ?? "",
-        signingSecret,
-        Math.floor(now() / 1000),
-      );
-      if (
-        !claims ||
-        !claimsMatchSession(claims, managed, origin) ||
-        !connectorAuth.isGrantActive(managed.authorizationGrantId)
-      ) {
-        response.setHeader("WWW-Authenticate", "Bearer");
-        sendJson(response, 401, { error: "invalid_session_capability" });
-        return;
-      }
-      if (request.method === "GET") {
-        providerSessionId = (await ensureHealthy(managed)).providerSessionId;
-      } else {
-        body = await readBody(request, MAX_EVENT_BYTES);
-        if (!eventMatchesToolSnapshot(body, managed.toolHash)) {
-          sendJson(response, 403, { error: "tool_snapshot_mismatch" });
-          return;
-        }
-        providerSessionId = managed.providerSessionId;
-      }
-
-      const controller = new AbortController();
-      response.on("close", () => {
-        if (!response.writableEnded) controller.abort();
-      });
-      const upstream = await fetchImplementation(
-        `${omnigentBaseUrl}/v1/sessions/${encodeURIComponent(providerSessionId)}/${operation}`,
-        {
-          method: request.method ?? "GET",
-          headers:
-            request.method === "GET"
-              ? { Accept: "text/event-stream" }
-              : { "Content-Type": "application/json" },
-          ...(body === undefined ? {} : { body }),
-          signal: controller.signal,
-        },
-      );
-
-      response.statusCode = upstream.status;
-      response.setHeader(
-        "Content-Type",
-        upstream.headers.get("content-type") ?? "application/octet-stream",
-      );
-      response.setHeader("Cache-Control", "no-store");
-      if (!upstream.body) {
-        response.end();
-        return;
-      }
-      for await (const chunk of upstream.body) response.write(chunk);
-      response.end();
+      sendJson(response, 404, { error: "route_not_found" });
     } catch (error) {
       if (response.headersSent) {
         response.destroy(error instanceof Error ? error : undefined);
@@ -724,62 +641,6 @@ function claimsMatchSession(
   );
 }
 
-function eventMatchesToolSnapshot(body: string, expectedHash: string): boolean {
-  let event: unknown;
-  try {
-    event = JSON.parse(body);
-  } catch {
-    return false;
-  }
-  if (!isRecord(event) || typeof event["type"] !== "string") return false;
-  if (event["type"] === "message") {
-    if (!hasOnlyKeys(event, ["type", "data", "tools"])) return false;
-    const data = event["data"];
-    if (!isRecord(data) || !hasOnlyKeys(data, ["role", "content"]))
-      return false;
-    const content = data["content"];
-    if (
-      data["role"] !== "user" ||
-      !Array.isArray(content) ||
-      content.length !== 1 ||
-      !isRecord(content[0]) ||
-      !hasOnlyKeys(content[0], ["type", "text"]) ||
-      content[0]["type"] !== "input_text" ||
-      typeof content[0]["text"] !== "string"
-    )
-      return false;
-    return hashOmnigentToolEnvelope(event["tools"]) === expectedHash;
-  }
-  if (event["type"] === "function_call_output") {
-    if (!hasOnlyKeys(event, ["type", "data"])) return false;
-    const data = event["data"];
-    return (
-      isRecord(data) &&
-      hasOnlyKeys(data, ["call_id", "output"]) &&
-      typeof data["call_id"] === "string" &&
-      data["call_id"].length > 0 &&
-      data["call_id"].length <= 256 &&
-      typeof data["output"] === "string"
-    );
-  }
-  return (
-    event["type"] === "interrupt" &&
-    hasOnlyKeys(event, ["type", "data"]) &&
-    isRecord(event["data"]) &&
-    Object.keys(event["data"]).length === 0
-  );
-}
-
-function hasOnlyKeys(
-  value: Readonly<Record<string, unknown>>,
-  keys: readonly string[],
-): boolean {
-  return (
-    Object.keys(value).every((key) => keys.includes(key)) &&
-    keys.every((key) => Object.hasOwn(value, key))
-  );
-}
-
 function canonicalPublicEndpoint(value: string): string {
   const endpoint = new URL(value);
   if (
@@ -825,10 +686,6 @@ function setCors(response: ServerResponse, origin: string): void {
 function header(request: IncomingMessage, name: string): string | undefined {
   const value = request.headers[name];
   return Array.isArray(value) ? value[0] : value;
-}
-
-function isSafeSessionId(value: string): boolean {
-  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value);
 }
 
 function bearerCredential(authorization: string): string | undefined {

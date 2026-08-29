@@ -1,8 +1,8 @@
 # 0010: Use Open Responses at the application boundary
 
-- Status: proposed; pending vertical-slice evidence
+- Status: proposed; implementation complete, pending final post-switch composition
 - Date: 2026-08-26
-- Revised: 2026-08-28
+- Revised: 2026-08-29
 
 ## Context
 
@@ -327,22 +327,23 @@ may be used behind a backend; none is required by applications.
 
 ## Validation gates before acceptance
 
-This ADR remains proposed until a time-boxed vertical slice demonstrates:
+This ADR remains proposed until the final post-switch composition confirms the
+implemented replacement:
 
-Gate status as of 2026-08-28, after the deterministic and real-Omnigent slice:
-gates 3, 4, 5, 6, 8, 9, and 10 are met and covered by
+Gate status as of 2026-08-29: gates 1 through 13 have implementation and
+pre-switch evidence. The protocol, authorization, durability, cancellation,
+and provider gates are covered by
 [VAL-RESP-001](../../contract/VAL-RESP-001.md),
 [VAL-RESP-002](../../contract/VAL-RESP-002.md),
+[VAL-RESP-003](../../contract/VAL-RESP-003.md),
+[VAL-RESP-004](../../contract/VAL-RESP-004.md),
 [VAL-RESP-005](../../contract/VAL-RESP-005.md),
 [VAL-RESP-006](../../contract/VAL-RESP-006.md), and
-[VAL-RESP-007](../../contract/VAL-RESP-007.md). Gate 7 is met for gateway
-restart and for the `interrupted` outcome, but cancellation is proven only
-against a deterministic backend. Gate 1 is met against a deterministic
-backend: the real `openai` 7.8.0 client completes two sequential calls, final
-text, and streaming with no Agent Connect-specific field
-([VAL-RESP-003](../../contract/VAL-RESP-003.md)). Gate 2 is the outstanding one: multiple sequential calls are proven end to end against
-real Omnigent, but not yet against a real browser and a
-subscription-authenticated Codex run. Gates 11, 12, and 13 wait on that.
+[VAL-RESP-007](../../contract/VAL-RESP-007.md). The real browser/Codex flow
+passed twice on 2026-08-28, including fresh authorization. Open Responses is
+now the SDK default and the old public routes/provider are deleted under
+[VAL-RESP-008](../../contract/VAL-RESP-008.md). Repeat that private composition
+once on the final single-wire build before changing this ADR to accepted.
 
 1. An ordinary Open Responses client can use the documented profile without
    Agent Connect-specific response payloads. This gate depends on the

@@ -1,6 +1,6 @@
 # Open Responses vertical-slice implementation plan
 
-Updated: 2026-08-27
+Updated: 2026-08-29
 
 ## Outcome
 
@@ -34,7 +34,7 @@ until the replacement gate passes.
 
 ## Investigation baseline
 
-### What already works
+### What worked at the investigation baseline
 
 - `packages/gateway/src/gateway.ts` authenticates the browser Origin, checks a
   revocable application grant, creates an opaque application session, and
@@ -43,7 +43,7 @@ until the replacement gate passes.
   approved function definitions. A different snapshot cannot reuse it.
 - `packages/gateway/src/omnigent-runtime.ts` provisions one Omnigent session
   and writes the approved application function names into its private policy.
-- `packages/web-sdk/src/omnigent-provider.ts` opens one Omnigent SSE stream,
+- The original `packages/web-sdk/src/omnigent-provider.ts` opened one Omnigent SSE stream,
   posts a prompt and function definitions, submits correlated function
   outputs, and leaves the underlying Codex turn alive across multiple calls.
 - `packages/web-sdk/src/agent-session.ts` validates arguments, executes the
@@ -54,9 +54,9 @@ until the replacement gate passes.
   already prove the multi-call application-function loop without consuming a
   model credential.
 
-### Gaps that matter to the slice
+### Gaps identified at the investigation baseline
 
-- The gateway currently proxies Omnigent bytes on
+- The gateway originally proxied Omnigent bytes on
   `/v1/sessions/:id/stream` and `/events`; it does not own Responses state or
   standard event ordering.
 - The Omnigent stream is tied to the browser HTTP request. A premature browser
@@ -736,13 +736,12 @@ Checkpoint: the Canvas application completes its existing user flow through
 `/v1/responses` with the flag enabled; no browser package imports Omnigent wire
 types for the new path.
 
-**Done for the SDK.** `packages/web-sdk/src/responses-provider.ts` is selected
-by `connectAgent({ protocol: "open-responses" })` and is not the default. The
-package smoke test now scans the browser sources for `node:` imports; the
-package tsconfig omits Node types, which catches globals but not an explicit
-`node:` specifier. The Canvas application reaches the flag with
-`?protocol=open-responses` and labels the connection when it is on; the
-checkpoint's own run through a real browser is Milestone 4.
+**Done for the SDK.** `packages/web-sdk/src/responses-provider.ts` implements
+the continuation loop behind the neutral `AgentSession` API. It was initially
+opt-in for Milestone 4; after the durability and replacement gates it became
+the only `connectAgent()` wire in Milestone 6. The package smoke test scans the
+browser sources for `node:` imports; the package tsconfig omits Node types,
+which catches globals but not an explicit `node:` specifier.
 
 ### Milestone 4: real browser-to-Codex composition
 
@@ -872,7 +871,8 @@ capability without losing its call IDs.
 
 Step 6 is done by `responses-process-crash.integration.test.ts`, which kills an
 actual gateway child at each of the four named commit boundaries and restarts
-over the same durable state. Step 7, the default switch, remains.
+over the same durable state. Step 7 is done under VAL-RESP-008: Open Responses
+is the sole browser wire and the legacy provider is removed.
 
 ### Milestone 6: conformance, replacement, and deletion
 
@@ -894,14 +894,19 @@ Checkpoint: the repository has one public task/function protocol, with custom
 Agent Connect APIs limited to authorization, session bootstrap, recovery, and
 cancellation responsibilities that Open Responses does not standardize.
 
+**Default and deletion implemented on 2026-08-29.** The neutral SDK convenience
+events remain local API types, not a gateway wire. `npm run verify:full` now
+includes the process-crash suite. The final post-switch private browser/Codex
+composition is the remaining acceptance action for ADR 0010.
+
 ## Validation contracts
 
 Implementation work should add the following compact contracts before changing
 runtime behavior:
 
-Written contracts live in `contract/`. Status as of 2026-08-28: `VAL-RESP-000`
-through `007` passed; `VAL-RESP-008` remains pending for the default switch and
-legacy-wire deletion.
+Written contracts live in `contract/`. Status as of 2026-08-29: `VAL-RESP-000`
+through `007` passed; the automated portion of `VAL-RESP-008` is implemented,
+with its final private browser/Codex composition pending.
 
 | Contract       | Required proof                                                                                                                                |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -940,8 +945,8 @@ composition check, not the routine test loop. The full evidence policy lives in
 
 In rough dependency order:
 
-1. **Milestone 5, step 7 and Milestone 6**: the default switch, the upstream
-   compliance suite, and deleting the superseded task routes.
+1. **Milestone 6 final composition**: repeat the private browser-to-real-Codex
+   flow on the single-wire build, then accept ADR 0010 and close VAL-RESP-008.
 2. **Bounded follow-ups from implementation review**, tracked in the dated
    [review disposition](../reviews/2026-08-28-open-responses-implementation-review.md):
    HTTP backpressure and last-resort post-header SSE errors, browser handler

@@ -1,6 +1,6 @@
 # Scope and capability inventory
 
-Updated: 2026-08-28
+Updated: 2026-08-29
 
 This inventory separates implemented behavior from explicit targets. The
 mission defines the product boundary; this file prevents future plans from
@@ -22,26 +22,26 @@ silently treating a target as a shipped guarantee.
 | Recover an unresolved tool request after disconnect    | Deferred                        | No durable pending-action broker yet                                                                 |
 | Provide generic exactly-once side effects              | Explicit non-goal               | Stable action IDs plus app-owned idempotency/deduplication are required                              |
 | Sender-bind grants with app-instance proof/DPoP        | Deferred                        | Current grants are scoped bearer capabilities                                                        |
-| Speak Open Responses between application and gateway   | Proposed exploration            | ADR 0010; requires a live multi-call Codex compatibility slice and authorization audit               |
+| Speak Open Responses between application and gateway   | Implemented                     | Bounded v0 profile; standard client, real Omnigent, crash, and real-Codex browser evidence           |
 | Speak AG-UI between browser and gateway                | Deprioritized exploration       | Optional edge adapter only unless Open Responses cannot meet a concrete UI requirement               |
 | Speak browser ACP/MCP-over-ACP                         | Experimental                    | Draft helpers remain isolated and are not the default transport                                      |
 
 ## Gateway and provider
 
-| Capability                                                                 | Status                        | Current evidence or boundary                                                                  |
-| -------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------- |
-| Broker the Omnigent HTTP/SSE Sessions API                                  | Implemented                   | First provider behind an internal adapter                                                     |
-| Provision one downstream runner and heal an unhealthy match                | Implemented                   | Grant-bound tool policy is written before launch                                              |
-| Restrict Codex's request-scoped relay tools to the authorized snapshot     | Implemented reference profile | Fail-closed manifest and `enabled_tools` compatibility wrapper, pinned to Omnigent 0.5.1      |
-| Keep provider IDs and wire types out of the normal browser API             | Implemented                   | `connectAgent` is the supported neutral entry point; legacy spike exports remain transitional |
-| Expose an OAuth-protected Open Responses endpoint                          | Proposed                      | ADR 0010; do not remove the passing Omnigent path before conformance evidence                 |
-| Bundle response translation with harness runtime supervision               | Proposed architecture         | Share standards machinery in source; avoid a separate private facade-to-supervisor protocol   |
-| Allocate a fresh workspace for each provider session                       | Implemented                   | Failed launches are cleaned immediately; successful-session expiry remains deferred           |
-| Persist gateway identity, devices, grants, revocations, and capability key | Implemented                   | Owner-only gateway state file                                                                 |
-| Persist pending authorization requests, codes, and provider mappings       | Deferred                      | These short-lived/session mappings are memory-only                                            |
-| Persist unresolved application actions                                     | Deferred                      | A disconnect can lose an in-flight app-tool request                                           |
-| Enforce a hardened real-agent sandbox                                      | Not implemented               | The source profile runs Codex as the gateway's Unix user; runtime posture is operator-owned   |
-| Support multiple users, hosts, agents, or concurrent tasks per session     | Explicit non-goal for MVP     | One online host, one downstream agent, one active task per app session                        |
+| Capability                                                                 | Status                        | Current evidence or boundary                                                                |
+| -------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
+| Broker the Omnigent HTTP/SSE Sessions API                                  | Implemented                   | First provider behind an internal adapter                                                   |
+| Provision one downstream runner and heal an unhealthy match                | Implemented                   | Grant-bound tool policy is written before launch                                            |
+| Restrict Codex's request-scoped relay tools to the authorized snapshot     | Implemented reference profile | Fail-closed manifest and `enabled_tools` compatibility wrapper, pinned to Omnigent 0.5.1    |
+| Keep provider IDs and wire types out of the normal browser API             | Implemented                   | `connectAgent` is neutral; browser-visible Omnigent exports and routes are removed          |
+| Expose an OAuth-protected Open Responses endpoint                          | Implemented                   | Bounded `POST /v1/responses` plus explicit Agent Connect recovery and cancellation controls |
+| Bundle response translation with harness runtime supervision               | Implemented for Omnigent      | Response engine and bundled backend share one gateway process; no private facade protocol   |
+| Allocate a fresh workspace for each provider session                       | Implemented                   | Failed launches are cleaned immediately; successful-session expiry remains deferred         |
+| Persist gateway identity, devices, grants, revocations, and capability key | Implemented                   | Owner-only gateway state file                                                               |
+| Persist pending authorization requests, codes, and provider mappings       | Deferred                      | These short-lived/session mappings are memory-only                                          |
+| Persist unresolved application actions                                     | Deferred                      | A disconnect can lose an in-flight app-tool request                                         |
+| Enforce a hardened real-agent sandbox                                      | Not implemented               | The source profile runs Codex as the gateway's Unix user; runtime posture is operator-owned |
+| Support multiple users, hosts, agents, or concurrent tasks per session     | Explicit non-goal for MVP     | One online host, one downstream agent, one active task per app session                      |
 
 ## Deployment profiles
 
@@ -76,8 +76,9 @@ silently treating a target as a shipped guarantee.
 
 1. `npm run verify` covers formatting, type checks, behavior tests, policy
    checks, builds, and the deterministic real-Omnigent compatibility suite.
-2. `npm run verify:full` additionally packs/installs the SDK in a clean
-   consumer and runs Canvas browser tests.
+2. `npm run verify:full` additionally kills and restarts real gateway
+   subprocesses at durability boundaries, packs/installs the SDK in a clean
+   consumer, and runs Canvas browser tests.
 3. `npm run test:integration:omnigent` runs that provider gate directly,
    starting disposable real Omnigent services and a deterministic ACP/MCP agent
    without model credentials.

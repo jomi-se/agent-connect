@@ -114,12 +114,9 @@ Its Omnibox or managed-host configuration is one way for the reference
 gateway to satisfy a runtime posture.
 
 The browser-safe `AgentSession`, `AgentConnection`, application-tool, and task
-event types are the intended neutral surface. Current exports named
-`OmnigentProvider`, `connectOmnigent`, and `OmnigentProviderOptions` expose the
-original spike adapter from the same package. They are transitional and must
-not become the default integration path. A later packaging pass should move
-provider adapters behind an internal or explicitly experimental entry point
-after the neutral `connectAgent` path covers the demonstrated behavior.
+event types are the neutral surface. The original browser-visible Omnigent
+provider exports were removed after the Open Responses replacement gate; the
+provider adapter now stays behind the gateway boundary.
 
 The current normalized provider event contract is intentionally small:
 

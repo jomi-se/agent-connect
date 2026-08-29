@@ -180,11 +180,11 @@ sudo tailscale serve --bg --https=8443 http://127.0.0.1:8787
 tailscale serve status
 ```
 
-Open the Canvas with the version 0 wire explicitly selected until the default
-switch is complete:
+Open the Canvas. `connectAgent()` uses the bounded Open Responses profile by
+default; no protocol query parameter is needed:
 
 ```text
-https://YOUR-MACHINE.YOUR-TAILNET.ts.net/?protocol=open-responses
+https://YOUR-MACHINE.YOUR-TAILNET.ts.net/
 ```
 
 These routes use Tailscale Serve and should appear as `tailnet only`. The real
