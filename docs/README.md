@@ -58,6 +58,9 @@ historical. AG-UI is no longer an active core-protocol experiment.
 - [Multi-turn task continuation](future/multi-turn-task-continuation.md):
   letting an application continue a finished task instead of restarting it.
   Proposed, not started; requires changes to the response chain lifecycle.
+- [Hassle-free tunnel ingress](future/hassle-free-tunnel-ingress.md): reaching a
+  self-hosted gateway at a stable HTTPS origin without root or a second admin
+  console. Surveys zrok, cloudflared, ngrok, and Funnel; depends on ADR 0009.
 
 ## Superseded and historical decisions
 
