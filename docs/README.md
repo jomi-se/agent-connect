@@ -61,6 +61,11 @@ historical. AG-UI is no longer an active core-protocol experiment.
 - [Hassle-free tunnel ingress](future/hassle-free-tunnel-ingress.md): reaching a
   self-hosted gateway at a stable HTTPS origin without root or a second admin
   console. Surveys zrok, cloudflared, ngrok, and Funnel; depends on ADR 0009.
+- [Application identity for native clients](future/native-client-identity.md):
+  what replaces the browser origin when the application is an Android or desktop
+  binary. Proposes `browser_origin`, `native_published`, and `native_paired`
+  profiles over one internal grant; recommends device-code pairing as the
+  general answer.
 
 ## Superseded and historical decisions
 
