@@ -248,92 +248,374 @@ gateway.
 1. **Web build first.** The Readest PoC proves the product — local RAG, book
    tools, citations, tutor quality, streaming, rich artifacts — entirely within
    `browser_origin`, with no identity work at all.
-2. **Hosted connect page** for a first Android demonstration. No protocol
-   change; exercises ADR 0009's standard-client profile end to end.
+2. ~~**Hosted connect page** for a first Android demonstration.~~ **Discarded**
+   2026-08-30 — see "The hosted bridge is discarded" below. It collides with
+   Local Network Access, and it misrepresents a native client as a
+   browser-origin one. Go straight to pairing.
 3. **`native_paired`** as the real native profile, reusing ADR 0004's lessons
    and ADR 0005's transport profiles.
 4. **`native_published`** with a client-metadata document and App Links, when
-   there is a published build to justify it.
+   there is a published build to justify it. For an upstream Readest
+   integration this becomes the *normal* path and pairing the fallback.
 5. **Attestation** optional, never foundational.
 
-## Open questions
+## Resolved: how the five open questions were answered
 
-- Where does the pairing endpoint live relative to the authorization server in
-  ADR 0007's runtime card, and does the card need a field advertising which
-  application profiles a gateway supports?
-- Does `native_paired` reuse the `non_browser_clients` consent bit, or does a
-  paired grant imply it and make the checkbox browser-only?
-- How is a paired installation named in the gateway's grant list, and how does
-  the user tell two installations of the same fork apart at revocation time?
-- Should the tool snapshot be sent at pairing initiation, or fetched by the
-  gateway from the client afterwards, given the hash must match what the consent
-  page displayed?
-- Can the hosted connect page reach a tailnet-only gateway at all, or does the
-  bridge implicitly require the public ingress from
-  `hassle-free-tunnel-ingress.md`? **Partially measured, 2026-08-30 — see
-  below.**
+Answered 2026-08-30. Three requirements sit above all five and are not
+negotiable:
 
-## Measured: the bridge collides with Local Network Access
+1. The application verifies the runtime card and establishes the expected
+   transport principal **before** submitting any pairing material. Pairing
+   authorizes an application installation; it must never recreate ADR 0004's
+   gap, where the application knew only that *something* answered at the
+   configured endpoint.
+2. The gateway renders verified and self-reported identities in **visibly
+   different namespaces**.
+3. Pairing authorizes a specific **installation key and tool snapshot**, not an
+   application name.
 
-Probed on 2026-08-30 against a live gateway and a Chrome 152 automation
-browser. Two results, one decisive and one indicative.
+### 1. Profiles are advertised through authorization-server metadata
 
-**CORS is not the obstacle.** The gateway answers a preflight from an arbitrary
-foreign origin and reflects it:
+Not through the runtime card. The card answers "who is this runtime, where is
+it, how do I authenticate its transport identity" and should stay a small,
+stable, signed bootstrap object. Which authorization methods exist is a
+different question, and the card already carries `authorizationServer` to point
+at whatever answers it:
+
+```json
+{
+  "issuer": "https://gateway.example/authorization",
+  "agent_connect_client_profiles_supported": ["browser_origin", "native_paired"],
+  "authorization_endpoint": "https://gateway.example/authorize",
+  "native_pairing_endpoint": "https://gateway.example/native/pair"
+}
+```
+
+A gateway that publishes no metadata means "browser profile only", so old
+gateways degrade correctly and clients never probe endpoints and interpret
+404s. Same separation as OAuth Authorization Server Metadata, without owing
+every field of it. **Card version 2 is therefore not assumed** — it becomes
+justified only if `authorizationServer` cannot serve as a discovery root, or
+the current parser rejects unknown fields. That is an implementation finding,
+not a starting premise.
+
+Clients negotiate:
+
+```ts
+if (gateway.supports('native_published') && app.hasPublishedIdentity) {
+  authorizeAsPublishedClient();
+} else if (gateway.supports('native_paired')) {
+  pairInstallation();
+} else {
+  showUnsupportedGateway();
+}
+```
+
+### 2. A paired grant is originless by definition; no checkbox
+
+A native application cannot present a meaningful browser origin, so asking the
+user to permit originless use is a question with one correct answer. The consent
+page states it as fact: *"This is a paired native application. It will connect
+directly from this device rather than through a browser origin."*
+
+Go further than auto-setting the existing boolean: make the **profile
+authoritative** in the policy engine.
+
+```ts
+type AuthorizedClient =
+  | { profile: 'browser_origin';   origin: string; allowOriginlessRuntime: boolean }
+  | { profile: 'native_paired';    instanceKeyThumbprint: string }
+  | { profile: 'native_published'; clientId: string; instanceKeyThumbprint: string };
+```
+
+A free-floating `non_browser_clients` boolean permits nonsensical states because
+it conflates two different things: a browser-origin grant *exceptionally
+extended* to originless use, and a grant *intrinsically* originless. Persist
+`{"client_profile": "native_paired", "non_browser_clients": true}` for
+compatibility if useful, but read the profile. The boolean becomes a legacy
+property of `browser_origin` grants.
+
+### 3. The gateway owns the installation nickname; the app only suggests it
+
+The application proposes `{suggested_device_name, platform, app_version}` as
+self-reported hints. The consent page lets the user confirm or edit, so the
+durable management label is gateway-owned and the application cannot silently
+rename itself later.
+
+```
+Application
+  Readest Book Helper
+  Publisher: Unverified local application
+
+Device
+  Suggested name: Readest on Pixel 7
+  Name this installation: [ José's Pixel 7            ]
+
+Pairing fingerprint
+  amber-river-cobalt-lantern
+```
+
+```ts
+interface PairedInstallation {
+  grantId: string;
+  instanceKeyThumbprint: string;   // security identity
+  transportPrincipal: string;
+  nickname: string;                // user-managed identity
+  platform?: string;               // self-reported, informational
+  deviceModel?: string;
+  appVersionAtPairing?: string;
+  pairedAt: string;
+  lastUsedAt?: string;
+}
+```
+
+A raw SHA-256 thumbprint is fine in logs and useless to humans: derive a short
+authentication string (four or five words, or grouped hex) and show the same one
+in the application and on the consent page. It is a comparison aid; the
+thumbprint remains the identifier. Note the two codes do different jobs — the
+**pairing code** identifies a short-lived transaction, the **key fingerprint**
+identifies the durable installation.
+
+Also required: a separate installation key per gateway; never a hardware
+identifier; rename from the gateway UI; "revoke this installation" and "revoke
+all installations of this client"; and on reinstall or lost key, a new pairing
+rather than heuristic recovery.
+
+### 4. The full tool snapshot is pinned at pairing initiation
+
+The client submits complete tool definitions — not a claimed hash. The gateway
+validates size and schema, canonicalizes, hashes, and stores them. The consent
+page renders **only the gateway's stored copy**, and the grant receives exactly
+that stored hash. The pairing transaction is immutable once created; a client
+whose tools change mid-pairing cancels and restarts.
+
+```
+submitted snapshot = displayed snapshot = approved snapshot = grant-bound hash
+```
+
+```ts
+interface PendingNativePairing {
+  deviceCodeHash: string;
+  userCodeHash: string;
+  transportPrincipal: string;
+  instancePublicKey: JsonWebKey;
+  instanceKeyThumbprint: string;
+  clientIdentity: ClientIdentityClaim;
+  canonicalToolSnapshot: CanonicalToolDefinition[];
+  toolSnapshotHash: string;
+  suggestedDeviceName?: string;
+  createdAt: string;
+  expiresAt: string;
+  approvedAt?: string;
+}
+```
+
+Expired, denied, and completed pairings are single-use; repeated redemption is
+idempotent or returns a terminal "already consumed" rather than minting a second
+grant.
+
+**Later tool changes must not repeat the whole ceremony.** The installation is
+already known and its key proves which client is asking, so an
+authorization-update flow shows a semantic diff and asks only for approval:
+
+```
+Added:    render_artifact — Render agent-authored interactive HTML
+Changed:  remember — May now store categorized memories
+Removed:  summarize_selection
+```
+
+That is what "we do not freeze tools, we make reauthorization painless but
+apparent" means in practice.
+
+### 5. The hosted bridge is discarded
+
+Chrome gates requests from public pages to local-network addresses behind a
+Local Network Access permission prompt (Chrome 141; extended to WebSockets in
+147), and Chromium classifies Tailscale's `100.64.0.0/10` as local for this
+purpose. A hosted bridge would therefore need *all* of: the device on the right
+tailnet, MagicDNS resolving, valid gateway HTTPS, the bridge itself a secure
+context, the user granting the local-network permission, gateway CORS admitting
+the bridge origin, preflight succeeding, SSE surviving, and the user's browser
+implementing compatible LNA behaviour. Not impossible; simply not the "open a
+page and it works" path it was proposed to be, and it also misrepresents a
+native client as a browser-origin client.
+
+**The decisive detail: Chrome does not apply LNA restrictions to top-level
+main-frame navigation.** So opening the gateway's own consent page in a Custom
+Tab is materially safer than a public page fetching the gateway as a
+subresource. Pairing gets this for free:
+
+```
+Native app → top-level Custom Tab navigation → tailnet gateway consent page
+```
+
+No public-origin JavaScript ever treats the gateway as a subresource.
+
+## Measured locally, 2026-08-30
+
+Probed against a live gateway with a Chrome 152 automation browser.
+
+**The gateway refuses non-HTTPS origins at the preflight.** An `http://` origin
+gets `403 origin_not_allowed` on the `OPTIONS` itself, both directly and through
+Tailscale Serve, consistent with `isDynamicApplicationOrigin` requiring HTTPS.
+An HTTPS origin gets a reflected preflight:
 
 ```
 OPTIONS /v1/responses   Origin: https://connect.example.com
--> 204
-   Access-Control-Allow-Origin: https://connect.example.com
-   Access-Control-Allow-Methods: GET, POST, OPTIONS
-   Access-Control-Allow-Headers: Authorization, Content-Type
+-> 204  Access-Control-Allow-Origin: https://connect.example.com
+        Access-Control-Allow-Methods: GET, POST, OPTIONS
+        Access-Control-Allow-Headers: Authorization, Content-Type
 ```
 
-Note what is absent: no `Access-Control-Allow-Private-Network`. A plain `GET /`
-with an unknown origin still returns `403 origin_not_allowed`, as designed — the
-preflight is answered before the origin policy is applied, which is correct.
+No `Access-Control-Allow-Private-Network` is sent. Consequence beyond Android:
+an application served from `http://localhost:5173` in development cannot call
+the gateway from the browser at all. Only an HTTPS origin can.
 
-**Chrome classifies a tailnet address as local network.** Address-space
-classification was probed by loading pages from different address spaces on one
-host (tailnet `100.101.140.78`, RFC1918 `10.0.0.194`, loopback `127.0.0.1`) and
-fetching a logging server:
+Address-space behaviour, serving pages from three address spaces on one host:
 
 | Initiator | Target | Result |
 | --- | --- | --- |
-| `http://100.101.140.78:9099` | `http://10.0.0.194:9098` | ordinary preflight, no PNA/LNA request header, fetch succeeded |
-| `http://100.101.140.78:9099` | `http://127.0.0.1:9098` | request never reached the server; hung pending |
-| `http://127.0.0.1:9099` | `http://10.0.0.194:9098` | request never reached the server; hung pending |
+| `http://100.101.140.78:9099` (tailnet) | `http://10.0.0.194:9098` | ordinary preflight, succeeded |
+| `http://100.101.140.78:9099` (tailnet) | `http://127.0.0.1:9098` | never reached the server, hung pending |
+| `http://127.0.0.1:9099` (loopback) | `http://10.0.0.194:9098` | never reached the server, hung pending |
+| `http://127.0.0.1:9099` (loopback) | `https://…ts.net:8443/v1/responses` | reached the gateway in 25 ms, refused by its own origin policy |
 
-The hangs are the Local Network Access permission gate, not unreachability: the
-same browser loads pages from loopback and from the RFC1918 address without
-trouble, and a blocked-by-policy request would fail fast. Automation has no way
-to answer the prompt, so the request simply waits.
+The hangs are a permission gate rather than unreachability — the same browser
+loads pages from both addresses directly, and a policy-blocked request fails
+fast; automation cannot answer a prompt, so the request waits.
 
-The pattern that fits all three rows is that Chrome buckets CGNAT `100.64/10`
-together with RFC1918 as *local network*, distinct from loopback, and gates any
-request that crosses into a more-restricted space.
+**This does not measure the scenario that matters**, and should not be read as
+if it did. None of these initiators is a public origin, which is the only
+initiator LNA gates. Row four is a cross-space request that was *not* gated,
+which is consistent with the initiator being loopback rather than public. Rows
+two and three remain unexplained by that model and may be automation artefacts.
+This host cannot serve a page from a public IP: Funnel needs root here (`serve
+config denied`, no `--operator` set) and would not settle it anyway, since
+MagicDNS resolves the funnel hostname to the tailnet address for any device on
+the tailnet — a browser on the tailnet would load the "public" page over a
+private address and never make the crossing being tested.
 
-**Consequence.** A genuinely public connect page fetching a tailnet gateway
-crosses public -> local network, which is exactly the transition LNA gates. The
-bridge would therefore depend on a browser permission prompt on every device,
-and the gateway sends no `Access-Control-Allow-Private-Network` header today.
+The operator separately recalls a system-style permission prompt while testing a
+locally served application against this gateway, which is what the Chrome 141
+behaviour predicts.
 
-This is inferred rather than observed end to end: the true scenario needs a page
-served from a public IP, and this host could not provide one. Tailscale Funnel
-requires root here (`serve config denied`, no `--operator` set), and would not
-have settled it anyway — MagicDNS resolves the funnel hostname to the tailnet
-address for any device on the tailnet, so a browser on the tailnet would load
-the "public" page over a private address and never make the crossing being
-tested. Settling it needs a page on a host outside the tailnet, and the answer
-should be recorded here when it is.
+**The experiment that settles it** — worth running even though the bridge is
+discarded, because it establishes exact behaviour on the target stack. From a
+public HTTPS page, against `https://<gateway>.<tailnet>.ts.net`: a simple GET, a
+preflighted POST, SSE streaming, and cancellation; across Chrome Android, Chrome
+desktop, and Firefox Android; with permission granted and denied; with Tailscale
+disconnected; with tailnet DNS unavailable; against a raw `100.x` address versus
+the `ts.net` name; and top-level navigation as the control. Record whether a
+prompt appears, the exact request and response headers, whether the preflight
+carries any local-network header, the console error, whether the gateway
+received anything, whether SSE stays open, and what happens after the permission
+is revoked.
 
-**What it means for sequencing.** If this holds, the hosted connect page is no
-longer the cheap tactical step: it either inherits a permission prompt whose
-wording nobody controls, or it requires the gateway to be publicly reachable,
-which is `hassle-free-tunnel-ingress.md` — a project of its own. That moves
-`native_paired` from "the strategically correct answer" toward "the only answer
-that does not depend on unrelated work", and it is the strongest argument yet
-for prioritizing pairing over the bridge.
+## Publisher verification is a separate dimension from profile
+
+The three profiles describe **how authorization happened**. They do not describe
+**who the publisher is**, and collapsing the two produces exactly the
+impersonation the consent page must prevent.
+
+```ts
+type ClientProfile = 'browser_origin' | 'native_paired' | 'native_published';
+
+type PublisherVerification =
+  | { kind: 'origin';        origin: string }
+  | { kind: 'https_metadata'; clientId: string }
+  | { kind: 'attested';       issuer: string; subject: string }
+  | { kind: 'none' };
+```
+
+A paired client may carry verified publisher metadata; a local fork carries
+none. The consent page must never render `web.readest.com wants access` because
+a paired application submitted `{"name": "web.readest.com"}`. Instead:
+
+```
+Unverified paired application
+Self-reported name: web.readest.com
+Publisher: Not verified
+```
+
+against a verified client's:
+
+```
+Readest
+Verified publisher: web.readest.com
+Paired installation: José's Pixel 7
+```
+
+Origin-shaped display names are reserved to the verified namespace, and names,
+logos, and favicons are never loaded as trusted UI from self-reported pairing
+data.
+
+**A metadata URL alone proves nothing about the running binary.** Fetching
+`https://web.readest.com/.well-known/agent-connect-client.json` proves only that
+whoever controls that domain published that document — a malicious fork can
+submit the same URL. Binding the *running application* to that publisher needs
+the verified App Link flow, a platform attestation bound to the installation
+key, or a publisher-issued client attestation.
+
+Note what the metadata document is *not*: it is a server-side HTTPS fetch by the
+gateway of a static public document. No hosted JavaScript talks to the gateway,
+no public bridge handles authorization, and no browser fetch crosses into the
+tailnet. That is why discarding the bridge does not discard the metadata
+document.
+
+## Product matrix
+
+| Application | Preferred profile | Fallback |
+| --- | --- | --- |
+| Readest web | `browser_origin` | none |
+| Official Readest Android/iOS | `native_published` | `native_paired` |
+| A signed fork with its own domain | `native_published` | `native_paired` |
+| Local or debug fork | `native_paired` | none |
+| CLI or desktop harness | `native_paired` | a published profile later |
+
+For an upstream Readest integration, `native_published` is the normal path and
+pairing is the fallback — the official application already owns the hard half
+(verified `web.readest.com` to `com.bilingify.readest` association), and the
+flow costs the user one consent screen with no visible code or polling:
+
+```
+Readest Android
+  → native authorization request (profile: native_published, client_id = metadata URL)
+  → gateway fetches metadata, verifies the callback appears in it
+  → gateway displays verified publisher identity and the pinned tools
+  → user approves
+  → redirect to the declared web.readest.com callback
+  → Android App Link opens the officially signed Readest
+  → Readest redeems with PKCE + installation key
+```
+
+A malicious fork can claim the same client id but cannot receive the callback:
+Android delivers it to the officially signed application, and PKCE stops either
+side redeeming the other's code.
+
+Pairing keeps its friction *on purpose* — with no publisher-established
+callback, the user is manually establishing the trust relationship the platform
+cannot.
+
+The resulting state machine is pleasantly small:
+
+```
+verified runtime → pending pairing with pinned tools → user-approved
+installation → key-bound grant → runtime session
+```
+
+which sits directly on ADR 0005 and ADR 0007: the runtime proves itself to the
+application first, then the application installation earns a scoped grant.
+
+## Still open
+
+- Does `authorizationServer` work as a discovery root, or does the runtime card
+  need a version 2 after all?
+- What exactly does a `ClientIdentityClaim` carry, and how is it displayed when
+  publisher verification is `none`?
+- Where does the authorization-update (tool diff) flow live relative to the
+  pairing endpoint, and does it need its own consent surface?
+- The public-origin LNA experiment above, if only to document the failure mode
+  for developers who try the bridge anyway.
 
 ## References
 
