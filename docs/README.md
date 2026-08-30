@@ -53,6 +53,12 @@ historical. AG-UI is no longer an active core-protocol experiment.
 - [ADR 0009: Separate ingress, owner authentication, and application authorization](decisions/0009-separate-ingress-owner-authentication-and-application-authorization.md)
 - [ADR 0010: Open Responses at the application boundary](decisions/0010-open-responses-gateway-pivot.md)
 
+## Future work
+
+- [Multi-turn task continuation](future/multi-turn-task-continuation.md):
+  letting an application continue a finished task instead of restarting it.
+  Proposed, not started; requires changes to the response chain lifecycle.
+
 ## Superseded and historical decisions
 
 - [ADR 0001: ACP-first application boundary](decisions/0001-acp-first-application-boundary.md)
