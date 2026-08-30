@@ -270,7 +270,70 @@ gateway.
   page displayed?
 - Can the hosted connect page reach a tailnet-only gateway at all, or does the
   bridge implicitly require the public ingress from
-  `hassle-free-tunnel-ingress.md`?
+  `hassle-free-tunnel-ingress.md`? **Partially measured, 2026-08-30 — see
+  below.**
+
+## Measured: the bridge collides with Local Network Access
+
+Probed on 2026-08-30 against a live gateway and a Chrome 152 automation
+browser. Two results, one decisive and one indicative.
+
+**CORS is not the obstacle.** The gateway answers a preflight from an arbitrary
+foreign origin and reflects it:
+
+```
+OPTIONS /v1/responses   Origin: https://connect.example.com
+-> 204
+   Access-Control-Allow-Origin: https://connect.example.com
+   Access-Control-Allow-Methods: GET, POST, OPTIONS
+   Access-Control-Allow-Headers: Authorization, Content-Type
+```
+
+Note what is absent: no `Access-Control-Allow-Private-Network`. A plain `GET /`
+with an unknown origin still returns `403 origin_not_allowed`, as designed — the
+preflight is answered before the origin policy is applied, which is correct.
+
+**Chrome classifies a tailnet address as local network.** Address-space
+classification was probed by loading pages from different address spaces on one
+host (tailnet `100.101.140.78`, RFC1918 `10.0.0.194`, loopback `127.0.0.1`) and
+fetching a logging server:
+
+| Initiator | Target | Result |
+| --- | --- | --- |
+| `http://100.101.140.78:9099` | `http://10.0.0.194:9098` | ordinary preflight, no PNA/LNA request header, fetch succeeded |
+| `http://100.101.140.78:9099` | `http://127.0.0.1:9098` | request never reached the server; hung pending |
+| `http://127.0.0.1:9099` | `http://10.0.0.194:9098` | request never reached the server; hung pending |
+
+The hangs are the Local Network Access permission gate, not unreachability: the
+same browser loads pages from loopback and from the RFC1918 address without
+trouble, and a blocked-by-policy request would fail fast. Automation has no way
+to answer the prompt, so the request simply waits.
+
+The pattern that fits all three rows is that Chrome buckets CGNAT `100.64/10`
+together with RFC1918 as *local network*, distinct from loopback, and gates any
+request that crosses into a more-restricted space.
+
+**Consequence.** A genuinely public connect page fetching a tailnet gateway
+crosses public -> local network, which is exactly the transition LNA gates. The
+bridge would therefore depend on a browser permission prompt on every device,
+and the gateway sends no `Access-Control-Allow-Private-Network` header today.
+
+This is inferred rather than observed end to end: the true scenario needs a page
+served from a public IP, and this host could not provide one. Tailscale Funnel
+requires root here (`serve config denied`, no `--operator` set), and would not
+have settled it anyway — MagicDNS resolves the funnel hostname to the tailnet
+address for any device on the tailnet, so a browser on the tailnet would load
+the "public" page over a private address and never make the crossing being
+tested. Settling it needs a page on a host outside the tailnet, and the answer
+should be recorded here when it is.
+
+**What it means for sequencing.** If this holds, the hosted connect page is no
+longer the cheap tactical step: it either inherits a permission prompt whose
+wording nobody controls, or it requires the gateway to be publicly reachable,
+which is `hassle-free-tunnel-ingress.md` — a project of its own. That moves
+`native_paired` from "the strategically correct answer" toward "the only answer
+that does not depend on unrelated work", and it is the strongest argument yet
+for prioritizing pairing over the bridge.
 
 ## References
 
