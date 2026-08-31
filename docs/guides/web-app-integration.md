@@ -252,15 +252,25 @@ A completed task publishes an opaque continuation checkpoint inside the SDK.
 `streamContinuation()` and `continueTask()` explicitly advance that linear
 conversation. A failed, cancelled, interrupted, or lost-checkpoint session must
 not be guessed back into continuity. To start over without repeating consent,
-call `connectAgent` with `freshSession: true`; the gateway provisions a new
-opaque application and provider session under the existing grant. It neither
-waits for nor replaces an older session, so a page refresh is not blocked by an
-abandoned task. Independent sessions may run concurrently, with one active task
-inside each session. The gateway permits up to eight unexpired sessions per
-grant, application, and tool snapshot in one process. Their lease matches the
-capability TTL (one hour by default); expiry retires the opaque session and
-best-effort cancels retained work. This starts over—it does not recover browser
-state or replay a pending function call.
+call `connectAgent` with the application grant; the gateway provisions a new
+opaque application and provider session under it. It neither waits for nor
+replaces an older session, so a page refresh is not blocked by an abandoned
+task. Independent sessions may run concurrently, with one active task inside
+each session. The gateway permits up to eight unexpired sessions per grant,
+application, and tool snapshot in one process. Session lifetime slides on
+activity under the idle, parked, and stalled clocks described in
+[the session lifecycle](../plan/parallel-expiring-sessions-mvp.md); expiry
+retires the opaque session and best-effort cancels retained work.
+
+Reconnecting to an existing conversation is a different operation, and it is
+one the application has to prepare for. Pass that session's own capability —
+the `accessToken` from the previous connect — as `accessToken`, and persist it
+(with the continuation checkpoint, to resume the conversation rather than only
+the session) somewhere that survives the reload. The gateway will not select a
+session for a bare application grant: every key it could search by is shared
+with every other tab of the same application, so it would eventually connect
+one tab to another tab's conversation. Losing the capability therefore starts
+over — it does not recover browser state or replay a pending function call.
 
 ## Gateway requirements
 

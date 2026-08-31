@@ -254,8 +254,8 @@ function connectFresh(
     baseUrl: runtimeCard.endpoint,
     appId: "agent-connect-demo",
     tools,
+    // The application grant, which always provisions a new session.
     accessToken,
-    freshSession: true,
   });
 }
 

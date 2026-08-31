@@ -130,8 +130,17 @@ export interface ConnectAgentOptions {
   readonly baseUrl: string;
   readonly appId: string;
   readonly tools: readonly ApplicationTool[];
+  /**
+   * Either the application grant, which always provisions a new independent
+   * session, or a session capability from a previous connect, which reconnects
+   * to that one session and nothing else. There is no credential that lets the
+   * gateway pick a session on the caller's behalf.
+   */
   readonly accessToken: string;
-  /** Provision an independent opaque session without replacing older work. */
+  /**
+   * @deprecated An application grant already means "create a new session", so
+   * this has no effect. Accepted for compatibility and due for removal.
+   */
   readonly freshSession?: boolean;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: Readonly<Record<string, string>>;

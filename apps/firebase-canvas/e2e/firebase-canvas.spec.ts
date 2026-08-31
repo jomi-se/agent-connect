@@ -565,8 +565,14 @@ async function mockConnectedRuntime(
     if (pathname === "/v1/app-sessions") {
       sessionRequests += 1;
       expect(request.headers()["authorization"]).toBe("Bearer existing-grant");
-      const body = request.postDataJSON() as { tools: Array<{ name: string }> };
-      expect(body).toMatchObject({ fresh: true });
+      const body = request.postDataJSON() as {
+        fresh?: unknown;
+        tools: Array<{ name: string }>;
+      };
+      // The grant is the whole request: presenting it means "create a new
+      // session", so the demo sends no `fresh` flag and cannot be handed an
+      // existing session by the gateway.
+      expect(body.fresh).toBeUndefined();
       expect(body.tools).toHaveLength(10);
       expect(body.tools.map((tool) => tool.name)).toEqual(
         expect.arrayContaining([

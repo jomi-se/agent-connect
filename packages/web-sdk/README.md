@@ -78,11 +78,23 @@ and the real gateway setup.
 - A fixed tool snapshot per session
 - No generic exactly-once execution
 
-Use `connectAgent({ ...options, freshSession: true })` to start an independent
-conversation under an existing application grant. This provisions a new opaque
-application session and provider session; it does not require reauthorization.
-Sessions run in parallel and are independent: a page reload that loses the
-session ID simply starts a new one, and the old one ends on its own.
+`connectAgent` with an application grant always starts a new independent
+conversation: it provisions a new opaque application session and provider
+session, and does not require reauthorization. Sessions run in parallel and are
+independent.
+
+To reconnect to a conversation rather than start one, pass that session's own
+capability — the `accessToken` the previous connect returned — as
+`accessToken`. Reconnecting is therefore something the application has to
+prepare for: persist the session capability (and, for continuing a turn, its
+checkpoint) somewhere that survives the reload. An application grant cannot
+find a session for you. There is no key it could search by that is not shared
+with every other tab of the same application, so a lookup would sooner or later
+hand one tab another tab's conversation; a page reload that has kept nothing
+simply starts a new session, and the old one ends on its own.
+
+`freshSession` is deprecated and now has no effect, since presenting the
+application grant already means "create".
 
 The gateway holds at most eight live sessions per grant, application, and tool
 snapshot. Beyond that it answers `429` with `Retry-After` and a `manageUrl`
