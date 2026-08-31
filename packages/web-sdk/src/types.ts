@@ -76,6 +76,8 @@ export type AgentConnectErrorCode =
   | "authorization_denied"
   | "authorization_expired"
   | "invalid_app_grant"
+  | "session_capacity"
+  | "session_expired"
   | "unknown_tool"
   | "invalid_tool_arguments"
   | "tool_execution_failed"

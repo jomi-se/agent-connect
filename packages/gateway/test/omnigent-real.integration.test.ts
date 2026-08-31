@@ -864,8 +864,25 @@ integration("Open Responses through the gateway", () => {
           invoke(first.capability),
           invoke(fresh.accessToken),
         ]);
+
+        // Teardown, against the real provider rather than a stub. Both the
+        // Omnigent session and the workspace this gateway created for it must
+        // actually go away, or every retired application session leaks a
+        // runner and a directory.
+        const [retired] = providerSessionIds;
+        const sessionRoot = join(harness.workspace, ".agent-connect-sessions");
+        const before = readdirSync(sessionRoot);
+        await omnigent.destroySession(retired!);
+        const after = readdirSync(sessionRoot);
+        const snapshot = await fetch(
+          `${harness.serverUrl}/v1/sessions/${encodeURIComponent(retired!)}`,
+        );
+
         return {
           providerSessionIds,
+          workspacesBefore: before.length,
+          workspacesAfter: after.length,
+          retiredSnapshotStatus: snapshot.status,
           callIds: [
             String(firstCall["call_id"]),
             String(secondCall["call_id"]),
@@ -883,6 +900,9 @@ integration("Open Responses through the gateway", () => {
 
     expect(new Set(result.value.providerSessionIds).size).toBe(2);
     expect(result.value.callIds[0]).not.toBe(result.value.callIds[1]);
+    expect(result.value.workspacesBefore).toBe(2);
+    expect(result.value.workspacesAfter).toBe(1);
+    expect(result.value.retiredSnapshotStatus).toBe(404);
   }, 240_000);
 
   it("continues two completed user turns on one durable ACP session", async () => {

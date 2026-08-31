@@ -41,6 +41,17 @@ export interface ResponseEngineOptions {
   readonly createId?: () => string;
 }
 
+/**
+ * What an application session is doing, for expiry. The three states carry
+ * different clocks: a running turn is capped only against a hung backend, a
+ * parked call must be answered promptly, and an idle session is reaped on the
+ * ordinary idle timeout. `since` is when the session entered the state.
+ */
+export type SessionLifecycle =
+  | { readonly kind: "running"; readonly since: number }
+  | { readonly kind: "parked"; readonly since: number }
+  | { readonly kind: "idle" };
+
 /** One of the three declared outcomes of a recovery attempt. */
 export type RecoveryOutcome =
   "reattached_live" | "terminal_reconstructed" | "interrupted";
@@ -64,6 +75,12 @@ interface ActiveChain {
   readonly events: AsyncIterator<BackendEvent>;
   busy: boolean;
   cancelRequested: boolean;
+  /**
+   * When the backend last produced anything for this chain. A running turn is
+   * legitimately silent to HTTP for as long as the agent thinks, so this, not
+   * request arrival, is what the running-turn safety cap measures.
+   */
+  lastProgressAt: number;
 }
 
 type SegmentLink =
@@ -198,6 +215,7 @@ export class ResponseEngine {
         events: run.events(),
         busy: true,
         cancelRequested: false,
+        lastProgressAt: this.seconds(),
       };
       this.active.set(chain.chainId, state);
       return this.segment(
@@ -551,6 +569,19 @@ export class ResponseEngine {
         error,
       });
 
+    // Admission proved the chain was continuable, but every caller awaits the
+    // backend before reaching here, and expiry or cancellation can commit a
+    // terminal state inside that window. Writing `running` unconditionally
+    // would resurrect it durably and hand the application call IDs on a chain
+    // whose provider session is already being torn down.
+    if (chain.status === "terminal") {
+      const error = chain.terminalError ?? CANCELLED_ERROR;
+      await persist("failed", error);
+      yield* writer.begin();
+      yield* writer.failed(error, { type: "api_error", param: null });
+      state.busy = false;
+      return;
+    }
     await persist("in_progress");
     await this.store.putChain({
       ...chain,
@@ -563,6 +594,7 @@ export class ResponseEngine {
     try {
       for (;;) {
         const next = await state.events.next();
+        state.lastProgressAt = this.seconds();
         if (state.cancelRequested) {
           yield* writer.closeText();
           await this.finishChain(chainId, "terminal", CANCELLED_ERROR);
@@ -774,9 +806,19 @@ export class ResponseEngine {
     await this.finishChain(response.chainId, "terminal", CANCELLED_ERROR);
   }
 
-  /** Retires every retained run owned by an expired application session. */
-  async expireSession(appSessionId: string): Promise<void> {
-    this.admittingSessions.delete(appSessionId);
+  /**
+   * Retires every retained run owned by an application session that is ending.
+   * `reason` becomes the chain's terminal error, which is the only durable
+   * record of why the session went away and the one the console reads back.
+   */
+  async expireSession(
+    appSessionId: string,
+    reason: SessionEndReason = "expired",
+  ): Promise<void> {
+    // Deliberately does not touch `admittingSessions`. A claim is owned by the
+    // operation that took it and released in its own `finally`; deleting it
+    // here would let a second admission run concurrently with the first. The
+    // gateway has already dropped the session, so nothing new can authorize.
     for (const chain of await this.store.listChains()) {
       if (chain.appSessionId !== appSessionId || chain.status === "terminal") {
         continue;
@@ -786,8 +828,51 @@ export class ResponseEngine {
         state.cancelRequested = true;
         await state.run.cancel().catch(() => {});
       }
-      await this.finishChain(chain.chainId, "terminal", SESSION_EXPIRED_ERROR);
+      await this.finishChain(chain.chainId, "terminal", {
+        code: "response_cancelled",
+        message: SESSION_END_MESSAGE[reason],
+      });
     }
+  }
+
+  /**
+   * Which expiry clock currently governs an application session.
+   *
+   * Deliberately a pure read: it never retires a chain whose run was lost, so
+   * the reaper cannot mutate state while merely deciding. Such a chain simply
+   * stops counting as live, which lets the session fall to the idle clock —
+   * the correct outcome, since it can never continue.
+   */
+  async sessionLifecycle(appSessionId: string): Promise<SessionLifecycle> {
+    // An admission in flight is a session actively starting work, whose chain
+    // record may not exist yet.
+    if (this.admittingSessions.has(appSessionId)) {
+      return { kind: "running", since: this.seconds() };
+    }
+    for (const chain of await this.store.listChains()) {
+      if (chain.appSessionId !== appSessionId) continue;
+      if (chain.status === "terminal") continue;
+      const state = this.active.get(chain.chainId);
+      if (!state || !state.run.isAlive()) continue;
+      if (chain.status !== "waiting_for_output") {
+        return { kind: "running", since: state.lastProgressAt };
+      }
+      const calls = await this.store.unresolvedCalls(chain.chainId);
+      const published = calls.filter(
+        (call) => call.publication === "published",
+      );
+      if (published.length === 0) continue;
+      // The clock starts when the application was handed the call, not when
+      // the chain last changed for some other reason.
+      return {
+        kind: "parked",
+        since: published.reduce(
+          (earliest, call) => Math.min(earliest, call.updatedAt),
+          Number.POSITIVE_INFINITY,
+        ),
+      };
+    }
+    return { kind: "idle" };
   }
 
   /**
@@ -1010,9 +1095,18 @@ const CANCELLED_ERROR: ResponseError = {
   message: "the response chain was cancelled",
 };
 
-const SESSION_EXPIRED_ERROR: ResponseError = {
-  code: "response_cancelled",
-  message: "the application session expired",
+/** Why an application session is being retired, in the words the owner sees. */
+export type SessionEndReason =
+  "expired" | "idle" | "unanswered_call" | "stalled" | "ended_by_owner";
+
+const SESSION_END_MESSAGE: Readonly<Record<SessionEndReason, string>> = {
+  expired: "the application session expired",
+  idle: "the application session expired after going idle",
+  unanswered_call:
+    "the application session expired without answering a function call",
+  stalled:
+    "the application session was retired after the turn stopped making progress",
+  ended_by_owner: "the session was ended from the gateway's session page",
 };
 
 const CONTINUABLE_TERMINAL_CODES: ReadonlySet<string> = new Set([

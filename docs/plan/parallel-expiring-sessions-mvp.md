@@ -21,12 +21,16 @@ the gateway durably retires it and best-effort cancels any retained run.
 - `freshSession: true` always provisions an independent application and
   provider session; it does not replace or wait for an earlier session.
 - One response chain may be live within each application session.
-- Up to eight unexpired sessions may exist for one grant, application, and
-  approved tool snapshot.
-- The application-session lease uses the existing capability TTL (one hour by
-  default) and is renewed when the session capability is issued or refreshed.
+- Up to eight live sessions may exist for one grant, application, and approved
+  tool snapshot. The ninth is refused with `429`, `Retry-After`, and a
+  `manageUrl` pointing at the gateway's session page.
+- Session lifetime slides on activity rather than running from issuance, and is
+  independent of the capability TTL. Three clocks govern it: idle (15 min by
+  default), unanswered function call (3 min), and a running turn making no
+  progress (30 min). All three are configurable.
 - Expiry removes in-memory authority, writes the existing durable retirement
-  tombstone, and asks the response engine to cancel retained runs.
+  tombstone, asks the response engine to cancel retained runs, and releases the
+  provider session and its workspace.
 - No automatic pending-call redelivery, DOM-state reconstruction, cross-tab
   ownership protocol, or generic task recovery is part of this MVP.
 
@@ -79,6 +83,14 @@ Evidence: browser flow and source-of-truth documentation review.
       operation.
 - [x] Stabilized expiry/reaping behavior around the signed capability lease,
       durable tombstones, process-local capacity, and restart reconstruction.
+- [x] Replaced the fixed capability-TTL lease with a sliding activity clock and
+      the separate parked-call and stalled-turn clocks, so an abandoned tab is
+      released in minutes and a long turn is never reaped underneath itself.
+- [x] Added provider-session teardown on expiry, so a retired session no longer
+      leaks an Omnigent runner and a session workspace.
+- [x] Added the owner session console at `GET /sessions`, with live state,
+      turn counts, cumulative tokens and cost, retirement deadlines, recent
+      ended sessions rebuilt from the chain ledger, and explicit termination.
 - [x] Replaced destructive-replacement tests with parallel-session and expiry
       tests.
 - [x] Updated ADR 0011, current scope, integration guide, and SDK wording.

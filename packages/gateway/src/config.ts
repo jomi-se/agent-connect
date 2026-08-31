@@ -45,6 +45,21 @@ export function configFromEnv(
       env.AGENT_CONNECT_CAPABILITY_TTL_SECONDS ?? "3600",
       "AGENT_CONNECT_CAPABILITY_TTL_SECONDS",
     ),
+    // Session lifetime slides on activity and is deliberately much shorter
+    // than the capability TTL: losing the session id means starting over, so
+    // holding a slot open for an hour buys nothing and costs a runner.
+    sessionIdleTimeoutSeconds: parsePositiveInteger(
+      env.AGENT_CONNECT_SESSION_IDLE_TIMEOUT_SECONDS ?? "900",
+      "AGENT_CONNECT_SESSION_IDLE_TIMEOUT_SECONDS",
+    ),
+    parkedCallTimeoutSeconds: parsePositiveInteger(
+      env.AGENT_CONNECT_PARKED_CALL_TIMEOUT_SECONDS ?? "180",
+      "AGENT_CONNECT_PARKED_CALL_TIMEOUT_SECONDS",
+    ),
+    runningTurnTimeoutSeconds: parsePositiveInteger(
+      env.AGENT_CONNECT_RUNNING_TURN_TIMEOUT_SECONDS ?? "1800",
+      "AGENT_CONNECT_RUNNING_TURN_TIMEOUT_SECONDS",
+    ),
   };
 }
 

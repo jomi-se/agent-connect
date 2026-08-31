@@ -53,7 +53,91 @@ function nonceTool(
   });
 }
 
+/** Refuses a turn the way the gateway does when nothing was admitted. */
+class RefusingProvider implements AgentProvider {
+  readonly requests: AgentProviderTaskRequest[] = [];
+  refuse = false;
+
+  constructor(private readonly events: readonly AgentProviderEvent[]) {}
+
+  async *streamTask(
+    request: AgentProviderTaskRequest,
+  ): AsyncGenerator<AgentProviderEvent> {
+    this.requests.push(request);
+    if (this.refuse) {
+      throw new AgentConnectError(
+        "http_error",
+        "this application session already has an active response chain",
+      );
+    }
+    for (const event of this.events) {
+      yield event;
+    }
+  }
+
+  async submitToolResult(): Promise<void> {}
+
+  async cancel(): Promise<void> {}
+}
+
 describe("AgentSession", () => {
+  it("keeps the continuation checkpoint when a turn is refused before admission", async () => {
+    const provider = new RefusingProvider([
+      { type: "text.delta", delta: "done" },
+      { type: "task.completed", continuationToken: "resp_first" },
+    ]);
+    const session = new AgentSession({
+      createSessionId: () => "acs_test",
+      provider,
+      tools: [nonceTool()],
+    });
+    await session.runTask("first");
+
+    // A refusal that admitted nothing leaves the previous turn as the session
+    // head, so the checkpoint must survive it. Clearing on the attempt rather
+    // than on admission stranded the session: the head was still continuable,
+    // but the application no longer held the token naming it.
+    provider.refuse = true;
+    await expect(session.continueTask("second")).rejects.toThrow(
+      AgentConnectError,
+    );
+
+    provider.refuse = false;
+    const retried = await session.continueTask("second");
+    expect(retried.text).toBe("done");
+    expect(provider.requests.at(-1)?.continuationToken).toBe("resp_first");
+  });
+
+  it("discards the continuation checkpoint once a turn has been admitted", async () => {
+    const provider = new RefusingProvider([
+      { type: "text.delta", delta: "done" },
+      { type: "task.completed", continuationToken: "resp_first" },
+    ]);
+    const session = new AgentSession({
+      createSessionId: () => "acs_test",
+      provider,
+      tools: [nonceTool()],
+    });
+    await session.runTask("first");
+
+    // An admitted turn makes the older head unusable, even when the turn then
+    // ends without publishing a new checkpoint of its own. `task.started` is
+    // emitted before the provider is called, so the turn is only admitted once
+    // the provider's own first event arrives.
+    const stream = session.streamContinuation("second");
+    expect(await stream.next()).toMatchObject({
+      value: { type: "task.started" },
+    });
+    expect(await stream.next()).toMatchObject({
+      value: { type: "text.delta" },
+    });
+    await stream.return(undefined);
+
+    await expect(session.continueTask("third")).rejects.toThrow(
+      /No successfully completed task/,
+    );
+  });
+
   it("uses a fixed tool snapshot and suppresses repeated action IDs", async () => {
     const execute = vi.fn(
       ({ prefix }: { readonly prefix: string }) => `${prefix}-nonce`,

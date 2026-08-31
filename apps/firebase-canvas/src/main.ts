@@ -383,6 +383,17 @@ function handleConnectionError(error: unknown): void {
     status.textContent = "Authorization expired or was revoked. Connect again.";
     connectionState.textContent = "Authorization expired";
     document.body.dataset["demo"] = "reauthorize";
+  } else if (
+    error instanceof AgentConnectError &&
+    error.code === "session_capacity"
+  ) {
+    // The gateway is full. Retrying does not help; ending a session does, and
+    // only the gateway's owner can do that.
+    status.textContent = error.manageUrl
+      ? `Your gateway is running too many sessions. Open ${error.manageUrl} to end one, then connect again.`
+      : "Your gateway is running too many sessions. End one, then connect again.";
+    connectionState.textContent = "Gateway at capacity";
+    document.body.dataset["demo"] = "failed";
   } else {
     status.textContent =
       error instanceof Error ? error.message : "Connection failed";

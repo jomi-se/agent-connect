@@ -214,3 +214,123 @@ function firstTarFile(tar: Buffer): string {
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+describe("OmnigentRuntime session teardown", () => {
+  function stubServer(
+    options: { readonly workspaceFromSnapshot?: boolean } = {},
+  ) {
+    const calls: Array<{ method: string; pathname: string }> = [];
+    let runnerWorkspace = "";
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const pathname = new URL(String(input)).pathname;
+      const method = init?.method ?? "GET";
+      calls.push({ method, pathname });
+      if (pathname === "/v1/sessions" && method === "POST") {
+        return Response.json({ session_id: "provider-session" });
+      }
+      if (pathname === "/v1/hosts") {
+        return Response.json({
+          hosts: [{ host_id: "host-1", status: "online" }],
+        });
+      }
+      if (pathname.endsWith("/runners")) {
+        runnerWorkspace = String(
+          JSON.parse(String(init?.body ?? "{}"))["workspace"] ?? "",
+        );
+        return Response.json({});
+      }
+      if (pathname === "/v1/sessions/provider-session") {
+        if (method === "DELETE") return Response.json({ deleted: true });
+        return Response.json({
+          runner_online: true,
+          status: "idle",
+          total_cost_usd: 0.125,
+          last_total_tokens: 4242,
+          context_window: 200000,
+          ...(options.workspaceFromSnapshot
+            ? { workspace: runnerWorkspace }
+            : {}),
+        });
+      }
+      return Response.json({}, { status: 404 });
+    });
+    return { fetch, calls, workspace: () => runnerWorkspace };
+  }
+
+  it("deletes the provider session and removes the session workspace", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "agent-connect-runtime-"));
+    const server = stubServer();
+    const runtime = new OmnigentRuntime({
+      baseUrl: "http://127.0.0.1:6767",
+      workspace,
+      fetch: server.fetch,
+    });
+    const providerSessionId = await runtime.createSession({
+      appId: "demo",
+      origin: "https://app.example",
+      toolHash: "hash",
+      approvedToolNames: ["write_result"],
+    });
+    expect(
+      await readdir(join(workspace, ".agent-connect-sessions")),
+    ).toHaveLength(1);
+
+    await runtime.destroySession(providerSessionId);
+
+    expect(
+      server.calls.some(
+        (call) =>
+          call.method === "DELETE" &&
+          call.pathname === "/v1/sessions/provider-session",
+      ),
+    ).toBe(true);
+    // The runner is torn down by the provider; the session workspace is the
+    // gateway's own and has to be removed here or it accumulates per session.
+    expect(await readdir(join(workspace, ".agent-connect-sessions"))).toEqual(
+      [],
+    );
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  it("refuses to delete a workspace outside the session root", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "agent-connect-runtime-"));
+    const outsider = await mkdtemp(join(tmpdir(), "agent-connect-outside-"));
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const pathname = new URL(String(input)).pathname;
+      if (pathname === "/v1/sessions/provider-session") {
+        if (init?.method === "DELETE") return Response.json({});
+        // A compromised or simply wrong provider must not be able to point
+        // teardown at an arbitrary path on the host.
+        return Response.json({ runner_online: true, workspace: outsider });
+      }
+      return Response.json({}, { status: 404 });
+    });
+    const runtime = new OmnigentRuntime({
+      baseUrl: "http://127.0.0.1:6767",
+      workspace,
+      fetch,
+    });
+    await runtime.destroySession("provider-session");
+    expect(await readdir(outsider)).toEqual([]);
+    await rm(workspace, { recursive: true, force: true });
+    await rm(outsider, { recursive: true, force: true });
+  });
+
+  it("reports cumulative usage for the operator console", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "agent-connect-runtime-"));
+    const server = stubServer();
+    const runtime = new OmnigentRuntime({
+      baseUrl: "http://127.0.0.1:6767",
+      workspace,
+      fetch: server.fetch,
+    });
+    expect(await runtime.describeSession("provider-session")).toEqual({
+      status: "idle",
+      runnerOnline: true,
+      totalCostUsd: 0.125,
+      totalTokens: 4242,
+      contextWindow: 200000,
+    });
+    await rm(workspace, { recursive: true, force: true });
+  });
+});

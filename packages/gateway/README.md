@@ -66,7 +66,53 @@ revocation remain on `/v1/grants`.
 The gateway uploads its narrow Codex ACP agent bundle, selects the one online
 Omnigent host, launches the runner, and replaces an unhealthy runner
 automatically. Set `AGENT_CONNECT_OMNIGENT_HOST_ID` when several hosts are
-online. Raw Omnigent session ids never enter the browser configuration.
+online. Raw Omnigent session ids never enter the browser configuration. When an
+application session is retired, the gateway deletes the provider session and
+removes the per-session workspace it created, so runners do not accumulate.
+
+## Session lifetime
+
+Sessions are cheap and short-lived on purpose. Losing the session id means
+starting a new session, not recovering the old one, so nothing is gained by
+keeping an abandoned one alive. Lifetime slides on activity rather than running
+from issuance, and three clocks govern it:
+
+| Variable                                     | Default | Retires a session when                                       |
+| -------------------------------------------- | ------- | ------------------------------------------------------------ |
+| `AGENT_CONNECT_SESSION_IDLE_TIMEOUT_SECONDS` | 900     | no request and no work in progress for this long             |
+| `AGENT_CONNECT_PARKED_CALL_TIMEOUT_SECONDS`  | 180     | a published function call goes unanswered for this long      |
+| `AGENT_CONNECT_RUNNING_TURN_TIMEOUT_SECONDS` | 1800    | a running turn produces nothing from the agent for this long |
+
+The three are separate because a running turn is legitimately silent for as
+long as the agent thinks, while a parked call means the application is supposed
+to be executing it _right now_. A parked session and an abandoned tab are
+indistinguishable — the segment ended and the gateway holds no socket to the
+browser — so this is a declared policy rather than an attempt to detect which
+one it is.
+
+`AGENT_CONNECT_CAPABILITY_TTL_SECONDS` (default 3600) is unrelated: it bounds
+how long a signed capability verifies, not how long the session lives. A
+capability that still verifies but names a retired session is answered
+`401 {"error": "session_expired"}`, so a client can tell "start over" from
+"refresh your token".
+
+## Session console
+
+`GET /sessions` is an owner-only page — same Tailscale-authenticated,
+loopback-only path as `/authorize` and `/v1/grants` — showing live sessions
+with their state, turn count, cumulative tokens and cost, last activity, and
+when each will be retired, plus recent ended sessions rebuilt from the durable
+chain ledger. `POST /sessions` with a `session` field ends one immediately,
+which releases its provider session and frees a capacity slot.
+
+Token and cost figures come from the provider's own session snapshot. For an
+ended session the final reading is taken just before teardown and kept in
+memory only — the provider deletes its record along with the session, and the
+gateway's durable ledger does not carry usage — so a restart drops the usage of
+already-ended sessions rather than reporting it wrongly.
+
+Applications refused a session at capacity receive `429` with `Retry-After` and
+a `manageUrl` pointing here, so they have somewhere to send the user.
 
 Gateway keys, enrolled-device token hashes, grant token hashes, revocation,
 and the capability secret are durable. Pending authorization requests, codes,
