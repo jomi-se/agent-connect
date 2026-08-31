@@ -67,12 +67,15 @@ is not required. It does not replace or wait for earlier sessions: a refreshed
 page can start over while an abandoned session remains parked, and independent
 sessions can run concurrently. The one-live-chain invariant remains local to
 each opaque session. At most eight unexpired sessions are provisioned for one
-grant, application, and tool snapshot in a gateway process. The session lease
-uses the capability TTL (one hour by default) and is renewed when its capability
-is issued or refreshed. Expiry durably retires the opaque session and
-best-effort cancels retained work. Provider-side workspace deletion remains
-separate operator work. Capability refresh remains reuse-only and cannot
-accidentally reset a conversation.
+grant, application, and tool snapshot in a gateway process; the next is refused
+with a retryable `429`. Session lifetime slides on activity rather than running
+from issuance, and is independent of the capability TTL: separate idle, parked
+and stalled clocks govern it, as described in
+[the session lifecycle](parallel-expiring-sessions-mvp.md), which supersedes the
+capability-lease model this plan originally specified. Expiry durably retires
+the opaque session, cancels retained work, and releases the provider session and
+its workspace. Capability refresh remains reuse-only and cannot accidentally
+reset a conversation.
 
 After a failed, cancelled, or interrupted turn, the application must also start
 a new application session. The gateway cannot know which partial provider

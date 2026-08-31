@@ -12,6 +12,8 @@ export interface OmnigentResponseBackendOptions {
   readonly baseUrl: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly postTimeoutMs?: number;
+  /** Bound on opening the provider stream, which has no timeout of its own. */
+  readonly openTimeoutMs?: number;
 }
 
 /**
@@ -25,12 +27,14 @@ export class OmnigentResponseBackend implements ResponseBackend {
   private readonly baseUrl: string;
   private readonly fetchImplementation: typeof globalThis.fetch;
   private readonly postTimeoutMs: number;
+  private readonly openTimeoutMs: number;
 
   constructor(options: OmnigentResponseBackendOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.fetchImplementation =
       options.fetch ?? globalThis.fetch.bind(globalThis);
     this.postTimeoutMs = options.postTimeoutMs ?? 15_000;
+    this.openTimeoutMs = options.openTimeoutMs ?? 30_000;
   }
 
   async start(request: BackendStartRequest): Promise<BackendRun> {
@@ -39,6 +43,7 @@ export class OmnigentResponseBackend implements ResponseBackend {
       request.providerSessionId,
       this.fetchImplementation,
       this.postTimeoutMs,
+      this.openTimeoutMs,
     );
     await run.open(request);
     return run;
@@ -50,6 +55,7 @@ class OmnigentBackendRun implements BackendRun {
   private readonly sessionUrl: string;
   private readonly fetchImplementation: typeof globalThis.fetch;
   private readonly postTimeoutMs: number;
+  private readonly openTimeoutMs: number;
   private readonly queue = new BackendEventQueue();
   private readonly controller = new AbortController();
   /**
@@ -65,18 +71,27 @@ class OmnigentBackendRun implements BackendRun {
     providerSessionId: string,
     fetchImplementation: typeof globalThis.fetch,
     postTimeoutMs: number,
+    openTimeoutMs: number,
   ) {
     this.sessionUrl = sessionUrl;
     this.providerSessionId = providerSessionId;
     this.fetchImplementation = fetchImplementation;
     this.postTimeoutMs = postTimeoutMs;
+    this.openTimeoutMs = openTimeoutMs;
   }
 
   async open(request: BackendStartRequest): Promise<void> {
-    const stream = await this.fetchImplementation(`${this.sessionUrl}/stream`, {
-      headers: { Origin: INTERNAL_ORIGIN, Accept: "text/event-stream" },
-      signal: this.controller.signal,
-    });
+    // Bounded separately from `post`, and not with a signal on the fetch
+    // itself: this is a long-lived event stream, so a timeout signal attached
+    // here would abort the stream mid-life rather than only its opening. A
+    // wedged open is instead resolved by aborting the whole run, which is the
+    // outcome that a stream that never opens deserves.
+    const stream = await this.withOpenTimeout(
+      this.fetchImplementation(`${this.sessionUrl}/stream`, {
+        headers: { Origin: INTERNAL_ORIGIN, Accept: "text/event-stream" },
+        signal: this.controller.signal,
+      }),
+    );
     if (!stream.ok || !stream.body) {
       throw new Error(
         `Omnigent stream for ${this.providerSessionId} failed: HTTP ${stream.status}`,
@@ -104,6 +119,27 @@ class OmnigentBackendRun implements BackendRun {
     } catch (cause) {
       await this.close();
       throw cause;
+    }
+  }
+
+  private async withOpenTimeout(pending: Promise<Response>): Promise<Response> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        pending,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => {
+            this.controller.abort();
+            reject(
+              new Error(
+                `Omnigent stream for ${this.providerSessionId} did not open within ${this.openTimeoutMs}ms`,
+              ),
+            );
+          }, this.openTimeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 

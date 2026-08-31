@@ -1103,6 +1103,120 @@ describe("one chain at a time, and no calls a chain can no longer take", () => {
     expect((await drain(stream)).types.at(-1)).toBe("response.completed");
   });
 
+  it("refuses to start work for a session retired while admission was awaiting", async () => {
+    // Window one: the session ends before the chain is persisted. Expiry scans
+    // chains and runs, and at this instant neither exists, so nothing else can
+    // stop this admission.
+    const store = new InMemoryResponseStore();
+    const backend = new FakeBackend({ turns: [[{ type: "completed" }]] });
+    const engine = new ResponseEngine({
+      store,
+      backend,
+      isGrantActive: () => true,
+      now: () => 1_700_000_000_000,
+    });
+    const listChains = store.listChains.bind(store);
+    const arrived = deferred();
+    const release = deferred();
+    let suspended = false;
+    store.listChains = async () => {
+      // Only the admission's own read is held; expiry's read of the same
+      // method must stay free or the two deadlock.
+      if (!suspended) {
+        suspended = true;
+        arrived.resolve();
+        await release.promise;
+      }
+      return listChains();
+    };
+
+    const pending = engine.createResponse(session, initial);
+    await arrived.promise;
+    await engine.expireSession(session.sessionId);
+    release.resolve();
+
+    await expect(pending).rejects.toMatchObject({ code: "response_cancelled" });
+    // No chain was written after the session's retirement tombstone, and the
+    // provider was never asked to start work for a session that had ended.
+    expect(await store.listChains()).toHaveLength(0);
+    expect(backend.runs).toHaveLength(0);
+  });
+
+  it("closes a run that arrives after its session was retired", async () => {
+    // Window two: the chain exists, so expiry terminalizes it, but the run is
+    // still being opened and is therefore invisible to expiry. It must not be
+    // left registered, or its event pump outlives the session for the life of
+    // the process.
+    const store = new InMemoryResponseStore();
+    const backend = new FakeBackend({ turns: [[{ type: "completed" }]] });
+    const arrived = deferred();
+    const release = deferred();
+    const start = backend.start.bind(backend);
+    backend.start = async (request) => {
+      arrived.resolve();
+      await release.promise;
+      return start(request);
+    };
+    const engine = new ResponseEngine({
+      store,
+      backend,
+      isGrantActive: () => true,
+      now: () => 1_700_000_000_000,
+    });
+
+    const pending = engine.createResponse(session, initial);
+    await arrived.promise;
+    await engine.expireSession(session.sessionId);
+    release.resolve();
+
+    await expect(pending).rejects.toMatchObject({ code: "response_cancelled" });
+    expect(backend.runs).toHaveLength(1);
+    expect(backend.runs[0]?.closed).toBe(true);
+    const chains = await store.listChains();
+    expect(chains[0]?.status).toBe("terminal");
+  });
+
+  it("ages a wedged admission so the stalled-turn cap can reach it", async () => {
+    // The admission registry used to be a timestamp-free set, and the
+    // lifecycle read re-dated it on every poll, holding the elapsed time at
+    // zero. A provider stream that never opens would then hold a session slot
+    // for the life of the process, because the stalled-turn cap could never
+    // fire against it.
+    const store = new InMemoryResponseStore();
+    const backend = new FakeBackend({ turns: [[{ type: "completed" }]] });
+    let clock = 1_700_000_000_000;
+    const arrived = deferred();
+    const release = deferred();
+    const start = backend.start.bind(backend);
+    backend.start = async (request) => {
+      arrived.resolve();
+      await release.promise;
+      return start(request);
+    };
+    const engine = new ResponseEngine({
+      store,
+      backend,
+      isGrantActive: () => true,
+      now: () => clock,
+    });
+
+    const pending = engine.createResponse(session, initial);
+    await arrived.promise;
+    expect(await engine.sessionLifecycle(session.sessionId)).toMatchObject({
+      kind: "running",
+    });
+
+    clock += 45 * 60 * 1000;
+    const aged = await engine.sessionLifecycle(session.sessionId);
+    expect(aged.kind).toBe("running");
+    expect(
+      Math.floor(clock / 1000) - (aged as { readonly since: number }).since,
+    ).toBeGreaterThanOrEqual(45 * 60);
+
+    release.resolve();
+    await drain(await pending);
+  });
+
   it("reports the lifecycle state each expiry clock is measured against", async () => {
     const { engine } = harness([[call("token_a", "set_page_message")]]);
     expect(await engine.sessionLifecycle(session.sessionId)).toEqual({
@@ -1138,4 +1252,13 @@ function textOf(resource: ResponseResource | undefined): string {
     .filter((item) => item.type === "message")
     .flatMap((item) => item.content.map((part) => part.text))
     .join("");
+}
+
+function deferred(): {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+} {
+  let resolve!: () => void;
+  const promise = new Promise<void>((value) => (resolve = value));
+  return { promise, resolve };
 }
