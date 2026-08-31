@@ -1072,6 +1072,57 @@ describe("one chain at a time, and no calls a chain can no longer take", () => {
     );
     expect(backend.runs[0]?.submitted).toHaveLength(1);
   });
+
+  it("does not resurrect a chain that expired between admission and its first event", async () => {
+    const { engine, store } = harness([[text("work"), { type: "completed" }]]);
+    // The generator exists but has not been consumed, which is exactly the
+    // window every caller has: admission finished and the backend started, but
+    // the segment has not written its first record yet.
+    const stream = await engine.createResponse(session, initial);
+    await engine.expireSession(session.sessionId);
+
+    const result = await drain(stream);
+    expect(result.types.at(-1)).toBe("response.failed");
+
+    const chains = await store.listChains();
+    expect(chains).toHaveLength(1);
+    // Durably terminal, not silently returned to `running`. A resurrected
+    // chain would hand the application call IDs on a provider session the
+    // gateway is already tearing down.
+    expect(chains[0]?.status).toBe("terminal");
+    expect(chains[0]?.terminalError?.message).toContain("expired");
+  });
+
+  it("leaves an in-flight admission claim to its own owner when a session expires", async () => {
+    const { engine } = harness([[{ type: "completed" }]]);
+    await engine.expireSession(session.sessionId);
+    // Expiry releasing a claim it does not own would let a second admission
+    // run concurrently with the first, so the claim must still be free here
+    // and an ordinary response must still be admissible.
+    const stream = await engine.createResponse(session, initial);
+    expect((await drain(stream)).types.at(-1)).toBe("response.completed");
+  });
+
+  it("reports the lifecycle state each expiry clock is measured against", async () => {
+    const { engine } = harness([[call("token_a", "set_page_message")]]);
+    expect(await engine.sessionLifecycle(session.sessionId)).toEqual({
+      kind: "idle",
+    });
+
+    const first = await drain(await engine.createResponse(session, initial));
+    expect(first.types.at(-1)).toBe("response.completed");
+    // A segment that ended on a function call leaves the session parked, and
+    // the clock starts from the call the application was handed rather than
+    // from whenever the chain last changed for some other reason.
+    expect(await engine.sessionLifecycle(session.sessionId)).toMatchObject({
+      kind: "parked",
+    });
+
+    await engine.expireSession(session.sessionId);
+    expect(await engine.sessionLifecycle(session.sessionId)).toEqual({
+      kind: "idle",
+    });
+  });
 });
 
 function callIdOf(resource: ResponseResource | undefined): string {

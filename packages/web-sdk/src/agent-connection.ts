@@ -2,6 +2,7 @@ import { AgentConnectError, AgentSession } from "./agent-session.js";
 import { ResponsesProvider } from "./responses-provider.js";
 import type {
   AgentConnection,
+  AgentConnectErrorCode,
   ApplicationTool,
   ConnectAgentOptions,
   JsonObject,
@@ -58,14 +59,14 @@ export async function connectAgent(
   });
   if (!response.ok) {
     const body = (await response.text()).slice(0, 500);
-    const code =
-      response.status === 401 && responseError(body) === "invalid_app_grant"
-        ? "invalid_app_grant"
-        : "http_error";
+    const failure = responseFailure(body);
     throw new AgentConnectError(
-      code,
+      sessionFailureCode(response.status, failure.error),
       `Failed to create Agent Connect session: HTTP ${response.status}${body ? ` — ${body}` : ""}`,
-      { status: response.status },
+      {
+        status: response.status,
+        ...(failure.manageUrl ? { manageUrl: failure.manageUrl } : {}),
+      },
     );
   }
   const created = parseCreateResponse(await response.json());
@@ -91,12 +92,38 @@ export async function connectAgent(
   };
 }
 
-function responseError(body: string): string | undefined {
+/**
+ * Distinguishes the refusals an application can act on. `session_capacity` is
+ * retryable and has a page that resolves it; `session_expired` means the
+ * session is gone and a new one must be created, rather than a token refreshed.
+ */
+function sessionFailureCode(
+  status: number,
+  error: string | undefined,
+): AgentConnectErrorCode {
+  if (status === 401 && error === "invalid_app_grant")
+    return "invalid_app_grant";
+  if (status === 401 && error === "session_expired") return "session_expired";
+  if (status === 429 && error === "session_capacity") return "session_capacity";
+  return "http_error";
+}
+
+function responseFailure(body: string): {
+  readonly error: string | undefined;
+  readonly manageUrl: string | undefined;
+} {
   try {
-    const parsed = JSON.parse(body) as { readonly error?: unknown };
-    return typeof parsed.error === "string" ? parsed.error : undefined;
+    const parsed = JSON.parse(body) as {
+      readonly error?: unknown;
+      readonly manageUrl?: unknown;
+    };
+    return {
+      error: typeof parsed.error === "string" ? parsed.error : undefined,
+      manageUrl:
+        typeof parsed.manageUrl === "string" ? parsed.manageUrl : undefined,
+    };
   } catch {
-    return undefined;
+    return { error: undefined, manageUrl: undefined };
   }
 }
 

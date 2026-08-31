@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createGateway } from "../src/gateway.js";
 import type { BackendEvent } from "../src/responses/backend.js";
-import type { AgentRuntime } from "../src/runtime.js";
+import type { AgentRuntime, RuntimeSessionUsage } from "../src/runtime.js";
 import { FakeBackend, type FakeTurn } from "./support/fake-backend.js";
 import {
   streamingEventSchemaName,
@@ -60,6 +60,8 @@ const wireTools = [
 class FakeRuntime implements AgentRuntime {
   createdSessions = 0;
   healthy = true;
+  usageAvailable = true;
+  readonly destroyed: string[] = [];
 
   async createSession(): Promise<string> {
     this.createdSessions += 1;
@@ -68,6 +70,23 @@ class FakeRuntime implements AgentRuntime {
 
   async isHealthy(): Promise<boolean> {
     return this.healthy;
+  }
+
+  async destroySession(providerSessionId: string): Promise<void> {
+    this.destroyed.push(providerSessionId);
+    this.usageAvailable = false;
+  }
+
+  async describeSession(): Promise<RuntimeSessionUsage | undefined> {
+    return this.usageAvailable
+      ? {
+          status: "idle",
+          runnerOnline: true,
+          totalCostUsd: 0.25,
+          totalTokens: 9000,
+          contextWindow: 200_000,
+        }
+      : undefined;
   }
 }
 
@@ -87,6 +106,9 @@ async function start(
     readonly nonBrowserClients?: boolean;
     readonly runs?: readonly (readonly FakeTurn[])[];
     readonly capabilityTtlSeconds?: number;
+    readonly sessionIdleTimeoutSeconds?: number;
+    readonly parkedCallTimeoutSeconds?: number;
+    readonly runningTurnTimeoutSeconds?: number;
     readonly now?: () => number;
   } = {},
 ): Promise<Harness> {
@@ -108,6 +130,15 @@ async function start(
     responseBackend: backend,
     ...(options.capabilityTtlSeconds
       ? { capabilityTtlSeconds: options.capabilityTtlSeconds }
+      : {}),
+    ...(options.sessionIdleTimeoutSeconds
+      ? { sessionIdleTimeoutSeconds: options.sessionIdleTimeoutSeconds }
+      : {}),
+    ...(options.parkedCallTimeoutSeconds
+      ? { parkedCallTimeoutSeconds: options.parkedCallTimeoutSeconds }
+      : {}),
+    ...(options.runningTurnTimeoutSeconds
+      ? { runningTurnTimeoutSeconds: options.runningTurnTimeoutSeconds }
       : {}),
     ...(options.now ? { now: options.now } : {}),
   });
@@ -411,7 +442,12 @@ describe("POST /v1/responses", () => {
       }),
       body: JSON.stringify({ appId: "test-app", tools: [tool()], fresh: true }),
     });
-    expect(refused.status).toBe(400);
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("retry-after")).toBe("30");
+    expect(await refused.json()).toMatchObject({
+      error: "session_capacity",
+      manageUrl: "https://runtime.example/sessions",
+    });
     expect(harness.runtime.createdSessions).toBe(8);
   });
 
@@ -449,10 +485,10 @@ describe("POST /v1/responses", () => {
     expect(harness.backend.runs[0]?.cancelled).toBe(false);
   });
 
-  it("expires an abandoned session and cancels its retained run", async () => {
+  it("expires a session whose parked call is never answered", async () => {
     let clock = Date.parse("2026-08-31T12:00:00Z");
     const harness = await start([[call("provider_a")]], {
-      capabilityTtlSeconds: 10,
+      parkedCallTimeoutSeconds: 10,
       now: () => clock,
     });
     expect(
@@ -481,16 +517,21 @@ describe("POST /v1/responses", () => {
       }),
       body: JSON.stringify({ appId: "test-app", tools: [tool()], fresh: true }),
     });
-    expect(atCapacity.status).toBe(400);
+    expect(atCapacity.status).toBe(429);
 
     clock += 11_000;
     const reaped = await fetch(`${harness.baseUrl}/healthz`);
     expect(reaped.status).toBe(200);
     expect(harness.backend.runs[0]?.cancelled).toBe(true);
+    // The provider session and its runner are released, not merely forgotten.
+    expect(harness.runtime.destroyed).toEqual(["provider-1"]);
 
-    expect(
-      await post(harness, { model: MODEL, input: "too late" }),
-    ).toMatchObject({ status: 401 });
+    const tooLate = await post(harness, { model: MODEL, input: "too late" });
+    expect(tooLate.status).toBe(401);
+    // Distinguishable from an invalid capability: the client must start a new
+    // session rather than refresh a token that still verifies.
+    expect(await tooLate.json()).toMatchObject({ error: "session_expired" });
+
     const fresh = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
       method: "POST",
       headers: browserHeaders({
@@ -501,6 +542,163 @@ describe("POST /v1/responses", () => {
     });
     expect(fresh.status).toBe(201);
     expect(harness.runtime.createdSessions).toBe(9);
+  });
+
+  it("keeps idle sessions while only the parked clock has run out", async () => {
+    let clock = Date.parse("2026-08-31T12:00:00Z");
+    const harness = await start([[call("provider_a")]], {
+      parkedCallTimeoutSeconds: 10,
+      sessionIdleTimeoutSeconds: 10_000,
+      now: () => clock,
+    });
+    const idle = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.grant}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()], fresh: true }),
+    });
+    expect(idle.status).toBe(201);
+    const idleSession = (await idle.json()) as { accessToken: string };
+
+    expect(
+      await post(harness, { model: MODEL, input: "park this session" }),
+    ).toMatchObject({ status: 200 });
+
+    clock += 11_000;
+    expect((await fetch(`${harness.baseUrl}/healthz`)).status).toBe(200);
+    expect(harness.runtime.destroyed).toEqual(["provider-1"]);
+
+    // The untouched session is still usable: the parked clock governs only the
+    // session that is actually holding an unanswered call.
+    const refreshed = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${idleSession.accessToken}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()] }),
+    });
+    expect(refreshed.status).toBe(201);
+  });
+
+  it("expires an idle session once its sliding clock runs out", async () => {
+    let clock = Date.parse("2026-08-31T12:00:00Z");
+    const harness = await start([], {
+      runs: [[[{ type: "completed" }]], [[{ type: "completed" }]]],
+      sessionIdleTimeoutSeconds: 60,
+      now: () => clock,
+    });
+    const first = (await (
+      await post(harness, { model: MODEL, input: "first" })
+    ).json()) as ResponseBody;
+
+    // Activity slides the clock: well past one idle window in total, but never
+    // a full window without a request. A liveness probe deliberately does not
+    // count — only the session's own traffic does.
+    for (let index = 0; index < 3; index += 1) {
+      clock += 50_000;
+      const refresh = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+        method: "POST",
+        headers: browserHeaders({
+          Authorization: `Bearer ${harness.capability}`,
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ appId: "test-app", tools: [tool()] }),
+      });
+      expect(refresh.status).toBe(201);
+    }
+    const second = await post(harness, {
+      model: MODEL,
+      previous_response_id: first.id,
+      input: "second",
+    });
+    expect(second.status).toBe(200);
+
+    clock += 61_000;
+    expect((await fetch(`${harness.baseUrl}/healthz`)).status).toBe(200);
+    expect(harness.runtime.destroyed).toEqual(["provider-1"]);
+    expect(
+      await post(harness, { model: MODEL, input: "after expiry" }),
+    ).toMatchObject({ status: 401 });
+  });
+
+  it("shows live sessions on the owner console and ends one on request", async () => {
+    const harness = await start([[call("provider_a")]]);
+    expect(
+      await post(harness, { model: MODEL, input: "park this session" }),
+    ).toMatchObject({ status: 200 });
+
+    const page = await fetch(`${harness.baseUrl}/sessions`, {
+      headers: { "Tailscale-User-Login": "owner@example.com" },
+    });
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain(harness.sessionId);
+    expect(html).toContain("test-app");
+    expect(html).toContain("Waiting for the application");
+
+    const ended = await fetch(`${harness.baseUrl}/sessions`, {
+      method: "POST",
+      headers: {
+        "Tailscale-User-Login": "owner@example.com",
+        Origin: "https://runtime.example",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ session: harness.sessionId }).toString(),
+      redirect: "manual",
+    });
+    expect(ended.status).toBe(303);
+    // Ending a session releases the retained run and the provider session, and
+    // the capability that named it stops working.
+    expect(harness.backend.runs[0]?.cancelled).toBe(true);
+    expect(harness.runtime.destroyed).toEqual(["provider-1"]);
+    expect(
+      await post(harness, { model: MODEL, input: "after ending" }),
+    ).toMatchObject({ status: 401 });
+
+    const after = await fetch(`${harness.baseUrl}/sessions`, {
+      headers: { "Tailscale-User-Login": "owner@example.com" },
+    });
+    // The ended session survives in recent history, rebuilt from its chains,
+    // and says why it ended rather than only that it did.
+    const history = await after.text();
+    expect(history).toContain("Recent sessions");
+    expect(history).toContain("ended from the gateway&#39;s session page");
+    // Usage is read before teardown, because deleting the provider session
+    // deletes its cost record too.
+    expect(history).toContain("$0.2500");
+    expect(history).toContain("9,000");
+  });
+
+  it("refuses the session console to a login outside the allow list", async () => {
+    const harness = await start([[{ type: "completed" }]]);
+    const refused = await fetch(`${harness.baseUrl}/sessions`, {
+      headers: { "Tailscale-User-Login": "someone-else@example.com" },
+    });
+    expect(refused.status).toBe(403);
+    const unauthenticated = await fetch(`${harness.baseUrl}/sessions`);
+    expect(unauthenticated.status).toBe(403);
+  });
+
+  it("does not reap a running turn that is slow but still producing events", async () => {
+    let clock = Date.parse("2026-08-31T12:00:00Z");
+    const harness = await start([[call("provider_a")]], {
+      // A turn that outlives the idle window must survive it: the session is
+      // busy, and no request arrives while the agent is thinking.
+      sessionIdleTimeoutSeconds: 10,
+      parkedCallTimeoutSeconds: 10_000,
+      runningTurnTimeoutSeconds: 10_000,
+      now: () => clock,
+    });
+    expect(
+      await post(harness, { model: MODEL, input: "long turn" }),
+    ).toMatchObject({ status: 200 });
+    clock += 11_000;
+    expect((await fetch(`${harness.baseUrl}/healthz`)).status).toBe(200);
+    expect(harness.runtime.destroyed).toEqual([]);
+    expect(harness.backend.runs[0]?.cancelled).toBe(false);
   });
 
   it("accepts a text follow-up in both JSON and streaming response modes", async () => {

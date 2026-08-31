@@ -81,5 +81,17 @@ and the real gateway setup.
 Use `connectAgent({ ...options, freshSession: true })` to start an independent
 conversation under an existing application grant. This provisions a new opaque
 application session and provider session; it does not require reauthorization.
-The gateway refuses replacement while work is live and bounds repeated fresh
-sessions to eight per grant, application, and tool snapshot in one process.
+Sessions run in parallel and are independent: a page reload that loses the
+session ID simply starts a new one, and the old one ends on its own.
+
+The gateway holds at most eight live sessions per grant, application, and tool
+snapshot. Beyond that it answers `429` with `Retry-After` and a `manageUrl`
+pointing at the gateway's own session page, where the owner can end a session
+to free a slot immediately. Slots also free themselves: a session is retired
+after roughly fifteen minutes idle, after three minutes holding a function call
+the application never answered, or after thirty minutes of a turn making no
+progress. All three are configurable on the gateway.
+
+A capability that still verifies but names a retired session is answered with
+`401 {"error": "session_expired"}`, distinct from `invalid_session_capability`.
+The correct response is to start a new session rather than refresh the token.

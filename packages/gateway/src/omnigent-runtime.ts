@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
-import type { AgentRuntime, RuntimeSessionRequest } from "./runtime.js";
+import type {
+  AgentRuntime,
+  RuntimeSessionRequest,
+  RuntimeSessionUsage,
+} from "./runtime.js";
 
 export interface OmnigentRuntimeOptions {
   readonly baseUrl: string;
@@ -12,6 +16,8 @@ export interface OmnigentRuntimeOptions {
   readonly fetch?: typeof globalThis.fetch;
   readonly pollIntervalMs?: number;
   readonly launchTimeoutMs?: number;
+  /** Bound on the console's decorative usage lookup. */
+  readonly usageTimeoutMs?: number;
   readonly sandbox?: OmnigentSandboxOptions;
 }
 
@@ -23,6 +29,7 @@ export interface OmnigentSandboxOptions {
 }
 
 const INTERNAL_ORIGIN = "omnigent://internal";
+const SESSION_WORKSPACE_ROOT = ".agent-connect-sessions";
 const TOOL_POLICY_DIRECTORY = ".agent-connect";
 const TOOL_POLICY_FILENAME = "codex-mcp-policy.json";
 const RESERVED_OMNIGENT_TOOL_NAMES = new Set([
@@ -44,7 +51,14 @@ export class OmnigentRuntime implements AgentRuntime {
   private readonly fetchImplementation: typeof globalThis.fetch;
   private readonly pollIntervalMs: number;
   private readonly launchTimeoutMs: number;
+  private readonly usageTimeoutMs: number;
   private readonly bundle: Uint8Array;
+  /**
+   * The per-session workspace this process created, so teardown can remove it.
+   * A session provisioned before a restart is absent here; `destroySession`
+   * falls back to the workspace the provider reports for it.
+   */
+  private readonly workspaces = new Map<string, string>();
 
   constructor(options: OmnigentRuntimeOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
@@ -54,11 +68,13 @@ export class OmnigentRuntime implements AgentRuntime {
       options.fetch ?? globalThis.fetch.bind(globalThis);
     this.pollIntervalMs = options.pollIntervalMs ?? 250;
     this.launchTimeoutMs = options.launchTimeoutMs ?? 30_000;
+    this.usageTimeoutMs = options.usageTimeoutMs ?? 2_000;
     this.bundle = buildAgentBundle(options.sandbox, options.workspace);
   }
 
   async createSession(request: RuntimeSessionRequest): Promise<string> {
     const workspace = await this.createSessionWorkspace(request);
+    let sessionId: string | undefined;
     try {
       const metadata = {
         title: `Agent Connect: ${request.appId}`,
@@ -81,7 +97,7 @@ export class OmnigentRuntime implements AgentRuntime {
         headers: { Origin: INTERNAL_ORIGIN },
         body: form,
       });
-      const sessionId = requiredString(created, "session_id");
+      sessionId = requiredString(created, "session_id");
       const hostId = await this.selectHost();
 
       await this.requestJson(
@@ -101,16 +117,94 @@ export class OmnigentRuntime implements AgentRuntime {
 
       const deadline = Date.now() + this.launchTimeoutMs;
       while (Date.now() < deadline) {
-        if (await this.isHealthy(sessionId)) return sessionId;
+        if (await this.isHealthy(sessionId)) {
+          this.workspaces.set(sessionId, workspace);
+          return sessionId;
+        }
         await delay(this.pollIntervalMs);
       }
       throw new Error(
         `Omnigent runner for ${sessionId} did not become healthy in time`,
       );
     } catch (error) {
+      // A partially provisioned session still owns a provider-side runner when
+      // the failure was the health-poll timeout, so the local directory is not
+      // the only thing to release.
+      if (sessionId) await this.deleteProviderSession(sessionId);
       await rm(workspace, { recursive: true, force: true });
       throw error;
     }
+  }
+
+  /**
+   * Deletes the provider session and the workspace this gateway created for it.
+   * `DELETE /v1/sessions/{id}` tears down the runner, its environments and
+   * terminals, and the conversation row; the session workspace is ours and is
+   * removed separately.
+   */
+  async destroySession(providerSessionId: string): Promise<void> {
+    const workspace =
+      this.workspaces.get(providerSessionId) ??
+      (await this.reportedWorkspace(providerSessionId));
+    this.workspaces.delete(providerSessionId);
+    await this.deleteProviderSession(providerSessionId);
+    // The provider reports the workspace back, so the path is only trusted far
+    // enough to delete when it is one this gateway could have created.
+    if (workspace && this.ownsWorkspace(workspace)) {
+      await rm(workspace, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
+  async describeSession(
+    providerSessionId: string,
+  ): Promise<RuntimeSessionUsage | undefined> {
+    try {
+      const snapshot = await this.requestJson(
+        `/v1/sessions/${encodeURIComponent(providerSessionId)}`,
+        // Usage is decoration on an owner page. A provider that has stopped
+        // answering must make the page render without it, not hang it.
+        { signal: AbortSignal.timeout(this.usageTimeoutMs) },
+      );
+      return {
+        status: optionalString(snapshot, "status"),
+        runnerOnline: snapshot["runner_online"] === true,
+        totalCostUsd: optionalNumber(snapshot, "total_cost_usd"),
+        totalTokens: optionalNumber(snapshot, "last_total_tokens"),
+        contextWindow: optionalNumber(snapshot, "context_window"),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async deleteProviderSession(
+    providerSessionId: string,
+  ): Promise<void> {
+    await this.requestJson(
+      `/v1/sessions/${encodeURIComponent(providerSessionId)}`,
+      { method: "DELETE" },
+    ).catch(() => ({}));
+  }
+
+  private async reportedWorkspace(
+    providerSessionId: string,
+  ): Promise<string | undefined> {
+    try {
+      const snapshot = await this.requestJson(
+        `/v1/sessions/${encodeURIComponent(providerSessionId)}`,
+      );
+      return optionalString(snapshot, "workspace") ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private ownsWorkspace(workspace: string): boolean {
+    const root = resolve(join(this.workspace, SESSION_WORKSPACE_ROOT));
+    const relation = relative(root, resolve(workspace));
+    return (
+      relation !== "" && !relation.startsWith("..") && !isAbsolute(relation)
+    );
   }
 
   private async createSessionWorkspace(
@@ -130,7 +224,7 @@ export class OmnigentRuntime implements AgentRuntime {
     }
     const workspace = join(
       this.workspace,
-      ".agent-connect-sessions",
+      SESSION_WORKSPACE_ROOT,
       randomUUID(),
     );
     const policyDirectory = join(workspace, TOOL_POLICY_DIRECTORY);
@@ -347,6 +441,26 @@ function writeOctal(
     length,
     `${value.toString(8).padStart(length - 1, "0")}\0`,
   );
+}
+
+function optionalString(
+  value: Record<string, unknown>,
+  key: string,
+): string | null {
+  const candidate = value[key];
+  return typeof candidate === "string" && candidate.length > 0
+    ? candidate
+    : null;
+}
+
+function optionalNumber(
+  value: Record<string, unknown>,
+  key: string,
+): number | null {
+  const candidate = value[key];
+  return typeof candidate === "number" && Number.isFinite(candidate)
+    ? candidate
+    : null;
 }
 
 function requiredString(value: Record<string, unknown>, key: string): string {

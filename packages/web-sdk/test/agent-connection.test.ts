@@ -203,7 +203,60 @@ describe("connectAgent", () => {
       status: 401,
     });
   });
+
+  it("surfaces a capacity refusal with the page that resolves it", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json(
+        {
+          error: "session_capacity",
+          message: "at most 8 live sessions",
+          manageUrl: "https://runtime.example/sessions",
+        },
+        { status: 429, headers: { "Retry-After": "30" } },
+      ),
+    );
+    const failure = await connectAgent({
+      baseUrl: "https://runtime.example",
+      appId: "demo",
+      accessToken: "grant-token",
+      fetch,
+      tools: [probeTool()],
+    }).catch((error: unknown) => error);
+
+    // Retrying into a full gateway is not a remedy; ending a session is, so the
+    // application needs the code and somewhere to send the person.
+    expect(failure).toMatchObject({
+      name: "AgentConnectError",
+      code: "session_capacity",
+      status: 429,
+      manageUrl: "https://runtime.example/sessions",
+    });
+  });
+
+  it("distinguishes a retired session from an invalid capability", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json({ error: "session_expired" }, { status: 401 }),
+    );
+    const failure = await connectAgent({
+      baseUrl: "https://runtime.example",
+      appId: "demo",
+      accessToken: "grant-token",
+      fetch,
+      tools: [probeTool()],
+    }).catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ code: "session_expired", status: 401 });
+  });
 });
+
+function probeTool() {
+  return defineTool({
+    name: "read_page",
+    description: "Read the current page",
+    inputSchema: { type: "object", additionalProperties: false },
+    execute: () => "page",
+  });
+}
 
 function sse(event: unknown): string {
   const type = (event as { type: string }).type;

@@ -169,8 +169,10 @@ response ID used for cancellation/recovery remains separate provider state.
 Evidence: provider seam tests, AgentSession public API tests, and exact HTTP body
 assertions for ResponsesProvider. Fresh-session tests prove a new opaque
 application session and provider mapping are created without reauthorization,
-refuse replacement during live work, keep the old opaque capability retired
-after restart, and enforce the per-grant/application/tool provisioning bound.
+run in parallel with an already-parked session, keep the old opaque capability
+retired after restart, and enforce the per-grant/application/tool bound as a
+retryable `429`. A checkpoint test proves a turn the gateway refused before
+admitting anything leaves the previous head continuable.
 
 ### VAL-CONT-003 — real Omnigent continuity
 
