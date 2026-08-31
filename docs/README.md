@@ -61,6 +61,10 @@ historical. AG-UI is no longer an active core-protocol experiment.
 - [Hassle-free tunnel ingress](future/hassle-free-tunnel-ingress.md): reaching a
   self-hosted gateway at a stable HTTPS origin without root or a second admin
   console. Surveys zrok, cloudflared, ngrok, and Funnel; depends on ADR 0009.
+- [Deployment tiers and confinement](future/deployment-tiers-and-confinement.md):
+  what CLI, desktop, and managed-cloud deployments each require of the sandbox.
+  Records why tier 2 is the hardest confinement problem and why posture belongs
+  to the grant rather than the tier; the product question it turns on is open.
 - [Application identity for native clients](future/native-client-identity.md):
   what replaces the browser origin when the application is an Android or desktop
   binary. Proposes `browser_origin`, `native_published`, and `native_paired`
