@@ -18,8 +18,11 @@ the gateway durably retires it and best-effort cancels any retained run.
 
 ## Accepted boundaries
 
-- `freshSession: true` always provisions an independent application and
-  provider session; it does not replace or wait for an earlier session.
+- Presenting the application grant always provisions an independent
+  application and provider session; it does not replace, wait for, or adopt an
+  earlier one. Reconnecting to a specific session requires that session's own
+  capability, which is the only credential that names one. (`freshSession` is
+  retained as a no-op for compatibility and is deprecated.)
 - One response chain may be live within each application session.
 - Up to eight live sessions may exist for one grant, application, and approved
   tool snapshot. The ninth is refused with `429`, `Retry-After`, and a

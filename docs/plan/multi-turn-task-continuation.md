@@ -61,9 +61,9 @@ Exactly one initial task is admitted per opaque application session. Every
 later turn must name the current head. An unlinked second request cannot
 honestly mean “fresh conversation” when the gateway would send it into the same
 durable Omnigent/ACP conversation. Starting over therefore requires a new
-application session and provider-session mapping. `connectAgent({ freshSession:
-true })` provisions both under the existing application grant; reauthorization
-is not required. It does not replace or wait for earlier sessions: a refreshed
+application session and provider-session mapping. Connecting with the
+application grant provisions both; reauthorization is not required. It does not
+replace or wait for earlier sessions: a refreshed
 page can start over while an abandoned session remains parked, and independent
 sessions can run concurrently. The one-live-chain invariant remains local to
 each opaque session. At most eight unexpired sessions are provisioned for one

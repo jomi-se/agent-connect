@@ -182,8 +182,8 @@ export function createGateway(options: GatewayOptions) {
     options.runningTurnTimeoutSeconds ?? DEFAULT_RUNNING_TURN_TIMEOUT_SECONDS;
   const signingSecret = connectorAuth.capabilitySigningSecret;
   const managedSessions = new Map<string, ManagedSession>();
-  const sessionsByKey = new Map<string, ManagedSession>();
-  const pendingSessions = new Map<string, Promise<ManagedSession>>();
+  /** In-flight creations per grant/app/tool key, for the capacity check. */
+  const pendingCreations = new Map<string, number>();
   const pendingRepairs = new Map<string, Promise<ManagedSession>>();
   /**
    * Final usage of sessions this process retired. Teardown deletes the provider
@@ -217,11 +217,9 @@ export function createGateway(options: GatewayOptions) {
    * chain is recoverable, complete, or terminally interrupted rather than
    * unknown.
    *
-   * Provider sessions are deliberately not revived for implicit reuse:
-   * `sessionsByKey` stays empty, so a new application session provisions a
-   * fresh provider session instead of adopting one whose run is gone. The
-   * signed capability remains the authorization oracle for reconstructed
-   * sessions.
+   * A rehydrated session is reachable only through the signed capability that
+   * names it, which remains the authorization oracle after restart. Nothing
+   * reconstructs a way for a bare application grant to find one.
    */
   const responseSessionsReady = (async () => {
     const chains = [...(await responseStore.listChains())].sort(
@@ -305,15 +303,6 @@ export function createGateway(options: GatewayOptions) {
     // restart could reconstruct the expired opaque session from its chains.
     await responseStore.retireSession(session.id);
     managedSessions.delete(session.id);
-    const key = sessionKey(
-      session.origin,
-      session.appId,
-      session.toolHash,
-      session.authorizationGrantId,
-    );
-    if (sessionsByKey.get(key)?.id === session.id) {
-      sessionsByKey.delete(key);
-    }
     await responseEngine.expireSession(session.id, reason);
     // The last usage reading has to be taken before teardown removes it.
     const usage = await sessionUsage(session.providerSessionId);
@@ -612,12 +601,7 @@ export function createGateway(options: GatewayOptions) {
               })
             : undefined;
           if (grant) {
-            session = await getOrCreateSession(
-              input,
-              origin,
-              grant.id,
-              input.fresh,
-            );
+            session = await createManagedSession(input, origin, grant.id);
           } else {
             response.setHeader("WWW-Authenticate", "Bearer");
             sendJson(response, 401, { error: "invalid_app_grant" });
@@ -916,11 +900,24 @@ export function createGateway(options: GatewayOptions) {
     return session.lastActivityAt + sessionIdleTimeout - timestamp;
   }
 
-  async function getOrCreateSession(
+  /**
+   * Provisions a new application session for an application grant.
+   *
+   * Presenting the grant means "create", always. There is deliberately no path
+   * by which a grant selects an existing session: the only key such a lookup
+   * could use is the grant, application, and tool snapshot, which every tab of
+   * the same application shares. Adopting the newest match under that key is
+   * ambient global state the caller neither names nor owns, and with parallel
+   * sessions it would silently hand one tab another tab's conversation. An
+   * extra session is a bounded cost; a crossed conversation is not.
+   *
+   * Reconnecting to a specific session is the session capability's job, and
+   * only the capability's: it names the one session it is for.
+   */
+  async function createManagedSession(
     input: CreateSessionInput,
     origin: string,
     authorizationGrantId: string,
-    fresh = false,
   ): Promise<ManagedSession> {
     const key = sessionKey(
       origin,
@@ -928,36 +925,28 @@ export function createGateway(options: GatewayOptions) {
       input.toolHash,
       authorizationGrantId,
     );
-    for (;;) {
-      const pending = pendingSessions.get(key);
-      if (!pending) break;
-      const resolved = await pending;
-      if (!fresh) return resolved;
+    const live = [...managedSessions.values()].filter(
+      (session) =>
+        session.provisionedInProcess &&
+        sessionKey(
+          session.origin,
+          session.appId,
+          session.toolHash,
+          session.authorizationGrantId,
+        ) === key,
+    ).length;
+    // Concurrent creates are no longer coalesced, so the capacity check has to
+    // count the ones still awaiting the provider as well. Reserving before the
+    // await and releasing in `finally` is race-free without a lock: nothing
+    // else runs between the count and the reservation.
+    const reserved = pendingCreations.get(key) ?? 0;
+    if (live + reserved >= MAX_SESSIONS_PER_GRANT_APP) {
+      throw new SessionCapacityError(
+        `at most ${MAX_SESSIONS_PER_GRANT_APP} live sessions may exist for one grant, application, and tool snapshot`,
+      );
     }
-    const operation = (async () => {
-      const existing = sessionsByKey.get(key);
-      if (existing && !fresh) {
-        return (
-          (await responseEngine.runIfSessionIdle(existing.id, () =>
-            ensureHealthy(existing),
-          )) ?? existing
-        );
-      }
-      const count = [...managedSessions.values()].filter(
-        (session) =>
-          session.provisionedInProcess &&
-          sessionKey(
-            session.origin,
-            session.appId,
-            session.toolHash,
-            session.authorizationGrantId,
-          ) === key,
-      ).length;
-      if (count >= MAX_SESSIONS_PER_GRANT_APP) {
-        throw new SessionCapacityError(
-          `at most ${MAX_SESSIONS_PER_GRANT_APP} live sessions may exist for one grant, application, and tool snapshot`,
-        );
-      }
+    pendingCreations.set(key, reserved + 1);
+    try {
       const providerSessionId = await runtime.createSession({
         appId: input.appId,
         origin,
@@ -979,14 +968,11 @@ export function createGateway(options: GatewayOptions) {
         provisionedInProcess: true,
       };
       managedSessions.set(created.id, created);
-      sessionsByKey.set(key, created);
       return created;
-    })();
-    pendingSessions.set(key, operation);
-    try {
-      return await operation;
     } finally {
-      pendingSessions.delete(key);
+      const outstanding = (pendingCreations.get(key) ?? 1) - 1;
+      if (outstanding > 0) pendingCreations.set(key, outstanding);
+      else pendingCreations.delete(key);
     }
   }
 
@@ -1024,6 +1010,12 @@ interface CreateSessionInput {
   readonly appId: string;
   readonly tools: readonly GatewayToolDefinition[];
   readonly toolHash: string;
+  /**
+   * @deprecated Presenting the application grant already means "create a new
+   * session", so this flag no longer selects between two behaviours. It is
+   * still accepted and still rejected alongside a session capability, so
+   * existing clients that send it keep working unchanged.
+   */
   readonly fresh: boolean;
 }
 

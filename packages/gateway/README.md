@@ -70,6 +70,39 @@ online. Raw Omnigent session ids never enter the browser configuration. When an
 application session is retired, the gateway deletes the provider session and
 removes the per-session workspace it created, so runners do not accumulate.
 
+## Selecting a session
+
+Which session a request means is decided by the credential it presents, and
+only by that:
+
+| Credential         | `POST /v1/app-sessions` means                 |
+| ------------------ | --------------------------------------------- |
+| Application grant  | provision a new independent session, always   |
+| Session capability | refresh the one session that capability names |
+| Neither            | `401` — no session may be selected implicitly |
+
+There is deliberately no third case. The only key a grant-based lookup could
+search by is origin, application, and tool snapshot, which every tab of that
+application shares, so "the newest match" is ambient state the caller neither
+names nor owns; with parallel sessions it would eventually connect one tab to
+another tab's conversation. An extra session is bounded by expiry and capacity.
+A crossed conversation is not.
+
+Reconnecting to a conversation is therefore something the application prepares
+for: it must persist the session capability (and the continuation checkpoint,
+to resume the conversation rather than only the session) across the reload. A
+client that kept nothing starts a new session.
+
+The consequence is that a lost HTTP response followed by a retry provisions an
+orphan session. That is honest and bounded — it retires on its own clock and
+counts against capacity meanwhile. If it ever becomes a real cost, the fix is
+an explicit client-supplied idempotency key, not a guess at which session was
+created most recently.
+
+The request body still accepts `fresh`, which is now redundant and deprecated:
+presenting the grant already means create. It remains rejected alongside a
+session capability.
+
 ## Session lifetime
 
 Sessions are cheap and short-lived on purpose. Losing the session id means

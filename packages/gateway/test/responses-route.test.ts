@@ -1189,14 +1189,8 @@ describe("Agent Connect control extensions", () => {
     expect(harness.backend.runs).toHaveLength(1);
   });
 
-  it("reuses a grant session without repairing its provider under a live chain", async () => {
-    const harness = await start([[call("provider_a")]]);
-    expect(
-      await post(harness, { model: MODEL, input: "start work" }),
-    ).toMatchObject({ status: 200 });
-
-    harness.runtime.healthy = false;
-    const reused = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+  const connectWithGrant = async (harness: Harness) =>
+    fetch(`${harness.baseUrl}/v1/app-sessions`, {
       method: "POST",
       headers: browserHeaders({
         Authorization: `Bearer ${harness.grant}`,
@@ -1205,8 +1199,62 @@ describe("Agent Connect control extensions", () => {
       body: JSON.stringify({ appId: "test-app", tools: [tool()] }),
     });
 
-    expect(reused.status).toBe(201);
-    expect(harness.runtime.createdSessions).toBe(1);
+  it("never adopts an existing session for an application grant", async () => {
+    const harness = await start([[call("provider_a")]]);
+    expect(
+      await post(harness, { model: MODEL, input: "start work" }),
+    ).toMatchObject({ status: 200 });
+
+    // The grant carries no session identity, so this cannot mean "the one with
+    // the live chain" — it means "a new one", and the live chain's provider
+    // session is left exactly as it was.
+    const connected = await connectWithGrant(harness);
+    expect(connected.status).toBe(201);
+    const body = (await connected.json()) as { sessionId: string };
+    expect(body.sessionId).not.toBe(harness.sessionId);
+    expect(harness.runtime.createdSessions).toBe(2);
+  });
+
+  it("gives two simultaneous grant connects distinct sessions", async () => {
+    const harness = await start([[call("provider_a")]]);
+    const [left, right] = await Promise.all([
+      connectWithGrant(harness),
+      connectWithGrant(harness),
+    ]);
+    expect(left.status).toBe(201);
+    expect(right.status).toBe(201);
+    const first = (await left.json()) as { sessionId: string };
+    const second = (await right.json()) as { sessionId: string };
+    // Coalescing concurrent creates is what used to make two tabs share one
+    // conversation; racing them must produce two of everything.
+    expect(first.sessionId).not.toBe(second.sessionId);
+    expect(harness.runtime.createdSessions).toBe(3);
+  });
+
+  it("refreshes only the session its capability names", async () => {
+    const harness = await start([[call("provider_a")]]);
+    const other = await connectWithGrant(harness);
+    const sibling = (await other.json()) as {
+      accessToken: string;
+      sessionId: string;
+    };
+    expect(harness.runtime.createdSessions).toBe(2);
+
+    const refreshed = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.capability}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()] }),
+    });
+    expect(refreshed.status).toBe(201);
+    const body = (await refreshed.json()) as { sessionId: string };
+    expect(body.sessionId).toBe(harness.sessionId);
+    expect(body.sessionId).not.toBe(sibling.sessionId);
+    // A refresh is not a provisioning: the healthy session it names is
+    // returned as it stands, and the sibling is untouched.
+    expect(harness.runtime.createdSessions).toBe(2);
   });
 
   it("refuses a chain that belongs to a different capability", async () => {
