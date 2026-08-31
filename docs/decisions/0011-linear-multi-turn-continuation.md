@@ -32,16 +32,19 @@ under the existing grant; capability refresh itself never resets a session.
 Fresh creation is independent of earlier sessions, including sessions with
 live or parked work. Distinct application sessions may therefore run in
 parallel while the one-active-chain rule remains local to each session. The
-gateway bounds this to eight unexpired sessions provisioned per grant,
-application, and tool snapshot in one process. Each session shares the
-capability lease (one hour by default); issuing or refreshing its capability
-renews that lease. On expiry the gateway durably retires the opaque session and
-best-effort cancels a retained provider run.
+gateway bounds this to eight live sessions provisioned per grant, application,
+and tool snapshot in one process, and refuses the next with a retryable `429`.
+Session lifetime slides on activity and is independent of the capability TTL:
+separate idle, parked-call, and stalled-turn clocks govern it. On expiry the
+gateway durably retires the opaque session, cancels a retained provider run,
+and releases the provider session and its workspace.
 
 The provider-neutral browser SDK represents the predecessor as an opaque
 continuation checkpoint. It exposes explicit `streamContinuation()` and
-`continueTask()` methods. Starting a turn invalidates the prior usable
-checkpoint, and only successful completion publishes the next one.
+`continueTask()` methods. A turn invalidates the prior checkpoint once it is
+admitted, not when it is attempted — a request the gateway refuses before
+admitting anything leaves the previous head continuable — and only successful
+completion publishes the next one.
 The SDK freezes the application tool snapshot once per session.
 
 Recovery of a chain parked on an unresolved application function call remains

@@ -70,6 +70,16 @@ export interface PendingCallView {
   readonly responseId: string;
 }
 
+/**
+ * One in-flight admission. It carries its own start time so a wedged admission
+ * ages like any other running turn, and an `ending` flag so a session that is
+ * being retired can stop work that has been authorized but not yet begun.
+ */
+interface Admission {
+  readonly since: number;
+  ending: boolean;
+}
+
 interface ActiveChain {
   readonly run: BackendRun;
   readonly events: AsyncIterator<BackendEvent>;
@@ -99,7 +109,7 @@ export class ResponseEngine {
   private readonly now: () => number;
   private readonly createId: () => string;
   private readonly active = new Map<string, ActiveChain>();
-  private readonly admittingSessions = new Set<string>();
+  private readonly admittingSessions = new Map<string, Admission>();
 
   constructor(options: ResponseEngineOptions) {
     this.store = options.store;
@@ -143,8 +153,9 @@ export class ResponseEngine {
     prompt: string,
     previousResponseId: string | null,
   ): Promise<AsyncGenerator<ResponseStreamEvent>> {
-    const releaseAdmission = this.claimSessionAdmission(session.sessionId);
+    const admission = this.claimSessionAdmission(session.sessionId);
     try {
+      await this.requireSessionActive(session.sessionId, admission);
       await this.requireNoLiveChain(session.sessionId);
       const chains = (await this.store.listChains()).filter(
         (chain) => chain.appSessionId === session.sessionId,
@@ -186,6 +197,11 @@ export class ResponseEngine {
         latestResponseId: null,
         terminalError: null,
       };
+      // Re-checked immediately before the chain exists. Admission was
+      // authorized, but retirement can commit inside any of the awaits above,
+      // and a chain written after its session's tombstone is work that nobody
+      // can stop and that restart reconstruction will refuse to own.
+      await this.requireSessionActive(session.sessionId, admission);
       await this.store.putChain(chain);
 
       let run: BackendRun;
@@ -210,6 +226,18 @@ export class ResponseEngine {
           `the selected user-owned runtime could not be reached: ${describe(cause)}`,
         );
       }
+      // `backend.start` is the longest await in admission, and expiry cannot
+      // see this run: it is not registered yet. A run that comes back after
+      // retirement is closed here rather than registered, which is the only
+      // point at which it is reachable at all.
+      if (await this.sessionEnded(session.sessionId, admission)) {
+        await run.close().catch(() => {});
+        await this.markSessionEnded(chain);
+        throw new ResponseApiError(
+          "response_cancelled",
+          "the application session was retired while this response was starting",
+        );
+      }
       const state: ActiveChain = {
         run,
         events: run.events(),
@@ -226,8 +254,48 @@ export class ResponseEngine {
           : { kind: "follow_up", previousResponseId },
       );
     } finally {
-      releaseAdmission();
+      this.releaseAdmission(session.sessionId, admission);
     }
+  }
+
+  /**
+   * Whether this session has been retired since admission began. The durable
+   * tombstone is the authority — the gateway writes it before it drops the
+   * session, so it is committed before any teardown that follows — and the
+   * in-process flag is the fast path for a retirement still in progress.
+   */
+  private async sessionEnded(
+    appSessionId: string,
+    admission: Admission,
+  ): Promise<boolean> {
+    return (
+      admission.ending || (await this.store.isSessionRetired(appSessionId))
+    );
+  }
+
+  private async requireSessionActive(
+    appSessionId: string,
+    admission: Admission,
+  ): Promise<void> {
+    if (!(await this.sessionEnded(appSessionId, admission))) return;
+    throw new ResponseApiError(
+      "response_cancelled",
+      "the application session was retired while this response was starting",
+    );
+  }
+
+  private async markSessionEnded(chain: ChainRecord): Promise<void> {
+    const stored = await this.store.getChain(chain.chainId);
+    if (!stored || stored.status === "terminal") return;
+    await this.store.putChain({
+      ...stored,
+      status: "terminal",
+      terminalError: {
+        code: "response_cancelled",
+        message: SESSION_END_MESSAGE.expired,
+      },
+      updatedAt: this.seconds(),
+    });
   }
 
   private async requireCompletedSessionHead(
@@ -297,21 +365,36 @@ export class ResponseEngine {
     }
   }
 
-  private claimSessionAdmission(appSessionId: string): () => void {
-    const release = this.tryClaimSession(appSessionId);
-    if (!release) {
+  private claimSessionAdmission(appSessionId: string): Admission {
+    const admission = this.tryClaimAdmission(appSessionId);
+    if (!admission) {
       throw new ResponseApiError(
         "response_busy",
         "this application session is already starting another response chain",
       );
     }
-    return release;
+    return admission;
+  }
+
+  private releaseAdmission(appSessionId: string, admission: Admission): void {
+    // Only the owner releases its own claim, so a claim taken after this one
+    // is never dropped by a stale release.
+    if (this.admittingSessions.get(appSessionId) === admission) {
+      this.admittingSessions.delete(appSessionId);
+    }
+  }
+
+  private tryClaimAdmission(appSessionId: string): Admission | undefined {
+    if (this.admittingSessions.has(appSessionId)) return undefined;
+    const admission: Admission = { since: this.seconds(), ending: false };
+    this.admittingSessions.set(appSessionId, admission);
+    return admission;
   }
 
   private tryClaimSession(appSessionId: string): (() => void) | undefined {
-    if (this.admittingSessions.has(appSessionId)) return undefined;
-    this.admittingSessions.add(appSessionId);
-    return () => this.admittingSessions.delete(appSessionId);
+    const admission = this.tryClaimAdmission(appSessionId);
+    if (!admission) return undefined;
+    return () => this.releaseAdmission(appSessionId, admission);
   }
 
   /**
@@ -580,6 +663,12 @@ export class ResponseEngine {
       yield* writer.begin();
       yield* writer.failed(error, { type: "api_error", param: null });
       state.busy = false;
+      // Whatever terminalized this chain could not close the run: expiry and
+      // cancellation both look for a registered run, and this one was
+      // registered after they had already scanned. Releasing it here is the
+      // only remaining opportunity, and skipping it leaks the run and its
+      // event pump for the life of the process.
+      await this.retireRun(chainId, state);
       return;
     }
     await persist("in_progress");
@@ -815,10 +904,13 @@ export class ResponseEngine {
     appSessionId: string,
     reason: SessionEndReason = "expired",
   ): Promise<void> {
-    // Deliberately does not touch `admittingSessions`. A claim is owned by the
-    // operation that took it and released in its own `finally`; deleting it
-    // here would let a second admission run concurrently with the first. The
-    // gateway has already dropped the session, so nothing new can authorize.
+    // The claim itself is never deleted here: it is owned by the operation
+    // that took it and released in that operation's own `finally`, and
+    // dropping it would let a second admission run concurrently with the
+    // first. Flagging it is what an admission still inside its awaits needs —
+    // its chain and its run may not exist yet, so the scan below cannot see it.
+    const admission = this.admittingSessions.get(appSessionId);
+    if (admission) admission.ending = true;
     for (const chain of await this.store.listChains()) {
       if (chain.appSessionId !== appSessionId || chain.status === "terminal") {
         continue;
@@ -846,8 +938,12 @@ export class ResponseEngine {
   async sessionLifecycle(appSessionId: string): Promise<SessionLifecycle> {
     // An admission in flight is a session actively starting work, whose chain
     // record may not exist yet.
-    if (this.admittingSessions.has(appSessionId)) {
-      return { kind: "running", since: this.seconds() };
+    const admission = this.admittingSessions.get(appSessionId);
+    if (admission) {
+      // The admission's own start time, not the current one. Re-dating it on
+      // every poll would hold `now - since` at zero and make the stalled-turn
+      // cap unable to fire for an admission wedged opening a provider stream.
+      return { kind: "running", since: admission.since };
     }
     for (const chain of await this.store.listChains()) {
       if (chain.appSessionId !== appSessionId) continue;
@@ -1022,6 +1118,12 @@ export class ResponseEngine {
       this.active.delete(chainId);
       await state?.run.close().catch(() => {});
     }
+  }
+
+  /** Deregisters and closes a run, without touching the chain record. */
+  private async retireRun(chainId: string, state: ActiveChain): Promise<void> {
+    if (this.active.get(chainId) === state) this.active.delete(chainId);
+    await state.run.close().catch(() => {});
   }
 
   private async markInterrupted(chain: ChainRecord): Promise<void> {
