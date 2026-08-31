@@ -45,15 +45,15 @@ authorization response.
 The mistake to avoid is manufacturing an Android-flavoured `Origin`. Native
 platforms deliberately separate the concerns the web bundles:
 
-| Question | Android mechanism |
-| --- | --- |
-| What application product is this? | Public OAuth `client_id`, package name, or publisher metadata URL |
-| Who publishes it? | Domain ownership, store listing, signed metadata, attestation |
-| Which installed copy is this? | Per-installation asymmetric key |
-| Where does the authorization response go? | Verified Android App Link |
-| Who started this transaction? | PKCE, `state`, `nonce`, or a pairing code |
-| Who is making later calls? | Key-bound capability, or DPoP |
-| Is this the official binary? | Optional Play Integrity or another attestation |
+| Question                                  | Android mechanism                                                 |
+| ----------------------------------------- | ----------------------------------------------------------------- |
+| What application product is this?         | Public OAuth `client_id`, package name, or publisher metadata URL |
+| Who publishes it?                         | Domain ownership, store listing, signed metadata, attestation     |
+| Which installed copy is this?             | Per-installation asymmetric key                                   |
+| Where does the authorization response go? | Verified Android App Link                                         |
+| Who started this transaction?             | PKCE, `state`, `nonce`, or a pairing code                         |
+| Who is making later calls?                | Key-bound capability, or DPoP                                     |
+| Is this the official binary?              | Optional Play Integrity or another attestation                    |
 
 RFC 8252 treats hybrid applications as native clients regardless of the WebView
 UI: public client, no bundled secret, PKCE required, system browser or Custom
@@ -82,12 +82,12 @@ authorization happens through device-code pairing, and no callback is needed.
 
 ## Candidate mechanisms
 
-| Approach | Protocol change | Domain required | Serves forks | Publisher identity |
-| --- | --- | --- | --- | --- |
-| Hosted connect page | none | yes | poor | domain-level |
-| Pre-registered native client | moderate | usually | poor | strong if curated |
-| Client-metadata URL + App Link | moderate | yes | yes, per publisher | good |
-| Device-code pairing | new endpoint | no | excellent | optional |
+| Approach                       | Protocol change | Domain required | Serves forks       | Publisher identity |
+| ------------------------------ | --------------- | --------------- | ------------------ | ------------------ |
+| Hosted connect page            | none            | yes             | poor               | domain-level       |
+| Pre-registered native client   | moderate        | usually         | poor               | strong if curated  |
+| Client-metadata URL + App Link | moderate        | yes             | yes, per publisher | good               |
+| Device-code pairing            | new endpoint    | no              | excellent          | optional           |
 
 **Hosted connect page.** The app opens `https://connect.<domain>` in a Custom
 Tab; that page is a real browser at a real origin, so authorization proceeds
@@ -105,7 +105,7 @@ statement issuers. Reasonable for an enterprise gateway; absurd for a user
 connecting their own reader to their own agent.
 
 **Client-ID metadata document.** An emerging OAuth draft
-(`draft-parecki-oauth-client-id-metadata-document`) where the `client_id` *is*
+(`draft-parecki-oauth-client-id-metadata-document`) where the `client_id` _is_
 an HTTPS URL the authorization server fetches for name, logo, redirect URIs, and
 client type. It recovers the useful half of an origin — a publisher controlling
 an HTTPS namespace — without requiring the application to execute there, and it
@@ -116,7 +116,7 @@ is a deliberate experiment. Best long-term fit for a published build.
 key, sends its public key plus self-reported metadata and the tool snapshot, and
 receives a high-entropy device code plus a short user code. It shows the short
 code and opens the gateway's consent page. The gateway displays the application
-name, verified publisher information *or an explicit unverified label*, the
+name, verified publisher information _or an explicit unverified label_, the
 device nickname and key fingerprint, the same short code, and the full tool
 snapshot. The user approves; the app polls, proving possession of its
 installation key; the grant is bound to that key and hash.
@@ -148,8 +148,8 @@ single-use code through its local terminal, an application submitted it with an
 app id and fixed tool snapshot, and the gateway bound the resulting capability
 to origin, app id, session id, and tool hash. It was superseded by ADR 0007 and
 the implementation removed on 2026-07-22. Its own security note is still the
-right framing: *"Pairing proves possession of a secret delivered through a
-user-controlled local channel; it does not prove a civil identity."*
+right framing: _"Pairing proves possession of a secret delivered through a
+user-controlled local channel; it does not prove a civil identity."_
 
 It was superseded because gateway-hosted OAuth is a better fit for **browser**
 applications, not because pairing was wrong. Reintroducing it for native clients
@@ -169,8 +169,8 @@ later application capabilities to both gateway and client keys.
 
 **The consent page must keep saying something true.** The origin profile's
 strength is that "example.app is asking" is verified. A paired client
-self-reports its name, so the page must distinguish *verified publisher* from
-*self-reported*, visibly, and a paired client must never be able to render as a
+self-reports its name, so the page must distinguish _verified publisher_ from
+_self-reported_, visibly, and a paired client must never be able to render as a
 known origin. Namespace the display identity so a self-reported name cannot
 collide with or impersonate an enrolled web origin.
 
@@ -224,7 +224,7 @@ determines what a fork inherits:
 
 - `identifier` is `com.bilingify.readest`.
 - `plugins.deep-link.mobile` declares `{scheme: ["https"], host:
-  "web.readest.com", appLink: true}`, and the generated manifest carries
+"web.readest.com", appLink: true}`, and the generated manifest carries
   `android:autoVerify="true"` for that host.
 - Three custom schemes also exist (`readest`, `readest-onedrive`, and a
   reverse-DNS Google client id), used by the existing OAuth path.
@@ -234,7 +234,7 @@ verified domain-to-signed-package association. What it does not have is any
 client-metadata document, which is unsurprising — Agent Connect published
 `0.0.1` on 2026-08-28.
 
-A fork inherits none of it. Android matches the *signing certificate*, not the
+A fork inherits none of it. Android matches the _signing certificate_, not the
 package name, so a fork-signed build is not the application associated with
 `web.readest.com`; that is the mechanism working correctly. A fork wanting
 `native_published` needs its own package id, release signing certificate,
@@ -256,7 +256,7 @@ gateway.
    and ADR 0005's transport profiles.
 4. **`native_published`** with a client-metadata document and App Links, when
    there is a published build to justify it. For an upstream Readest
-   integration this becomes the *normal* path and pairing the fallback.
+   integration this becomes the _normal_ path and pairing the fallback.
 5. **Attestation** optional, never foundational.
 
 ## Resolved: how the five open questions were answered
@@ -267,7 +267,7 @@ negotiable:
 1. The application verifies the runtime card and establishes the expected
    transport principal **before** submitting any pairing material. Pairing
    authorizes an application installation; it must never recreate ADR 0004's
-   gap, where the application knew only that *something* answered at the
+   gap, where the application knew only that _something_ answered at the
    configured endpoint.
 2. The gateway renders verified and self-reported identities in **visibly
    different namespaces**.
@@ -285,7 +285,10 @@ at whatever answers it:
 ```json
 {
   "issuer": "https://gateway.example/authorization",
-  "agent_connect_client_profiles_supported": ["browser_origin", "native_paired"],
+  "agent_connect_client_profiles_supported": [
+    "browser_origin",
+    "native_paired"
+  ],
   "authorization_endpoint": "https://gateway.example/authorize",
   "native_pairing_endpoint": "https://gateway.example/native/pair"
 }
@@ -302,9 +305,9 @@ not a starting premise.
 Clients negotiate:
 
 ```ts
-if (gateway.supports('native_published') && app.hasPublishedIdentity) {
+if (gateway.supports("native_published") && app.hasPublishedIdentity) {
   authorizeAsPublishedClient();
-} else if (gateway.supports('native_paired')) {
+} else if (gateway.supports("native_paired")) {
   pairInstallation();
 } else {
   showUnsupportedGateway();
@@ -315,22 +318,30 @@ if (gateway.supports('native_published') && app.hasPublishedIdentity) {
 
 A native application cannot present a meaningful browser origin, so asking the
 user to permit originless use is a question with one correct answer. The consent
-page states it as fact: *"This is a paired native application. It will connect
-directly from this device rather than through a browser origin."*
+page states it as fact: _"This is a paired native application. It will connect
+directly from this device rather than through a browser origin."_
 
 Go further than auto-setting the existing boolean: make the **profile
 authoritative** in the policy engine.
 
 ```ts
 type AuthorizedClient =
-  | { profile: 'browser_origin';   origin: string; allowOriginlessRuntime: boolean }
-  | { profile: 'native_paired';    instanceKeyThumbprint: string }
-  | { profile: 'native_published'; clientId: string; instanceKeyThumbprint: string };
+  | {
+      profile: "browser_origin";
+      origin: string;
+      allowOriginlessRuntime: boolean;
+    }
+  | { profile: "native_paired"; instanceKeyThumbprint: string }
+  | {
+      profile: "native_published";
+      clientId: string;
+      instanceKeyThumbprint: string;
+    };
 ```
 
 A free-floating `non_browser_clients` boolean permits nonsensical states because
-it conflates two different things: a browser-origin grant *exceptionally
-extended* to originless use, and a grant *intrinsically* originless. Persist
+it conflates two different things: a browser-origin grant _exceptionally
+extended_ to originless use, and a grant _intrinsically_ originless. Persist
 `{"client_profile": "native_paired", "non_browser_clients": true}` for
 compatibility if useful, but read the profile. The boolean becomes a legacy
 property of `browser_origin` grants.
@@ -358,10 +369,10 @@ Pairing fingerprint
 ```ts
 interface PairedInstallation {
   grantId: string;
-  instanceKeyThumbprint: string;   // security identity
+  instanceKeyThumbprint: string; // security identity
   transportPrincipal: string;
-  nickname: string;                // user-managed identity
-  platform?: string;               // self-reported, informational
+  nickname: string; // user-managed identity
+  platform?: string; // self-reported, informational
   deviceModel?: string;
   appVersionAtPairing?: string;
   pairedAt: string;
@@ -432,7 +443,7 @@ apparent" means in practice.
 Chrome gates requests from public pages to local-network addresses behind a
 Local Network Access permission prompt (Chrome 141; extended to WebSockets in
 147), and Chromium classifies Tailscale's `100.64.0.0/10` as local for this
-purpose. A hosted bridge would therefore need *all* of: the device on the right
+purpose. A hosted bridge would therefore need _all_ of: the device on the right
 tailnet, MagicDNS resolving, valid gateway HTTPS, the bridge itself a secure
 context, the user granting the local-network permission, gateway CORS admitting
 the bridge origin, preflight succeeding, SSE surviving, and the user's browser
@@ -473,12 +484,12 @@ the gateway from the browser at all. Only an HTTPS origin can.
 
 Address-space behaviour, serving pages from three address spaces on one host:
 
-| Initiator | Target | Result |
-| --- | --- | --- |
-| `http://100.101.140.78:9099` (tailnet) | `http://10.0.0.194:9098` | ordinary preflight, succeeded |
-| `http://100.101.140.78:9099` (tailnet) | `http://127.0.0.1:9098` | never reached the server, hung pending |
-| `http://127.0.0.1:9099` (loopback) | `http://10.0.0.194:9098` | never reached the server, hung pending |
-| `http://127.0.0.1:9099` (loopback) | `https://…ts.net:8443/v1/responses` | reached the gateway in 25 ms, refused by its own origin policy |
+| Initiator                              | Target                              | Result                                                         |
+| -------------------------------------- | ----------------------------------- | -------------------------------------------------------------- |
+| `http://100.101.140.78:9099` (tailnet) | `http://10.0.0.194:9098`            | ordinary preflight, succeeded                                  |
+| `http://100.101.140.78:9099` (tailnet) | `http://127.0.0.1:9098`             | never reached the server, hung pending                         |
+| `http://127.0.0.1:9099` (loopback)     | `http://10.0.0.194:9098`            | never reached the server, hung pending                         |
+| `http://127.0.0.1:9099` (loopback)     | `https://…ts.net:8443/v1/responses` | reached the gateway in 25 ms, refused by its own origin policy |
 
 The hangs are a permission gate rather than unreachability — the same browser
 loads pages from both addresses directly, and a policy-blocked request fails
@@ -486,7 +497,7 @@ fast; automation cannot answer a prompt, so the request waits.
 
 **This does not measure the scenario that matters**, and should not be read as
 if it did. None of these initiators is a public origin, which is the only
-initiator LNA gates. Row four is a cross-space request that was *not* gated,
+initiator LNA gates. Row four is a cross-space request that was _not_ gated,
 which is consistent with the initiator being loopback rather than public. Rows
 two and three remain unexplained by that model and may be automation artefacts.
 This host cannot serve a page from a public IP: Funnel needs root here (`serve
@@ -518,13 +529,13 @@ The three profiles describe **how authorization happened**. They do not describe
 impersonation the consent page must prevent.
 
 ```ts
-type ClientProfile = 'browser_origin' | 'native_paired' | 'native_published';
+type ClientProfile = "browser_origin" | "native_paired" | "native_published";
 
 type PublisherVerification =
-  | { kind: 'origin';        origin: string }
-  | { kind: 'https_metadata'; clientId: string }
-  | { kind: 'attested';       issuer: string; subject: string }
-  | { kind: 'none' };
+  | { kind: "origin"; origin: string }
+  | { kind: "https_metadata"; clientId: string }
+  | { kind: "attested"; issuer: string; subject: string }
+  | { kind: "none" };
 ```
 
 A paired client may carry verified publisher metadata; a local fork carries
@@ -552,11 +563,11 @@ data.
 **A metadata URL alone proves nothing about the running binary.** Fetching
 `https://web.readest.com/.well-known/agent-connect-client.json` proves only that
 whoever controls that domain published that document — a malicious fork can
-submit the same URL. Binding the *running application* to that publisher needs
+submit the same URL. Binding the _running application_ to that publisher needs
 the verified App Link flow, a platform attestation bound to the installation
 key, or a publisher-issued client attestation.
 
-Note what the metadata document is *not*: it is a server-side HTTPS fetch by the
+Note what the metadata document is _not_: it is a server-side HTTPS fetch by the
 gateway of a static public document. No hosted JavaScript talks to the gateway,
 no public bridge handles authorization, and no browser fetch crosses into the
 tailnet. That is why discarding the bridge does not discard the metadata
@@ -564,13 +575,13 @@ document.
 
 ## Product matrix
 
-| Application | Preferred profile | Fallback |
-| --- | --- | --- |
-| Readest web | `browser_origin` | none |
-| Official Readest Android/iOS | `native_published` | `native_paired` |
-| A signed fork with its own domain | `native_published` | `native_paired` |
-| Local or debug fork | `native_paired` | none |
-| CLI or desktop harness | `native_paired` | a published profile later |
+| Application                       | Preferred profile  | Fallback                  |
+| --------------------------------- | ------------------ | ------------------------- |
+| Readest web                       | `browser_origin`   | none                      |
+| Official Readest Android/iOS      | `native_published` | `native_paired`           |
+| A signed fork with its own domain | `native_published` | `native_paired`           |
+| Local or debug fork               | `native_paired`    | none                      |
+| CLI or desktop harness            | `native_paired`    | a published profile later |
 
 For an upstream Readest integration, `native_published` is the normal path and
 pairing is the fallback — the official application already owns the hard half
@@ -592,7 +603,7 @@ A malicious fork can claim the same client id but cannot receive the callback:
 Android delivers it to the officially signed application, and PKCE stops either
 side redeeming the other's code.
 
-Pairing keeps its friction *on purpose* — with no publisher-established
+Pairing keeps its friction _on purpose_ — with no publisher-established
 callback, the user is manually establishing the trust relationship the platform
 cannot.
 
