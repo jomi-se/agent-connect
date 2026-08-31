@@ -253,10 +253,14 @@ A completed task publishes an opaque continuation checkpoint inside the SDK.
 conversation. A failed, cancelled, interrupted, or lost-checkpoint session must
 not be guessed back into continuity. To start over without repeating consent,
 call `connectAgent` with `freshSession: true`; the gateway provisions a new
-opaque application and provider session under the existing grant.
-It refuses the reset while that session has live work and bounds repeated fresh
-sessions to eight per grant, application, and tool snapshot in one gateway
-process.
+opaque application and provider session under the existing grant. It neither
+waits for nor replaces an older session, so a page refresh is not blocked by an
+abandoned task. Independent sessions may run concurrently, with one active task
+inside each session. The gateway permits up to eight unexpired sessions per
+grant, application, and tool snapshot in one process. Their lease matches the
+capability TTL (one hour by default); expiry retires the opaque session and
+best-effort cancels retained work. This starts over—it does not recover browser
+state or replay a pending function call.
 
 ## Gateway requirements
 

@@ -67,6 +67,8 @@ interface ManagedSession {
   readonly tools: readonly GatewayToolDefinition[];
   readonly authorizationGrantId: string;
   providerSessionId: string;
+  expiresAt: number;
+  readonly provisionedInProcess: boolean;
 }
 
 const MAX_CREATE_BYTES = 64 * 1024;
@@ -119,10 +121,8 @@ export function createGateway(options: GatewayOptions) {
   const signingSecret = connectorAuth.capabilitySigningSecret;
   const managedSessions = new Map<string, ManagedSession>();
   const sessionsByKey = new Map<string, ManagedSession>();
-  const rehydratedSessionsByKey = new Map<string, ManagedSession[]>();
   const pendingSessions = new Map<string, Promise<ManagedSession>>();
   const pendingRepairs = new Map<string, Promise<ManagedSession>>();
-  const sessionCountsByKey = new Map<string, number>();
   const responseStore =
     options.responseStore ??
     new FileResponseStore(
@@ -147,9 +147,11 @@ export function createGateway(options: GatewayOptions) {
    * chain is recoverable, complete, or terminally interrupted rather than
    * unknown.
    *
-   * Provider sessions are deliberately not revived for reuse: `sessionsByKey`
-   * stays empty, so a new application session provisions a fresh provider
-   * session instead of adopting one whose run is gone.
+   * Provider sessions are deliberately not revived for implicit reuse:
+   * `sessionsByKey` stays empty, so a new application session provisions a
+   * fresh provider session instead of adopting one whose run is gone. The
+   * signed capability remains the authorization oracle for reconstructed
+   * sessions.
    */
   const responseSessionsReady = (async () => {
     const chains = [...(await responseStore.listChains())].sort(
@@ -171,22 +173,48 @@ export function createGateway(options: GatewayOptions) {
         tools: chain.tools,
         authorizationGrantId: chain.authorizationGrantId,
         providerSessionId: chain.providerSessionId,
+        // The signed capability is the authorization oracle after restart.
+        // Its latest issue time is deliberately not reconstructed from a chain
+        // timestamp, which could predate a later capability refresh.
+        expiresAt: Math.floor(now() / 1000) + capabilityTtl,
+        provisionedInProcess: false,
       };
       managedSessions.set(chain.appSessionId, session);
-      const key = sessionKey(
-        session.origin,
-        session.appId,
-        session.toolHash,
-        session.authorizationGrantId,
-      );
-      const matches = rehydratedSessionsByKey.get(key) ?? [];
-      matches.push(session);
-      rehydratedSessionsByKey.set(key, matches);
     }
   })();
 
-  return createServer(async (request, response) => {
+  let reaping: Promise<void> | undefined;
+  const reapExpiredSessions = (): Promise<void> => {
+    if (reaping) return reaping;
+    reaping = (async () => {
+      await responseSessionsReady;
+      const timestamp = Math.floor(now() / 1000);
+      for (const session of [...managedSessions.values()]) {
+        if (session.expiresAt > timestamp) continue;
+        // Persist retirement before removing in-memory authority. Otherwise a
+        // restart could reconstruct the expired opaque session from its chains.
+        await responseStore.retireSession(session.id);
+        managedSessions.delete(session.id);
+        const key = sessionKey(
+          session.origin,
+          session.appId,
+          session.toolHash,
+          session.authorizationGrantId,
+        );
+        if (sessionsByKey.get(key)?.id === session.id) {
+          sessionsByKey.delete(key);
+        }
+        await responseEngine.expireSession(session.id);
+      }
+    })().finally(() => {
+      reaping = undefined;
+    });
+    return reaping;
+  };
+
+  const server = createServer(async (request, response) => {
     try {
+      await reapExpiredSessions();
       if (request.url === "/healthz" && request.method === "GET") {
         sendJson(response, 200, { ok: true });
         return;
@@ -421,6 +449,7 @@ export function createGateway(options: GatewayOptions) {
 
         const issuedAt = Math.floor(now() / 1000);
         const expiresAt = issuedAt + capabilityTtl;
+        session.expiresAt = expiresAt;
         const accessToken = issueCapability(
           {
             appId: session.appId,
@@ -485,6 +514,13 @@ export function createGateway(options: GatewayOptions) {
       }
     }
   });
+  const reapInterval = setInterval(
+    () => void reapExpiredSessions().catch(() => {}),
+    Math.min(capabilityTtl * 1000, 60_000),
+  );
+  reapInterval.unref();
+  server.on("close", () => clearInterval(reapInterval));
+  return server;
 
   /**
    * Resolves the application session behind a response request. `origin` is
@@ -559,59 +595,41 @@ export function createGateway(options: GatewayOptions) {
           )) ?? existing
         );
       }
-      const rehydrated = rehydratedSessionsByKey.get(key) ?? [];
-      const predecessors = existing
-        ? [
-            existing,
-            ...rehydrated.filter((session) => session.id !== existing.id),
-          ]
-        : rehydrated;
-      const count = sessionCountsByKey.get(key) ?? (existing ? 1 : 0);
+      const count = [...managedSessions.values()].filter(
+        (session) =>
+          session.provisionedInProcess &&
+          sessionKey(
+            session.origin,
+            session.appId,
+            session.toolHash,
+            session.authorizationGrantId,
+          ) === key,
+      ).length;
       if (count >= MAX_SESSIONS_PER_GRANT_APP) {
         throw new InvalidRequestError(
-          `at most ${MAX_SESSIONS_PER_GRANT_APP} sessions may be provisioned for one grant, application, and tool snapshot`,
+          `at most ${MAX_SESSIONS_PER_GRANT_APP} unexpired sessions may exist for one grant, application, and tool snapshot`,
         );
       }
-      const provision = async (): Promise<ManagedSession> => {
-        const providerSessionId = await runtime.createSession({
-          appId: input.appId,
-          origin,
-          toolHash: input.toolHash,
-          approvedToolNames: input.tools.map((tool) => tool.name),
-        });
-        const created: ManagedSession = {
-          id: `acs_${randomUUID()}`,
-          appId: input.appId,
-          origin,
-          toolHash: input.toolHash,
-          approvedToolNames: input.tools.map((tool) => tool.name),
-          tools: input.tools,
-          authorizationGrantId,
-          providerSessionId,
-        };
-        for (const predecessor of predecessors) {
-          // The tombstone must be durable before the replacement capability can
-          // be exposed. Otherwise a restart could reconstruct the old opaque
-          // session from its historical response chains.
-          await responseStore.retireSession(predecessor.id);
-          managedSessions.delete(predecessor.id);
-        }
-        rehydratedSessionsByKey.delete(key);
-        managedSessions.set(created.id, created);
-        sessionsByKey.set(key, created);
-        sessionCountsByKey.set(key, count + 1);
-        return created;
+      const providerSessionId = await runtime.createSession({
+        appId: input.appId,
+        origin,
+        toolHash: input.toolHash,
+        approvedToolNames: input.tools.map((tool) => tool.name),
+      });
+      const created: ManagedSession = {
+        id: `acs_${randomUUID()}`,
+        appId: input.appId,
+        origin,
+        toolHash: input.toolHash,
+        approvedToolNames: input.tools.map((tool) => tool.name),
+        tools: input.tools,
+        authorizationGrantId,
+        providerSessionId,
+        expiresAt: Math.floor(now() / 1000) + capabilityTtl,
+        provisionedInProcess: true,
       };
-      if (predecessors.length === 0) return provision();
-      const created = await responseEngine.runIfSessionsIdle(
-        predecessors.map((session) => session.id),
-        provision,
-      );
-      if (!created) {
-        throw new InvalidRequestError(
-          "an active task must finish or be cancelled before starting a fresh session",
-        );
-      }
+      managedSessions.set(created.id, created);
+      sessionsByKey.set(key, created);
       return created;
     })();
     pendingSessions.set(key, operation);

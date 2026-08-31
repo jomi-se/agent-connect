@@ -1,0 +1,100 @@
+# Parallel expiring application sessions MVP
+
+Status: implemented, validated, and committed on 2026-08-31
+
+## User-visible goal
+
+A browser losing its in-memory Agent Connect state must not strand the user
+behind the old task. A new page instance can create a new opaque application
+session under the existing grant even while an older session still has live or
+parked work. Different application sessions may run concurrently; the existing
+one-active-task rule remains local to each session.
+
+This MVP deliberately does not recover a lost browser task. Completed-turn
+continuation works only while the application retains its opaque continuation
+checkpoint. After refresh, starting a fresh session starts over. The abandoned
+session remains isolated by its own capability until its lease expires, then
+the gateway durably retires it and best-effort cancels any retained run.
+
+## Accepted boundaries
+
+- `freshSession: true` always provisions an independent application and
+  provider session; it does not replace or wait for an earlier session.
+- One response chain may be live within each application session.
+- Up to eight unexpired sessions may exist for one grant, application, and
+  approved tool snapshot.
+- The application-session lease uses the existing capability TTL (one hour by
+  default) and is renewed when the session capability is issued or refreshed.
+- Expiry removes in-memory authority, writes the existing durable retirement
+  tombstone, and asks the response engine to cancel retained runs.
+- No automatic pending-call redelivery, DOM-state reconstruction, cross-tab
+  ownership protocol, or generic task recovery is part of this MVP.
+
+## Validation contract
+
+### VAL-PARALLEL-001: a dangling session does not block a fresh session
+
+Surface: HTTP API.
+Needs: authorized application grant and a first session parked on an
+application function call.
+Behavior: creating a fresh session succeeds, receives a distinct opaque and
+provider session, and can start work while the first session remains isolated.
+Evidence: route integration test plus real-Omnigent integration coverage where
+provider-dependent behavior is involved.
+
+### VAL-PARALLEL-002: concurrency remains isolated per session
+
+Surface: HTTP API.
+Needs: two application sessions under the same grant and tool snapshot.
+Behavior: each session admits its own chain, while a second unlinked chain in
+either individual session is still rejected.
+Evidence: route integration test observing two backend runs with distinct
+provider session IDs and the existing per-session busy regression tests.
+
+### VAL-PARALLEL-003: expired sessions stop consuming authority and capacity
+
+Surface: HTTP API and durable gateway state.
+Needs: controllable clock and short configured capability TTL.
+Behavior: after the lease expires, the old capability is rejected, the session
+is durably retired, a retained run is cancelled, and a new fresh session can use
+the released capacity.
+Evidence: route integration test across expiry and gateway reconstruction.
+
+### VAL-PARALLEL-004: browser refresh semantics are honest
+
+Surface: browser demo and public integration documentation.
+Needs: Canvas configured to request a fresh session.
+Behavior: a new page instance starts a new conversation without claiming to
+recover the lost task; completed-turn continuation within the current page
+still works.
+Evidence: browser flow and source-of-truth documentation review.
+
+## Implementation state
+
+- [x] Located the destructive replacement and live-task refusal in
+      `packages/gateway/src/gateway.ts`.
+- [x] Changed the in-progress implementation so fresh provisioning no longer
+      retires or waits for predecessors.
+- [x] Added a session lease to managed sessions and a response-engine expiry
+      operation.
+- [x] Stabilized expiry/reaping behavior around the signed capability lease,
+      durable tombstones, process-local capacity, and restart reconstruction.
+- [x] Replaced destructive-replacement tests with parallel-session and expiry
+      tests.
+- [x] Updated ADR 0011, current scope, integration guide, and SDK wording.
+- [x] Focused route tests and gateway typecheck pass.
+- [x] A focused pinned real-Omnigent test proved two independent sessions can
+      enter two distinct provider sessions concurrently.
+- [x] Gateway and web SDK focused suites pass.
+- [x] The complete pinned real-Omnigent and process-crash gate passes through
+      `npm run verify:full`.
+- [x] The complete Canvas Playwright suite passes, including a page-refresh
+      regression that starts a second independent session under the saved grant.
+- [x] `npm run analyze`, formatting, diff checks, and final source review pass.
+- [x] Commit the completed change.
+
+## Resume notes
+
+No service restart or deployment was performed as part of this change. The
+currently running private gateway must be rebuilt/restarted before a manual
+phone demo exercises this code.

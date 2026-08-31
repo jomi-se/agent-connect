@@ -63,13 +63,16 @@ honestly mean “fresh conversation” when the gateway would send it into the s
 durable Omnigent/ACP conversation. Starting over therefore requires a new
 application session and provider-session mapping. `connectAgent({ freshSession:
 true })` provisions both under the existing application grant; reauthorization
-is not required. It refuses to replace a session with live work and allows at
-most eight provisioned sessions for one grant, application, and tool snapshot
-in a gateway process. The replaced opaque session is retired with a durable
-tombstone so its capability cannot be reconstructed after restart;
-provider-side workspace expiry and garbage collection remain separate operator
-work. Capability refresh remains reuse-only and cannot accidentally reset a
-conversation.
+is not required. It does not replace or wait for earlier sessions: a refreshed
+page can start over while an abandoned session remains parked, and independent
+sessions can run concurrently. The one-live-chain invariant remains local to
+each opaque session. At most eight unexpired sessions are provisioned for one
+grant, application, and tool snapshot in a gateway process. The session lease
+uses the capability TTL (one hour by default) and is renewed when its capability
+is issued or refreshed. Expiry durably retires the opaque session and
+best-effort cancels retained work. Provider-side workspace deletion remains
+separate operator work. Capability refresh remains reuse-only and cannot
+accidentally reset a conversation.
 
 After a failed, cancelled, or interrupted turn, the application must also start
 a new application session. The gateway cannot know which partial provider
@@ -106,26 +109,24 @@ completes successfully, because an admitted failed or cancelled turn has still
 consumed the former head. Calling continuation without a current completed
 checkpoint fails locally.
 
-Persisting a checkpoint across page reloads is deliberately deferred. The
-gateway representation is durable, but a reload also has to preserve or renew
-the opaque application session capability without replacing its provider
-session. That deserves its own end-to-end contract. A client that did not
-persist the checkpoint must request a fresh session after reload rather than
-reusing a conversation it can no longer continue.
+Persisting a checkpoint across page reloads is deliberately deferred. A client
+that did not persist the checkpoint requests a fresh independent session rather
+than reusing a conversation it can no longer continue. The older session does
+not block it and expires automatically; this is abandonment, not recovery.
 
 ## Scope inventory
 
-| Surface                | Change                                                                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Open Responses profile | Distinguish text follow-up input from function-call output continuation when `previous_response_id` is present.                      |
-| Response engine        | Admit a new linked chain on the same provider session; enforce predecessor, terminal-success, head, and concurrency invariants.      |
-| Response store         | Persist optional predecessor metadata and a per-session turn ordinal; load older version-1 files compatibly.                         |
-| Provider-neutral SDK   | Add an opaque continuation checkpoint and explicit continuation methods.                                                             |
-| Session provisioning   | Add an explicit fresh-session option under an existing grant for reset, failure recovery, and reload without a persisted checkpoint. |
-| Responses provider     | Send checkpoint as `previous_response_id`; publish the final successful response ID as the next checkpoint.                          |
-| Canvas                 | Exercise a visible correction turn without reconnecting or reauthorizing.                                                            |
-| Real-provider fixture  | Prove one ACP session receives two completed prompts and retains first-turn information.                                             |
-| Documentation          | Correct the former fresh-conversation claim and describe the bounded behavior.                                                       |
+| Surface                | Change                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Open Responses profile | Distinguish text follow-up input from function-call output continuation when `previous_response_id` is present.                 |
+| Response engine        | Admit a new linked chain on the same provider session; enforce predecessor, terminal-success, head, and concurrency invariants. |
+| Response store         | Persist optional predecessor metadata and a per-session turn ordinal; load older version-1 files compatibly.                    |
+| Provider-neutral SDK   | Add an opaque continuation checkpoint and explicit continuation methods.                                                        |
+| Session provisioning   | Add independent, expiring fresh sessions under an existing grant for reset and reload without a persisted checkpoint.           |
+| Responses provider     | Send checkpoint as `previous_response_id`; publish the final successful response ID as the next checkpoint.                     |
+| Canvas                 | Exercise a visible correction turn without reconnecting or reauthorizing.                                                       |
+| Real-provider fixture  | Prove one ACP session receives two completed prompts and retains first-turn information.                                        |
+| Documentation          | Correct the former fresh-conversation claim and describe the bounded behavior.                                                  |
 
 ## Validation contracts
 

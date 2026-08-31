@@ -86,6 +86,8 @@ async function start(
   options: {
     readonly nonBrowserClients?: boolean;
     readonly runs?: readonly (readonly FakeTurn[])[];
+    readonly capabilityTtlSeconds?: number;
+    readonly now?: () => number;
   } = {},
 ): Promise<Harness> {
   const directory = mkdtempSync(join(tmpdir(), "agent-connect-responses-"));
@@ -104,6 +106,10 @@ async function start(
     enrollmentPassphrase: "test enrollment phrase",
     runtime,
     responseBackend: backend,
+    ...(options.capabilityTtlSeconds
+      ? { capabilityTtlSeconds: options.capabilityTtlSeconds }
+      : {}),
+    ...(options.now ? { now: options.now } : {}),
   });
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -285,8 +291,8 @@ describe("POST /v1/responses", () => {
     expect(body.sessionId).not.toBe(harness.sessionId);
     expect(harness.runtime.createdSessions).toBe(2);
     expect(
-      await post(harness, { model: MODEL, input: "use the replaced session" }),
-    ).toMatchObject({ status: 401 });
+      await post(harness, { model: MODEL, input: "use the original session" }),
+    ).toMatchObject({ status: 200 });
     const freshTask = await post(
       harness,
       { model: MODEL, input: "use the fresh session" },
@@ -295,7 +301,7 @@ describe("POST /v1/responses", () => {
     expect(freshTask.status).toBe(200);
   });
 
-  it("keeps a replaced opaque session retired after gateway restart", async () => {
+  it("keeps independent opaque sessions authorized after gateway restart", async () => {
     const harness = await start([], {
       runs: [[[{ type: "completed" }]], [[{ type: "completed" }]]],
     });
@@ -328,7 +334,7 @@ describe("POST /v1/responses", () => {
         }),
       },
     );
-    expect(oldStatus.status).toBe(401);
+    expect(oldStatus.status).toBe(200);
 
     const freshStatus = await fetch(
       `${baseUrl}/v1/agent-connect/responses/${freshResponse.id}`,
@@ -341,7 +347,7 @@ describe("POST /v1/responses", () => {
     expect(freshStatus.status).toBe(200);
   });
 
-  it("retires a reconstructed session when fresh is requested after restart", async () => {
+  it("does not retire a reconstructed session when fresh is requested after restart", async () => {
     const harness = await start([[{ type: "completed" }]]);
     const oldResponse = (await (
       await post(harness, { model: MODEL, input: "before restart" })
@@ -367,7 +373,7 @@ describe("POST /v1/responses", () => {
         }),
       },
     );
-    expect(oldStatus.status).toBe(401);
+    expect(oldStatus.status).toBe(200);
 
     const refreshed = await fetch(`${baseUrl}/v1/app-sessions`, {
       method: "POST",
@@ -409,12 +415,14 @@ describe("POST /v1/responses", () => {
     expect(harness.runtime.createdSessions).toBe(8);
   });
 
-  it("does not replace a session while its task is live", async () => {
-    const harness = await start([[call("provider_a")]]);
+  it("starts an independent session while an older task is parked", async () => {
+    const harness = await start([], {
+      runs: [[[call("provider_a")]], [[{ type: "completed" }]]],
+    });
     expect(
       await post(harness, { model: MODEL, input: "start work" }),
     ).toMatchObject({ status: 200 });
-    const refused = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+    const created = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
       method: "POST",
       headers: browserHeaders({
         Authorization: `Bearer ${harness.grant}`,
@@ -422,8 +430,77 @@ describe("POST /v1/responses", () => {
       }),
       body: JSON.stringify({ appId: "test-app", tools: [tool()], fresh: true }),
     });
-    expect(refused.status).toBe(400);
-    expect(harness.runtime.createdSessions).toBe(1);
+    expect(created.status).toBe(201);
+    const fresh = (await created.json()) as {
+      sessionId: string;
+      accessToken: string;
+    };
+    expect(fresh.sessionId).not.toBe(harness.sessionId);
+    const freshTask = await post(
+      harness,
+      { model: MODEL, input: "independent work" },
+      { Authorization: `Bearer ${fresh.accessToken}` },
+    );
+    expect(freshTask.status).toBe(200);
+    expect(harness.backend.runs.map((run) => run.providerSessionId)).toEqual([
+      "provider-1",
+      "provider-2",
+    ]);
+    expect(harness.backend.runs[0]?.cancelled).toBe(false);
+  });
+
+  it("expires an abandoned session and cancels its retained run", async () => {
+    let clock = Date.parse("2026-08-31T12:00:00Z");
+    const harness = await start([[call("provider_a")]], {
+      capabilityTtlSeconds: 10,
+      now: () => clock,
+    });
+    expect(
+      await post(harness, { model: MODEL, input: "park this session" }),
+    ).toMatchObject({ status: 200 });
+    for (let index = 0; index < 7; index += 1) {
+      const additional = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+        method: "POST",
+        headers: browserHeaders({
+          Authorization: `Bearer ${harness.grant}`,
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          appId: "test-app",
+          tools: [tool()],
+          fresh: true,
+        }),
+      });
+      expect(additional.status).toBe(201);
+    }
+    const atCapacity = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.grant}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()], fresh: true }),
+    });
+    expect(atCapacity.status).toBe(400);
+
+    clock += 11_000;
+    const reaped = await fetch(`${harness.baseUrl}/healthz`);
+    expect(reaped.status).toBe(200);
+    expect(harness.backend.runs[0]?.cancelled).toBe(true);
+
+    expect(
+      await post(harness, { model: MODEL, input: "too late" }),
+    ).toMatchObject({ status: 401 });
+    const fresh = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.grant}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()], fresh: true }),
+    });
+    expect(fresh.status).toBe(201);
+    expect(harness.runtime.createdSessions).toBe(9);
   });
 
   it("accepts a text follow-up in both JSON and streaming response modes", async () => {

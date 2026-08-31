@@ -648,7 +648,7 @@ integration("Open Responses through the gateway", () => {
           gateway.listen(0, "127.0.0.1", resolve),
         );
         const gatewayUrl = `http://127.0.0.1:${(gateway.address() as AddressInfo).port}`;
-        const capability = await authorizeApplication(
+        const { capability } = await authorizeApplication(
           gatewayUrl,
           responseTools,
         );
@@ -774,6 +774,117 @@ integration("Open Responses through the gateway", () => {
     ).toBe(true);
   }, 240_000);
 
+  it("runs independent application sessions concurrently", async () => {
+    const result = await withIsolatedOmnigent(
+      async (harness) => {
+        assertIsolatedEnvironment(harness);
+        const omnigent = new OmnigentRuntime({
+          baseUrl: harness.serverUrl,
+          workspace: harness.workspace,
+          launchTimeoutMs: 30_000,
+          pollIntervalMs: 100,
+        });
+        const providerSessionIds: string[] = [];
+        const runtime = {
+          createSession: async (request: RuntimeSessionRequest) => {
+            const id = await omnigent.createSession(request);
+            providerSessionIds.push(id);
+            return id;
+          },
+          isHealthy: (id: string) => omnigent.isHealthy(id),
+        };
+        const gateway = createGateway({
+          allowedOrigins: new Set(["https://integration.example"]),
+          allowedTailscaleUsers: new Set(["owner@example.com"]),
+          omnigentBaseUrl: harness.serverUrl,
+          runtime,
+          authStatePath: join(harness.root, "gateway-parallel-auth.json"),
+          responseStatePath: join(harness.root, "gateway-parallel-responses"),
+          publicEndpoint: "https://integration-runtime.example",
+          enrollmentPassphrase: "integration enrollment phrase",
+        });
+        liveGateways.push(gateway);
+        await new Promise<void>((resolve) =>
+          gateway.listen(0, "127.0.0.1", resolve),
+        );
+        const gatewayUrl = `http://127.0.0.1:${(gateway.address() as AddressInfo).port}`;
+        const first = await authorizeApplication(gatewayUrl, [
+          responseTools[0]!,
+        ]);
+        const headers = {
+          Origin: "https://integration.example",
+          "Tailscale-User-Login": "owner@example.com",
+        };
+        const freshResponse = await fetch(`${gatewayUrl}/v1/app-sessions`, {
+          method: "POST",
+          headers: {
+            ...headers,
+            Authorization: `Bearer ${first.grant}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            appId: "integration-test",
+            tools: [responseTools[0]],
+            fresh: true,
+          }),
+        });
+        expect(freshResponse.status).toBe(201);
+        const fresh = (await freshResponse.json()) as { accessToken: string };
+        const wireTool = {
+          type: "function",
+          name: responseTools[0]!.name,
+          description: responseTools[0]!.description,
+          parameters: responseTools[0]!.inputSchema,
+        };
+        const invoke = async (capability: string) => {
+          const response = await fetch(`${gatewayUrl}/v1/responses`, {
+            method: "POST",
+            headers: {
+              ...headers,
+              Authorization: `Bearer ${capability}`,
+              "Content-Type": "application/json",
+              Accept: "text/event-stream",
+            },
+            body: JSON.stringify({
+              model: "agent-connect/default",
+              stream: true,
+              input: "Call get_test_nonce once",
+              tools: [wireTool],
+            }),
+          });
+          expect(response.status).toBe(200);
+          expect(response.body).not.toBeNull();
+          const events: Record<string, unknown>[] = [];
+          for await (const event of parseSse(response.body!))
+            events.push(event);
+          return functionCallOf(events);
+        };
+
+        const [firstCall, secondCall] = await Promise.all([
+          invoke(first.capability),
+          invoke(fresh.accessToken),
+        ]);
+        return {
+          providerSessionIds,
+          callIds: [
+            String(firstCall["call_id"]),
+            String(secondCall["call_id"]),
+          ],
+        };
+      },
+      {
+        extraEnv: {
+          AGENT_CONNECT_DETERMINISTIC_PLAN: JSON.stringify([
+            { name: "get_test_nonce", arguments: {} },
+          ]),
+        },
+      },
+    );
+
+    expect(new Set(result.value.providerSessionIds).size).toBe(2);
+    expect(result.value.callIds[0]).not.toBe(result.value.callIds[1]);
+  }, 240_000);
+
   it("continues two completed user turns on one durable ACP session", async () => {
     const marker = "LANTERN_17";
     const markerTool = {
@@ -822,7 +933,9 @@ integration("Open Responses through the gateway", () => {
           gateway.listen(0, "127.0.0.1", resolve),
         );
         const gatewayUrl = `http://127.0.0.1:${(gateway.address() as AddressInfo).port}`;
-        const capability = await authorizeApplication(gatewayUrl, [markerTool]);
+        const { capability } = await authorizeApplication(gatewayUrl, [
+          markerTool,
+        ]);
         const createResponse = async (
           body: Record<string, unknown>,
         ): Promise<Record<string, unknown>[]> => {
@@ -971,7 +1084,7 @@ integration("Open Responses through the gateway", () => {
           gateway.listen(0, "127.0.0.1", resolve),
         );
         const gatewayUrl = `http://127.0.0.1:${(gateway.address() as AddressInfo).port}`;
-        const capability = await authorizeApplication(
+        const { capability } = await authorizeApplication(
           gatewayUrl,
           responseTools,
         );
@@ -1098,7 +1211,7 @@ integration("Open Responses through the gateway", () => {
           gateway.listen(0, "127.0.0.1", resolve),
         );
         const gatewayUrl = `http://127.0.0.1:${(gateway.address() as AddressInfo).port}`;
-        const capability = await authorizeApplication(
+        const { capability } = await authorizeApplication(
           gatewayUrl,
           responseTools,
         );
@@ -1213,7 +1326,7 @@ integration("Open Responses through the gateway", () => {
   }, 240_000);
 });
 
-/** The full authorization ceremony, returning a session capability. */
+/** The full authorization ceremony, returning the grant and first session. */
 async function authorizeApplication(
   gatewayUrl: string,
   tools: readonly {
@@ -1221,7 +1334,7 @@ async function authorizeApplication(
     readonly description: string;
     readonly inputSchema: Record<string, unknown>;
   }[],
-): Promise<string> {
+): Promise<{ readonly grant: string; readonly capability: string }> {
   const headers = {
     Origin: "https://integration.example",
     "Tailscale-User-Login": "owner@example.com",
@@ -1281,7 +1394,10 @@ async function authorizeApplication(
     body: JSON.stringify({ appId: "integration-test", tools }),
   });
   expect(session.status).toBe(201);
-  return ((await session.json()) as { accessToken: string }).accessToken;
+  return {
+    grant: grant.accessToken,
+    capability: ((await session.json()) as { accessToken: string }).accessToken,
+  };
 }
 
 function responseIdOf(events: readonly Record<string, unknown>[]): string {

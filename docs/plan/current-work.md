@@ -61,7 +61,9 @@ Linear completed-task continuation is implemented under
 is a new immutable response chain on the same Omnigent/ACP session, guarded by
 a durable session head. Gateway, SDK, browser, and real-Omnigent contracts pass;
 the remaining release gate is a manual real-Codex correction that depends on
-first-turn-only context.
+first-turn-only context. Fresh connections are independent: an abandoned or
+parked session does not block another application instance, and application
+sessions expire on the capability lease rather than accumulating forever.
 
 ## Priority 1: finish the Open Responses replacement
 
@@ -115,7 +117,8 @@ Pending-call persistence, stable call IDs, same-output retry, capability
 refresh, cancellation, restart reconstruction, and deterministic process-loss
 outcomes are implemented for the bounded slice. The remaining operator work is:
 
-1. expire successful workspaces and replaced provider sessions; and
+1. delete expired provider workspaces beyond the retained-run cleanup performed
+   by the application-session lease; and
 2. add small operator commands for runtime-card re-export, device management,
    gateway-key rotation, recovery, and audit history.
 
