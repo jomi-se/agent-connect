@@ -17,7 +17,7 @@ silently treating a target as a shipped guarantee.
 | Dynamically enroll a previously unknown app Origin     | Implemented for Tailscale Serve | The Origin may begin authorization but receives no operational access before approval                                                      |
 | Stream task, text, lifecycle, and tool events          | Implemented                     | Provider-neutral `AgentTaskEvent` surface                                                                                                  |
 | Continue a successfully completed task                 | Implemented                     | Explicit SDK continuation; durable linear head; real Omnigent proves two prompts on one ACP session                                        |
-| Start over without reauthorizing                       | Implemented                     | `freshSession` safely replaces idle opaque/provider sessions; upstream workspace expiry remains deferred                                   |
+| Start over without reauthorizing                       | Implemented                     | `freshSession` creates an independent expiring session even while older sessions have live work                                            |
 | Execute and return a correlated browser tool result    | Implemented                     | Unknown tools and malformed arguments fail closed                                                                                          |
 | Revoke an application's grant                          | Implemented                     | Self-revocation and gateway-owned grant management invalidate later use                                                                    |
 | Install the SDK from a clean package artifact          | Implemented from source         | `npm run test:package:web`; package is not published to npm                                                                                |
@@ -30,20 +30,21 @@ silently treating a target as a shipped guarantee.
 
 ## Gateway and provider
 
-| Capability                                                                 | Status                        | Current evidence or boundary                                                                |
-| -------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
-| Broker the Omnigent HTTP/SSE Sessions API                                  | Implemented                   | First provider behind an internal adapter                                                   |
-| Provision one downstream runner and heal an unhealthy match                | Implemented                   | Grant-bound tool policy is written before launch                                            |
-| Restrict Codex's request-scoped relay tools to the authorized snapshot     | Implemented reference profile | Fail-closed manifest and `enabled_tools` compatibility wrapper, pinned to Omnigent 0.5.1    |
-| Keep provider IDs and wire types out of the normal browser API             | Implemented                   | `connectAgent` is neutral; browser-visible Omnigent exports and routes are removed          |
-| Expose an OAuth-protected Open Responses endpoint                          | Implemented                   | Bounded `POST /v1/responses` plus explicit Agent Connect recovery and cancellation controls |
-| Bundle response translation with harness runtime supervision               | Implemented for Omnigent      | Response engine and bundled backend share one gateway process; no private facade protocol   |
-| Allocate a fresh workspace for each provider session                       | Implemented                   | Failed launches are cleaned immediately; successful-session expiry remains deferred         |
-| Persist gateway identity, devices, grants, revocations, and capability key | Implemented                   | Owner-only gateway state file                                                               |
-| Persist pending authorization requests, codes, and provider mappings       | Deferred                      | These short-lived/session mappings are memory-only                                          |
-| Persist unresolved application actions                                     | Implemented                   | Durable `FileResponseStore` writes pending calls before publication                         |
-| Enforce a hardened real-agent sandbox                                      | Not implemented               | The source profile runs Codex as the gateway's Unix user; runtime posture is operator-owned |
-| Support multiple users, hosts, agents, or concurrent tasks per session     | Explicit non-goal for MVP     | One online host, one downstream agent, one active task per app session                      |
+| Capability                                                                 | Status                        | Current evidence or boundary                                                                          |
+| -------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Broker the Omnigent HTTP/SSE Sessions API                                  | Implemented                   | First provider behind an internal adapter                                                             |
+| Provision one downstream runner and heal an unhealthy match                | Implemented                   | Grant-bound tool policy is written before launch                                                      |
+| Restrict Codex's request-scoped relay tools to the authorized snapshot     | Implemented reference profile | Fail-closed manifest and `enabled_tools` compatibility wrapper, pinned to Omnigent 0.5.1              |
+| Keep provider IDs and wire types out of the normal browser API             | Implemented                   | `connectAgent` is neutral; browser-visible Omnigent exports and routes are removed                    |
+| Expose an OAuth-protected Open Responses endpoint                          | Implemented                   | Bounded `POST /v1/responses` plus explicit Agent Connect recovery and cancellation controls           |
+| Run independent application sessions concurrently                          | Implemented                   | One live chain per opaque session; abandoned sessions do not block fresh creation and expire by lease |
+| Bundle response translation with harness runtime supervision               | Implemented for Omnigent      | Response engine and bundled backend share one gateway process; no private facade protocol             |
+| Allocate a fresh workspace for each provider session                       | Implemented                   | Failed launches are cleaned immediately; successful-session expiry remains deferred                   |
+| Persist gateway identity, devices, grants, revocations, and capability key | Implemented                   | Owner-only gateway state file                                                                         |
+| Persist pending authorization requests, codes, and provider mappings       | Deferred                      | These short-lived/session mappings are memory-only                                                    |
+| Persist unresolved application actions                                     | Implemented                   | Durable `FileResponseStore` writes pending calls before publication                                   |
+| Enforce a hardened real-agent sandbox                                      | Not implemented               | The source profile runs Codex as the gateway's Unix user; runtime posture is operator-owned           |
+| Support multiple users, hosts, agents, or concurrent tasks per session     | Explicit non-goal for MVP     | One online host, one downstream agent, one active task per app session                                |
 
 ## Deployment profiles
 

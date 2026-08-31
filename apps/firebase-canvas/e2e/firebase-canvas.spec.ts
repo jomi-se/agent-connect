@@ -194,6 +194,24 @@ test("the mobile page completes the connection before a task can run", async ({
   ).toBe(true);
 });
 
+test("a page refresh starts an independent session under the saved grant", async ({
+  page,
+}) => {
+  const harness = await mockConnectedRuntime(page, []);
+  await openAndConnect(page, "desktop");
+  await expect.poll(harness.sessionRequestCount).toBe(1);
+
+  await page.reload();
+  await page.locator("#runtime-card").fill(JSON.stringify(runtimeCard));
+  await page.getByRole("button", { name: "Connect runtime" }).click();
+
+  await expect.poll(harness.sessionRequestCount).toBe(2);
+  await expect(page.locator("#connection-state")).toContainText(
+    "Codex through Omnigent",
+  );
+  await expect(page.locator("#status")).not.toContainText("active task");
+});
+
 test("a failed turn starts a fresh session on retry without reauthorization", async ({
   page,
 }) => {

@@ -774,6 +774,22 @@ export class ResponseEngine {
     await this.finishChain(response.chainId, "terminal", CANCELLED_ERROR);
   }
 
+  /** Retires every retained run owned by an expired application session. */
+  async expireSession(appSessionId: string): Promise<void> {
+    this.admittingSessions.delete(appSessionId);
+    for (const chain of await this.store.listChains()) {
+      if (chain.appSessionId !== appSessionId || chain.status === "terminal") {
+        continue;
+      }
+      const state = this.active.get(chain.chainId);
+      if (state) {
+        state.cancelRequested = true;
+        await state.run.cancel().catch(() => {});
+      }
+      await this.finishChain(chain.chainId, "terminal", SESSION_EXPIRED_ERROR);
+    }
+  }
+
   /**
    * Whether an application session still has a chain that is not terminal.
    * The session-refresh path uses this to refuse repairing a provider session
@@ -992,6 +1008,11 @@ export class ResponseEngine {
 const CANCELLED_ERROR: ResponseError = {
   code: "response_cancelled",
   message: "the response chain was cancelled",
+};
+
+const SESSION_EXPIRED_ERROR: ResponseError = {
+  code: "response_cancelled",
+  message: "the application session expired",
 };
 
 const CONTINUABLE_TERMINAL_CODES: ReadonlySet<string> = new Set([

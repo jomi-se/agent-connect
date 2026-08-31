@@ -29,10 +29,14 @@ later turn must explicitly continue the current successful head. Failed,
 cancelled, interrupted, stale, legacy, or provider-replaced heads are not
 continuable. Starting over uses a fresh opaque application and provider session
 under the existing grant; capability refresh itself never resets a session.
-Fresh replacement is refused while work is live and bounded to eight
-provisioned sessions per grant, application, and tool snapshot in one gateway
-process. Retiring the corresponding upstream workspace is provider lifecycle
-work and is not part of this decision.
+Fresh creation is independent of earlier sessions, including sessions with
+live or parked work. Distinct application sessions may therefore run in
+parallel while the one-active-chain rule remains local to each session. The
+gateway bounds this to eight unexpired sessions provisioned per grant,
+application, and tool snapshot in one process. Each session shares the
+capability lease (one hour by default); issuing or refreshing its capability
+renews that lease. On expiry the gateway durably retires the opaque session and
+best-effort cancels a retained provider run.
 
 The provider-neutral browser SDK represents the predecessor as an opaque
 continuation checkpoint. It exposes explicit `streamContinuation()` and
@@ -50,9 +54,10 @@ replay.
 - The application cannot fork one stateful provider conversation.
 - A client that loses its checkpoint must start a fresh session unless a later
   design adds durable client-side checkpoint restoration.
-- A fresh session durably tombstones the previous opaque session so its
-  capability cannot return after a gateway restart. Provider workspace cleanup
-  remains future lifecycle work.
+- Losing browser state does not block a fresh connection and does not imply
+  recovery: the abandoned session remains isolated until its lease expires.
+- Expiry durably tombstones the opaque session. Complete provider workspace
+  deletion beyond closing its retained run remains future lifecycle work.
 - Pre-feature response files remain readable but cannot be guessed into a
   continuation order.
 - Real-provider compatibility requires one ACP `session/new`, multiple

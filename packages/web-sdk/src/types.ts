@@ -129,7 +129,7 @@ export interface ConnectAgentOptions {
   readonly appId: string;
   readonly tools: readonly ApplicationTool[];
   readonly accessToken: string;
-  /** Provision a new opaque application/provider session under this grant. */
+  /** Provision an independent opaque session without replacing older work. */
   readonly freshSession?: boolean;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: Readonly<Record<string, string>>;
