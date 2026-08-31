@@ -175,14 +175,16 @@ Rules for version 0:
 - Repeated continuation tools are compared **after** canonicalization, never as
   raw JSON.
 
-### Accepted continuation request
+### Accepted continuation requests
 
 - `model` remains exactly `agent-connect/default`.
-- `previous_response_id` identifies the immediately preceding response in the
-  same authorized application session and chain.
-- `input` contains exactly one string-valued `function_call_output` for the
-  one unresolved sequential call.
-- `call_id` must match that unresolved call.
+- `previous_response_id` identifies either the immediately preceding response
+  in a parked function-call chain or the successful durable head of the same
+  authorized application session.
+- For a parked function call, `input` contains exactly one string-valued
+  `function_call_output`, and `call_id` must match that unresolved call.
+- For completed-task follow-up, `input` is one user text prompt and starts a new
+  immutable chain on the same provider session. See ADR 0011.
 - `tools` may be omitted or repeat the exact approved snapshot. A mutation is
   an authorization error, not a new tool configuration.
 - `stream`, `store`, `tool_choice`, and `parallel_tool_calls` have the same
@@ -541,10 +543,10 @@ race. Version 0 fixes precedence:
 Two admission rules follow from the same boundary, and both are enforced in
 `ResponseEngine`:
 
-- **One live chain per application session.** The session's provider session is
-  a single harness conversation; a second initial response would interleave two
-  conversations on it and hand the application call IDs from both. A second
-  initial response while a chain is live is `response_busy`.
+- **One live chain and one linear history per application session.** The
+  session's provider session is a single harness conversation. A concurrent
+  chain is `response_busy`; after the initial task, a later user turn must name
+  the successful durable head. An unlinked second initial request is invalid.
 - **One operation at a time on a chain**, claimed in the same synchronous step
   as the check that guards it. A claim taken after the intervening `await`s
   would let two continuations pass together and deliver two outputs for one

@@ -59,6 +59,12 @@ for await (const event of connection.session.streamTask(
 )) {
   renderAgentEvent(event);
 }
+
+for await (const event of connection.session.streamContinuation(
+  "Keep the cleanup, but leave the totals row unchanged",
+)) {
+  renderAgentEvent(event);
+}
 ```
 
 See the repository's complete
@@ -68,6 +74,12 @@ and the real gateway setup.
 
 ## Current constraints
 
-- One active task per application session
+- One active task per application session and a linear completed-turn history
 - A fixed tool snapshot per session
 - No generic exactly-once execution
+
+Use `connectAgent({ ...options, freshSession: true })` to start an independent
+conversation under an existing application grant. This provisions a new opaque
+application session and provider session; it does not require reauthorization.
+The gateway refuses replacement while work is live and bounds repeated fresh
+sessions to eight per grant, application, and tool snapshot in one process.

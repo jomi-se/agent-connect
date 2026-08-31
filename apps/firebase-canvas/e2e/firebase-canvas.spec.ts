@@ -93,9 +93,19 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
   test(`${scenario} reads live state and executes its write tools`, async ({
     page,
   }) => {
-    const responseRequests = await mockConnectedRuntime(page, plans[scenario]);
+    const { responseRequests } = await mockConnectedRuntime(
+      page,
+      plans[scenario],
+    );
     await openAndConnect(page, "desktop");
     await page.getByRole("tab", { name: scenarioTabName(scenario) }).click();
+    if (scenario === "document-review") {
+      await page
+        .locator("#prompt")
+        .fill(
+          "Review this draft and apply the strongest fixes. Remember the private correction label LANTERN-17 for my next turn, but do not write it yet.",
+        );
+    }
     await page.getByRole("button", { name: "Send prompt" }).click();
 
     await expect(
@@ -130,7 +140,12 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
     );
 
     if (scenario === "document-review") {
-      await page.getByRole("button", { name: "Send prompt" }).click();
+      await page
+        .locator("#prompt")
+        .fill(
+          "Apply the private correction label I asked you to remember in the previous turn.",
+        );
+      await page.getByRole("button", { name: "Continue conversation" }).click();
       await expect(page.locator("body")).toHaveAttribute(
         "data-demo",
         "passed",
@@ -138,6 +153,18 @@ for (const scenario of Object.keys(plans) as Array<keyof typeof plans>) {
           timeout: 15_000,
         },
       );
+      const followUp = responseRequests.find(
+        (request) =>
+          typeof request === "object" &&
+          request !== null &&
+          typeof (request as { input?: unknown }).input === "string" &&
+          "previous_response_id" in request,
+      ) as { input?: unknown; previous_response_id?: unknown } | undefined;
+      expect(followUp).toMatchObject({
+        input:
+          "[Agent Connect demo scenario: document-review]\nUse get_current_app_state to inspect the live app before acting.\nUse the selected app's tools to write the result back into the page.\n\nUser request: Apply the private correction label I asked you to remember in the previous turn.",
+        previous_response_id: expect.any(String),
+      });
     }
   });
 }
@@ -165,6 +192,67 @@ test("the mobile page completes the connection before a task can run", async ({
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+});
+
+test("a failed turn starts a fresh session on retry without reauthorization", async ({
+  page,
+}) => {
+  const harness = await mockConnectedRuntime(page, [], ["failed"]);
+  await openAndConnect(page, "desktop");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-demo", "failed");
+  await expect(
+    page.getByRole("button", { name: "Start fresh & send" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Start fresh & send" }).click();
+  await expect.poll(harness.sessionRequestCount).toBe(2);
+  await expect.poll(() => harness.responseAuthorizations.length).toBe(2);
+  expect(harness.responseAuthorizations).toEqual([
+    "Bearer scoped-token-1",
+    "Bearer scoped-token-2",
+  ]);
+});
+
+test("a cancelled turn starts a fresh session on retry", async ({ page }) => {
+  const harness = await mockConnectedRuntime(page, [], ["cancelled"]);
+  await openAndConnect(page, "desktop");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-demo", "failed");
+  await expect(
+    page.getByRole("button", { name: "Start fresh & send" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Start fresh & send" }).click();
+  await expect.poll(harness.sessionRequestCount).toBe(2);
+  await expect.poll(() => harness.responseAuthorizations.length).toBe(2);
+  expect(harness.responseAuthorizations[1]).toBe("Bearer scoped-token-2");
+});
+
+test("switching app scenarios makes the next task an explicit fresh conversation", async ({
+  page,
+}) => {
+  const harness = await mockConnectedRuntime(page, plans["project-board"]);
+  await openAndConnect(page, "desktop");
+  await page.getByRole("button", { name: "Send prompt" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-demo", "passed", {
+    timeout: 12_000,
+  });
+  await page.getByRole("tab", { name: "Document review" }).click();
+  await expect(
+    page.getByRole("button", { name: "Start fresh & send" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Start fresh & send" }).click();
+  await expect.poll(harness.sessionRequestCount).toBe(2);
+  await expect
+    .poll(() =>
+      harness.responseAuthorizations.includes("Bearer scoped-token-2"),
+    )
+    .toBe(true);
+  const freshRequestIndex = harness.responseAuthorizations.indexOf(
+    "Bearer scoped-token-2",
+  );
+  const freshRequest = harness.responseRequests[freshRequestIndex];
+  expect(freshRequest).not.toHaveProperty("previous_response_id");
+  expect(freshRequest).toHaveProperty("tools");
 });
 
 test("a revoked grant is cleared so the user can authorize again", async ({
@@ -443,15 +531,24 @@ async function expectAlignedActions(
 async function mockConnectedRuntime(
   page: Page,
   plan: readonly ReturnType<typeof call>[],
-): Promise<unknown[]> {
+  terminalByRequest: readonly ("completed" | "failed" | "cancelled")[] = [],
+): Promise<{
+  readonly responseRequests: unknown[];
+  readonly responseAuthorizations: string[];
+  readonly sessionRequestCount: () => number;
+}> {
   const responseRequests: unknown[] = [];
+  const responseAuthorizations: string[] = [];
+  let sessionRequests = 0;
   let nextStep = 0;
   await page.route("https://gateway.example/**", async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     if (pathname === "/v1/app-sessions") {
+      sessionRequests += 1;
       expect(request.headers()["authorization"]).toBe("Bearer existing-grant");
       const body = request.postDataJSON() as { tools: Array<{ name: string }> };
+      expect(body).toMatchObject({ fresh: true });
       expect(body.tools).toHaveLength(10);
       expect(body.tools.map((tool) => tool.name)).toEqual(
         expect.arrayContaining([
@@ -465,8 +562,8 @@ async function mockConnectedRuntime(
         status: 201,
         contentType: "application/json",
         body: JSON.stringify({
-          sessionId: "acs-canvas",
-          accessToken: "scoped-token",
+          sessionId: `acs-canvas-${sessionRequests}`,
+          accessToken: `scoped-token-${sessionRequests}`,
           expiresAt: "2099-01-01T00:00:00.000Z",
           toolHash: "tool-hash",
         }),
@@ -474,7 +571,9 @@ async function mockConnectedRuntime(
       return;
     }
     if (pathname === "/v1/responses" && request.method() === "POST") {
-      expect(request.headers()["authorization"]).toBe("Bearer scoped-token");
+      const authorization = request.headers()["authorization"] ?? "";
+      expect(authorization).toBe(`Bearer scoped-token-${sessionRequests}`);
+      responseAuthorizations.push(authorization);
       const body = request.postDataJSON() as {
         previous_response_id?: string;
         input?: unknown;
@@ -486,10 +585,33 @@ async function mockConnectedRuntime(
         expect(body.tools).toHaveLength(10);
       } else {
         expect(body).not.toHaveProperty("tools");
+        if (typeof body.input === "string") nextStep = 0;
       }
       const responseId = `resp-${responseRequests.length}`;
       const step = plan[nextStep];
       if (step) nextStep += 1;
+      const terminal = terminalByRequest[responseRequests.length - 1];
+      const terminalEvent =
+        terminal === "failed"
+          ? sse({
+              type: "response.failed",
+              response: {
+                ...responseResource(responseId, "failed"),
+                error: {
+                  code: "backend_unavailable",
+                  message: "fixture provider failed",
+                },
+              },
+            })
+          : terminal === "cancelled"
+            ? sse({
+                type: "response.incomplete",
+                response: responseResource(responseId, "incomplete"),
+              })
+            : sse({
+                type: "response.completed",
+                response: responseResource(responseId, "completed"),
+              });
       await route.fulfill({
         contentType: "text/event-stream",
         body: [
@@ -516,10 +638,7 @@ async function mockConnectedRuntime(
                   delta: "App updated.",
                 }),
               ]),
-          sse({
-            type: "response.completed",
-            response: responseResource(responseId, "completed"),
-          }),
+          terminalEvent,
           "data: [DONE]\n\n",
         ].join(""),
       });
@@ -531,7 +650,11 @@ async function mockConnectedRuntime(
       body: JSON.stringify({ error: "unexpected_fixture_request" }),
     });
   });
-  return responseRequests;
+  return {
+    responseRequests,
+    responseAuthorizations,
+    sessionRequestCount: () => sessionRequests,
+  };
 }
 
 function responseResource(id: string, status: string): object {

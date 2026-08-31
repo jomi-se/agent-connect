@@ -26,14 +26,16 @@ An application can:
 7. revoke the application's gateway grant without knowing provider session
    identifiers.
 
-Stable call IDs and persistence before publication ensure reliable multi-turn
-continuation; applications remain responsible for idempotent operations.
+Stable call IDs and persistence before publication protect function-call
+continuation; explicit response checkpoints provide linear completed-task
+follow-up. Applications remain responsible for idempotent operations.
 
 ## Current strategy
 
 - Use standard Open Responses semantics (`POST /v1/responses`) as the sole public
-  wire. A convenience `streamTask()` coordinates multi-turn response chains
-  (`previous_response_id`) without creating a separate public protocol.
+  wire. The SDK coordinates function-call segments and explicit completed-task
+  follow-ups through `previous_response_id` without creating a separate public
+  protocol.
 - Use Omnigent internally behind the gateway as the first runtime-supervision
   and execution backend; the application does not depend on that choice.
 - Supply a fixed tool snapshot on the initial response request. Execute

@@ -41,6 +41,14 @@ class CheckpointStore {
     return this.inner.listChains();
   }
 
+  retireSession(appSessionId) {
+    return this.inner.retireSession(appSessionId);
+  }
+
+  isSessionRetired(appSessionId) {
+    return this.inner.isSessionRetired(appSessionId);
+  }
+
   putChain(chain) {
     return this.inner.putChain(chain);
   }

@@ -44,6 +44,8 @@ export interface AgentToolDefinition {
 export interface AgentProviderTaskRequest {
   readonly prompt: string;
   readonly tools: readonly AgentToolDefinition[];
+  /** Opaque provider checkpoint for an explicit completed-task follow-up. */
+  readonly continuationToken?: string;
 }
 
 export type AgentProviderEvent =
@@ -55,7 +57,7 @@ export type AgentProviderEvent =
       readonly name: string;
       readonly arguments: unknown;
     }
-  | { readonly type: "task.completed" }
+  | { readonly type: "task.completed"; readonly continuationToken?: string }
   | { readonly type: "task.failed"; readonly message: string }
   | { readonly type: "task.cancelled" };
 
@@ -76,7 +78,9 @@ export type AgentConnectErrorCode =
   | "invalid_app_grant"
   | "unknown_tool"
   | "invalid_tool_arguments"
-  | "tool_execution_failed";
+  | "tool_execution_failed"
+  | "continuation_unavailable"
+  | "task_busy";
 
 export interface AgentTaskError {
   readonly code: AgentConnectErrorCode;
@@ -125,6 +129,8 @@ export interface ConnectAgentOptions {
   readonly appId: string;
   readonly tools: readonly ApplicationTool[];
   readonly accessToken: string;
+  /** Provision a new opaque application/provider session under this grant. */
+  readonly freshSession?: boolean;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: Readonly<Record<string, string>>;
   readonly credentials?: RequestCredentials;

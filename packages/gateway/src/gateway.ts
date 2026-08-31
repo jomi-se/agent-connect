@@ -70,6 +70,7 @@ interface ManagedSession {
 }
 
 const MAX_CREATE_BYTES = 64 * 1024;
+const MAX_SESSIONS_PER_GRANT_APP = 8;
 const DEVICE_COOKIE = "agent_connect_device";
 
 export function createGateway(options: GatewayOptions) {
@@ -118,8 +119,10 @@ export function createGateway(options: GatewayOptions) {
   const signingSecret = connectorAuth.capabilitySigningSecret;
   const managedSessions = new Map<string, ManagedSession>();
   const sessionsByKey = new Map<string, ManagedSession>();
+  const rehydratedSessionsByKey = new Map<string, ManagedSession[]>();
   const pendingSessions = new Map<string, Promise<ManagedSession>>();
   const pendingRepairs = new Map<string, Promise<ManagedSession>>();
+  const sessionCountsByKey = new Map<string, number>();
   const responseStore =
     options.responseStore ??
     new FileResponseStore(
@@ -153,12 +156,13 @@ export function createGateway(options: GatewayOptions) {
       (left, right) => right.updatedAt - left.updatedAt,
     );
     for (const chain of chains) {
+      if (await responseStore.isSessionRetired(chain.appSessionId)) continue;
       // Terminal chains are rehydrated too: a response that completed during an
       // outage must stay retrievable, and that is the reason the chain resource
       // exists at all. When one application session has several chains, the
       // most recently updated one supplies the provider session.
       if (managedSessions.has(chain.appSessionId)) continue;
-      managedSessions.set(chain.appSessionId, {
+      const session: ManagedSession = {
         id: chain.appSessionId,
         appId: chain.appId,
         origin: chain.origin,
@@ -167,7 +171,17 @@ export function createGateway(options: GatewayOptions) {
         tools: chain.tools,
         authorizationGrantId: chain.authorizationGrantId,
         providerSessionId: chain.providerSessionId,
-      });
+      };
+      managedSessions.set(chain.appSessionId, session);
+      const key = sessionKey(
+        session.origin,
+        session.appId,
+        session.toolHash,
+        session.authorizationGrantId,
+      );
+      const matches = rehydratedSessionsByKey.get(key) ?? [];
+      matches.push(session);
+      rehydratedSessionsByKey.set(key, matches);
     }
   })();
 
@@ -358,6 +372,11 @@ export function createGateway(options: GatewayOptions) {
         let session: ManagedSession;
 
         if (existingClaims) {
+          if (input.fresh) {
+            throw new InvalidRequestError(
+              "fresh sessions require the application grant, not a session capability",
+            );
+          }
           session = requireExistingSession(
             existingClaims,
             input,
@@ -372,9 +391,10 @@ export function createGateway(options: GatewayOptions) {
           // response chain must not repair the provider session underneath it:
           // the chain's private call IDs belong to the old one. The chain
           // reports its own recovery outcome through the control extensions.
-          if (!(await responseEngine.hasLiveChain(session.id))) {
-            session = await ensureHealthy(session);
-          }
+          session =
+            (await responseEngine.runIfSessionIdle(session.id, () =>
+              ensureHealthy(session),
+            )) ?? session;
         } else {
           const bearer = bearerCredential(authorization);
           const grant = bearer
@@ -386,7 +406,12 @@ export function createGateway(options: GatewayOptions) {
               })
             : undefined;
           if (grant) {
-            session = await getOrCreateSession(input, origin, grant.id);
+            session = await getOrCreateSession(
+              input,
+              origin,
+              grant.id,
+              input.fresh,
+            );
           } else {
             response.setHeader("WWW-Authenticate", "Bearer");
             sendJson(response, 401, { error: "invalid_app_grant" });
@@ -511,6 +536,7 @@ export function createGateway(options: GatewayOptions) {
     input: CreateSessionInput,
     origin: string,
     authorizationGrantId: string,
+    fresh = false,
   ): Promise<ManagedSession> {
     const key = sessionKey(
       origin,
@@ -518,29 +544,74 @@ export function createGateway(options: GatewayOptions) {
       input.toolHash,
       authorizationGrantId,
     );
-    const pending = pendingSessions.get(key);
-    if (pending) return pending;
+    for (;;) {
+      const pending = pendingSessions.get(key);
+      if (!pending) break;
+      const resolved = await pending;
+      if (!fresh) return resolved;
+    }
     const operation = (async () => {
       const existing = sessionsByKey.get(key);
-      if (existing) return ensureHealthy(existing);
-      const providerSessionId = await runtime.createSession({
-        appId: input.appId,
-        origin,
-        toolHash: input.toolHash,
-        approvedToolNames: input.tools.map((tool) => tool.name),
-      });
-      const created: ManagedSession = {
-        id: `acs_${randomUUID()}`,
-        appId: input.appId,
-        origin,
-        toolHash: input.toolHash,
-        approvedToolNames: input.tools.map((tool) => tool.name),
-        tools: input.tools,
-        authorizationGrantId,
-        providerSessionId,
+      if (existing && !fresh) {
+        return (
+          (await responseEngine.runIfSessionIdle(existing.id, () =>
+            ensureHealthy(existing),
+          )) ?? existing
+        );
+      }
+      const rehydrated = rehydratedSessionsByKey.get(key) ?? [];
+      const predecessors = existing
+        ? [
+            existing,
+            ...rehydrated.filter((session) => session.id !== existing.id),
+          ]
+        : rehydrated;
+      const count = sessionCountsByKey.get(key) ?? (existing ? 1 : 0);
+      if (count >= MAX_SESSIONS_PER_GRANT_APP) {
+        throw new InvalidRequestError(
+          `at most ${MAX_SESSIONS_PER_GRANT_APP} sessions may be provisioned for one grant, application, and tool snapshot`,
+        );
+      }
+      const provision = async (): Promise<ManagedSession> => {
+        const providerSessionId = await runtime.createSession({
+          appId: input.appId,
+          origin,
+          toolHash: input.toolHash,
+          approvedToolNames: input.tools.map((tool) => tool.name),
+        });
+        const created: ManagedSession = {
+          id: `acs_${randomUUID()}`,
+          appId: input.appId,
+          origin,
+          toolHash: input.toolHash,
+          approvedToolNames: input.tools.map((tool) => tool.name),
+          tools: input.tools,
+          authorizationGrantId,
+          providerSessionId,
+        };
+        for (const predecessor of predecessors) {
+          // The tombstone must be durable before the replacement capability can
+          // be exposed. Otherwise a restart could reconstruct the old opaque
+          // session from its historical response chains.
+          await responseStore.retireSession(predecessor.id);
+          managedSessions.delete(predecessor.id);
+        }
+        rehydratedSessionsByKey.delete(key);
+        managedSessions.set(created.id, created);
+        sessionsByKey.set(key, created);
+        sessionCountsByKey.set(key, count + 1);
+        return created;
       };
-      managedSessions.set(created.id, created);
-      sessionsByKey.set(key, created);
+      if (predecessors.length === 0) return provision();
+      const created = await responseEngine.runIfSessionsIdle(
+        predecessors.map((session) => session.id),
+        provision,
+      );
+      if (!created) {
+        throw new InvalidRequestError(
+          "an active task must finish or be cancelled before starting a fresh session",
+        );
+      }
       return created;
     })();
     pendingSessions.set(key, operation);
@@ -581,6 +652,7 @@ interface CreateSessionInput {
   readonly appId: string;
   readonly tools: readonly GatewayToolDefinition[];
   readonly toolHash: string;
+  readonly fresh: boolean;
 }
 
 async function readCreateRequest(
@@ -603,7 +675,11 @@ async function readCreateRequest(
     throw new InvalidRequestError("appId is invalid");
   }
   const tools = validateToolSnapshot(value["tools"]);
-  return { appId, tools, toolHash: hashToolSnapshot(tools) };
+  const fresh = value["fresh"] ?? false;
+  if (typeof fresh !== "boolean") {
+    throw new InvalidRequestError("fresh must be a boolean");
+  }
+  return { appId, tools, toolHash: hashToolSnapshot(tools), fresh };
 }
 
 function requireExistingSession(

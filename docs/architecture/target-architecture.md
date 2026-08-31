@@ -181,6 +181,10 @@ infer whether an unacknowledged external side effect succeeded.
 9. Browser SDK validates tool arguments, executes the local handler, and continues the chain with POST /v1/responses (previous_response_id + function_call_output).
 10. Gateway correlates the result to the parked run and resumes the turn.
 11. Codex finishes execution and the gateway streams the final response.completed event.
+12. A later user correction starts a new immutable response chain with the
+    completed response as `previous_response_id`; the gateway admits it only at
+    the durable session head and starts another prompt on the same provider
+    session.
 ```
 
 Pending function calls are persisted before publication (`FileResponseStore`),

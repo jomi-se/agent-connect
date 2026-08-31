@@ -113,6 +113,8 @@ const tools = createDemoTools();
 let selectedScenario: DemoScenario = "project-board";
 let connection: AgentConnection | undefined;
 let taskRunning = false;
+let canContinue = false;
+let needsFreshSession = false;
 let activeConnectionActivity: HTMLLIElement | undefined;
 const activeToolActivities = new Map<string, HTMLLIElement>();
 const activeToolChoreography = new Map<string, ToolChoreography>();
@@ -218,12 +220,9 @@ async function establishConnection(
   runtimeCard: RuntimeCard,
   accessToken: string,
 ): Promise<void> {
-  connection = await connectAgent({
-    baseUrl: runtimeCard.endpoint,
-    appId: "agent-connect-demo",
-    tools,
-    accessToken,
-  });
+  connection = await connectFresh(runtimeCard, accessToken);
+  canContinue = false;
+  needsFreshSession = false;
   if (activeConnectionActivity) {
     updateActivity(
       activeConnectionActivity,
@@ -247,6 +246,28 @@ async function establishConnection(
   syncAuthorizationControls();
 }
 
+function connectFresh(
+  runtimeCard: RuntimeCard,
+  accessToken: string,
+): Promise<AgentConnection> {
+  return connectAgent({
+    baseUrl: runtimeCard.endpoint,
+    appId: "agent-connect-demo",
+    tools,
+    accessToken,
+    freshSession: true,
+  });
+}
+
+async function createFreshConnection(): Promise<AgentConnection> {
+  const serializedCard = localStorage.getItem(STORED_CARD);
+  const accessToken = sessionStorage.getItem(STORED_GRANT);
+  if (!serializedCard || !accessToken) {
+    throw new Error("The saved runtime authorization is missing.");
+  }
+  return connectFresh(parseRuntimeCard(serializedCard), accessToken);
+}
+
 async function runTask(): Promise<void> {
   if (!connection) {
     status.textContent = "Connect a runtime before running a task.";
@@ -265,6 +286,15 @@ async function runTask(): Promise<void> {
   delete surface.dataset["changed"];
 
   try {
+    let taskConnection = connection;
+    if (needsFreshSession) {
+      status.textContent = "Starting a fresh agent conversation…";
+      taskConnection = await createFreshConnection();
+      connection = taskConnection;
+      needsFreshSession = false;
+      canContinue = false;
+      connectionState.textContent = "Fresh conversation · Open Responses";
+    }
     const prompt = [
       `[Agent Connect demo scenario: ${selectedScenario}]`,
       "Use get_current_app_state to inspect the live app before acting.",
@@ -272,7 +302,11 @@ async function runTask(): Promise<void> {
       "",
       `User request: ${promptInput.value}`,
     ].join("\n");
-    for await (const taskEvent of connection.session.streamTask(prompt)) {
+    const stream = canContinue
+      ? taskConnection.session.streamContinuation(prompt)
+      : taskConnection.session.streamTask(prompt);
+    canContinue = false;
+    for await (const taskEvent of stream) {
       appendEvent(taskEvent);
       await paceVisibleTaskEvent(taskEvent);
       if (taskEvent.type === "task.completed") {
@@ -284,11 +318,20 @@ async function runTask(): Promise<void> {
         status.textContent = "The app was updated through its own tools.";
         traceSummary.textContent = "Task completed";
         document.body.dataset["demo"] = "passed";
+        canContinue = true;
+        needsFreshSession = false;
       } else if (taskEvent.type === "task.failed") {
         throw new Error(taskEvent.error.message);
+      } else if (taskEvent.type === "task.cancelled") {
+        status.textContent =
+          "The task was cancelled. The next prompt will start fresh.";
+        traceSummary.textContent = "Task cancelled";
+        needsFreshSession = true;
+        document.body.dataset["demo"] = "failed";
       }
     }
   } catch (error) {
+    needsFreshSession = true;
     status.textContent = error instanceof Error ? error.message : "Task failed";
     setCurrentActivityError(
       error instanceof Error ? error.message : "Task failed",
@@ -365,6 +408,8 @@ function clearLocalAuthorization(): void {
   sessionStorage.removeItem(STORED_GRANT);
   sessionStorage.removeItem(STORED_TRANSACTION);
   connection = undefined;
+  canContinue = false;
+  needsFreshSession = false;
   syncAuthorizationControls();
 }
 
@@ -403,6 +448,10 @@ async function disconnect(): Promise<void> {
 }
 
 function selectScenario(scenario: DemoScenario): void {
+  if (scenario !== selectedScenario && canContinue) {
+    canContinue = false;
+    needsFreshSession = true;
+  }
   selectedScenario = scenario;
   for (const tab of document.querySelectorAll<HTMLButtonElement>(
     "[data-scenario-tab]",
@@ -417,6 +466,7 @@ function selectScenario(scenario: DemoScenario): void {
     panel.hidden = panel.dataset["scenarioPanel"] !== scenario;
   }
   promptInput.value = DEFAULT_PROMPTS[scenario];
+  if (connection) setRunBusy(false);
 }
 
 function appendEvent(event: AgentTaskEvent): void {
@@ -1364,7 +1414,13 @@ function setRunBusy(busy: boolean): void {
   runButton.disabled = busy || !connection;
   for (const tab of scenarioTabs) tab.disabled = busy;
   if (runButtonLabel)
-    runButtonLabel.textContent = busy ? "Working…" : "Send prompt";
+    runButtonLabel.textContent = busy
+      ? "Working…"
+      : needsFreshSession
+        ? "Start fresh & send"
+        : canContinue
+          ? "Continue conversation"
+          : "Send prompt";
 }
 
 function moveScenarioFocus(

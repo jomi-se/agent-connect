@@ -185,6 +185,74 @@ describe("ResponsesProvider", () => {
     expect(result).toEqual({ text: "hello" });
   });
 
+  it("continues a completed task from its opaque response checkpoint", async () => {
+    const harness = provider([
+      () => segment("resp_1", textDelta("draft"), completed("resp_1")),
+      () => segment("resp_2", textDelta("revised"), completed("resp_2")),
+    ]);
+    const session = new AgentSession({
+      provider: harness.provider,
+      tools: [tool],
+    });
+
+    await expect(session.runTask("write it")).resolves.toEqual({
+      text: "draft",
+    });
+    await expect(session.continueTask("make it shorter")).resolves.toEqual({
+      text: "revised",
+    });
+    expect(harness.bodies[1]).toEqual({
+      model: "agent-connect/default",
+      stream: true,
+      input: "make it shorter",
+      previous_response_id: "resp_1",
+    });
+  });
+
+  it("invalidates the previous checkpoint when a continued turn fails", async () => {
+    const harness = provider([
+      () => segment("resp_1", completed("resp_1")),
+      () =>
+        segment("resp_2", {
+          type: "response.failed",
+          sequence_number: 3,
+          response: {
+            ...resource("resp_2", "failed"),
+            error: { code: "backend_unavailable", message: "runtime is gone" },
+          },
+        }),
+    ]);
+    const session = new AgentSession({
+      provider: harness.provider,
+      tools: [tool],
+    });
+    await session.runTask("first");
+    await expect(session.continueTask("second")).rejects.toThrow(
+      "runtime is gone",
+    );
+    await expect(session.continueTask("third")).rejects.toMatchObject({
+      code: "continuation_unavailable",
+    });
+  });
+
+  it("does not publish an empty checkpoint when response.created is missing", async () => {
+    const raw = new Response(
+      encoder.encode(frame(completed("resp_missing")) + "data: [DONE]\n\n"),
+      { headers: { "Content-Type": "text/event-stream" } },
+    );
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => raw);
+    const session = new AgentSession({
+      provider: new ResponsesProvider({
+        baseUrl: "https://runtime.example",
+        fetch,
+      }),
+      tools: [tool],
+    });
+    await expect(session.runTask("hello")).rejects.toMatchObject({
+      code: "protocol_error",
+    });
+  });
+
   it("reports a failed response as a task failure", async () => {
     const harness = provider([
       () =>
@@ -229,6 +297,45 @@ describe("ResponsesProvider", () => {
       tools: [tool],
     });
     await expect(session.runTask("hi")).rejects.toThrow(/unsupported_feature/);
+  });
+
+  it("maps gateway contention and stale continuation to neutral recovery codes", async () => {
+    const busyHarness = provider([
+      () =>
+        Response.json(
+          { error: { code: "response_busy", message: "already running" } },
+          { status: 409 },
+        ),
+    ]);
+    const busy = new AgentSession({
+      provider: busyHarness.provider,
+      tools: [tool],
+    });
+    await expect(busy.runTask("hi")).rejects.toMatchObject({
+      code: "task_busy",
+    });
+
+    const staleHarness = provider([
+      () => segment("resp_1", completed("resp_1")),
+      () =>
+        Response.json(
+          {
+            error: {
+              code: "previous_response_not_continuable",
+              message: "stale head",
+            },
+          },
+          { status: 409 },
+        ),
+    ]);
+    const stale = new AgentSession({
+      provider: staleHarness.provider,
+      tools: [tool],
+    });
+    await stale.runTask("first");
+    await expect(stale.continueTask("again")).rejects.toMatchObject({
+      code: "continuation_unavailable",
+    });
   });
 
   it("returns a tool error to the agent without ending the chain", async () => {

@@ -233,4 +233,28 @@ describe("AgentSession", () => {
       AgentConnectError,
     );
   });
+
+  it("requires an explicit provider checkpoint and permits only one initial task", async () => {
+    const session = new AgentSession({
+      provider: new FakeProvider([{ type: "task.completed" }]),
+      tools: [nonceTool()],
+    });
+
+    await expect(session.runTask("first")).resolves.toEqual({ text: "" });
+    await expect(session.continueTask("follow up")).rejects.toMatchObject({
+      code: "continuation_unavailable",
+    });
+    await expect(session.runTask("second initial")).rejects.toMatchObject({
+      code: "protocol_error",
+    });
+  });
+
+  it("does not consume the initial turn when prompt validation fails locally", async () => {
+    const session = new AgentSession({
+      provider: new FakeProvider([{ type: "task.completed" }]),
+      tools: [nonceTool()],
+    });
+    await expect(session.runTask("   ")).rejects.toBeInstanceOf(TypeError);
+    await expect(session.runTask("valid")).resolves.toEqual({ text: "" });
+  });
 });

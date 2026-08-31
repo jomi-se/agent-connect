@@ -432,7 +432,7 @@ async function withIsolatedOmnigent<T>(
     OMNIGENT_CONFIG_HOME: configHome,
     OMNIGENT_DATA_DIR: dataDir,
     OMNIGENT_RUNNER_ENV_PASSTHROUGH:
-      "AGENT_CONNECT_ACP_TRANSCRIPT,AGENT_CONNECT_DETERMINISTIC_PLAN,CODEX_HOME,HOME,PATH,TMPDIR,UV_CACHE_DIR,XDG_CACHE_HOME,XDG_CONFIG_HOME,XDG_DATA_HOME",
+      "AGENT_CONNECT_ACP_TRANSCRIPT,AGENT_CONNECT_DETERMINISTIC_PLAN,AGENT_CONNECT_DETERMINISTIC_CONTINUATION,AGENT_CONNECT_DETERMINISTIC_TOOL_NAME,CODEX_HOME,HOME,PATH,TMPDIR,UV_CACHE_DIR,XDG_CACHE_HOME,XDG_CONFIG_HOME,XDG_DATA_HOME",
     AGENT_CONNECT_ACP_TRANSCRIPT: transcript,
     NO_BROWSER: "1",
     NO_PROXY: "127.0.0.1,localhost",
@@ -772,6 +772,169 @@ integration("Open Responses through the gateway", () => {
     expect(
       observed.allTypes.every((type) => type.startsWith("response.")),
     ).toBe(true);
+  }, 240_000);
+
+  it("continues two completed user turns on one durable ACP session", async () => {
+    const marker = "LANTERN_17";
+    const markerTool = {
+      name: "record_continuation_marker",
+      description: "Record the marker remembered from the prior user turn",
+      inputSchema: {
+        type: "object",
+        properties: { marker: { type: "string" } },
+        required: ["marker"],
+        additionalProperties: false,
+      },
+    };
+    const result = await withIsolatedOmnigent(
+      async (harness) => {
+        assertIsolatedEnvironment(harness);
+        const omnigent = new OmnigentRuntime({
+          baseUrl: harness.serverUrl,
+          workspace: harness.workspace,
+          launchTimeoutMs: 30_000,
+          pollIntervalMs: 100,
+        });
+        const providerSessionIds: string[] = [];
+        const runtime = {
+          createSession: async (request: RuntimeSessionRequest) => {
+            const id = await omnigent.createSession(request);
+            providerSessionIds.push(id);
+            return id;
+          },
+          isHealthy: (id: string) => omnigent.isHealthy(id),
+        };
+        const gateway = createGateway({
+          allowedOrigins: new Set(["https://integration.example"]),
+          allowedTailscaleUsers: new Set(["owner@example.com"]),
+          omnigentBaseUrl: harness.serverUrl,
+          runtime,
+          authStatePath: join(harness.root, "gateway-continuation-auth.json"),
+          responseStatePath: join(
+            harness.root,
+            "gateway-continuation-responses",
+          ),
+          publicEndpoint: "https://integration-runtime.example",
+          enrollmentPassphrase: "integration enrollment phrase",
+        });
+        liveGateways.push(gateway);
+        await new Promise<void>((resolve) =>
+          gateway.listen(0, "127.0.0.1", resolve),
+        );
+        const gatewayUrl = `http://127.0.0.1:${(gateway.address() as AddressInfo).port}`;
+        const capability = await authorizeApplication(gatewayUrl, [markerTool]);
+        const createResponse = async (
+          body: Record<string, unknown>,
+        ): Promise<Record<string, unknown>[]> => {
+          const response = await fetch(`${gatewayUrl}/v1/responses`, {
+            method: "POST",
+            headers: {
+              Origin: "https://integration.example",
+              "Tailscale-User-Login": "owner@example.com",
+              Authorization: `Bearer ${capability}`,
+              "Content-Type": "application/json",
+              Accept: "text/event-stream",
+            },
+            body: JSON.stringify({ ...body, model: "agent-connect/default" }),
+          });
+          expect(response.status).toBe(200);
+          const events: Record<string, unknown>[] = [];
+          for await (const event of parseSse(response.body!)) {
+            events.push(event);
+            if (
+              event["type"] === "response.completed" ||
+              event["type"] === "response.failed" ||
+              event["type"] === "response.incomplete"
+            ) {
+              break;
+            }
+          }
+          return events;
+        };
+
+        const first = await createResponse({
+          stream: true,
+          input: `CONTINUATION_MARKER:${marker}\nRemember this marker for my next turn.`,
+          tools: [
+            {
+              type: "function",
+              name: markerTool.name,
+              description: markerTool.description,
+              parameters: markerTool.inputSchema,
+            },
+          ],
+        });
+        const second = await createResponse({
+          stream: true,
+          previous_response_id: responseIdOf(first),
+          input:
+            "Call the approved tool with the marker I gave you in the previous turn.",
+        });
+        const markerCall = functionCallOf(second);
+        const third = await createResponse({
+          stream: true,
+          previous_response_id: responseIdOf(second),
+          input: [
+            {
+              type: "function_call_output",
+              call_id: markerCall["call_id"],
+              output: JSON.stringify({ recorded: true }),
+            },
+          ],
+        });
+        const transcript = readFileSync(harness.transcript, "utf8")
+          .trim()
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as Record<string, unknown>);
+        return {
+          providerSessionIds,
+          markerCall,
+          finalStatus: (third.at(-1)?.["response"] as Record<string, unknown>)[
+            "status"
+          ],
+          transcript,
+        };
+      },
+      {
+        extraEnv: {
+          AGENT_CONNECT_DETERMINISTIC_CONTINUATION: "1",
+          AGENT_CONNECT_DETERMINISTIC_TOOL_NAME: markerTool.name,
+        },
+      },
+    );
+
+    const prompts = result.value.transcript.filter(
+      (event) =>
+        event["kind"] === "acp.request" && event["method"] === "session/prompt",
+    );
+    expect(
+      result.value.transcript.filter(
+        (event) =>
+          event["kind"] === "acp.request" && event["method"] === "session/new",
+      ),
+    ).toHaveLength(1);
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]?.["sessionId"]).toBe(prompts[1]?.["sessionId"]);
+    expect(String(prompts[1]?.["promptText"])).not.toContain(marker);
+    expect(result.value.providerSessionIds).toHaveLength(1);
+    expect(result.value.markerCall["name"]).toBe(markerTool.name);
+    expect(JSON.parse(String(result.value.markerCall["arguments"]))).toEqual({
+      marker,
+    });
+    expect(result.value.finalStatus).toBe("completed");
+    expect(result.value.transcript).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "mcp.request",
+          method: "tools/call",
+          params: {
+            name: markerTool.name,
+            arguments: { marker },
+          },
+        }),
+      ]),
+    );
   }, 240_000);
 
   it("cancels a busy chain when the client disconnects", async () => {

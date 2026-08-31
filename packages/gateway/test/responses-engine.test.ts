@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { BackendEvent } from "../src/responses/backend.js";
+import type {
+  BackendEvent,
+  BackendRun,
+  BackendStartRequest,
+  ResponseBackend,
+} from "../src/responses/backend.js";
 import {
   ResponseApiError,
   type ResponseErrorCode,
@@ -56,10 +61,16 @@ const session: EngineSession = {
 
 function harness(
   turns: readonly FakeTurn[],
-  options: { readonly grantActive?: () => boolean } = {},
+  options: {
+    readonly grantActive?: () => boolean;
+    readonly runs?: readonly (readonly FakeTurn[])[];
+  } = {},
 ) {
   const store = new InMemoryResponseStore();
-  const backend = new FakeBackend({ turns });
+  const backend = new FakeBackend({
+    turns,
+    ...(options.runs ? { runs: options.runs } : {}),
+  });
   let counter = 0;
   const engine = new ResponseEngine({
     store,
@@ -91,6 +102,18 @@ function continuation(
     previousResponseId,
     callId,
     output,
+  };
+}
+
+function followUp(
+  previousResponseId: string,
+  prompt = "not quite",
+): ParsedResponseRequest {
+  return {
+    kind: "follow_up",
+    stream: true,
+    previousResponseId,
+    prompt,
   };
 }
 
@@ -181,6 +204,154 @@ describe("response engine protocol fit", () => {
       },
     ]);
     expect(final?.previous_response_id).toBeNull();
+  });
+
+  it("starts a completed-task follow-up as a new chain on the same provider session", async () => {
+    const { engine, backend, store } = harness([], {
+      runs: [
+        [[text("first answer"), { type: "completed" }]],
+        [[text("revised answer"), { type: "completed" }]],
+      ],
+    });
+    const first = await drain(await engine.createResponse(session, initial));
+    const second = await drain(
+      await engine.createResponse(session, followUp(first.final!.id)),
+    );
+
+    expect(textOf(second.final)).toBe("revised answer");
+    expect(second.final?.previous_response_id).toBe(first.final?.id);
+    expect(backend.runs).toHaveLength(2);
+    expect(backend.runs.map((run) => run.providerSessionId)).toEqual([
+      session.providerSessionId,
+      session.providerSessionId,
+    ]);
+    const chains = await store.listChains();
+    expect(chains.map((chain) => chain.sessionTurn)).toEqual([1, 2]);
+    expect(chains[1]?.continuedFromResponseId).toBe(first.final?.id);
+  });
+
+  it("rejects unlinked, stale, and provider-replaced follow-ups", async () => {
+    const { engine } = harness([], {
+      runs: [
+        [[text("one"), { type: "completed" }]],
+        [[text("two"), { type: "completed" }]],
+      ],
+    });
+    const first = await drain(await engine.createResponse(session, initial));
+    expect(await failureCode(engine.createResponse(session, initial))).toBe(
+      "invalid_request",
+    );
+    const second = await drain(
+      await engine.createResponse(session, followUp(first.final!.id)),
+    );
+    expect(
+      await failureCode(
+        engine.createResponse(session, followUp(first.final!.id)),
+      ),
+    ).toBe("previous_response_not_continuable");
+    expect(
+      await failureCode(
+        engine.createResponse(
+          { ...session, providerSessionId: "provider_replaced" },
+          followUp(second.final!.id),
+        ),
+      ),
+    ).toBe("previous_response_not_continuable");
+  });
+
+  it("admits only one of two initial chains racing on one session", async () => {
+    const { engine } = harness([[]]);
+    const outcomes = await Promise.allSettled([
+      engine.createResponse(session, initial),
+      engine.createResponse(session, initial),
+    ]);
+    expect(
+      outcomes.filter((outcome) => outcome.status === "fulfilled"),
+    ).toHaveLength(1);
+    const rejected = outcomes.find((outcome) => outcome.status === "rejected");
+    expect((rejected as PromiseRejectedResult).reason).toMatchObject({
+      code: "response_busy",
+    });
+    await engine.closeAll();
+  });
+
+  it("makes an in-progress admission visible to provider-session repair", async () => {
+    let releaseStart!: () => void;
+    const mayStart = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
+    const inner = new FakeBackend({
+      turns: [[{ type: "completed" }]],
+    });
+    const backend: ResponseBackend = {
+      kind: inner.kind,
+      async start(request: BackendStartRequest): Promise<BackendRun> {
+        await mayStart;
+        return inner.start(request);
+      },
+    };
+    const engine = new ResponseEngine({
+      store: new InMemoryResponseStore(),
+      backend,
+      isGrantActive: () => true,
+    });
+
+    const starting = engine.createResponse(session, initial);
+    expect(await engine.hasLiveChain(session.sessionId)).toBe(true);
+    expect(
+      await engine.runIfSessionIdle(session.sessionId, async () => "repaired"),
+    ).toBeUndefined();
+    releaseStart();
+    await drain(await starting);
+  });
+
+  it("blocks response admission while provider-session repair owns the session", async () => {
+    let releaseRepair!: () => void;
+    const mayRepair = new Promise<void>((resolve) => {
+      releaseRepair = resolve;
+    });
+    const { engine } = harness([[{ type: "completed" }]]);
+    const repairing = engine.runIfSessionIdle(session.sessionId, async () => {
+      await mayRepair;
+      return "repaired";
+    });
+
+    expect(await failureCode(engine.createResponse(session, initial))).toBe(
+      "response_busy",
+    );
+    releaseRepair();
+    await expect(repairing).resolves.toBe("repaired");
+    await drain(await engine.createResponse(session, initial));
+  });
+
+  it("admits only one of two completed-turn follow-ups racing on one head", async () => {
+    const { engine } = harness([], {
+      runs: [
+        [[text("one"), { type: "completed" }]],
+        [[text("two"), { type: "completed" }]],
+      ],
+    });
+    const first = await drain(await engine.createResponse(session, initial));
+    const body = followUp(first.final!.id);
+    const outcomes = await Promise.allSettled([
+      engine.createResponse(session, body),
+      engine.createResponse(session, body),
+    ]);
+    expect(
+      outcomes.filter((outcome) => outcome.status === "fulfilled"),
+    ).toHaveLength(1);
+    const rejected = outcomes.find((outcome) => outcome.status === "rejected");
+    expect((rejected as PromiseRejectedResult).reason).toMatchObject({
+      code: "response_busy",
+    });
+    const admitted = outcomes.find(
+      (
+        outcome,
+      ): outcome is PromiseFulfilledResult<
+        AsyncGenerator<ResponseStreamEvent>
+      > => outcome.status === "fulfilled",
+    );
+    await drain(admitted!.value);
   });
 
   it("renders the six inert required fields as the documented constants", async () => {
@@ -676,9 +847,15 @@ describe("Agent Connect control extensions", () => {
     expect(rest.final?.status).toBe("cancelled");
     expect(await engine.hasLiveChain(session.sessionId)).toBe(false);
 
-    // The disconnected run no longer locks the application session.
+    // The disconnected run no longer locks a new application session. The old
+    // session cannot honestly restart on provider context that may be partial.
+    const freshSession = {
+      ...session,
+      sessionId: "acs_after_disconnect",
+      providerSessionId: "provider_after_disconnect",
+    };
     await expect(
-      engine.createResponse(session, initial),
+      engine.createResponse(freshSession, initial),
     ).resolves.toBeDefined();
     await engine.closeAll();
   });
@@ -824,7 +1001,7 @@ describe("one chain at a time, and no calls a chain can no longer take", () => {
     );
   });
 
-  it("lets a new chain start once the live one is terminal", async () => {
+  it("requires a new application session after cancellation", async () => {
     const { engine, backend } = harness([
       [call("provider_a", "set_page_message")],
     ]);
@@ -833,23 +1010,41 @@ describe("one chain at a time, and no calls a chain can no longer take", () => {
     );
     await engine.cancelChain(session, final!.id);
 
-    const second = await drain(await engine.createResponse(session, initial));
+    expect(await failureCode(engine.createResponse(session, initial))).toBe(
+      "invalid_request",
+    );
+    const freshSession = {
+      ...session,
+      sessionId: "acs_after_cancel",
+      providerSessionId: "provider_after_cancel",
+    };
+    const second = await drain(
+      await engine.createResponse(freshSession, initial),
+    );
     expect(second.final!.id).not.toBe(final!.id);
     expect(backend.runs).toHaveLength(2);
   });
 
-  it("retires a chain whose harness died so the session is not blocked", async () => {
+  it("retires a dead chain but requires a fresh application session", async () => {
     const { engine, backend } = harness([
       [call("provider_a", "set_page_message")],
     ]);
     const first = await drain(await engine.createResponse(session, initial));
     backend.runs[0]?.killTransport(new Error("omnigent process died"));
 
-    // The dead chain is still `running` in the ledger; nothing else would ever
-    // look at it, so admission retires it rather than blocking forever.
-    const second = await drain(await engine.createResponse(session, initial));
+    expect(await failureCode(engine.createResponse(session, initial))).toBe(
+      "invalid_request",
+    );
+    const freshSession = {
+      ...session,
+      sessionId: "acs_after_death",
+      providerSessionId: "provider_after_death",
+    };
+    const second = await drain(
+      await engine.createResponse(freshSession, initial),
+    );
     expect(second.final!.id).not.toBe(first.final!.id);
-    expect(await engine.hasLiveChain(session.sessionId)).toBe(true);
+    expect(await engine.hasLiveChain(session.sessionId)).toBe(false);
   });
 
   it("admits only one of two continuations racing on the same call", async () => {

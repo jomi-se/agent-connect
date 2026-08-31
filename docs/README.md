@@ -33,6 +33,7 @@ documents an unstable prototype. It is not the default browser/gateway path.
 ## Current design direction
 
 - [ADR 0010: Open Responses at the application boundary](decisions/0010-open-responses-gateway-pivot.md)
+- [ADR 0011: Linear multi-turn continuation](decisions/0011-linear-multi-turn-continuation.md)
   is the leading proposed protocol direction and defines its evidence gates.
 - [Containerized gateway deployment](plan/containerized-gateway-deployment.md)
   remains supporting packaging research, not a required architecture.
@@ -55,9 +56,9 @@ historical. AG-UI is no longer an active core-protocol experiment.
 
 ## Future work
 
-- [Multi-turn task continuation](future/multi-turn-task-continuation.md):
-  letting an application continue a finished task instead of restarting it.
-  Proposed, not started; requires changes to the response chain lifecycle.
+- [Multi-turn task continuation](plan/multi-turn-task-continuation.md): explicit
+  completed-task follow-up on one durable provider conversation. Implemented;
+  pending the manual real-Codex release gate.
 - [Hassle-free tunnel ingress](future/hassle-free-tunnel-ingress.md): reaching a
   self-hosted gateway at a stable HTTPS origin without root or a second admin
   console. Surveys zrok, cloudflared, ngrok, and Funnel; depends on ADR 0009.
