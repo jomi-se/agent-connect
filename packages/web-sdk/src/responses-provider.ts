@@ -69,17 +69,35 @@ export class ResponsesProvider implements AgentProvider {
         model: MODEL,
         stream: true,
         input: request.prompt,
-        tools: request.tools.map((tool) => ({
-          type: "function",
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.inputSchema,
-        })),
+        ...(request.continuationToken
+          ? { previous_response_id: request.continuationToken }
+          : {
+              tools: request.tools.map((tool) => ({
+                type: "function",
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.inputSchema,
+              })),
+            }),
       };
       for (;;) {
         const segment = yield* this.streamSegment(body, controller);
         if (segment.terminal) {
-          yield segment.terminal;
+          if (
+            segment.terminal.type === "task.completed" &&
+            segment.responseId === ""
+          ) {
+            throw new AgentConnectError(
+              "protocol_error",
+              "The gateway completed a response without publishing its id",
+            );
+          }
+          yield segment.terminal.type === "task.completed"
+            ? {
+                ...segment.terminal,
+                continuationToken: segment.responseId,
+              }
+            : segment.terminal;
           return;
         }
         // The segment ended on a function call. Wait for the application's
@@ -248,7 +266,7 @@ export class ResponsesProvider implements AgentProvider {
 
 async function responseError(response: Response): Promise<AgentConnectError> {
   const body = (await response.text()).slice(0, 500);
-  let code = "http_error";
+  let gatewayCode: string | undefined;
   try {
     const parsed: unknown = JSON.parse(body);
     if (
@@ -257,14 +275,22 @@ async function responseError(response: Response): Promise<AgentConnectError> {
       "error" in parsed &&
       typeof (parsed as { error: { code?: unknown } }).error?.code === "string"
     ) {
-      code = (parsed as { error: { code: string } }).error.code;
+      gatewayCode = (parsed as { error: { code: string } }).error.code;
     }
   } catch {
     // A non-JSON body keeps the generic code.
   }
+  const code =
+    response.status === 401
+      ? "invalid_app_grant"
+      : gatewayCode === "response_busy"
+        ? "task_busy"
+        : gatewayCode === "previous_response_not_continuable"
+          ? "continuation_unavailable"
+          : "http_error";
   return new AgentConnectError(
-    response.status === 401 ? "invalid_app_grant" : "http_error",
-    `The gateway rejected the response request (${code}): HTTP ${response.status}${body ? ` — ${body}` : ""}`,
+    code,
+    `The gateway rejected the response request (${gatewayCode ?? "unknown"}): HTTP ${response.status}${body ? ` — ${body}` : ""}`,
     { status: response.status },
   );
 }

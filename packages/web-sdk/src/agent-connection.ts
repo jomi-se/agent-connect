@@ -48,6 +48,7 @@ export async function connectAgent(
     credentials: options.credentials ?? "same-origin",
     body: JSON.stringify({
       appId: options.appId,
+      ...(options.freshSession ? { fresh: true } : {}),
       tools: tools.map((tool) => ({
         name: tool.name,
         description: tool.description,

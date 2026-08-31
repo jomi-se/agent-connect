@@ -31,6 +31,10 @@ export interface ChainRecord {
   readonly tools: readonly GatewayToolDefinition[];
   readonly providerKind: string;
   readonly providerSessionId: string;
+  /** Durable ordering within one application session. Legacy files load as 0. */
+  readonly sessionTurn: number;
+  /** The completed response this user turn explicitly continues, if any. */
+  readonly continuedFromResponseId: string | null;
   readonly status: ChainStatus;
   readonly createdAt: number;
   readonly updatedAt: number;
@@ -70,6 +74,9 @@ export interface CallRecord {
  * durable before the caller publishes anything derived from it.
  */
 export interface ResponseStore {
+  /** Persistently prevents reconstruction of a replaced application session. */
+  retireSession(appSessionId: string): Promise<void>;
+  isSessionRetired(appSessionId: string): Promise<boolean>;
   putChain(chain: ChainRecord): Promise<void>;
   getChain(chainId: string): Promise<ChainRecord | undefined>;
   /** Every known chain, for reconstructing authority after a restart. */
@@ -83,9 +90,18 @@ export interface ResponseStore {
 }
 
 export class InMemoryResponseStore implements ResponseStore {
+  private readonly retiredSessions = new Set<string>();
   private readonly chains = new Map<string, ChainRecord>();
   private readonly responses = new Map<string, ResponseRecord>();
   private readonly calls = new Map<string, CallRecord>();
+
+  async retireSession(appSessionId: string): Promise<void> {
+    this.retiredSessions.add(appSessionId);
+  }
+
+  async isSessionRetired(appSessionId: string): Promise<boolean> {
+    return this.retiredSessions.has(appSessionId);
+  }
 
   async putChain(chain: ChainRecord): Promise<void> {
     this.chains.set(chain.chainId, chain);

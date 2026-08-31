@@ -66,6 +66,15 @@ interface ActiveChain {
   cancelRequested: boolean;
 }
 
+type SegmentLink =
+  | { readonly kind: "initial" }
+  | { readonly kind: "follow_up"; readonly previousResponseId: string }
+  | {
+      readonly kind: "function_output";
+      readonly previousResponseId: string;
+      readonly callId: string;
+    };
+
 export class ResponseEngine {
   private readonly store: ResponseStore;
   private readonly backend: ResponseBackend;
@@ -73,6 +82,7 @@ export class ResponseEngine {
   private readonly now: () => number;
   private readonly createId: () => string;
   private readonly active = new Map<string, ActiveChain>();
+  private readonly admittingSessions = new Set<string>();
 
   constructor(options: ResponseEngineOptions) {
     this.store = options.store;
@@ -94,7 +104,14 @@ export class ResponseEngine {
   ): Promise<AsyncGenerator<ResponseStreamEvent>> {
     this.requireGrant(session.authorizationGrantId);
     if (request.kind === "initial") {
-      return this.startInitial(session, request.prompt);
+      return this.startNewChain(session, request.prompt, null);
+    }
+    if (request.kind === "follow_up") {
+      return this.startNewChain(
+        session,
+        request.prompt,
+        request.previousResponseId,
+      );
     }
     return this.startContinuation(
       session,
@@ -104,60 +121,212 @@ export class ResponseEngine {
     );
   }
 
-  private async startInitial(
+  private async startNewChain(
     session: EngineSession,
     prompt: string,
+    previousResponseId: string | null,
   ): Promise<AsyncGenerator<ResponseStreamEvent>> {
-    await this.requireNoLiveChain(session.sessionId);
-    const timestamp = this.seconds();
-    const chain: ChainRecord = {
-      chainId: `chain_${this.createId()}`,
-      appSessionId: session.sessionId,
-      appId: session.appId,
-      origin: session.origin,
-      authorizationGrantId: session.authorizationGrantId,
-      toolHash: session.toolHash,
-      tools: session.tools,
-      providerKind: this.backend.kind,
-      providerSessionId: session.providerSessionId,
-      status: "running",
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      latestResponseId: null,
-      terminalError: null,
-    };
-    await this.store.putChain(chain);
-
-    let run: BackendRun;
+    const releaseAdmission = this.claimSessionAdmission(session.sessionId);
     try {
-      run = await this.backend.start({
-        providerSessionId: session.providerSessionId,
-        prompt,
+      await this.requireNoLiveChain(session.sessionId);
+      const chains = (await this.store.listChains()).filter(
+        (chain) => chain.appSessionId === session.sessionId,
+      );
+      if (previousResponseId === null && chains.length > 0) {
+        throw new ResponseApiError(
+          "invalid_request",
+          "previous_response_id is required after the first task in an application session",
+          "previous_response_id",
+        );
+      }
+      if (previousResponseId !== null) {
+        await this.requireCompletedSessionHead(
+          session,
+          previousResponseId,
+          chains,
+        );
+      }
+      const timestamp = this.seconds();
+      const chain: ChainRecord = {
+        chainId: `chain_${this.createId()}`,
+        appSessionId: session.sessionId,
+        appId: session.appId,
+        origin: session.origin,
+        authorizationGrantId: session.authorizationGrantId,
+        toolHash: session.toolHash,
         tools: session.tools,
-      });
-    } catch (cause) {
-      await this.store.putChain({
-        ...chain,
-        status: "terminal",
+        providerKind: this.backend.kind,
+        providerSessionId: session.providerSessionId,
+        sessionTurn:
+          chains.reduce(
+            (latest, candidate) => Math.max(latest, candidate.sessionTurn),
+            0,
+          ) + 1,
+        continuedFromResponseId: previousResponseId,
+        status: "running",
+        createdAt: timestamp,
         updatedAt: this.seconds(),
-        terminalError: {
-          code: "backend_unavailable",
-          message: "the selected user-owned runtime could not be reached",
-        },
-      });
+        latestResponseId: null,
+        terminalError: null,
+      };
+      await this.store.putChain(chain);
+
+      let run: BackendRun;
+      try {
+        run = await this.backend.start({
+          providerSessionId: session.providerSessionId,
+          prompt,
+          tools: session.tools,
+        });
+      } catch (cause) {
+        await this.store.putChain({
+          ...chain,
+          status: "terminal",
+          updatedAt: this.seconds(),
+          terminalError: {
+            code: "backend_unavailable",
+            message: "the selected user-owned runtime could not be reached",
+          },
+        });
+        throw new ResponseApiError(
+          "backend_unavailable",
+          `the selected user-owned runtime could not be reached: ${describe(cause)}`,
+        );
+      }
+      const state: ActiveChain = {
+        run,
+        events: run.events(),
+        busy: true,
+        cancelRequested: false,
+      };
+      this.active.set(chain.chainId, state);
+      return this.segment(
+        chain.chainId,
+        state,
+        previousResponseId === null
+          ? { kind: "initial" }
+          : { kind: "follow_up", previousResponseId },
+      );
+    } finally {
+      releaseAdmission();
+    }
+  }
+
+  private async requireCompletedSessionHead(
+    session: EngineSession,
+    previousResponseId: string,
+    chains: readonly ChainRecord[],
+  ): Promise<void> {
+    const previous = await this.store.getResponse(previousResponseId);
+    const predecessor = previous
+      ? await this.store.getChain(previous.chainId)
+      : undefined;
+    if (
+      !previous ||
+      !predecessor ||
+      !this.chainBelongsTo(predecessor, session)
+    ) {
       throw new ResponseApiError(
-        "backend_unavailable",
-        `the selected user-owned runtime could not be reached: ${describe(cause)}`,
+        "previous_response_not_found",
+        "previous_response_id is unknown or not owned by this application session",
+        "previous_response_id",
       );
     }
-    const state: ActiveChain = {
-      run,
-      events: run.events(),
-      busy: true,
-      cancelRequested: false,
-    };
-    this.active.set(chain.chainId, state);
-    return this.segment(chain.chainId, state, null);
+    const latestTurn = chains.reduce(
+      (latest, candidate) => Math.max(latest, candidate.sessionTurn),
+      0,
+    );
+    const heads = chains.filter((chain) => chain.sessionTurn === latestTurn);
+    if (
+      heads.length !== 1 ||
+      heads[0]?.chainId !== predecessor.chainId ||
+      predecessor.latestResponseId !== previousResponseId
+    ) {
+      throw new ResponseApiError(
+        "previous_response_not_continuable",
+        "only the latest response in this application session can be continued",
+        "previous_response_id",
+      );
+    }
+    if (predecessor.sessionTurn === 0) {
+      throw new ResponseApiError(
+        "previous_response_not_continuable",
+        "legacy response state has no trustworthy session order and cannot be continued",
+        "previous_response_id",
+      );
+    }
+    if (
+      predecessor.status !== "terminal" ||
+      predecessor.terminalError !== null ||
+      previous.status !== "completed"
+    ) {
+      throw new ResponseApiError(
+        "previous_response_not_continuable",
+        predecessor.terminalError?.message ??
+          "only a successfully completed task can be continued",
+        "previous_response_id",
+      );
+    }
+    if (
+      predecessor.providerKind !== this.backend.kind ||
+      predecessor.providerSessionId !== session.providerSessionId
+    ) {
+      throw new ResponseApiError(
+        "previous_response_not_continuable",
+        "the provider session that produced this response is no longer available",
+        "previous_response_id",
+      );
+    }
+  }
+
+  private claimSessionAdmission(appSessionId: string): () => void {
+    const release = this.tryClaimSession(appSessionId);
+    if (!release) {
+      throw new ResponseApiError(
+        "response_busy",
+        "this application session is already starting another response chain",
+      );
+    }
+    return release;
+  }
+
+  private tryClaimSession(appSessionId: string): (() => void) | undefined {
+    if (this.admittingSessions.has(appSessionId)) return undefined;
+    this.admittingSessions.add(appSessionId);
+    return () => this.admittingSessions.delete(appSessionId);
+  }
+
+  /**
+   * Runs a provider-session maintenance operation only while no response can
+   * be admitted or remain live. The same synchronous claim used by admission
+   * closes the refresh-first as well as admission-first race.
+   */
+  async runIfSessionIdle<T>(
+    appSessionId: string,
+    operation: () => Promise<T>,
+  ): Promise<T | undefined> {
+    return this.runIfSessionsIdle([appSessionId], operation);
+  }
+
+  /** Atomically leases several session IDs for replacement after rehydration. */
+  async runIfSessionsIdle<T>(
+    appSessionIds: readonly string[],
+    operation: () => Promise<T>,
+  ): Promise<T | undefined> {
+    const releases: Array<() => void> = [];
+    try {
+      for (const appSessionId of [...new Set(appSessionIds)].sort()) {
+        const release = this.tryClaimSession(appSessionId);
+        if (!release) return undefined;
+        releases.push(release);
+      }
+      for (const appSessionId of appSessionIds) {
+        if ((await this.liveChains(appSessionId)).length > 0) return undefined;
+      }
+      return await operation();
+    } finally {
+      for (const release of releases.reverse()) release();
+    }
   }
 
   private async startContinuation(
@@ -195,6 +364,7 @@ export class ResponseEngine {
       throw cause;
     }
     return this.segment(chain.chainId, state, {
+      kind: "function_output",
       previousResponseId,
       callId,
     });
@@ -349,7 +519,7 @@ export class ResponseEngine {
   private async *segment(
     chainId: string,
     state: ActiveChain,
-    continuation: { previousResponseId: string; callId: string } | null,
+    link: SegmentLink,
   ): AsyncGenerator<ResponseStreamEvent> {
     const responseId = `resp_${this.createId()}`;
     const createdAt = this.seconds();
@@ -357,12 +527,13 @@ export class ResponseEngine {
     const writer = new SegmentWriter({
       responseId,
       createdAt,
-      previousResponseId: continuation?.previousResponseId ?? null,
+      previousResponseId:
+        link.kind === "initial" ? null : link.previousResponseId,
       tools: projectTools(chain.tools),
       now: this.now,
       createId: this.createId,
     });
-    let resolvedCall = continuation === null;
+    let resolvedCall = link.kind !== "function_output";
 
     const persist = (
       status: ResponseStatus,
@@ -371,7 +542,8 @@ export class ResponseEngine {
       this.store.putResponse({
         responseId,
         chainId,
-        previousResponseId: continuation?.previousResponseId ?? null,
+        previousResponseId:
+          link.kind === "initial" ? null : link.previousResponseId,
         status,
         createdAt,
         completedAt: status === "in_progress" ? null : this.seconds(),
@@ -411,9 +583,9 @@ export class ResponseEngine {
           return;
         }
         if (next.value.type === "completed") {
-          if (!resolvedCall && continuation) {
+          if (!resolvedCall && link.kind === "function_output") {
             resolvedCall = true;
-            await this.observeCallResult(continuation.callId);
+            await this.observeCallResult(link.callId);
           }
           yield* writer.closeText();
           await this.finishChain(chainId, "terminal", null);
@@ -423,17 +595,17 @@ export class ResponseEngine {
         }
         const event = next.value;
         if (event.type === "text.delta") {
-          if (!resolvedCall && continuation) {
+          if (!resolvedCall && link.kind === "function_output") {
             resolvedCall = true;
-            await this.observeCallResult(continuation.callId);
+            await this.observeCallResult(link.callId);
           }
           yield* writer.appendText(event.delta);
           continue;
         }
         if (event.type === "tool.call") {
-          if (!resolvedCall && continuation) {
+          if (!resolvedCall && link.kind === "function_output") {
             resolvedCall = true;
-            await this.observeCallResult(continuation.callId);
+            await this.observeCallResult(link.callId);
           }
           yield* writer.closeText();
           const item = await this.recordCall(chainId, responseId, event, chain);
@@ -609,6 +781,7 @@ export class ResponseEngine {
    * old provider session, so a replacement would silently break it.
    */
   async hasLiveChain(appSessionId: string): Promise<boolean> {
+    if (this.admittingSessions.has(appSessionId)) return true;
     return (await this.liveChains(appSessionId)).length > 0;
   }
 

@@ -3,6 +3,38 @@ import { describe, expect, it, vi } from "vitest";
 import { connectAgent, defineTool } from "../src/index.js";
 
 describe("connectAgent", () => {
+  it("requests a fresh application session without requiring a new grant", async () => {
+    let body: unknown;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init = {}) => {
+      body = init.body ? JSON.parse(String(init.body)) : undefined;
+      return Response.json(
+        {
+          sessionId: "acs_fresh",
+          accessToken: "fresh-capability",
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          toolHash: "snapshot-hash",
+        },
+        { status: 201 },
+      );
+    });
+    await connectAgent({
+      baseUrl: "https://runtime.example",
+      appId: "notes-app",
+      accessToken: "existing-application-grant",
+      freshSession: true,
+      fetch,
+      tools: [
+        defineTool({
+          name: "read_page",
+          description: "Read the current page",
+          inputSchema: { type: "object", additionalProperties: false },
+          execute: () => "page",
+        }),
+      ],
+    });
+    expect(body).toMatchObject({ appId: "notes-app", fresh: true });
+  });
+
   it("uses an app grant, receives an opaque session, and runs through the neutral API", async () => {
     const requests: Array<{
       url: string;

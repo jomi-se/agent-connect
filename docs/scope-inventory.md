@@ -1,6 +1,6 @@
 # Scope and capability inventory
 
-Updated: 2026-08-29
+Updated: 2026-08-31
 
 This inventory separates implemented behavior from explicit targets. The
 mission defines the product boundary; this file prevents future plans from
@@ -16,6 +16,8 @@ silently treating a target as a shipped guarantee.
 | Authorize an HTTPS application without terminal access | Implemented                     | Gateway-owned consent and S256 PKCE grant bind Origin, redirect, app id, scopes, and canonical tools                                       |
 | Dynamically enroll a previously unknown app Origin     | Implemented for Tailscale Serve | The Origin may begin authorization but receives no operational access before approval                                                      |
 | Stream task, text, lifecycle, and tool events          | Implemented                     | Provider-neutral `AgentTaskEvent` surface                                                                                                  |
+| Continue a successfully completed task                 | Implemented                     | Explicit SDK continuation; durable linear head; real Omnigent proves two prompts on one ACP session                                        |
+| Start over without reauthorizing                       | Implemented                     | `freshSession` safely replaces idle opaque/provider sessions; upstream workspace expiry remains deferred                                   |
 | Execute and return a correlated browser tool result    | Implemented                     | Unknown tools and malformed arguments fail closed                                                                                          |
 | Revoke an application's grant                          | Implemented                     | Self-revocation and gateway-owned grant management invalidate later use                                                                    |
 | Install the SDK from a clean package artifact          | Implemented from source         | `npm run test:package:web`; package is not published to npm                                                                                |

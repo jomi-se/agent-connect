@@ -141,6 +141,21 @@ describe("version 0 request profile", () => {
         output: '{"ok":true}',
       });
     });
+
+    it("takes text plus previous_response_id as a completed-turn follow-up", () => {
+      expect(
+        parse({
+          model: AGENT_CONNECT_MODEL,
+          previous_response_id: "resp_1",
+          input: "not quite, make it shorter",
+        }),
+      ).toEqual({
+        kind: "follow_up",
+        stream: false,
+        previousResponseId: "resp_1",
+        prompt: "not quite, make it shorter",
+      });
+    });
   });
 
   describe("rejected", () => {

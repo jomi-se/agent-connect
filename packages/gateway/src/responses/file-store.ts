@@ -1,5 +1,6 @@
 import {
   closeSync,
+  existsSync,
   fsyncSync,
   mkdirSync,
   openSync,
@@ -26,6 +27,11 @@ interface ChainFile {
   readonly calls: Record<string, CallRecord>;
 }
 
+interface RetiredSessionsFile {
+  readonly version: 1;
+  readonly sessionIds: readonly string[];
+}
+
 export interface QuarantinedResponseState {
   readonly originalPath: string;
   readonly quarantinePath: string;
@@ -46,6 +52,8 @@ export interface QuarantinedResponseState {
  */
 export class FileResponseStore implements ResponseStore {
   private readonly directory: string;
+  private readonly retiredSessionsPath: string;
+  private readonly retiredSessions = new Set<string>();
   private readonly files = new Map<string, ChainFile>();
   private readonly chainOfResponse = new Map<string, string>();
   private readonly chainOfCall = new Map<string, string>();
@@ -61,9 +69,16 @@ export class FileResponseStore implements ResponseStore {
     } = {},
   ) {
     this.directory = directory;
+    this.retiredSessionsPath = join(directory, "retired-sessions.state");
     this.durableWrite = options.durableWrite ?? writeDurably;
     this.onCorruptFile = options.onCorruptFile ?? reportCorruptFile;
     mkdirSync(directory, { recursive: true, mode: 0o700 });
+    if (existsSync(this.retiredSessionsPath)) {
+      const state = loadRetiredSessions(this.retiredSessionsPath);
+      for (const sessionId of state.sessionIds) {
+        this.retiredSessions.add(sessionId);
+      }
+    }
     for (const entry of readdirSync(directory)) {
       if (!entry.endsWith(".json")) continue;
       const path = join(directory, entry);
@@ -73,6 +88,24 @@ export class FileResponseStore implements ResponseStore {
         this.quarantine(path, cause);
       }
     }
+  }
+
+  async retireSession(appSessionId: string): Promise<void> {
+    await this.writeOperation(() => {
+      const sessionIds = new Set(this.retiredSessions);
+      sessionIds.add(appSessionId);
+      const body = `${JSON.stringify(
+        { version: 1, sessionIds: [...sessionIds].sort() },
+        null,
+        2,
+      )}\n`;
+      this.durableWrite(this.retiredSessionsPath, body, this.directory);
+      this.retiredSessions.add(appSessionId);
+    });
+  }
+
+  async isSessionRetired(appSessionId: string): Promise<boolean> {
+    return this.retiredSessions.has(appSessionId);
   }
 
   async listChains(): Promise<readonly ChainRecord[]> {
@@ -151,7 +184,7 @@ export class FileResponseStore implements ResponseStore {
     // Serialized so two concurrent updates to one chain cannot interleave a
     // rename between another writer's write and its own. A failed operation is
     // not retained as the queue tail: later writes must still be attempted.
-    const operation = this.writes.then(() => {
+    return this.writeOperation(() => {
       const file = createFile();
       const path = join(this.directory, `${file.chain.chainId}.json`);
       const body = `${JSON.stringify(file, null, 2)}\n`;
@@ -159,6 +192,10 @@ export class FileResponseStore implements ResponseStore {
       // Reads never observe state that was not durably committed.
       this.index(file);
     });
+  }
+
+  private writeOperation(operationBody: () => void): Promise<void> {
+    const operation = this.writes.then(operationBody);
     this.writes = operation.catch(() => {});
     return operation;
   }
@@ -181,7 +218,18 @@ export class FileResponseStore implements ResponseStore {
     const file = parsed as ChainFile;
     return {
       version: 1,
-      chain: file.chain,
+      chain: {
+        ...file.chain,
+        sessionTurn:
+          Number.isSafeInteger(file.chain.sessionTurn) &&
+          file.chain.sessionTurn >= 0
+            ? file.chain.sessionTurn
+            : 0,
+        continuedFromResponseId:
+          typeof file.chain.continuedFromResponseId === "string"
+            ? file.chain.continuedFromResponseId
+            : null,
+      },
       responses: file.responses ?? {},
       calls: file.calls ?? {},
     };
@@ -197,6 +245,18 @@ export class FileResponseStore implements ResponseStore {
       reason: cause instanceof Error ? cause.message : String(cause),
     });
   }
+}
+
+function loadRetiredSessions(path: string): RetiredSessionsFile {
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as RetiredSessionsFile;
+  if (
+    parsed.version !== 1 ||
+    !Array.isArray(parsed.sessionIds) ||
+    parsed.sessionIds.some((sessionId) => typeof sessionId !== "string")
+  ) {
+    throw new Error(`Invalid retired response-session state ${path}`);
+  }
+  return parsed;
 }
 
 function reportCorruptFile(event: QuarantinedResponseState): void {

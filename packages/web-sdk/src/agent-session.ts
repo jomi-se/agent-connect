@@ -37,8 +37,10 @@ export class AgentConnectError extends Error {
 
 export class AgentSession {
   private readonly provider: AgentProvider;
-  private readonly tools: readonly ApplicationTool[];
+  private readonly tools: ReadonlyMap<string, ToolSnapshot>;
   private readonly sessionId: string;
+  private continuationToken: string | undefined;
+  private initialTaskStarted = false;
 
   constructor(options: AgentSessionOptions) {
     if (options.tools.length === 0) {
@@ -47,18 +49,48 @@ export class AgentSession {
       );
     }
     this.provider = options.provider;
-    this.tools = Array.from(options.tools);
+    // Tool authorization is fixed for the lifetime of an application session.
+    // Clone and compile it once so later caller mutation cannot change the
+    // browser-side contract underneath the gateway's approved snapshot.
+    this.tools = snapshotTools(options.tools);
     this.sessionId =
       options.createSessionId?.() ??
       `agent-session-${globalThis.crypto.randomUUID()}`;
   }
 
   async *streamTask(prompt: string): AsyncGenerator<AgentTaskEvent> {
-    if (prompt.trim().length === 0) {
-      throw new TypeError("Task prompt must not be empty");
+    requirePrompt(prompt);
+    if (this.initialTaskStarted) {
+      throw new AgentConnectError(
+        "protocol_error",
+        "This agent session already started; continue the completed task or create a new session",
+      );
     }
+    this.initialTaskStarted = true;
+    yield* this.stream(prompt, undefined);
+  }
 
-    const tools = snapshotTools(this.tools);
+  async *streamContinuation(prompt: string): AsyncGenerator<AgentTaskEvent> {
+    const checkpoint = this.continuationToken;
+    if (!checkpoint) {
+      throw new AgentConnectError(
+        "continuation_unavailable",
+        "No successfully completed task is available to continue",
+      );
+    }
+    yield* this.stream(prompt, checkpoint);
+  }
+
+  private async *stream(
+    prompt: string,
+    continuationToken: string | undefined,
+  ): AsyncGenerator<AgentTaskEvent> {
+    requirePrompt(prompt);
+
+    // Once another turn is admitted, an older checkpoint is no longer a safe
+    // branch point. Publish a new checkpoint only after successful completion.
+    this.continuationToken = undefined;
+
     const completedActions = new Set<string>();
     let text = "";
     let terminal = false;
@@ -67,7 +99,8 @@ export class AgentSession {
 
     for await (const event of this.provider.streamTask({
       prompt,
-      tools: Array.from(tools.values(), (tool) => tool.definition),
+      tools: Array.from(this.tools.values(), (tool) => tool.definition),
+      ...(continuationToken ? { continuationToken } : {}),
     })) {
       switch (event.type) {
         case "text.delta":
@@ -79,7 +112,7 @@ export class AgentSession {
             break;
           }
           completedActions.add(event.actionId);
-          const tool = tools.get(event.name);
+          const tool = this.tools.get(event.name);
           const arguments_ = asJsonObject(event.arguments);
           if (!tool) {
             const error = taskError(
@@ -153,6 +186,7 @@ export class AgentSession {
         }
         case "task.completed":
           terminal = true;
+          this.continuationToken = event.continuationToken;
           yield { type: "task.completed", text };
           break;
         case "task.failed":
@@ -179,8 +213,18 @@ export class AgentSession {
   }
 
   async runTask(prompt: string): Promise<AgentTaskResult> {
+    return this.collect(this.streamTask(prompt));
+  }
+
+  async continueTask(prompt: string): Promise<AgentTaskResult> {
+    return this.collect(this.streamContinuation(prompt));
+  }
+
+  private async collect(
+    stream: AsyncIterable<AgentTaskEvent>,
+  ): Promise<AgentTaskResult> {
     let text = "";
-    for await (const event of this.streamTask(prompt)) {
+    for await (const event of stream) {
       if (event.type === "task.completed") {
         text = event.text;
       } else if (event.type === "task.failed") {
@@ -197,6 +241,12 @@ export class AgentSession {
 
   cancel(): Promise<void> {
     return this.provider.cancel();
+  }
+}
+
+function requirePrompt(prompt: string): void {
+  if (prompt.trim().length === 0) {
+    throw new TypeError("Task prompt must not be empty");
   }
 }
 

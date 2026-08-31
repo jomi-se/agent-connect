@@ -10,6 +10,7 @@ export type ResponseErrorCode =
   | "unsupported_feature"
   | "model_not_found"
   | "previous_response_not_found"
+  | "previous_response_not_continuable"
   | "tool_snapshot_mismatch"
   | "function_call_not_found"
   | "function_output_conflict"
@@ -23,6 +24,7 @@ const STATUS: Readonly<Record<ResponseErrorCode, number>> = {
   unsupported_feature: 400,
   model_not_found: 400,
   previous_response_not_found: 404,
+  previous_response_not_continuable: 409,
   tool_snapshot_mismatch: 403,
   function_call_not_found: 409,
   function_output_conflict: 409,
@@ -37,6 +39,7 @@ const TYPE: Readonly<Record<ResponseErrorCode, string>> = {
   unsupported_feature: "invalid_request_error",
   model_not_found: "invalid_request_error",
   previous_response_not_found: "invalid_request_error",
+  previous_response_not_continuable: "invalid_request_error",
   tool_snapshot_mismatch: "authorization_error",
   function_call_not_found: "invalid_request_error",
   function_output_conflict: "invalid_request_error",

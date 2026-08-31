@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-08-28
+Updated: 2026-08-31
 
 This is the canonical unfinished-work list. It records current priorities and
 only enough completed context to explain them. Product boundaries live in the
@@ -55,6 +55,13 @@ npm run verify:full
 that kills disposable gateway subprocesses. A real Codex/browser composition
 remains a deliberate manual milestone because it consumes the operator's
 credentials and model allowance.
+
+Linear completed-task continuation is implemented under
+[ADR 0011](../decisions/0011-linear-multi-turn-continuation.md). Each follow-up
+is a new immutable response chain on the same Omnigent/ACP session, guarded by
+a durable session head. Gateway, SDK, browser, and real-Omnigent contracts pass;
+the remaining release gate is a manual real-Codex correction that depends on
+first-turn-only context.
 
 ## Priority 1: finish the Open Responses replacement
 

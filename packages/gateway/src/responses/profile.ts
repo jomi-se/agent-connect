@@ -66,8 +66,15 @@ export interface ParsedContinuationRequest {
   readonly output: string;
 }
 
+export interface ParsedFollowUpRequest {
+  readonly kind: "follow_up";
+  readonly stream: boolean;
+  readonly previousResponseId: string;
+  readonly prompt: string;
+}
+
 export type ParsedResponseRequest =
-  ParsedInitialRequest | ParsedContinuationRequest;
+  ParsedInitialRequest | ParsedContinuationRequest | ParsedFollowUpRequest;
 
 /**
  * Validates one `POST /v1/responses` body against the version 0 profile and the
@@ -110,8 +117,24 @@ export function parseResponseRequest(
       "previous_response_id",
     );
   }
-  const output = parseFunctionCallOutput(value["input"]);
-  return { kind: "continuation", stream, previousResponseId, ...output };
+  if (isFunctionCallOutputInput(value["input"])) {
+    const output = parseFunctionCallOutput(value["input"]);
+    return { kind: "continuation", stream, previousResponseId, ...output };
+  }
+  return {
+    kind: "follow_up",
+    stream,
+    previousResponseId,
+    prompt: parsePrompt(value["input"]),
+  };
+}
+
+function isFunctionCallOutputInput(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    isRecord(value[0]) &&
+    value[0]["type"] === "function_call_output"
+  );
 }
 
 /**

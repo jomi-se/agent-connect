@@ -1,0 +1,63 @@
+# 0011: Model completed-task continuation as a linear response history
+
+- Status: proposed; implementation complete, pending manual real-Codex release gate
+- Date: 2026-08-31
+
+## Context
+
+The first application needed to correct a completed result without restating
+the whole task. Omnigent 0.5.1 already binds one provider session to one durable
+ACP session and reuses it across prompts. The missing layer was an honest
+application-visible continuation contract.
+
+Reopening a terminal response chain would weaken the existing run, persistence,
+and cancellation invariants. Allowing another unlinked initial request would
+also be misleading: it would omit `previous_response_id` while still entering
+the same stateful provider conversation.
+
+## Decision
+
+Each user turn is a new immutable Open Responses chain. The first response of a
+follow-up chain names the latest successfully completed response with
+`previous_response_id`. The gateway persists a monotonically increasing turn
+ordinal and predecessor ID, and accepts only a linear advance of the durable
+session head on the same provider kind, provider session, grant, origin,
+application, and fixed tool snapshot.
+
+One opaque application session admits exactly one unlinked initial task. Every
+later turn must explicitly continue the current successful head. Failed,
+cancelled, interrupted, stale, legacy, or provider-replaced heads are not
+continuable. Starting over uses a fresh opaque application and provider session
+under the existing grant; capability refresh itself never resets a session.
+Fresh replacement is refused while work is live and bounded to eight
+provisioned sessions per grant, application, and tool snapshot in one gateway
+process. Retiring the corresponding upstream workspace is provider lifecycle
+work and is not part of this decision.
+
+The provider-neutral browser SDK represents the predecessor as an opaque
+continuation checkpoint. It exposes explicit `streamContinuation()` and
+`continueTask()` methods. Starting a turn invalidates the prior usable
+checkpoint, and only successful completion publishes the next one.
+The SDK freezes the application tool snapshot once per session.
+
+Recovery of a chain parked on an unresolved application function call remains
+a separate problem. This decision does not authorize automatic side-effect
+replay.
+
+## Consequences
+
+- Completed runs remain terminal and no idle backend run is retained.
+- The application cannot fork one stateful provider conversation.
+- A client that loses its checkpoint must start a fresh session unless a later
+  design adds durable client-side checkpoint restoration.
+- A fresh session durably tombstones the previous opaque session so its
+  capability cannot return after a gateway restart. Provider workspace cleanup
+  remains future lifecycle work.
+- Pre-feature response files remain readable but cannot be guessed into a
+  continuation order.
+- Real-provider compatibility requires one ACP `session/new`, multiple
+  `session/prompt` calls on its ID, and a later tool call that depends on
+  first-turn-only information.
+
+The executable contracts and evidence plan are in
+[`docs/plan/multi-turn-task-continuation.md`](../plan/multi-turn-task-continuation.md).

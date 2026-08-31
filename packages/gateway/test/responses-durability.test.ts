@@ -99,6 +99,17 @@ function callIdOf(resource: ResponseResource): string {
 }
 
 describe("file-backed response store", () => {
+  it("persists retired application sessions across store reconstruction", async () => {
+    const directory = stateDirectory();
+    const first = new FileResponseStore(directory);
+    await first.retireSession("acs_retired");
+    expect(await first.isSessionRetired("acs_retired")).toBe(true);
+
+    const restarted = new FileResponseStore(directory);
+    expect(await restarted.isSessionRetired("acs_retired")).toBe(true);
+    expect(await restarted.isSessionRetired("acs_current")).toBe(false);
+  });
+
   it("recovers after one durable write failure without exposing phantom state", async () => {
     const directory = stateDirectory();
     const first = engineOn(directory, [[{ type: "completed" }]]);
@@ -192,6 +203,65 @@ describe("file-backed response store", () => {
     expect(view.response.output).toEqual(completed.output);
     // The immutable snapshot is rendered from the durable record, not memory.
     expect(view.response.tools).toEqual(completed.tools);
+  });
+
+  it("continues a durably ordered completed turn after engine reconstruction", async () => {
+    const directory = stateDirectory();
+    const first = engineOn(directory, [
+      [{ type: "text.delta", delta: "draft" }, { type: "completed" }],
+    ]);
+    const completed = await drain(
+      await first.engine.createResponse(session, initial),
+    );
+
+    const restarted = engineOn(directory, [
+      [{ type: "text.delta", delta: "revised" }, { type: "completed" }],
+    ]);
+    const followUp = await drain(
+      await restarted.engine.createResponse(session, {
+        kind: "follow_up",
+        stream: true,
+        previousResponseId: completed.id,
+        prompt: "make it shorter",
+      }),
+    );
+    expect(followUp.previous_response_id).toBe(completed.id);
+    expect(
+      (await restarted.store.listChains()).map((chain) => chain.sessionTurn),
+    ).toEqual([1, 2]);
+  });
+
+  it("loads pre-continuation state for recovery but refuses to infer its head", async () => {
+    const directory = stateDirectory();
+    const first = engineOn(directory, [[{ type: "completed" }]]);
+    const completed = await drain(
+      await first.engine.createResponse(session, initial),
+    );
+    const [file] = readdirSync(directory).filter((name) =>
+      name.endsWith(".json"),
+    );
+    const path = join(directory, file ?? "");
+    const legacy = JSON.parse(readFileSync(path, "utf8")) as {
+      chain: Record<string, unknown>;
+    };
+    delete legacy.chain["sessionTurn"];
+    delete legacy.chain["continuedFromResponseId"];
+    writeFileSync(path, `${JSON.stringify(legacy)}\n`);
+
+    const restarted = engineOn(directory, [[{ type: "completed" }]]);
+    await expect(
+      restarted.engine.createResponse(session, {
+        kind: "follow_up",
+        stream: true,
+        previousResponseId: completed.id,
+        prompt: "continue",
+      }),
+    ).rejects.toMatchObject({
+      code: "previous_response_not_continuable",
+    });
+    await expect(
+      restarted.engine.describeChain(session, completed.id),
+    ).resolves.toMatchObject({ recovery: "terminal_reconstructed" });
   });
 
   it("resolves a chain parked across a restart as interrupted", async () => {

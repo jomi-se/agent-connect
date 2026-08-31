@@ -16,6 +16,8 @@ export type FakeTurn = readonly BackendEvent[];
 
 export interface FakeBackendOptions {
   readonly turns: readonly FakeTurn[];
+  /** Optional per-run scripts for tests that start several immutable chains. */
+  readonly runs?: readonly (readonly FakeTurn[])[];
   readonly failStart?: Error;
   readonly failSubmit?: Error;
 }
@@ -31,7 +33,8 @@ export class FakeBackend implements ResponseBackend {
 
   async start(request: BackendStartRequest): Promise<BackendRun> {
     if (this.options.failStart) throw this.options.failStart;
-    const run = new FakeBackendRun(request, this.options);
+    const turns = this.options.runs?.[this.runs.length] ?? this.options.turns;
+    const run = new FakeBackendRun(request, { ...this.options, turns });
     this.runs.push(run);
     return run;
   }

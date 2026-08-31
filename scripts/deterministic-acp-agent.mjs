@@ -14,6 +14,8 @@ const targetToolArguments = parseTargetArguments(
   process.env.AGENT_CONNECT_DETERMINISTIC_TOOL_ARGUMENTS ?? "{}",
 );
 const scenarioMode = process.env.AGENT_CONNECT_DETERMINISTIC_SCENARIOS === "1";
+const continuationMode =
+  process.env.AGENT_CONNECT_DETERMINISTIC_CONTINUATION === "1";
 const promptDelayMs = parseNonNegativeInteger(
   process.env.AGENT_CONNECT_DETERMINISTIC_PROMPT_DELAY_MS ?? "0",
   "AGENT_CONNECT_DETERMINISTIC_PROMPT_DELAY_MS",
@@ -380,7 +382,12 @@ const app = agent({ name: "Agent Connect deterministic ACP test agent" })
       })),
     });
     const sessionId = `deterministic-${crypto.randomUUID()}`;
-    const session = { mcpClients: [], advertisedTools: [] };
+    const session = {
+      mcpClients: [],
+      advertisedTools: [],
+      promptCount: 0,
+      rememberedMarker: undefined,
+    };
     for (const server of params.mcpServers) {
       const client = new McpStdioClient(server);
       session.mcpClients.push(client);
@@ -397,21 +404,46 @@ const app = agent({ name: "Agent Connect deterministic ACP test agent" })
     return { sessionId };
   })
   .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
+    const promptText = extractPromptText(params.prompt);
     record({
       kind: "acp.request",
       method: "session/prompt",
       sessionId: params.sessionId,
+      promptText,
     });
     const session = sessions.get(params.sessionId);
     if (!session) throw new Error(`unknown ACP session ${params.sessionId}`);
     if (promptDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, promptDelayMs));
     }
-    const plan = scenarioMode
-      ? selectScenarioPlan(extractPromptText(params.prompt))
-      : (explicitPlan ?? [
-          { name: targetToolName, arguments: targetToolArguments },
-        ]);
+    session.promptCount += 1;
+    let plan;
+    if (continuationMode) {
+      if (session.promptCount === 1) {
+        const marker = /CONTINUATION_MARKER:([A-Za-z0-9_-]+)/.exec(
+          promptText,
+        )?.[1];
+        if (!marker) throw new Error("first turn omitted continuation marker");
+        session.rememberedMarker = marker;
+        plan = [];
+      } else {
+        if (!session.rememberedMarker) {
+          throw new Error("ACP session did not retain the first-turn marker");
+        }
+        plan = [
+          {
+            name: targetToolName,
+            arguments: { marker: session.rememberedMarker },
+          },
+        ];
+      }
+    } else {
+      plan = scenarioMode
+        ? selectScenarioPlan(promptText)
+        : (explicitPlan ?? [
+            { name: targetToolName, arguments: targetToolArguments },
+          ]);
+    }
     const results = [];
     for (const step of plan) {
       const selected = session.advertisedTools.find(

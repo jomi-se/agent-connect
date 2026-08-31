@@ -231,6 +231,13 @@ async function runPrompt(connection: AgentConnection, prompt: string) {
     if (event.type === "task.failed") throw new Error(event.error.message);
   }
 }
+
+async function refinePrompt(connection: AgentConnection, prompt: string) {
+  for await (const event of connection.session.streamContinuation(prompt)) {
+    if (event.type === "text.delta") appendAgentText(event.delta);
+    if (event.type === "task.failed") throw new Error(event.error.message);
+  }
+}
 ```
 
 Under the hood, `AgentSession` drives standard Open Responses (`POST /v1/responses`)
@@ -240,6 +247,16 @@ against the declared schema, executes the matching browser handler, and continue
 the chain with `previous_response_id` and the correlated function output. Stable
 action ids support application-owned deduplication; Agent Connect does not claim
 generic exactly-once side effects.
+
+A completed task publishes an opaque continuation checkpoint inside the SDK.
+`streamContinuation()` and `continueTask()` explicitly advance that linear
+conversation. A failed, cancelled, interrupted, or lost-checkpoint session must
+not be guessed back into continuity. To start over without repeating consent,
+call `connectAgent` with `freshSession: true`; the gateway provisions a new
+opaque application and provider session under the existing grant.
+It refuses the reset while that session has live work and bounds repeated fresh
+sessions to eight per grant, application, and tool snapshot in one gateway
+process.
 
 ## Gateway requirements
 

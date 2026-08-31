@@ -75,17 +75,25 @@ interface Harness {
   readonly baseUrl: string;
   readonly backend: FakeBackend;
   readonly capability: string;
+  readonly grant: string;
+  readonly sessionId: string;
   readonly directory: string;
   readonly runtime: FakeRuntime;
 }
 
 async function start(
   turns: readonly FakeTurn[],
-  options: { readonly nonBrowserClients?: boolean } = {},
+  options: {
+    readonly nonBrowserClients?: boolean;
+    readonly runs?: readonly (readonly FakeTurn[])[];
+  } = {},
 ): Promise<Harness> {
   const directory = mkdtempSync(join(tmpdir(), "agent-connect-responses-"));
   temporaryDirectories.push(directory);
-  const backend = new FakeBackend({ turns });
+  const backend = new FakeBackend({
+    turns,
+    ...(options.runs ? { runs: options.runs } : {}),
+  });
   const runtime = new FakeRuntime();
   const server = createGateway({
     allowedOrigins: new Set([APP_ORIGIN]),
@@ -110,8 +118,19 @@ async function start(
     body: JSON.stringify({ appId: "test-app", tools: [tool()] }),
   });
   expect(session.status).toBe(201);
-  const body = (await session.json()) as { accessToken: string };
-  return { baseUrl, backend, capability: body.accessToken, directory, runtime };
+  const body = (await session.json()) as {
+    accessToken: string;
+    sessionId: string;
+  };
+  return {
+    baseUrl,
+    backend,
+    capability: body.accessToken,
+    grant,
+    sessionId: body.sessionId,
+    directory,
+    runtime,
+  };
 }
 
 /**
@@ -248,6 +267,276 @@ function callIdOf(body: ResponseBody): string {
 }
 
 describe("POST /v1/responses", () => {
+  it("provisions a fresh application and provider session under the existing grant", async () => {
+    const harness = await start([[{ type: "completed" }]]);
+    const created = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.grant}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()], fresh: true }),
+    });
+    expect(created.status).toBe(201);
+    const body = (await created.json()) as {
+      sessionId: string;
+      accessToken: string;
+    };
+    expect(body.sessionId).not.toBe(harness.sessionId);
+    expect(harness.runtime.createdSessions).toBe(2);
+    expect(
+      await post(harness, { model: MODEL, input: "use the replaced session" }),
+    ).toMatchObject({ status: 401 });
+    const freshTask = await post(
+      harness,
+      { model: MODEL, input: "use the fresh session" },
+      { Authorization: `Bearer ${body.accessToken}` },
+    );
+    expect(freshTask.status).toBe(200);
+  });
+
+  it("keeps a replaced opaque session retired after gateway restart", async () => {
+    const harness = await start([], {
+      runs: [[[{ type: "completed" }]], [[{ type: "completed" }]]],
+    });
+    const oldResponse = (await (
+      await post(harness, { model: MODEL, input: "old conversation" })
+    ).json()) as ResponseBody;
+    const created = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.grant}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()], fresh: true }),
+    });
+    const fresh = (await created.json()) as { accessToken: string };
+    const freshResponse = (await (
+      await post(
+        harness,
+        { model: MODEL, input: "fresh conversation" },
+        { Authorization: `Bearer ${fresh.accessToken}` },
+      )
+    ).json()) as ResponseBody;
+
+    const baseUrl = await restart(harness);
+    const oldStatus = await fetch(
+      `${baseUrl}/v1/agent-connect/responses/${oldResponse.id}`,
+      {
+        headers: browserHeaders({
+          Authorization: `Bearer ${harness.capability}`,
+        }),
+      },
+    );
+    expect(oldStatus.status).toBe(401);
+
+    const freshStatus = await fetch(
+      `${baseUrl}/v1/agent-connect/responses/${freshResponse.id}`,
+      {
+        headers: browserHeaders({
+          Authorization: `Bearer ${fresh.accessToken}`,
+        }),
+      },
+    );
+    expect(freshStatus.status).toBe(200);
+  });
+
+  it("retires a reconstructed session when fresh is requested after restart", async () => {
+    const harness = await start([[{ type: "completed" }]]);
+    const oldResponse = (await (
+      await post(harness, { model: MODEL, input: "before restart" })
+    ).json()) as ResponseBody;
+    const baseUrl = await restart(harness);
+
+    const created = await fetch(`${baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.grant}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()], fresh: true }),
+    });
+    expect(created.status).toBe(201);
+    const fresh = (await created.json()) as { accessToken: string };
+
+    const oldStatus = await fetch(
+      `${baseUrl}/v1/agent-connect/responses/${oldResponse.id}`,
+      {
+        headers: browserHeaders({
+          Authorization: `Bearer ${harness.capability}`,
+        }),
+      },
+    );
+    expect(oldStatus.status).toBe(401);
+
+    const refreshed = await fetch(`${baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${fresh.accessToken}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()] }),
+    });
+    expect(refreshed.status).toBe(201);
+  });
+
+  it("bounds fresh-session provisioning under one grant and application", async () => {
+    const harness = await start([[{ type: "completed" }]]);
+    for (let index = 0; index < 7; index += 1) {
+      const created = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+        method: "POST",
+        headers: browserHeaders({
+          Authorization: `Bearer ${harness.grant}`,
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          appId: "test-app",
+          tools: [tool()],
+          fresh: true,
+        }),
+      });
+      expect(created.status).toBe(201);
+    }
+    const refused = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.grant}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()], fresh: true }),
+    });
+    expect(refused.status).toBe(400);
+    expect(harness.runtime.createdSessions).toBe(8);
+  });
+
+  it("does not replace a session while its task is live", async () => {
+    const harness = await start([[call("provider_a")]]);
+    expect(
+      await post(harness, { model: MODEL, input: "start work" }),
+    ).toMatchObject({ status: 200 });
+    const refused = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.grant}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()], fresh: true }),
+    });
+    expect(refused.status).toBe(400);
+    expect(harness.runtime.createdSessions).toBe(1);
+  });
+
+  it("accepts a text follow-up in both JSON and streaming response modes", async () => {
+    const harness = await start([], {
+      runs: [
+        [[{ type: "text.delta", delta: "draft" }, { type: "completed" }]],
+        [[{ type: "text.delta", delta: "revised" }, { type: "completed" }]],
+      ],
+    });
+    const first = await post(harness, {
+      model: MODEL,
+      input: "write a draft",
+    });
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as ResponseBody;
+
+    const second = await post(harness, {
+      model: MODEL,
+      previous_response_id: firstBody.id,
+      input: "make it shorter",
+      stream: true,
+    });
+    expect(second.status).toBe(200);
+    const raw = await second.text();
+    expect(raw).toContain('"previous_response_id":"' + firstBody.id + '"');
+    expect(raw).toContain("revised");
+    expect(raw.endsWith("data: [DONE]\n\n")).toBe(true);
+    expect(harness.backend.runs).toHaveLength(2);
+  });
+
+  it("returns the declared errors for unlinked, unknown, and stale turns", async () => {
+    const harness = await start([], {
+      runs: [[[{ type: "completed" }]], [[{ type: "completed" }]]],
+    });
+    const first = (await (
+      await post(harness, { model: MODEL, input: "first" })
+    ).json()) as ResponseBody;
+
+    const unlinked = await post(harness, { model: MODEL, input: "second" });
+    expect(unlinked.status).toBe(400);
+    expect(await unlinked.json()).toMatchObject({
+      error: { code: "invalid_request", param: "previous_response_id" },
+    });
+
+    const unknown = await post(harness, {
+      model: MODEL,
+      previous_response_id: "resp_unknown",
+      input: "continue",
+    });
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({
+      error: {
+        code: "previous_response_not_found",
+        param: "previous_response_id",
+      },
+    });
+
+    const second = await post(harness, {
+      model: MODEL,
+      previous_response_id: first.id,
+      input: "continue",
+    });
+    expect(second.status).toBe(200);
+    const stale = await post(harness, {
+      model: MODEL,
+      previous_response_id: first.id,
+      input: "branch",
+    });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toMatchObject({
+      error: {
+        code: "previous_response_not_continuable",
+        param: "previous_response_id",
+      },
+    });
+  });
+
+  it("fails continuation explicitly after an idle provider session is repaired", async () => {
+    const harness = await start([[{ type: "completed" }]]);
+    const first = (await (
+      await post(harness, { model: MODEL, input: "first" })
+    ).json()) as ResponseBody;
+    harness.runtime.healthy = false;
+    const refreshed = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.capability}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()] }),
+    });
+    expect(refreshed.status).toBe(201);
+    const renewed = (await refreshed.json()) as { accessToken: string };
+    expect(harness.runtime.createdSessions).toBe(2);
+
+    const continued = await post(
+      harness,
+      {
+        model: MODEL,
+        previous_response_id: first.id,
+        input: "continue",
+      },
+      { Authorization: `Bearer ${renewed.accessToken}` },
+    );
+    expect(continued.status).toBe(409);
+    expect(await continued.json()).toMatchObject({
+      error: {
+        code: "previous_response_not_continuable",
+        param: "previous_response_id",
+      },
+    });
+  });
+
   it("completes a two-call chain for an ordinary JSON client", async () => {
     const harness = await start([
       [{ type: "text.delta", delta: "on it" }, call("provider_a")],
@@ -623,6 +912,26 @@ describe("Agent Connect control extensions", () => {
     expect(continued.status).toBe(200);
     expect(((await continued.json()) as ResponseBody).status).toBe("completed");
     expect(harness.backend.runs).toHaveLength(1);
+  });
+
+  it("reuses a grant session without repairing its provider under a live chain", async () => {
+    const harness = await start([[call("provider_a")]]);
+    expect(
+      await post(harness, { model: MODEL, input: "start work" }),
+    ).toMatchObject({ status: 200 });
+
+    harness.runtime.healthy = false;
+    const reused = await fetch(`${harness.baseUrl}/v1/app-sessions`, {
+      method: "POST",
+      headers: browserHeaders({
+        Authorization: `Bearer ${harness.grant}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ appId: "test-app", tools: [tool()] }),
+    });
+
+    expect(reused.status).toBe(201);
+    expect(harness.runtime.createdSessions).toBe(1);
   });
 
   it("refuses a chain that belongs to a different capability", async () => {
