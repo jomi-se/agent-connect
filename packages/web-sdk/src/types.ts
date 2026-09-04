@@ -82,7 +82,9 @@ export type AgentConnectErrorCode =
   | "invalid_tool_arguments"
   | "tool_execution_failed"
   | "continuation_unavailable"
-  | "task_busy";
+  | "task_busy"
+  | "webmcp_unavailable"
+  | "webmcp_snapshot_invalidated";
 
 export interface AgentTaskError {
   readonly code: AgentConnectErrorCode;

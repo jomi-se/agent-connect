@@ -76,7 +76,7 @@ The owner-only `/sessions` console exposes live sessions, usage, expiry, and
 termination. Lost creation responses can leave bounded orphan sessions;
 creation idempotency is deferred until this is an observed problem.
 
-## Active initiative: WebMCP tools in the browser SDK
+## WebMCP tools: implemented and validated
 
 Requested 2026-09-04: consume WebMCP tools through the existing approved
 snapshot and Open Responses loop. Investigate native discovery/execution,
@@ -84,6 +84,14 @@ implement a bounded adapter, and validate it against a real browser API.
 Keep explicit `defineTool` applications working. No new gateway protocol,
 browser extension, or automatic expansion of approved tools is required.
 Bookhand integration follows this work; it is not part of this SDK change.
+
+`createWebMcpToolSnapshot()` now maps native current-document tools to existing
+`ApplicationTool` objects. Metadata is frozen before consent; observed registry
+changes permanently invalidate the snapshot. Native Chrome 153 JSON-string
+binding is experimental and explicitly differs from the current draft. See the
+[implementation and validation ledger](webmcp-tool-source.md) for evidence and
+the same-name handler replacement limitation. Bookhand composition is next,
+not yet implemented or validated.
 
 ## Release evidence housekeeping
 

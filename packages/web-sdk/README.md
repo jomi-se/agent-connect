@@ -67,6 +67,71 @@ for await (const event of connection.session.streamContinuation(
 }
 ```
 
+## Native WebMCP tools (experimental)
+
+An application that already registers tools with `document.modelContext` can
+reuse those tools through Agent Connect:
+
+```ts
+import {
+  createWebMcpToolSnapshot,
+  connectAgent,
+} from "@open-agent-connect/web";
+
+// Register your page's tools first. No iframe tools are included.
+const snapshot = await createWebMcpToolSnapshot({
+  toolNames: ["read_range"], // optional: otherwise all current-document tools
+});
+// Use snapshot.tools with beginAgentAuthorization for the normal consent flow.
+// After a redirect, rediscover from the new document. The gateway still checks
+// the definitions against the approved grant before admitting a session.
+try {
+  const connection = await connectAgent({
+    baseUrl: runtimeCard.endpoint,
+    appId: "my-spreadsheet",
+    tools: snapshot.tools,
+    accessToken: approvedGrant.accessToken,
+  });
+  await connection.session.runTask("Read the selected cells");
+} finally {
+  snapshot.dispose();
+}
+```
+
+The snapshot deeply freezes definitions and uses native WebMCP execution.
+Returned strings are passed intact to the existing tool-result loop. Invocation
+rejections become ordinary application tool failures. Tool metadata such as
+annotations/title is not added to the gateway's name/description/schema grant
+contract and must not be treated as an extra permission.
+
+`toolchange`, `pagehide`, explicit `dispose()`, or the optional caller
+`signal` permanently invalidates the snapshot and requests cancellation of
+pending local calls. Inspect `snapshot.signal.aborted` or listen for its abort
+event to show reconnect UI. Rediscover and establish a new authorized connection
+after a change; the adapter never adds tools to a live session. Disposal removes
+listeners. Keep the snapshot alive for as long as you need completed-task
+continuation, then dispose it when disconnecting. To stop both sides, abort or
+dispose the snapshot **and** call `connection.session.cancel()`; local abort
+does not itself cancel a gateway run and cannot roll back a side effect.
+
+Compatibility is deliberately narrow: native Chrome for Testing 153.0.8010.12
+with experimental web platform features enabled, whose discovery schemas and
+execution arguments use JSON strings. The current WebMCP CG draft uses objects;
+that binding is not claimed here. Browsers without native discovery/execution
+raise `webmcp_unavailable`. There is no testing API, navigator fallback, or
+polyfill installed by this SDK. See [the compatibility plan](../../docs/plan/webmcp-tool-source.md).
+
+WebMCP descriptors identify tools by document/name, not immutable registration
+ID. Observed registry changes stop dispatch, but native same-name replacement
+can race notification. This adapter freezes approved definitions; it does not
+attest handler identity or turn a page into a sandbox. Calls are never retried
+automatically using a different argument format.
+
+Run `npm run test:webmcp` from the repository root for real native browser
+coverage. Set `WEBMCP_CHROMIUM_EXECUTABLE` to a compatible Chrome executable
+if Playwright's default Chromium lacks this experimental binding. Missing native support fails
+the suite instead of silently skipping it. `verify:full` includes this gate.
+
 See the repository's complete
 [web application integration guide](https://github.com/jomi-se/agent-connect/blob/main/docs/guides/web-app-integration.md)
 for callback handling, transaction storage, package installation, revocation,
