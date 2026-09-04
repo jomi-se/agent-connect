@@ -8,6 +8,11 @@ silently treating a target as a shipped guarantee.
 
 ## Application and SDK
 
+Implemented experimental addition: native WebMCP discovery/execution through an immutable,
+current-document snapshot. Compatibility and lifecycle assertions are tracked
+in [the WebMCP plan](plan/webmcp-tool-source.md); Bookhand integration and a
+generic browser extension remain separate future work.
+
 | Capability                                             | Status                          | Current evidence or boundary                                                                                                               |
 | ------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Define typed application-owned tools                   | Implemented                     | Browser-safe `defineTool`; schemas are fixed for the logical session                                                                       |

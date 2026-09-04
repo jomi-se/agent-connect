@@ -32,6 +32,11 @@ follow-up. Applications remain responsible for idempotent operations.
 
 ## Current strategy
 
+Current SDK initiative (2026-09-04): reuse native WebMCP page tools through the
+existing consent and Open Responses path. Preserve a fixed approved snapshot;
+observed tool changes invalidate it. Prove native browser compatibility before
+integrating Bookhand. See [the bounded plan](plan/webmcp-tool-source.md).
+
 - Use standard Open Responses semantics (`POST /v1/responses`) as the sole public
   wire. The SDK coordinates function-call segments and explicit completed-task
   follow-ups through `previous_response_id` without creating a separate public

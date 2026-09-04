@@ -57,7 +57,15 @@ writeFileSync(
 );
 writeFileSync(
   join(consumerDir, "check.mjs"),
-  `import { defineTool, parseRuntimeCard } from "@open-agent-connect/web";
+  `import { defineTool, parseRuntimeCard, createWebMcpToolSnapshot } from "@open-agent-connect/web";
+
+if (typeof createWebMcpToolSnapshot !== "function") throw new Error("Missing WebMCP export");
+try {
+  await createWebMcpToolSnapshot();
+  throw new Error("Node should not have native WebMCP");
+} catch (error) {
+  if (error.code !== "webmcp_unavailable") throw error;
+}
 
 const tool = defineTool({
   name: "external_consumer_tool",

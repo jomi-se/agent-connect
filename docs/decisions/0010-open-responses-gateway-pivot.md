@@ -246,12 +246,12 @@ mutation. Dynamic application tools are not a current product requirement.
 
 ### WebMCP is an optional source of candidate tools
 
-WebMCP may later replace or augment the browser SDK's explicit tool-declaration
-API. It is not part of the gateway protocol and does not weaken the fixed
-snapshot rule.
+WebMCP is available as an experimental browser SDK tool source under the
+[WebMCP tool-source plan](../plan/webmcp-tool-source.md). It is not part of the
+gateway protocol and does not weaken the fixed snapshot rule.
 
-If implemented, the browser SDK may use a small internal
-`ApplicationToolSource` boundary:
+The SDK uses `createWebMcpToolSnapshot()` to return ordinary application tools;
+no new `ApplicationToolSource` interface is needed. The conceptual boundary is:
 
 ```text
 explicit declarations ---\
@@ -259,13 +259,14 @@ WebMCP page tools ---------+-> candidate definitions -> user-approved snapshot
 deterministic test source -/
 ```
 
-An adapter may discover WebMCP tools, map their schemas to Open Responses
-function definitions, retain stable local implementation handles, and execute
-approved calls in the page. Discovery occurs before authorization or before a
-new logical run is established. Later `toolchange` events do not mutate an
-active snapshot.
+An adapter discovers WebMCP tools and maps their schemas to existing application
+tool definitions before authorization. Later `toolchange` events invalidate
+the adapter rather than mutate an active snapshot. The native descriptor is
+not a stable implementation handle: the draft permits same-name replacement
+to race dispatch. The experimental adapter makes no stronger handler-identity
+claim than the browser; its immutable definitions remain the grant boundary.
 
-Explicit registration remains the version 0 implementation and fallback.
+Explicit registration remains supported without WebMCP.
 Agent Connect does not need WebMCP to prove the Open Responses architecture.
 
 ### Authorization remains an Agent Connect responsibility

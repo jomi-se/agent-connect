@@ -1,6 +1,11 @@
 export { createBrowserAcpStream } from "./transport.js";
 export { AgentConnectError, AgentSession } from "./agent-session.js";
 export { connectAgent } from "./agent-connection.js";
+export { createWebMcpToolSnapshot } from "./webmcp.js";
+export type {
+  WebMcpToolSnapshot,
+  WebMcpToolSnapshotOptions,
+} from "./webmcp.js";
 export { parseRuntimeCard } from "./runtime-card.js";
 export {
   beginAgentAuthorization,
