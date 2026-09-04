@@ -61,8 +61,8 @@ provider session IDs and the existing per-session busy regression tests.
 ### VAL-PARALLEL-003: expired sessions stop consuming authority and capacity
 
 Surface: HTTP API and durable gateway state.
-Needs: controllable clock and short configured capability TTL.
-Behavior: after the lease expires, the old capability is rejected, the session
+Needs: controllable clock and short configured session lifecycle timeouts.
+Behavior: after the activity deadline expires, the old capability is rejected, the session
 is durably retired, a retained run is cancelled, and a new fresh session can use
 the released capacity.
 Evidence: route integration test across expiry and gateway reconstruction.

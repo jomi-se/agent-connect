@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-08-31
+Updated: 2026-09-04
 
 This is the canonical unfinished-work list. It records current priorities and
 only enough completed context to explain them. Product boundaries live in the
@@ -60,12 +60,41 @@ Linear completed-task continuation is implemented under
 [ADR 0011](../decisions/0011-linear-multi-turn-continuation.md). Each follow-up
 is a new immutable response chain on the same Omnigent/ACP session, guarded by
 a durable session head. Gateway, SDK, browser, and real-Omnigent contracts pass;
-the remaining release gate is a manual real-Codex correction that depends on
-first-turn-only context. Fresh connections are independent: an abandoned or
-parked session does not block another application instance, and application
-sessions expire on the capability lease rather than accumulating forever.
+the remaining evidence gap is a recorded manual real-Codex correction that
+depends on first-turn-only context. The user reported successful continuation
+in the development conversation, but that is not a preserved trace proving
+this narrower assertion. Fresh connections are independent. Session lifetime
+slides on activity, independently of capability TTL: idle 15 minutes,
+unanswered function call 3 minutes, stalled running turn 30 minutes by default.
+Retirement tears down the provider session and gateway-owned workspace.
 
-## Priority 1: finish the Open Responses replacement
+The last implementation commits are `5b1628e` (lifecycle and owner console),
+`cb70738` (retirement/admission races and stream-open timeout), and `3c534df`
+(no implicit session adoption). A grant always creates; a capability selects
+exactly its own session. Concurrent creates reserve capacity independently.
+The owner-only `/sessions` console exposes live sessions, usage, expiry, and
+termination. Lost creation responses can leave bounded orphan sessions;
+creation idempotency is deferred until this is an observed problem.
+
+## Active initiative: WebMCP tools in the browser SDK
+
+Requested 2026-09-04: consume WebMCP tools through the existing approved
+snapshot and Open Responses loop. Investigate native discovery/execution,
+implement a bounded adapter, and validate it against a real browser API.
+Keep explicit `defineTool` applications working. No new gateway protocol,
+browser extension, or automatic expansion of approved tools is required.
+Bookhand integration follows this work; it is not part of this SDK change.
+
+## Release evidence housekeeping
+
+The user confirmed the single-wire private demo worked after the default
+switch. This is user-reported composition evidence, not a new automated run.
+Existing traces and tests remain the implementation evidence. Do not repeat
+the completed protocol migration just because its ADR status is still open.
+Capture the specific first-turn-only continuation smoke when doing the next
+real-Codex application demo, then close ADR 0011's evidence gate.
+
+## Completed milestone: Open Responses replacement
 
 Follow the
 [Open Responses vertical-slice implementation plan](open-responses-vertical-slice.md)
@@ -88,12 +117,10 @@ for the implemented slice and its evidence. The following now pass:
     boundaries and recover deterministically.
 
 The default switch and deletion are implemented under
-[VAL-RESP-008](../../contract/VAL-RESP-008.md). What remains before accepting
-ADR 0010 is the final private real-Codex browser composition on the resulting
-single-wire build, followed by recording that evidence.
+[VAL-RESP-008](../../contract/VAL-RESP-008.md); subsequent user testing reported
+the private composition working. No replacement implementation remains.
 
-WebMCP is not part of this milestone. Explicit browser tool registration is the
-version 0 source of the fixed approved snapshot.
+WebMCP was outside this completed milestone and is now the active follow-up.
 
 ## Priority 2: one-click user-owned deployment
 
@@ -117,10 +144,12 @@ Pending-call persistence, stable call IDs, same-output retry, capability
 refresh, cancellation, restart reconstruction, and deterministic process-loss
 outcomes are implemented for the bounded slice. The remaining operator work is:
 
-1. delete expired provider workspaces beyond the retained-run cleanup performed
-   by the application-session lease; and
-2. add small operator commands for runtime-card re-export, device management,
+1. add small operator commands for runtime-card re-export, device management,
    gateway-key rotation, recovery, and audit history.
+
+Session/workspace teardown and the owner session console are implemented.
+Any future orphan-directory sweep is distinct from normal retirement cleanup
+and needs evidence of leftovers before expanding maintenance scope.
 
 Use stable action IDs and require idempotent application operations or
 application-owned deduplication. Do not claim generic exactly-once execution.
@@ -137,8 +166,8 @@ should:
 - use application-owned functions in a way that justifies Agent Connect; and
 - make the gateway infrastructure mostly invisible.
 
-A personalized study/tutoring system backed by user-provided technical sources
-is one candidate. Its product test is whether persistent progress, source-aware
+Bookhand is now a separate published WebMCP ebook reader and is the next
+candidate for optional Agent Connect integration. Its product test is whether persistent progress, source-aware
 lessons, exercises, and agent-driven application actions produce something
 meaningfully better than an ordinary document-chat product. Select and build
 one narrow application before expanding into a generic application platform.
@@ -169,8 +198,8 @@ neatness alone.
 - ACP: optional harness-facing adapter where stable capabilities fit;
 - MCP and harness-native dynamic tools: backend techniques, not public
   requirements;
-- WebMCP: possible future browser-side source of candidate tool definitions,
-  still subject to exact snapshot approval;
+- Browser extension: possible later host for the WebMCP adapter; current work
+  is a page SDK integration, still subject to exact snapshot approval;
 - a second backend: add after the Codex/Open Responses slice reveals the real
   adapter seam;
 - arbitrary multi-agent orchestration;

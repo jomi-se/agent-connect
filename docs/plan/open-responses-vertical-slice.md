@@ -898,8 +898,10 @@ cancellation responsibilities that Open Responses does not standardize.
 
 **Default and deletion implemented on 2026-08-29.** The neutral SDK convenience
 events remain local API types, not a gateway wire. `npm run verify:full` now
-includes the process-crash suite. The final post-switch private browser/Codex
-composition is the remaining acceptance action for ADR 0010.
+includes the process-crash suite. Ledger reconciliation on 2026-09-04 records
+the user's subsequent successful private browser/Codex demo report; ADR 0010
+is accepted. This is user-reported evidence, not a fresh trace. ADR 0011's
+first-turn-only memory smoke is separate.
 
 ## Validation contracts
 

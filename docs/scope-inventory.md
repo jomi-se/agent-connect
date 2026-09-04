@@ -1,6 +1,6 @@
 # Scope and capability inventory
 
-Updated: 2026-08-31
+Updated: 2026-09-04
 
 This inventory separates implemented behavior from explicit targets. The
 mission defines the product boundary; this file prevents future plans from
@@ -39,7 +39,8 @@ silently treating a target as a shipped guarantee.
 | Expose an OAuth-protected Open Responses endpoint                          | Implemented                   | Bounded `POST /v1/responses` plus explicit Agent Connect recovery and cancellation controls           |
 | Run independent application sessions concurrently                          | Implemented                   | One live chain per opaque session; abandoned sessions do not block fresh creation and expire by lease |
 | Bundle response translation with harness runtime supervision               | Implemented for Omnigent      | Response engine and bundled backend share one gateway process; no private facade protocol             |
-| Allocate a fresh workspace for each provider session                       | Implemented                   | Failed launches are cleaned immediately; successful-session expiry remains deferred                   |
+| Allocate and release a workspace for each provider session                 | Implemented                   | Failed launches and retired sessions clean up provider sessions and gateway-owned workspaces          |
+| Inspect and terminate sessions as the gateway owner                        | Implemented                   | `/sessions` console; separate idle, parked-call, and stalled-turn expiry clocks                       |
 | Persist gateway identity, devices, grants, revocations, and capability key | Implemented                   | Owner-only gateway state file                                                                         |
 | Persist pending authorization requests, codes, and provider mappings       | Deferred                      | These short-lived/session mappings are memory-only                                                    |
 | Persist unresolved application actions                                     | Implemented                   | Durable `FileResponseStore` writes pending calls before publication                                   |
@@ -72,8 +73,8 @@ silently treating a target as a shipped guarantee.
   approval requests.
 - Unknown provider events, unknown tools, malformed inputs, policy-manifest
   drift, and ambiguous trusted-proxy identities fail closed.
-- Stable action IDs support app-owned idempotency; unresolved-action durability
-  is still pending.
+- Stable action IDs and durable pending calls support app-owned idempotency;
+  automatic SDK recovery/redelivery remains outside the MVP.
 
 ## Validation surfaces
 
