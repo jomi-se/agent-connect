@@ -1,8 +1,13 @@
 # 0010: Use Open Responses at the application boundary
 
-- Status: proposed; implementation complete, pending final post-switch composition
+- Status: accepted; implemented, post-switch composition confirmed by user
 - Date: 2026-08-26
-- Revised: 2026-08-29
+- Revised: 2026-09-04
+
+Release note: the user reported the private demo working after the default
+switch in the development conversation. This records that report rather than
+claiming a newly captured trace or test run. The narrower completed-turn memory
+smoke remains tracked separately in ADR 0011.
 
 ## Context
 

@@ -64,7 +64,9 @@ consent and grant.
 
 ### Session authorization
 
-An application grant creates or recovers an opaque Agent Connect session. A
+An application grant creates a new opaque Agent Connect session. Only a
+session capability selects an existing session; implicit adoption was removed
+in `3c534df`. A
 short-lived session capability authorizes traffic for that session while its
 underlying grant remains active.
 
