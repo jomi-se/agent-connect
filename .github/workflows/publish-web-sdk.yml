@@ -33,8 +33,10 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       # Node 22 ships an npm that predates OIDC trusted publishing.
+      # Pin the supported CLI: npm@latest crossed to npm 12 and changed the
+      # pack JSON contract used by our installed-package smoke test.
       - name: Install an npm that supports trusted publishing
-        run: npm install --global npm@latest
+        run: npm install --global npm@11.19.1
 
       - run: npm ci
 
