@@ -56,6 +56,9 @@ historical. AG-UI is no longer an active core-protocol experiment.
 
 ## Future work
 
+- [Reuse existing gateway components](ideas/reuse-existing-gateway-components.md):
+  deferred investigation into reducing authentication and provisioning ownership;
+  not a replacement plan or a prerequisite for Bookhand.
 - [Multi-turn task continuation](plan/multi-turn-task-continuation.md): explicit
   completed-task follow-up on one durable provider conversation. Implemented;
   pending the manual real-Codex release gate.

@@ -39,17 +39,57 @@ npm run build
 
 ## 2. Create a dedicated Codex runtime home
 
-This is not mandatory, but avoid pointing the gateway at the same writable
-Codex home used by other Codex processes. Authenticate a dedicated runtime home
-so token rotation and runtime state remain isolated:
+Keep the runtime home distinct from the machine's interactive Codex home.
+Startup links only `auth.json` from the existing machine login into this home;
+configuration, history, sessions and caches remain separate. No second account
+or dedicated runtime login is needed:
 
 ```sh
 mkdir -p "$HOME/.agent-connect/codex-home"
 chmod 700 "$HOME/.agent-connect/codex-home"
-CODEX_HOME="$HOME/.agent-connect/codex-home" codex login
 ```
 
-Omnigent will use the resulting `auth.json` as a live credential.
+The source defaults to `$HOME/.codex`, resolved before the launcher isolates
+Omnigent's `HOME`. Set `AGENT_CONNECT_CODEX_AUTH_HOME` when the machine login lives
+elsewhere. It never defaults to the runtime `CODEX_HOME`. The source must have a
+regular, file-backed `auth.json`; keyring-only storage is not supported by this
+reference profile. If needed, configure file storage for the **same existing
+account** in the source home using Codex's supported credential-storage settings.
+See [Codex credential storage](https://learn.chatgpt.com/docs/auth#credential-storage).
+
+The launcher selects a small `CODEX_PATH` wrapper which passes
+`-c 'cli_auth_credentials_store="file"'` to the actual Codex CLI, so file storage
+applies from app-server startup, not only at session creation. It also sets the
+matching `CODEX_CONFIG` override, without editing either home's `config.toml`. Explicit
+`keyring` or `auto` overrides fail before startup. It does not change source
+credential permissions or copy source configuration/history.
+
+The symlink follows source refreshes and atomic source-file replacements. This
+shares credential state, not a cross-process refresh lock: concurrent Codex
+refreshes can still race, and a client that replaces the destination symlink
+instead of writing through it will be refused on the next startup. Treat the
+linked credential and any migration backup like a password.
+
+### Migrating an existing standalone runtime login
+
+Normal startup refuses to overwrite an existing regular runtime `auth.json`.
+First stop the gateway, Omnigent host and all Codex processes using that runtime
+home. With those writers stopped, explicitly migrate the exact configured homes:
+
+```sh
+node scripts/link-codex-auth.mjs --migrate \
+  /absolute/path/to/machine-codex-home \
+  /absolute/path/to/agent-connect-codex-home
+```
+
+The helper preserves the old runtime credential in a unique private backup
+directory beside `auth.json`, with file mode `0600`, and prints only its path.
+Link failure restores the old file; an unexpected concurrent destination is
+never overwritten and the backup is retained for manual recovery. Successful
+repeated runs accept the correct link unchanged. Unexpected links, directories,
+missing source files and aliased homes are refused; there is no copy fallback.
+To roll back a successful migration, stop writers again, confirm and remove only
+the runtime symlink, then move the printed backup file back to runtime `auth.json`.
 
 ## 3. Configure the gateway
 
@@ -70,8 +110,8 @@ Edit `.env` with:
 
 The reference launcher passes a dedicated `CODEX_HOME`, one
 `AGENT_CONNECT_WORKSPACE`, and an explicit Codex ACP mode into every Omnigent
-runner. It does not inherit the interactive shell's default `~/.codex` unless
-the user deliberately points `CODEX_HOME` there.
+runner. It shares only the selected machine login's `auth.json`; pointing runtime
+`CODEX_HOME` at the source home (including a symlink alias) is rejected.
 
 | `INITIAL_AGENT_MODE` | Codex behavior                                                         | Recommended use                                        |
 | -------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------ |
@@ -150,8 +190,8 @@ gitignored `.agent-connect/real-connector` directory by default. This legacy
 internal directory name is retained for compatibility. Keep the
 foreground process in tmux/screen or replace it with a user-managed service for
 long-running use. The supervisor also gives Omnigent a dedicated home
-inside that state directory. Codex continues to use the separately authenticated
-`CODEX_HOME`.
+inside that state directory. Codex continues to use its isolated `CODEX_HOME`
+with the shared machine credential.
 
 ## 5. Publish the gateway through Tailscale Serve
 
