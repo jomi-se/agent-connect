@@ -1,365 +1,204 @@
-import {
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ResponseEngine, type EngineSession } from "../src/responses/engine.js";
-import { ResponseApiError } from "../src/responses/errors.js";
+import { OpenClawResponses } from "../src/responses/openclaw.js";
 import { FileResponseStore } from "../src/responses/file-store.js";
-import type { ParsedResponseRequest } from "../src/responses/profile.js";
-import type {
-  ResponseResource,
-  ResponseStreamEvent,
-} from "../src/responses/protocol.js";
 import {
-  hashToolSnapshot,
-  validateToolSnapshot,
-} from "../src/tool-snapshot.js";
-import { FakeBackend, type FakeTurn } from "./support/fake-backend.js";
+  InMemoryResponseStore,
+  type ChainRecord,
+  type ResponseRecord,
+  type CallRecord,
+} from "../src/responses/store.js";
+import { hashToolSnapshot } from "../src/tool-snapshot.js";
 
-const directories: string[] = [];
-
+const roots: string[] = [];
+function directory() {
+  const root = mkdtempSync(join(tmpdir(), "ac-authority-fault-"));
+  roots.push(root);
+  return root;
+}
 afterEach(() => {
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
-
-function stateDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), "agent-connect-responses-"));
-  directories.push(directory);
-  return directory;
-}
-
-const tools = validateToolSnapshot([
-  {
-    name: "set_page_message",
-    description: "Replace the visible page message",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      additionalProperties: false,
-    },
-  },
-]);
-
 const session: EngineSession = {
-  sessionId: "acs_1",
-  appId: "canvas",
+  sessionId: "acs_local",
+  appId: "test",
   origin: "https://app.example",
-  toolHash: hashToolSnapshot(tools),
-  tools,
-  authorizationGrantId: "grant_1",
-  providerSessionId: "provider_1",
+  tools: [],
+  toolHash: hashToolSnapshot([]),
+  authorizationGrantId: "grant_local",
+  providerSessionId: "agent:main:openresponses:private_local",
 };
-
-const initial: ParsedResponseRequest = {
-  kind: "initial",
-  stream: true,
-  prompt: "hello",
+const chain: ChainRecord = {
+  chainId: "chain_local",
+  appSessionId: session.sessionId,
+  appId: session.appId,
+  origin: session.origin,
+  authorizationGrantId: session.authorizationGrantId,
+  toolHash: session.toolHash,
+  tools: [],
+  providerKind: "openclaw",
+  providerSessionId: session.providerSessionId,
+  sessionTurn: 1,
+  continuedFromResponseId: null,
+  status: "running",
+  createdAt: 1,
+  updatedAt: 1,
+  latestResponseId: null,
+  terminalError: null,
 };
-
-function engineOn(directory: string, turns: readonly FakeTurn[]) {
-  const store = new FileResponseStore(directory);
-  const backend = new FakeBackend({ turns });
-  return {
+function engine(
+  store: FileResponseStore,
+  fetch: typeof globalThis.fetch,
+  isGrantActive = () => true,
+) {
+  return new ResponseEngine({
     store,
-    backend,
-    engine: new ResponseEngine({
-      store,
-      backend,
-      isGrantActive: () => true,
+    upstream: new OpenClawResponses({
+      baseUrl: "http://127.0.0.1:1",
+      token: "private",
+      agentId: "main",
+      fetch,
     }),
-  };
-}
-
-async function drain(
-  stream: AsyncGenerator<ResponseStreamEvent>,
-): Promise<ResponseResource> {
-  let final: ResponseResource | undefined;
-  for await (const event of stream) {
-    if ("response" in event) final = event.response;
-  }
-  if (!final) throw new Error("the segment produced no terminal event");
-  return final;
-}
-
-function callIdOf(resource: ResponseResource): string {
-  const item = resource.output.at(-1);
-  if (!item || item.type !== "function_call") {
-    throw new Error("expected the response to end with a function call");
-  }
-  return item.call_id;
-}
-
-describe("file-backed response store", () => {
-  it("persists retired application sessions across store reconstruction", async () => {
-    const directory = stateDirectory();
-    const first = new FileResponseStore(directory);
-    await first.retireSession("acs_retired");
-    expect(await first.isSessionRetired("acs_retired")).toBe(true);
-
-    const restarted = new FileResponseStore(directory);
-    expect(await restarted.isSessionRetired("acs_retired")).toBe(true);
-    expect(await restarted.isSessionRetired("acs_current")).toBe(false);
+    isGrantActive,
   });
+}
+describe("AC-owned durable authority faults (not provider compatibility)", () => {
+  it.each(["memory", "file"])(
+    "atomically rejects foreign response/call ownership in %s storage",
+    async (kind) => {
+      const store =
+        kind === "file"
+          ? new FileResponseStore(directory())
+          : new InMemoryResponseStore();
+      await store.putChain(chain);
+      await store.putChain({
+        ...chain,
+        chainId: "chain_foreign",
+        appSessionId: "acs_foreign",
+      });
+      const response: ResponseRecord = {
+        responseId: "resp_collision",
+        chainId: chain.chainId,
+        previousResponseId: null,
+        status: "completed",
+        createdAt: 1,
+        completedAt: 1,
+        output: [],
+        error: null,
+      };
+      const call: CallRecord = {
+        callId: "call_collision",
+        chainId: chain.chainId,
+        responseId: response.responseId,
+        providerToken: "call_collision",
+        name: "set_page_message",
+        arguments: "{}",
+        publication: "published",
+        result: "none",
+        output: null,
+        outputFingerprint: null,
+        createdAt: 1,
+        updatedAt: 1,
+      };
+      await store.putResponse(response);
+      await store.putCall(call);
+      await expect(
+        store.putResponse({ ...response, chainId: "chain_foreign" }),
+      ).rejects.toThrow();
+      await expect(
+        store.putCall({ ...call, chainId: "chain_foreign" }),
+      ).rejects.toThrow();
+      expect(await store.getResponse(response.responseId)).toEqual(response);
+      expect(await store.getCall(call.callId)).toEqual(call);
+    },
+  );
 
-  it("recovers after one durable write failure without exposing phantom state", async () => {
-    const directory = stateDirectory();
-    const first = engineOn(directory, [[{ type: "completed" }]]);
-    await drain(await first.engine.createResponse(session, initial));
-    const [original] = await first.store.listChains();
-    expect(original).toBeDefined();
-
-    let failNext = true;
-    const store = new FileResponseStore(directory, {
-      durableWrite: (path, body) => {
-        if (failNext) {
-          failNext = false;
-          throw new Error("transient disk failure");
-        }
-        writeFileSync(path, body, { encoding: "utf8", mode: 0o600 });
+  it("keeps durable retirement and rolls back a failed write without phantom state", async () => {
+    const path = directory();
+    let fail = false;
+    const store = new FileResponseStore(path, {
+      durableWrite(file, body) {
+        if (fail) throw new Error("disk full");
+        writeFileSync(file, body);
       },
     });
-    const phantom = { ...original!, updatedAt: original!.updatedAt + 1 };
-    await expect(store.putChain(phantom)).rejects.toThrow(
-      "transient disk failure",
+    await store.putChain(chain);
+    await store.retireSession("acs_retired");
+    fail = true;
+    await expect(store.putChain({ ...chain, updatedAt: 2 })).rejects.toThrow(
+      "disk full",
     );
-    expect(await store.getChain(original!.chainId)).toEqual(original);
-
-    const recovered = { ...original!, updatedAt: original!.updatedAt + 2 };
-    await store.putChain(recovered);
-    expect(await store.getChain(original!.chainId)).toEqual(recovered);
-    expect(
-      JSON.parse(
-        readFileSync(join(directory, `${original!.chainId}.json`), "utf8"),
-      ).chain.updatedAt,
-    ).toBe(recovered.updatedAt);
+    expect(await store.getChain(chain.chainId)).toEqual(chain);
+    const restarted = new FileResponseStore(path);
+    expect(await restarted.getChain(chain.chainId)).toEqual(chain);
+    expect(await restarted.isSessionRetired("acs_retired")).toBe(true);
   });
-
-  it("persists a published call before the process that published it is gone", async () => {
-    const directory = stateDirectory();
-    const first = engineOn(directory, [
-      [
-        {
-          type: "tool.call",
-          providerToken: "provider_a",
-          name: "set_page_message",
-          arguments: '{"message":"hi"}',
-        },
-      ],
-    ]);
-    const created = await drain(
-      await first.engine.createResponse(session, initial),
-    );
-    const callId = callIdOf(created);
-
-    // Everything below reads only what reached disk.
-    const files = readdirSync(directory).filter((name) =>
-      name.endsWith(".json"),
-    );
-    expect(files).toHaveLength(1);
-    const raw = JSON.parse(
-      readFileSync(join(directory, files[0] ?? ""), "utf8"),
-    ) as {
-      chain: { status: string; authorizationGrantId: string; origin: string };
-      calls: Record<
-        string,
-        { publication: string; result: string; providerToken: string }
-      >;
+  it("does not contact upstream when admission cannot be made durable", async () => {
+    const store = new FileResponseStore(directory(), {
+      durableWrite() {
+        throw new Error("disk full");
+      },
+    });
+    const upstream = vi.fn<typeof fetch>();
+    await expect(
+      engine(store, upstream).createResponse(session, {
+        kind: "initial",
+        stream: true,
+        prompt: "hello",
+      }),
+    ).rejects.toThrow("disk full");
+    expect(upstream).not.toHaveBeenCalled();
+    expect(await store.listChains()).toEqual([]);
+  });
+  it("persists uncertain network acceptance and never retries after restart", async () => {
+    const path = directory();
+    const store = new FileResponseStore(path);
+    const upstream = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new Error("connection reset after write"));
+    await expect(
+      engine(store, upstream).createResponse(session, {
+        kind: "initial",
+        stream: true,
+        prompt: "hello",
+      }),
+    ).rejects.toBeDefined();
+    expect(upstream).toHaveBeenCalledTimes(1);
+    const [persisted] = await store.listChains();
+    expect(persisted).toMatchObject({
+      status: "terminal",
+      terminalError: { code: "backend_unavailable" },
+    });
+    const restarted = engine(new FileResponseStore(path), upstream);
+    await expect(
+      restarted.createResponse(session, {
+        kind: "initial",
+        stream: true,
+        prompt: "retry",
+      }),
+    ).rejects.toMatchObject({ code: "previous_response_not_continuable" });
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
+  it("rechecks consent after asynchronous durable admission before network delivery", async () => {
+    const store = new FileResponseStore(directory());
+    let active = true;
+    const original = store.putChain.bind(store);
+    store.putChain = async (value) => {
+      await original(value);
+      active = false;
     };
-    expect(raw.chain.status).toBe("waiting_for_output");
-    // The fields a restarted gateway needs to prove who authorized the chain.
-    expect(raw.chain.authorizationGrantId).toBe("grant_1");
-    expect(raw.chain.origin).toBe("https://app.example");
-    expect(raw.calls[callId]).toMatchObject({
-      publication: "published",
-      result: "none",
-      providerToken: "provider_a",
-    });
-  });
-
-  it("reconstructs a completed response after a restart", async () => {
-    const directory = stateDirectory();
-    const first = engineOn(directory, [
-      [{ type: "text.delta", delta: "done" }, { type: "completed" }],
-    ]);
-    const completed = await drain(
-      await first.engine.createResponse(session, initial),
-    );
-
-    // A new engine over the same directory stands in for a restarted gateway:
-    // it shares no process memory with the one that produced the response.
-    const restarted = engineOn(directory, []);
-    const view = await restarted.engine.describeChain(session, completed.id);
-    expect(view.recovery).toBe("terminal_reconstructed");
-    expect(view.response.status).toBe("completed");
-    expect(view.response.output).toEqual(completed.output);
-    // The immutable snapshot is rendered from the durable record, not memory.
-    expect(view.response.tools).toEqual(completed.tools);
-  });
-
-  it("continues a durably ordered completed turn after engine reconstruction", async () => {
-    const directory = stateDirectory();
-    const first = engineOn(directory, [
-      [{ type: "text.delta", delta: "draft" }, { type: "completed" }],
-    ]);
-    const completed = await drain(
-      await first.engine.createResponse(session, initial),
-    );
-
-    const restarted = engineOn(directory, [
-      [{ type: "text.delta", delta: "revised" }, { type: "completed" }],
-    ]);
-    const followUp = await drain(
-      await restarted.engine.createResponse(session, {
-        kind: "follow_up",
+    const upstream = vi.fn<typeof fetch>();
+    await expect(
+      engine(store, upstream, () => active).createResponse(session, {
+        kind: "initial",
         stream: true,
-        previousResponseId: completed.id,
-        prompt: "make it shorter",
+        prompt: "revoked while writing",
       }),
-    );
-    expect(followUp.previous_response_id).toBe(completed.id);
-    expect(
-      (await restarted.store.listChains()).map((chain) => chain.sessionTurn),
-    ).toEqual([1, 2]);
-  });
-
-  it("loads pre-continuation state for recovery but refuses to infer its head", async () => {
-    const directory = stateDirectory();
-    const first = engineOn(directory, [[{ type: "completed" }]]);
-    const completed = await drain(
-      await first.engine.createResponse(session, initial),
-    );
-    const [file] = readdirSync(directory).filter((name) =>
-      name.endsWith(".json"),
-    );
-    const path = join(directory, file ?? "");
-    const legacy = JSON.parse(readFileSync(path, "utf8")) as {
-      chain: Record<string, unknown>;
-    };
-    delete legacy.chain["sessionTurn"];
-    delete legacy.chain["continuedFromResponseId"];
-    writeFileSync(path, `${JSON.stringify(legacy)}\n`);
-
-    const restarted = engineOn(directory, [[{ type: "completed" }]]);
-    await expect(
-      restarted.engine.createResponse(session, {
-        kind: "follow_up",
-        stream: true,
-        previousResponseId: completed.id,
-        prompt: "continue",
-      }),
-    ).rejects.toMatchObject({
-      code: "previous_response_not_continuable",
-    });
-    await expect(
-      restarted.engine.describeChain(session, completed.id),
-    ).resolves.toMatchObject({ recovery: "terminal_reconstructed" });
-  });
-
-  it("resolves a chain parked across a restart as interrupted", async () => {
-    const directory = stateDirectory();
-    const first = engineOn(directory, [
-      [
-        {
-          type: "tool.call",
-          providerToken: "provider_a",
-          name: "set_page_message",
-          arguments: "{}",
-        },
-      ],
-    ]);
-    const created = await drain(
-      await first.engine.createResponse(session, initial),
-    );
-    const callId = callIdOf(created);
-
-    const restarted = engineOn(directory, []);
-    // The published call is still redeliverable from the durable ledger, which
-    // is the only source of truth for it: the harness snapshot never reports a
-    // parked call.
-    // A restarted engine has no live harness run. It must retire the chain
-    // before offering the side effect for redelivery.
-    expect(
-      await restarted.engine.pendingFunctionCalls(session, created.id),
-    ).toEqual([]);
-
-    // But the parked awaiter lived in the harness process, so the chain cannot
-    // continue. It resolves to the declared terminal outcome, not a hang and
-    // not a silently replaced provider session.
-    const view = await restarted.engine.describeChain(session, created.id);
-    expect(view.recovery).toBe("terminal_reconstructed");
-    await expect(
-      restarted.engine.createResponse(session, {
-        kind: "continuation",
-        stream: true,
-        previousResponseId: created.id,
-        callId,
-        output: "{}",
-      }),
-    ).rejects.toMatchObject({ code: "backend_unavailable" });
-  });
-
-  it("refuses a chain whose grant was revoked while the gateway was down", async () => {
-    const directory = stateDirectory();
-    const first = engineOn(directory, [
-      [{ type: "text.delta", delta: "done" }, { type: "completed" }],
-    ]);
-    const completed = await drain(
-      await first.engine.createResponse(session, initial),
-    );
-
-    const store = new FileResponseStore(directory);
-    const revoked = new ResponseEngine({
-      store,
-      backend: new FakeBackend({ turns: [] }),
-      isGrantActive: () => false,
-    });
-    await expect(
-      revoked.describeChain(session, completed.id),
-    ).rejects.toBeInstanceOf(ResponseApiError);
-  });
-
-  it("quarantines a corrupt chain file and loads the healthy chains", async () => {
-    const directory = stateDirectory();
-    const first = engineOn(directory, [[{ type: "completed" }]]);
-    const completed = await drain(
-      await first.engine.createResponse(session, initial),
-    );
-    const corruptPath = join(directory, "not-a-chain.json");
-    rmSync(corruptPath, { force: true });
-    writeFileSync(corruptPath, "{ broken", "utf8");
-    const quarantined: Array<{
-      originalPath: string;
-      quarantinePath: string;
-      reason: string;
-    }> = [];
-
-    const store = new FileResponseStore(directory, {
-      onCorruptFile: (event) => quarantined.push(event),
-    });
-    expect(await store.getResponse(completed.id)).toMatchObject({
-      status: "completed",
-    });
-    expect(quarantined).toEqual([
-      expect.objectContaining({
-        originalPath: corruptPath,
-        reason: expect.stringContaining("Cannot load response state"),
-      }),
-    ]);
-    expect(readdirSync(directory)).toEqual(
-      expect.arrayContaining([
-        expect.stringMatching(/^not-a-chain\.json\.corrupt-[0-9a-f]+$/),
-      ]),
-    );
-    expect(readdirSync(directory)).not.toContain("not-a-chain.json");
-    expect(completed.status).toBe("completed");
+    ).rejects.toMatchObject({ code: "response_cancelled" });
+    expect(upstream).not.toHaveBeenCalled();
   });
 });

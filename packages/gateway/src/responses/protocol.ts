@@ -227,14 +227,3 @@ export function buildResponseResource(
     prompt_cache_key: null,
   };
 }
-
-/** Allocates the monotonically increasing `sequence_number` of one segment. */
-export class SequenceCounter {
-  private next = 0;
-
-  take(): number {
-    const value = this.next;
-    this.next += 1;
-    return value;
-  }
-}

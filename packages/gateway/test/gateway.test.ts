@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConnectorAuth, type EnrollmentBundle } from "../src/connector-auth.js";
 import { configFromEnv } from "../src/config.js";
 import { createGateway } from "../src/gateway.js";
-import type { AgentRuntime } from "../src/runtime.js";
 import { hashToolSnapshot } from "../src/tool-snapshot.js";
 
 const servers: ReturnType<typeof createGateway>[] = [];
@@ -43,6 +42,9 @@ describe("gateway", () => {
 
   it("does not accept an enrollment passphrase from the process environment", () => {
     const config = configFromEnv({
+      OPENCLAW_BASE_URL: "http://127.0.0.1:1",
+      OPENCLAW_TOKEN: "private-test-token",
+      OPENCLAW_AGENT_ID: "main",
       AGENT_CONNECT_STATE_PATH: "/tmp/agent-connect-test-state.json",
       AGENT_CONNECT_PUBLIC_ENDPOINT: "https://gateway.example",
       AGENT_CONNECT_ENROLLMENT_PASSPHRASE: "must not enter runtime config",
@@ -125,9 +127,32 @@ describe("gateway", () => {
 });
 
 describe("managed application sessions", () => {
+  it("reports a deliberate transport outage honestly for nonstream clients", async () => {
+    const upstream = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new Error("deliberate network failure"));
+    const { baseUrl } = await start({ fetch: upstream });
+    const grant = await authorizeApp(baseUrl);
+    const created = await (
+      await createAppSession(baseUrl, `Bearer ${grant}`)
+    ).json();
+    const response = await fetch(`${baseUrl}/v1/responses`, {
+      method: "POST",
+      headers: allowedHeaders({
+        Authorization: `Bearer ${created.accessToken as string}`,
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({ model: "agent-connect/default", input: "hello" }),
+    });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({
+      error: { code: "backend_unavailable" },
+    });
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
   it("uses an application grant and hides the provider session id", async () => {
-    const runtime = new FakeRuntime();
-    const { baseUrl } = await start({ runtime });
+    const { baseUrl } = await start();
     const grant = await authorizeApp(baseUrl);
 
     const response = await createAppSession(baseUrl, `Bearer ${grant}`);
@@ -139,18 +164,16 @@ describe("managed application sessions", () => {
       toolHash: expect.any(String),
     });
     expect(JSON.stringify(created)).not.toContain("provider-1");
-    expect(runtime.created).toHaveLength(1);
+    expect(created).not.toHaveProperty("providerSessionId");
   });
 
   it("binds a capability to origin, session, and exact tool envelope", async () => {
-    const runtime = new FakeRuntime();
     const upstream = vi.fn<typeof fetch>().mockResolvedValue(
       new Response('data: {"type":"response.completed"}\n\n', {
         headers: { "Content-Type": "text/event-stream" },
       }),
     );
     const { baseUrl } = await start({
-      runtime,
       fetch: upstream,
       allowedOrigins: new Set([
         "https://preview.example",
@@ -221,9 +244,8 @@ describe("managed application sessions", () => {
     expect(upstream).not.toHaveBeenCalled();
   });
 
-  it("reuses a healthy match and heals it when the provider goes offline", async () => {
-    const runtime = new FakeRuntime();
-    const { baseUrl } = await start({ runtime });
+  it("refreshes only the explicitly selected private session", async () => {
+    const { baseUrl } = await start();
     const grant = await authorizeApp(baseUrl);
     const first = await createAppSession(baseUrl, `Bearer ${grant}`);
     const created = await first.json();
@@ -234,23 +256,19 @@ describe("managed application sessions", () => {
     );
     expect(reused.status).toBe(201);
     expect((await reused.json()).sessionId).toBe(created.sessionId);
-    expect(runtime.created).toHaveLength(1);
-
-    runtime.healthy = false;
     const [refreshed, concurrentRefresh] = await Promise.all([
       createAppSession(baseUrl, `Bearer ${created.accessToken as string}`),
       createAppSession(baseUrl, `Bearer ${created.accessToken as string}`),
     ]);
     expect(refreshed.status).toBe(201);
     expect(concurrentRefresh.status).toBe(201);
-    expect(runtime.created).toHaveLength(2);
+    expect((await refreshed.json()).sessionId).toBe(created.sessionId);
+    expect((await concurrentRefresh.json()).sessionId).toBe(created.sessionId);
   });
 
   it("rejects expired capabilities and changed snapshots", async () => {
     let clock = Date.parse("2026-07-13T20:00:00Z");
-    const runtime = new FakeRuntime();
     const { baseUrl } = await start({
-      runtime,
       capabilityTtlSeconds: 10,
       now: () => clock,
     });
@@ -424,14 +442,12 @@ describe("connector enrollment and app authorization", () => {
     temporaryDirectories.push(directory);
     const statePath = join(directory, "connector.json");
     const bundles: EnrollmentBundle[] = [];
-    const runtime = new FakeRuntime();
     const upstream = vi.fn<typeof fetch>().mockResolvedValue(
       new Response("data: [DONE]\n\n", {
         headers: { "Content-Type": "text/event-stream" },
       }),
     );
     const { baseUrl } = await start({
-      runtime,
       fetch: upstream,
       authStatePath: statePath,
       publicEndpoint: "https://runtime.example/",
@@ -561,7 +577,7 @@ describe("connector enrollment and app authorization", () => {
     );
     expect(created.status).toBe(201);
     const applicationSession = await created.json();
-    expect(runtime.created).toHaveLength(1);
+    expect(applicationSession.sessionId).toMatch(/^acs_/);
 
     const changedSnapshot = await createAppSession(
       baseUrl,
@@ -569,7 +585,6 @@ describe("connector enrollment and app authorization", () => {
       [{ ...tool(), description: "A changed authority" }],
     );
     expect(changedSnapshot.status).toBe(401);
-    expect(runtime.created).toHaveLength(1);
 
     const selfRevoke = await fetch(`${baseUrl}/oauth/revoke`, {
       method: "POST",
@@ -656,7 +671,6 @@ describe("connector enrollment and app authorization", () => {
     const directory = mkdtempSync(join(tmpdir(), "agent-connect-auth-"));
     temporaryDirectories.push(directory);
     const { baseUrl } = await start({
-      runtime: new FakeRuntime(),
       authStatePath: join(directory, "connector.json"),
       publicEndpoint: "https://runtime.example",
       enrollmentPassphrase: "correct phrase",
@@ -729,9 +743,7 @@ describe("dynamic application enrollment", () => {
   it("authorizes a previously unknown HTTPS Origin and binds the grant to it", async () => {
     const directory = mkdtempSync(join(tmpdir(), "agent-connect-dynamic-app-"));
     temporaryDirectories.push(directory);
-    const runtime = new FakeRuntime();
     const { baseUrl } = await start({
-      runtime,
       allowedOrigins: new Set(),
       dynamicAppEnrollment: true,
       authStatePath: join(directory, "connector.json"),
@@ -826,12 +838,7 @@ describe("dynamic application enrollment", () => {
       body: JSON.stringify({ appId: "third-party-app", tools: [tool()] }),
     });
     expect(session.status).toBe(201);
-    expect(runtime.created).toEqual([
-      expect.objectContaining({
-        appId: "third-party-app",
-        origin: appOrigin,
-      }),
-    ]);
+    expect((await session.json()).sessionId).toMatch(/^acs_/);
 
     const substitutedOrigin = await fetch(`${baseUrl}/v1/app-sessions`, {
       method: "POST",
@@ -861,7 +868,9 @@ async function start(
   const server = createGateway({
     allowedOrigins: new Set(["https://preview.example"]),
     allowedTailscaleUsers: new Set(["owner@example.com"]),
-    omnigentBaseUrl: "http://127.0.0.1:6767",
+    openclawBaseUrl: "http://127.0.0.1:1",
+    openclawToken: "private-operator-token",
+    openclawAgentId: "main",
     authStatePath: join(directory, "gateway.json"),
     publicEndpoint: "https://runtime.example",
     enrollmentPassphrase: "test enrollment phrase",
@@ -909,31 +918,6 @@ async function createAppSession(
     }),
     body: JSON.stringify({ appId: "test-app", tools }),
   });
-}
-
-class FakeRuntime implements AgentRuntime {
-  readonly created: Array<{
-    appId: string;
-    origin: string;
-    toolHash: string;
-    approvedToolNames: readonly string[];
-  }> = [];
-  healthy = true;
-
-  async createSession(request: {
-    appId: string;
-    origin: string;
-    toolHash: string;
-    approvedToolNames: readonly string[];
-  }): Promise<string> {
-    this.created.push(request);
-    this.healthy = true;
-    return `provider-${this.created.length}`;
-  }
-
-  async isHealthy(): Promise<boolean> {
-    return this.healthy;
-  }
 }
 
 async function sha256Base64Url(value: string): Promise<string> {

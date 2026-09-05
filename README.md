@@ -3,8 +3,8 @@
 Bring your own coding agent to any web app.
 
 Build AI features by leveraging users' coding agents included with their
-subscriptions. This is currently focused on Codex specifically, but the goal is
-to support any agent that has an ACP interface.
+subscriptions. This branch replaces the original backend with an OpenClaw policy
+gateway. Subscription-runtime and live browser acceptance gates remain open.
 
 ## Built with Codex and GPT-5.6
 
@@ -23,39 +23,38 @@ connect it to a gateway you operate using that gateway's public runtime card.
 
 The demo includes three example apps: a project-board app with bulk editing,
 in-place document review in a document editor, and product research in a
-shopping app. It uses the Agent Connect browser SDK and gateway. Internally, it
-uses [Omnigent](https://omnigent.ai/) as an agent orchestrator, Codex as the
-agent, and [Tailscale](https://tailscale.com/) as the network path between the
-demo web app and a live Agent Connect gateway.
+shopping app. It uses the Agent Connect browser SDK and gateway. The published
+demo and existing personal installation are not changed by this branch.
 
-The reference profile below runs the complete path with a real Codex instance
-and the user's own account. The retired anonymous judge profile has been
-removed now that the hackathon is over.
+The anonymous judge profile is retired; connect to a gateway you own.
 
-## Run the real Codex reference profile
+## Run the OpenClaw replacement
 
-The [real gateway guide](deploy/real-gateway/README.md) starts the usable MVP on
-a Linux machine. It requires a [Tailscale account and tailnet](https://tailscale.com/docs/install),
-with Tailscale installed and authenticated on both the gateway host and the
-browser device.
+The [gateway guide](deploy/openclaw-gateway/README.md) covers isolated setup,
+the pinned dependency and the private launcher. Use Node 24 LTS >=24.15 and <25.
+OpenClaw must already be configured and running; the launcher does not select
+its harness, manage credentials or restart personal services.
 
 ```sh
-curl -fsSL https://omnigent.ai/install.sh | sh -s -- --version 0.5.1
-git clone https://github.com/jomi-se/agent-connect.git
-cd agent-connect
 npm install
 npm run build
-
-cp deploy/real-gateway/.env.example deploy/real-gateway/.env
-# Configure Tailscale endpoint, user, dedicated CODEX_HOME, and workspace.
-deploy/real-gateway/run.sh initialize
-deploy/real-gateway/run.sh
+cp deploy/openclaw-gateway/.env.example deploy/openclaw-gateway/.env
+chmod 600 deploy/openclaw-gateway/.env
+# Edit private literal values; follow the guide for new identity initialization.
+export AGENT_CONNECT_OPENCLAW_ENV_FILE="$PWD/deploy/openclaw-gateway/.env"
+node scripts/openclaw-gateway.mjs check
+node scripts/openclaw-gateway.mjs serve
 ```
 
-The supervisor runs a loopback Agent Connect gateway, Omnigent server and host,
-a narrow compatibility wrapper around the pinned `codex-acp` adapter, and a
-real Codex process. Tailscale Serve publishes only the gateway over
-authenticated HTTPS.
+The gateway mediates private OpenClaw Responses. Tailscale Serve can expose only
+Agent Connect over authenticated HTTPS. OpenClaw's operator token stays on the
+server. Preserve existing identity state during migration; old Omnigent
+conversations cannot become OpenClaw conversations.
+
+The pinned built-in OpenClaw loop passes deterministic client-tool tests, but
+its native Codex adapter drops those tools. The built-in loop also projects
+client output as user text. See the [measured findings](docs/research/2026-09-05-openclaw-replacement.md):
+this is not yet a proven subscription-backed replacement.
 
 On a first connection, the gateway shows the exact
 Origin, callback, scopes, and tools before approval. The resulting grant is
@@ -114,29 +113,26 @@ Web application
         │ sequential calls & previous_response_id continuation
         ▼
 User-owned Agent Connect gateway
-  gateway identity, consent, grants, response engine
-        │ internal bundled backend
+  identity, consent, grants, profile and durable call ownership
+        │ private operator-authenticated Open Responses
         ▼
-Omnigent ──ACP──> codex-acp ──> Codex
-        │
-        └── request-scoped MCP tool calls return to the web application
+OpenClaw → operator-configured runtime/model
+  client function calls return through Agent Connect to the application
 ```
 
 Open Responses HTTP/SSE is the standard public wire between applications and the
-gateway. Omnigent is the first working provider backend bundled internally behind
-the gateway. ACP is the preferred downstream harness boundary. Neither Omnigent
-nor Codex types are part of the application API. Future runtime backends should
-preserve the Open Responses web integration.
+gateway. OpenClaw owns the runtime loop and provider integration. Agent Connect
+retains the untrusted-application boundary and durable ownership checks, not
+another agent loop. See [ADR 0012](docs/decisions/0012-openclaw-policy-gateway.md).
 
 ## Supported platforms
 
 - Web SDK: modern HTTPS browsers with Fetch, SSE, Web Crypto, and Web Storage.
-- Development: Node.js 22+ and npm 10+.
-- Real gateway reference host: tested on Ubuntu 24.04 with Omnigent
-  0.5.1, `codex-acp` 1.1.2, Codex CLI, and Tailscale Serve.
+- Development/operator checks: Node.js 24 LTS >=24.15 and <25.
+- Replacement setup: pinned OpenClaw 2026.9.1, tested in isolation on this Linux VM.
 
 Other Linux distributions and architectures may work but have not passed the
-complete real-Codex reference flow. Windows and macOS gateway hosting are not
+complete replacement acceptance flow. Windows and macOS gateway hosting are not
 currently tested.
 
 ## Security boundary
@@ -147,9 +143,10 @@ consent and PKCE create a revocable capability bound to the exact application
 and tool snapshot. These mechanisms authorize an application.
 
 Treat every authorized app as a potentially adversarial principal. The real
-reference profile is not a hardened sandbox for arbitrary hostile apps: Codex
-can use its configured native capabilities inside the selected workspace, and
-the runtime operator owns the machine's security posture.
+profile is not a hardened sandbox for arbitrary hostile apps. The selected
+OpenClaw agent must have host tools disabled and its capabilities verified;
+checking the app snapshot alone does not confine a runtime. The operator owns
+the machine's security posture.
 
 See [the architecture documentation](docs/architecture/),
 [the runtime threat model](docs/research/2026-07-14-malicious-application-runtime-threat-model.md),
@@ -169,11 +166,11 @@ npm run verify
 ```
 
 `npm run verify` runs formatting checks, type checks, unit and behavior tests,
-all package builds, and the deterministic real-Omnigent compatibility suite
-without requiring Tailscale, Codex credentials, or model credits. It requires
-the pinned Omnigent CLI version from `config/omnigent-test-compat.json` on `PATH`
-so provider compatibility assertions are verified against the real dependency
-rather than assumed mock behavior.
+all package builds, real-OpenClaw compatibility and process-crash tests. It
+requires the pin in `config/openclaw-test-compat.json` on PATH or at
+`OPENCLAW_TEST_BIN`; install using the guide above. Only inference is
+deterministic: no subscription credentials or model credits are needed.
+A missing or mismatched dependency fails instead of skipping tests.
 
 For local maintainability diagnostics, run `npm run analyze`. It reports
 complexity, dependency boundaries, unused code, and production duplication
@@ -184,8 +181,8 @@ rules and ratcheting policy.
 Additional real-boundary checks:
 
 ```sh
-# Run the isolated real-Omnigent compatibility suite directly.
-npm run test:integration:omnigent
+# Run the isolated real-OpenClaw compatibility suite directly.
+npm run test:integration:openclaw
 
 # Test gateway response durability across process death.
 npm run test:integration:response-crash
@@ -194,18 +191,18 @@ npm run test:integration:response-crash
 npm run test:package:web
 ```
 
-`npm run verify:full` adds the response-crash durability suite, clean external
-SDK-package consumer fixture, and Canvas Playwright browser suites to the
+`npm run verify:full` adds the clean external SDK-package consumer fixture,
+WebMCP checks, and Canvas Playwright browser suites to the
 default verification gate.
 
 See the [testing strategy guide](docs/architecture/testing-strategy.md) for how
 Agent Connect separates pure state-machine invariants, deterministic real-dependency
-compatibility tests, and real-Codex composition smoke tests.
+compatibility tests, and selected subscription-runtime composition smoke tests.
 
 ## Project status
 
 This is a hackathon MVP and is still in hackathon MVP state.
-The current boundary is one user, one online Omnigent host, one downstream
+The current boundary is one user, one private OpenClaw gateway, one configured
 agent, one active task per app session, and one fixed tool snapshot per logical
 session. Use at your own risk ^^.
 

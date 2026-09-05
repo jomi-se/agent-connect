@@ -13,15 +13,18 @@ only enough completed context to explain them. Product boundaries live in the
 User authorized replacing duplicated runtime/Responses machinery with an
 OpenClaw-based implementation while retaining the application SDK and narrow
 application authorization. This takes priority over further Omnigent-specific
-development and the deferred expired-conversation replay UX. Investigation,
-executable setup and unresolved compatibility questions are tracked in
-[the dated replacement investigation](../research/2026-09-05-openclaw-replacement.md).
+development and the deferred expired-conversation replay UX. Execution and
+validation are tracked in [the replacement plan](openclaw-replacement.md), with
+dependency findings in [the dated investigation](../research/2026-09-05-openclaw-replacement.md).
 The working private gateway remains unchanged until replacement validation and
 an explicit live cutover. Success requires deletion of superseded machinery,
 documented choices and real application/tool/subscription evidence, not simply
 adding another supported backend.
 
-## Working baseline
+## Historical working baseline (live main, not replacement-branch instructions)
+
+The following records pre-migration evidence. On this branch use the OpenClaw
+setup and verification in the replacement plan and current testing strategy.
 
 The hackathon MVP proved the core loop through a deterministic public fixture
 and a source-installable Tailscale Serve gateway using a real user-owned Codex

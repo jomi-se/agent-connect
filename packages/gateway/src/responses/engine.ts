@@ -1,18 +1,13 @@
-import { createHash, randomBytes } from "node:crypto";
-
+import { createHash, randomUUID } from "node:crypto";
 import type { GatewayToolDefinition } from "../tool-snapshot.js";
-import type { BackendEvent, BackendRun, ResponseBackend } from "./backend.js";
-import { ResponseApiError, type ResponseErrorCode } from "./errors.js";
+import { ResponseApiError } from "./errors.js";
 import {
   buildResponseResource,
   projectTools,
-  type ResponseError,
-  type ResponseOutputItem,
   type ResponseResource,
-  type ResponseStatus,
   type ResponseStreamEvent,
+  type ResponseOutputItem,
 } from "./protocol.js";
-import { SegmentWriter } from "./segment-writer.js";
 import type {
   CallRecord,
   ChainRecord,
@@ -20,8 +15,8 @@ import type {
   ResponseStore,
 } from "./store.js";
 import type { ParsedResponseRequest } from "./profile.js";
+import { OpenClawResponses } from "./openclaw.js";
 
-/** The authorized application session a response request is executed under. */
 export interface EngineSession {
   readonly sessionId: string;
   readonly appId: string;
@@ -31,818 +26,516 @@ export interface EngineSession {
   readonly authorizationGrantId: string;
   readonly providerSessionId: string;
 }
-
 export interface ResponseEngineOptions {
   readonly store: ResponseStore;
-  readonly backend: ResponseBackend;
-  /** Checked at every authorization boundary: create, continue, recover, cancel. */
+  readonly upstream: OpenClawResponses;
   readonly isGrantActive: (grantId: string) => boolean;
   readonly now?: () => number;
-  readonly createId?: () => string;
 }
-
-/**
- * What an application session is doing, for expiry. The three states carry
- * different clocks: a running turn is capped only against a hung backend, a
- * parked call must be answered promptly, and an idle session is reaped on the
- * ordinary idle timeout. `since` is when the session entered the state.
- */
 export type SessionLifecycle =
-  | { readonly kind: "running"; readonly since: number }
-  | { readonly kind: "parked"; readonly since: number }
-  | { readonly kind: "idle" };
-
-/** One of the three declared outcomes of a recovery attempt. */
-export type RecoveryOutcome =
-  "reattached_live" | "terminal_reconstructed" | "interrupted";
-
+  | { readonly kind: "running" | "parked"; readonly since: number }
+  | { readonly kind: "idle" | "interrupted" };
+export type SessionEndReason =
+  "expired" | "idle" | "unanswered_call" | "stalled" | "ended_by_owner";
 export interface ChainView {
   readonly responseId: string;
   readonly chainStatus: ChainRecord["status"];
-  readonly recovery: RecoveryOutcome;
+  readonly recovery:
+    "reattached_live" | "terminal_reconstructed" | "interrupted";
   readonly response: ResponseResource;
 }
-
-export interface PendingCallView {
-  readonly callId: string;
-  readonly name: string;
-  readonly arguments: string;
-  readonly responseId: string;
-}
-
-/**
- * One in-flight admission. It carries its own start time so a wedged admission
- * ages like any other running turn, and an `ending` flag so a session that is
- * being retired can stop work that has been authorized but not yet begun.
- */
 interface Admission {
+  readonly controller: AbortController;
   readonly since: number;
-  ending: boolean;
+  chainId?: string;
 }
 
-interface ActiveChain {
-  readonly run: BackendRun;
-  readonly events: AsyncIterator<BackendEvent>;
-  busy: boolean;
-  cancelRequested: boolean;
-  /**
-   * When the backend last produced anything for this chain. A running turn is
-   * legitimately silent to HTTP for as long as the agent thinks, so this, not
-   * request arrival, is what the running-turn safety cap measures.
-   */
-  lastProgressAt: number;
-}
-
-type SegmentLink =
-  | { readonly kind: "initial" }
-  | { readonly kind: "follow_up"; readonly previousResponseId: string }
-  | {
-      readonly kind: "function_output";
-      readonly previousResponseId: string;
-      readonly callId: string;
-    };
-
+/** Local authority and no-redrive ledger only. OpenClaw owns execution and history. */
 export class ResponseEngine {
-  private readonly store: ResponseStore;
-  private readonly backend: ResponseBackend;
-  private readonly isGrantActive: (grantId: string) => boolean;
-  private readonly now: () => number;
-  private readonly createId: () => string;
-  private readonly active = new Map<string, ActiveChain>();
-  private readonly admittingSessions = new Map<string, Admission>();
-
-  constructor(options: ResponseEngineOptions) {
-    this.store = options.store;
-    this.backend = options.backend;
-    this.isGrantActive = options.isGrantActive;
-    this.now = options.now ?? Date.now;
-    this.createId = options.createId ?? (() => randomBytes(16).toString("hex"));
+  private readonly active = new Map<string, Admission>();
+  private readonly poisoned = new Set<string>();
+  private readonly revisions = new Map<string, number>();
+  private revision(id: string) {
+    return this.revisions.get(id) ?? 0;
   }
-
-  /**
-   * Validates and starts one response segment. Rejects before any event is
-   * produced, so a caller can map the failure onto an HTTP status; once the
-   * returned generator has yielded, failures become `error` plus
-   * `response.failed` frames instead.
-   */
+  private changed(id: string) {
+    this.revisions.set(id, this.revision(id) + 1);
+  }
+  private readonly now: () => number;
+  constructor(private readonly options: ResponseEngineOptions) {
+    this.now = options.now ?? Date.now;
+  }
+  private get store() {
+    return this.options.store;
+  }
+  private seconds() {
+    return Math.floor(this.now() / 1000);
+  }
+  private async authorize(session: EngineSession, admission?: Admission) {
+    if (
+      !this.options.isGrantActive(session.authorizationGrantId) ||
+      admission?.controller.signal.aborted ||
+      this.poisoned.has(session.sessionId) ||
+      (await this.store.isSessionRetired(session.sessionId))
+    ) {
+      throw new ResponseApiError(
+        "response_cancelled",
+        "the application session is no longer active",
+      );
+    }
+    // Retirement/revocation can happen during the store await.
+    if (
+      !this.options.isGrantActive(session.authorizationGrantId) ||
+      admission?.controller.signal.aborted
+    )
+      throw new ResponseApiError(
+        "response_cancelled",
+        "the application session is no longer active",
+      );
+  }
+  private async owned(session: EngineSession, id: string) {
+    await this.authorize(session);
+    const response = await this.store.getResponse(id);
+    const chain = response && (await this.store.getChain(response.chainId));
+    if (
+      !response ||
+      !chain ||
+      chain.appSessionId !== session.sessionId ||
+      chain.appId !== session.appId ||
+      chain.origin !== session.origin ||
+      chain.toolHash !== session.toolHash ||
+      chain.authorizationGrantId !== session.authorizationGrantId
+    ) {
+      throw new ResponseApiError(
+        "previous_response_not_found",
+        "response does not belong to this application session",
+      );
+    }
+    return { response, chain };
+  }
   async createResponse(
     session: EngineSession,
     request: ParsedResponseRequest,
   ): Promise<AsyncGenerator<ResponseStreamEvent>> {
-    this.requireGrant(session.authorizationGrantId);
-    if (request.kind === "initial") {
-      return this.startNewChain(session, request.prompt, null);
-    }
-    if (request.kind === "follow_up") {
-      return this.startNewChain(
-        session,
-        request.prompt,
-        request.previousResponseId,
+    if (this.active.has(session.sessionId))
+      throw new ResponseApiError(
+        "response_busy",
+        "one response may run per application session",
       );
-    }
-    return this.startContinuation(
-      session,
-      request.previousResponseId,
-      request.callId,
-      request.output,
-    );
-  }
-
-  private async startNewChain(
-    session: EngineSession,
-    prompt: string,
-    previousResponseId: string | null,
-  ): Promise<AsyncGenerator<ResponseStreamEvent>> {
-    const admission = this.claimSessionAdmission(session.sessionId);
+    const admission: Admission = {
+      controller: new AbortController(),
+      since: this.seconds(),
+    };
+    this.active.set(session.sessionId, admission);
+    this.changed(session.sessionId);
+    let admitted: ChainRecord | undefined;
     try {
-      await this.requireSessionActive(session.sessionId, admission);
-      await this.requireNoLiveChain(session.sessionId);
-      const chains = (await this.store.listChains()).filter(
-        (chain) => chain.appSessionId === session.sessionId,
-      );
-      if (previousResponseId === null && chains.length > 0) {
+      await this.authorize(session, admission);
+      const chains = (await this.store.listChains())
+        .filter((c) => c.appSessionId === session.sessionId)
+        .sort((a, b) => b.sessionTurn - a.sessionTurn);
+      const head = chains[0];
+      const previousId =
+        request.kind === "initial" ? null : request.previousResponseId;
+      let prior: Awaited<ReturnType<ResponseEngine["owned"]>> | undefined;
+      let call: CallRecord | undefined;
+      if (previousId) prior = await this.owned(session, previousId);
+      if (request.kind === "continuation") {
+        call = await this.store.getCall(request.callId);
+        if (
+          !prior ||
+          !call ||
+          call.chainId !== prior.chain.chainId ||
+          call.responseId !== previousId
+        )
+          throw new ResponseApiError(
+            "function_call_not_found",
+            "call does not belong to this response",
+          );
+        if (call.output !== null) {
+          throw new ResponseApiError(
+            call.output === request.output
+              ? "previous_response_not_continuable"
+              : "function_output_conflict",
+            "this output was already submitted and will not be redelivered",
+          );
+        }
+        if (
+          prior.chain.status !== "waiting_for_output" ||
+          call.result !== "none"
+        )
+          throw new ResponseApiError(
+            "previous_response_not_continuable",
+            "function call cannot be continued",
+          );
+      } else if (
+        prior &&
+        (prior.chain.status !== "terminal" ||
+          prior.response.status !== "completed")
+      ) {
+        throw new ResponseApiError(
+          "previous_response_not_continuable",
+          "the previous turn is not complete",
+        );
+      }
+      if (
+        head &&
+        (head.providerKind !== "openclaw" ||
+          head.latestResponseId !== previousId ||
+          head.terminalError ||
+          (head.status === "running" && head.chainId !== admission.chainId))
+      ) {
+        throw new ResponseApiError(
+          "previous_response_not_continuable",
+          "only the latest healthy OpenClaw checkpoint can be continued; create a new session after interruption or migration",
+        );
+      }
+      if (!previousId && head)
         throw new ResponseApiError(
           "invalid_request",
-          "previous_response_id is required after the first task in an application session",
-          "previous_response_id",
+          "previous_response_id is required",
         );
-      }
-      if (previousResponseId !== null) {
-        await this.requireCompletedSessionHead(
-          session,
-          previousResponseId,
-          chains,
-        );
-      }
+      await this.authorize(session, admission);
       const timestamp = this.seconds();
       const chain: ChainRecord = {
-        chainId: `chain_${this.createId()}`,
+        chainId: "chain_" + randomUUID(),
         appSessionId: session.sessionId,
         appId: session.appId,
         origin: session.origin,
         authorizationGrantId: session.authorizationGrantId,
         toolHash: session.toolHash,
         tools: session.tools,
-        providerKind: this.backend.kind,
+        providerKind: "openclaw",
         providerSessionId: session.providerSessionId,
-        sessionTurn:
-          chains.reduce(
-            (latest, candidate) => Math.max(latest, candidate.sessionTurn),
-            0,
-          ) + 1,
-        continuedFromResponseId: previousResponseId,
+        sessionTurn: (head?.sessionTurn ?? 0) + 1,
+        continuedFromResponseId: previousId,
         status: "running",
         createdAt: timestamp,
-        updatedAt: this.seconds(),
+        updatedAt: timestamp,
         latestResponseId: null,
         terminalError: null,
       };
-      // Re-checked immediately before the chain exists. Admission was
-      // authorized, but retirement can commit inside any of the awaits above,
-      // and a chain written after its session's tombstone is work that nobody
-      // can stop and that restart reconstruction will refuse to own.
-      await this.requireSessionActive(session.sessionId, admission);
       await this.store.putChain(chain);
-
-      let run: BackendRun;
+      admitted = chain;
+      admission.chainId = chain.chainId;
+      if (call && request.kind === "continuation") {
+        // Commit the no-redrive boundary before the network call. A crash from here
+        // onward is ambiguous, even if no bytes actually reached OpenClaw.
+        await this.store.putCall({
+          ...call,
+          output: request.output,
+          outputFingerprint: createHash("sha256")
+            .update(request.output)
+            .digest("hex"),
+          result: "delivery_attempted",
+          updatedAt: timestamp,
+        });
+      }
+      await this.authorize(session, admission);
+      const stream = await this.options.upstream.create(
+        session.providerSessionId,
+        session.tools,
+        request,
+        admission.controller.signal,
+      );
+      await this.authorize(session, admission);
+      return this.mediate(session, chain, admission, stream, call);
+    } catch (error) {
+      admission.controller.abort();
       try {
-        run = await this.backend.start({
-          providerSessionId: session.providerSessionId,
-          prompt,
-          tools: session.tools,
-        });
-      } catch (cause) {
-        await this.store.putChain({
-          ...chain,
-          status: "terminal",
-          updatedAt: this.seconds(),
-          terminalError: {
-            code: "backend_unavailable",
-            message: "the selected user-owned runtime could not be reached",
-          },
-        });
-        throw new ResponseApiError(
-          "backend_unavailable",
-          `the selected user-owned runtime could not be reached: ${describe(cause)}`,
-        );
+        if (admitted)
+          await this.interrupt(
+            admitted,
+            "upstream acceptance is uncertain; no automatic replay",
+          );
+      } finally {
+        this.active.delete(session.sessionId);
       }
-      // `backend.start` is the longest await in admission, and expiry cannot
-      // see this run: it is not registered yet. A run that comes back after
-      // retirement is closed here rather than registered, which is the only
-      // point at which it is reachable at all.
-      if (await this.sessionEnded(session.sessionId, admission)) {
-        await run.close().catch(() => {});
-        await this.markSessionEnded(chain);
-        throw new ResponseApiError(
-          "response_cancelled",
-          "the application session was retired while this response was starting",
-        );
-      }
-      const state: ActiveChain = {
-        run,
-        events: run.events(),
-        busy: true,
-        cancelRequested: false,
-        lastProgressAt: this.seconds(),
-      };
-      this.active.set(chain.chainId, state);
-      return this.segment(
-        chain.chainId,
-        state,
-        previousResponseId === null
-          ? { kind: "initial" }
-          : { kind: "follow_up", previousResponseId },
-      );
-    } finally {
-      this.releaseAdmission(session.sessionId, admission);
+      throw error;
     }
   }
-
-  /**
-   * Whether this session has been retired since admission began. The durable
-   * tombstone is the authority — the gateway writes it before it drops the
-   * session, so it is committed before any teardown that follows — and the
-   * in-process flag is the fast path for a retirement still in progress.
-   */
-  private async sessionEnded(
-    appSessionId: string,
+  private async *mediate(
+    session: EngineSession,
+    initial: ChainRecord,
     admission: Admission,
-  ): Promise<boolean> {
-    return (
-      admission.ending || (await this.store.isSessionRetired(appSessionId))
-    );
-  }
-
-  private async requireSessionActive(
-    appSessionId: string,
-    admission: Admission,
-  ): Promise<void> {
-    if (!(await this.sessionEnded(appSessionId, admission))) return;
-    throw new ResponseApiError(
-      "response_cancelled",
-      "the application session was retired while this response was starting",
-    );
-  }
-
-  private async markSessionEnded(chain: ChainRecord): Promise<void> {
-    const stored = await this.store.getChain(chain.chainId);
-    if (!stored || stored.status === "terminal") return;
-    await this.store.putChain({
-      ...stored,
-      status: "terminal",
-      terminalError: {
-        code: "response_cancelled",
-        message: SESSION_END_MESSAGE.expired,
-      },
-      updatedAt: this.seconds(),
-    });
-  }
-
-  private async requireCompletedSessionHead(
-    session: EngineSession,
-    previousResponseId: string,
-    chains: readonly ChainRecord[],
-  ): Promise<void> {
-    const previous = await this.store.getResponse(previousResponseId);
-    const predecessor = previous
-      ? await this.store.getChain(previous.chainId)
-      : undefined;
-    if (
-      !previous ||
-      !predecessor ||
-      !this.chainBelongsTo(predecessor, session)
-    ) {
-      throw new ResponseApiError(
-        "previous_response_not_found",
-        "previous_response_id is unknown or not owned by this application session",
-        "previous_response_id",
-      );
-    }
-    const latestTurn = chains.reduce(
-      (latest, candidate) => Math.max(latest, candidate.sessionTurn),
-      0,
-    );
-    const heads = chains.filter((chain) => chain.sessionTurn === latestTurn);
-    if (
-      heads.length !== 1 ||
-      heads[0]?.chainId !== predecessor.chainId ||
-      predecessor.latestResponseId !== previousResponseId
-    ) {
-      throw new ResponseApiError(
-        "previous_response_not_continuable",
-        "only the latest response in this application session can be continued",
-        "previous_response_id",
-      );
-    }
-    if (predecessor.sessionTurn === 0) {
-      throw new ResponseApiError(
-        "previous_response_not_continuable",
-        "legacy response state has no trustworthy session order and cannot be continued",
-        "previous_response_id",
-      );
-    }
-    if (
-      predecessor.status !== "terminal" ||
-      predecessor.terminalError !== null ||
-      previous.status !== "completed"
-    ) {
-      throw new ResponseApiError(
-        "previous_response_not_continuable",
-        predecessor.terminalError?.message ??
-          "only a successfully completed task can be continued",
-        "previous_response_id",
-      );
-    }
-    if (
-      predecessor.providerKind !== this.backend.kind ||
-      predecessor.providerSessionId !== session.providerSessionId
-    ) {
-      throw new ResponseApiError(
-        "previous_response_not_continuable",
-        "the provider session that produced this response is no longer available",
-        "previous_response_id",
-      );
-    }
-  }
-
-  private claimSessionAdmission(appSessionId: string): Admission {
-    const admission = this.tryClaimAdmission(appSessionId);
-    if (!admission) {
-      throw new ResponseApiError(
-        "response_busy",
-        "this application session is already starting another response chain",
-      );
-    }
-    return admission;
-  }
-
-  private releaseAdmission(appSessionId: string, admission: Admission): void {
-    // Only the owner releases its own claim, so a claim taken after this one
-    // is never dropped by a stale release.
-    if (this.admittingSessions.get(appSessionId) === admission) {
-      this.admittingSessions.delete(appSessionId);
-    }
-  }
-
-  private tryClaimAdmission(appSessionId: string): Admission | undefined {
-    if (this.admittingSessions.has(appSessionId)) return undefined;
-    const admission: Admission = { since: this.seconds(), ending: false };
-    this.admittingSessions.set(appSessionId, admission);
-    return admission;
-  }
-
-  private tryClaimSession(appSessionId: string): (() => void) | undefined {
-    const admission = this.tryClaimAdmission(appSessionId);
-    if (!admission) return undefined;
-    return () => this.releaseAdmission(appSessionId, admission);
-  }
-
-  /**
-   * Runs a provider-session maintenance operation only while no response can
-   * be admitted or remain live. The same synchronous claim used by admission
-   * closes the refresh-first as well as admission-first race.
-   */
-  async runIfSessionIdle<T>(
-    appSessionId: string,
-    operation: () => Promise<T>,
-  ): Promise<T | undefined> {
-    return this.runIfSessionsIdle([appSessionId], operation);
-  }
-
-  /** Atomically leases several session IDs for replacement after rehydration. */
-  async runIfSessionsIdle<T>(
-    appSessionIds: readonly string[],
-    operation: () => Promise<T>,
-  ): Promise<T | undefined> {
-    const releases: Array<() => void> = [];
-    try {
-      for (const appSessionId of [...new Set(appSessionIds)].sort()) {
-        const release = this.tryClaimSession(appSessionId);
-        if (!release) return undefined;
-        releases.push(release);
-      }
-      for (const appSessionId of appSessionIds) {
-        if ((await this.liveChains(appSessionId)).length > 0) return undefined;
-      }
-      return await operation();
-    } finally {
-      for (const release of releases.reverse()) release();
-    }
-  }
-
-  private async startContinuation(
-    session: EngineSession,
-    previousResponseId: string,
-    callId: string,
-    output: string,
-  ): Promise<AsyncGenerator<ResponseStreamEvent>> {
-    const { chain, state } = await this.resumableChain(
-      session,
-      previousResponseId,
-    );
-    try {
-      const call = await this.resolvableCall(chain, callId, output);
-      if (state.cancelRequested) {
-        throw new ResponseApiError(
-          "response_cancelled",
-          "the response chain was cancelled before its output was delivered",
-        );
-      }
-      await this.deliverOutput(state, call, output, fingerprintOf(output));
-      if (state.cancelRequested) {
-        throw new ResponseApiError(
-          "response_cancelled",
-          "the response chain was cancelled while its output was being delivered",
-        );
-      }
-      await this.store.putChain({
-        ...chain,
-        status: "running",
-        updatedAt: this.seconds(),
-      });
-    } catch (cause) {
-      state.busy = false;
-      throw cause;
-    }
-    return this.segment(chain.chainId, state, {
-      kind: "function_output",
-      previousResponseId,
-      callId,
-    });
-  }
-
-  /**
-   * Resolves the chain a continuation targets and proves it is still
-   * continuable: owned by this session, not terminal, at its head, live, and
-   * not already executing another operation.
-   */
-  private async resumableChain(
-    session: EngineSession,
-    previousResponseId: string,
-  ): Promise<{ chain: ChainRecord; state: ActiveChain }> {
-    const previous = await this.store.getResponse(previousResponseId);
-    const chain = previous
-      ? await this.store.getChain(previous.chainId)
-      : undefined;
-    if (!previous || !chain || !this.chainBelongsTo(chain, session)) {
-      throw new ResponseApiError(
-        "previous_response_not_found",
-        "previous_response_id is unknown or no longer continuable",
-        "previous_response_id",
-      );
-    }
-    if (chain.status === "terminal") {
-      // A terminal chain reports why it is terminal: `response_cancelled` and
-      // `backend_unavailable` (an interrupted chain) are materially different
-      // answers for a client deciding whether to retry.
-      throw new ResponseApiError(
-        terminalErrorCode(chain),
-        chain.terminalError?.message ??
-          "the response chain has already reached a terminal state",
-        "previous_response_id",
-      );
-    }
-    if (chain.latestResponseId !== previousResponseId) {
-      throw new ResponseApiError(
-        "previous_response_not_found",
-        "only the most recent response in a chain can be continued",
-        "previous_response_id",
-      );
-    }
-    const state = this.liveRun(chain.chainId);
-    if (!state) {
-      // The live run did not survive. Persist-before-publication tells us the
-      // call existed; nothing restores the parked awaiter inside the harness.
-      await this.markInterrupted(chain);
-      throw new ResponseApiError(
-        "backend_unavailable",
-        "the harness run backing this chain is no longer available; the chain is interrupted",
-      );
-    }
-    if (state.busy) {
-      throw new ResponseApiError(
-        "response_busy",
-        "another operation is already active on this response chain",
-      );
-    }
-    // Claimed here, in the same synchronous step as the check. Every caller
-    // awaits before it reaches the run, and a claim taken after those awaits
-    // would let two continuations pass the guard together and deliver two
-    // outputs for one parked call. The caller releases it if it then throws.
-    state.busy = true;
-    return { chain, state };
-  }
-
-  /**
-   * The unresolved call a continuation names, proven to belong to this chain
-   * and to be answerable with this output.
-   */
-  private async resolvableCall(
-    chain: ChainRecord,
-    callId: string,
-    output: string,
-  ): Promise<CallRecord> {
-    const call = await this.store.getCall(callId);
-    if (
-      !call ||
-      call.chainId !== chain.chainId ||
-      call.result === "provider_observed"
-    ) {
-      throw new ResponseApiError(
-        "function_call_not_found",
-        "call_id does not match the unresolved function call on this chain",
-        "input",
-      );
-    }
-    if (
-      call.result !== "none" &&
-      call.outputFingerprint !== null &&
-      call.outputFingerprint !== fingerprintOf(output)
-    ) {
-      throw new ResponseApiError(
-        "function_output_conflict",
-        "a different output has already been recorded for this call",
-        "input",
-      );
-    }
-    return call;
-  }
-
-  /**
-   * Persists the canonical output before the provider is contacted, so a crash
-   * between the two is recoverable as a same-output redrive.
-   */
-  private async deliverOutput(
-    state: ActiveChain,
-    call: CallRecord,
-    output: string,
-    fingerprint: string,
-  ): Promise<void> {
-    // A successful provider post was already durably recorded. Re-entering a
-    // continuation must observe the retained run, not post the same output a
-    // second time. `output_recorded` remains an intentionally uncertain
-    // at-least-once boundary if the process died around the provider request.
-    if (call.result === "delivery_attempted") return;
-    const recorded: CallRecord = {
-      ...call,
-      result: "output_recorded",
-      output,
-      outputFingerprint: fingerprint,
-      updatedAt: this.seconds(),
-    };
-    await this.store.putCall(recorded);
-    if (state.cancelRequested) {
-      throw new ResponseApiError(
-        "response_cancelled",
-        "the response chain was cancelled before its output was delivered",
-      );
-    }
-    try {
-      await state.run.submitOutput(call.providerToken, output);
-    } catch (cause) {
-      throw new ResponseApiError(
-        "backend_unavailable",
-        `the function output could not be delivered: ${describe(cause)}`,
-      );
-    }
-    await this.store.putCall({
-      ...recorded,
-      result: "delivery_attempted",
-      updatedAt: this.seconds(),
-    });
-  }
-
-  /**
-   * Emits one public response segment. A segment ends at the first application
-   * function call or at the run's own terminal event; the underlying run is
-   * deliberately retained in the former case.
-   */
-  private async *segment(
-    chainId: string,
-    state: ActiveChain,
-    link: SegmentLink,
+    stream: AsyncGenerator<ResponseStreamEvent>,
+    submitted?: CallRecord,
   ): AsyncGenerator<ResponseStreamEvent> {
-    const responseId = `resp_${this.createId()}`;
-    const createdAt = this.seconds();
-    const chain = await this.requireChain(chainId);
-    const writer = new SegmentWriter({
-      responseId,
-      createdAt,
-      previousResponseId:
-        link.kind === "initial" ? null : link.previousResponseId,
-      tools: projectTools(chain.tools),
-      now: this.now,
-      createId: this.createId,
-    });
-    let resolvedCall = link.kind !== "function_output";
-
-    const persist = (
-      status: ResponseStatus,
-      error: ResponseError | null = null,
-    ): Promise<void> =>
-      this.store.putResponse({
-        responseId,
-        chainId,
-        previousResponseId:
-          link.kind === "initial" ? null : link.previousResponseId,
-        status,
-        createdAt,
-        completedAt: status === "in_progress" ? null : this.seconds(),
-        output: [...writer.output],
-        error,
-      });
-
-    // Admission proved the chain was continuable, but every caller awaits the
-    // backend before reaching here, and expiry or cancellation can commit a
-    // terminal state inside that window. Writing `running` unconditionally
-    // would resurrect it durably and hand the application call IDs on a chain
-    // whose provider session is already being torn down.
-    if (chain.status === "terminal") {
-      const error = chain.terminalError ?? CANCELLED_ERROR;
-      await persist("failed", error);
-      yield* writer.begin();
-      yield* writer.failed(error, { type: "api_error", param: null });
-      state.busy = false;
-      // Whatever terminalized this chain could not close the run: expiry and
-      // cancellation both look for a registered run, and this one was
-      // registered after they had already scanned. Releasing it here is the
-      // only remaining opportunity, and skipping it leaks the run and its
-      // event pump for the life of the process.
-      await this.retireRun(chainId, state);
-      return;
-    }
-    await persist("in_progress");
-    await this.store.putChain({
-      ...chain,
-      status: "running",
-      latestResponseId: responseId,
-      updatedAt: this.seconds(),
-    });
-    yield* writer.begin();
-
+    let chain = initial;
+    let response: ResponseRecord | undefined;
+    let completed = false;
+    const held: ResponseStreamEvent[] = [];
+    const items = new Map<string, ResponseOutputItem>();
     try {
-      for (;;) {
-        const next = await state.events.next();
-        state.lastProgressAt = this.seconds();
-        if (state.cancelRequested) {
-          yield* writer.closeText();
-          await this.finishChain(chainId, "terminal", CANCELLED_ERROR);
-          await persist("cancelled", CANCELLED_ERROR);
-          yield* writer.cancelled(CANCELLED_ERROR);
-          return;
-        }
-        if (next.done) {
-          const error = {
-            code: "backend_protocol_error",
-            message:
-              "the user-owned runtime stream ended without a terminal event",
+      for await (const event of stream) {
+        await this.authorize(session, admission);
+        if ("response" in event) {
+          const resource = event.response;
+          if (
+            resource.status === "in_progress" &&
+            resource.output.some((item) => item.type === "function_call")
+          )
+            throw protocolError();
+          if (response && response.responseId !== resource.id)
+            throw protocolError();
+          const existing = await this.store.getResponse(resource.id);
+          if (existing && existing.chainId !== chain.chainId)
+            throw protocolError();
+          response = {
+            responseId: resource.id,
+            chainId: chain.chainId,
+            previousResponseId: chain.continuedFromResponseId,
+            status: resource.status,
+            createdAt: resource.created_at,
+            completedAt: resource.completed_at,
+            output: resource.output,
+            error: resource.error,
           };
-          yield* writer.closeText();
-          await this.finishChain(chainId, "terminal", error);
-          await persist("failed", error);
-          yield* writer.failed(error, { type: "api_error", param: null });
-          return;
+          await this.store.putResponse(response);
+          chain = {
+            ...chain,
+            latestResponseId: resource.id,
+            updatedAt: this.seconds(),
+          };
+          await this.store.putChain(chain);
         }
-        if (next.value.type === "completed") {
-          if (!resolvedCall && link.kind === "function_output") {
-            resolvedCall = true;
-            await this.observeCallResult(link.callId);
+        if (!response) throw protocolError();
+        if ("item" in event) {
+          this.validateItem(session, event.item);
+          if (event.type === "response.output_item.done") {
+            if (items.has(event.item.id)) throw protocolError();
+            items.set(event.item.id, event.item);
           }
-          yield* writer.closeText();
-          await this.finishChain(chainId, "terminal", null);
-          await persist("completed");
-          yield* writer.completed();
-          return;
+          if (event.item.type === "function_call") {
+            held.push(event);
+            continue;
+          }
         }
-        const event = next.value;
-        if (event.type === "text.delta") {
-          if (!resolvedCall && link.kind === "function_output") {
-            resolvedCall = true;
-            await this.observeCallResult(link.callId);
-          }
-          yield* writer.appendText(event.delta);
+        if (event.type === "response.function_call_arguments.done") {
+          held.push(event);
           continue;
         }
-        if (event.type === "tool.call") {
-          if (!resolvedCall && link.kind === "function_output") {
-            resolvedCall = true;
-            await this.observeCallResult(link.callId);
+        const terminal =
+          event.type === "response.completed" ||
+          event.type === "response.failed" ||
+          event.type === "response.incomplete";
+        if (terminal && "response" in event) {
+          const calls = event.response.output.filter(
+            (item) => item.type === "function_call",
+          );
+          for (const item of event.response.output)
+            this.validateItem(session, item);
+          if (calls.length > 1) throw protocolError();
+          for (const call of calls)
+            if (!items.has(call.id) || call.status !== "completed")
+              throw protocolError();
+          for (const pending of held) {
+            if ("item" in pending && pending.item.type === "function_call") {
+              const item = pending.item;
+              if (
+                !calls.some(
+                  (call) =>
+                    call.id === item.id &&
+                    call.call_id === item.call_id &&
+                    call.name === item.name &&
+                    call.arguments === item.arguments,
+                )
+              )
+                throw protocolError();
+            } else if (
+              pending.type === "response.function_call_arguments.done"
+            ) {
+              if (
+                !calls.some(
+                  (call) =>
+                    call.id === pending.item_id &&
+                    call.arguments === pending.arguments,
+                )
+              )
+                throw protocolError();
+            }
           }
-          yield* writer.closeText();
-          const item = await this.recordCall(chainId, responseId, event, chain);
-          if (state.cancelRequested) {
-            await this.finishChain(chainId, "terminal", CANCELLED_ERROR);
-            await persist("cancelled", CANCELLED_ERROR);
-            yield* writer.cancelled(CANCELLED_ERROR);
-            return;
+          for (const item of items.values())
+            if (
+              item.type === "function_call" &&
+              !calls.some(
+                (call) => JSON.stringify(call) === JSON.stringify(item),
+              )
+            )
+              throw protocolError();
+          if (event.type !== "response.completed" && calls.length)
+            throw protocolError();
+          for (const item of calls) {
+            if (await this.store.getCall(item.call_id)) throw protocolError();
+            await this.store.putCall({
+              callId: item.call_id,
+              chainId: chain.chainId,
+              responseId: response.responseId,
+              providerToken: item.call_id,
+              name: item.name,
+              arguments: item.arguments,
+              publication: "published",
+              result: "none",
+              output: null,
+              outputFingerprint: null,
+              createdAt: this.seconds(),
+              updatedAt: this.seconds(),
+            });
           }
-          yield* writer.functionCall(item);
-          await this.publishCall(item.call_id);
-          // The segment ends here; the harness run is deliberately retained.
-          await this.finishChain(chainId, "waiting_for_output", null);
-          await persist("completed");
-          yield* writer.completed();
+          chain = {
+            ...chain,
+            status: calls.length ? "waiting_for_output" : "terminal",
+            terminalError: event.response.error,
+            updatedAt: this.seconds(),
+          };
+          await this.store.putChain(chain);
+          if (submitted) {
+            const recorded = await this.store.getCall(submitted.callId);
+            if (recorded)
+              await this.store.putCall({
+                ...recorded,
+                result: "provider_observed",
+                updatedAt: this.seconds(),
+              });
+          }
+          await this.authorize(session, admission);
+          completed = true;
+          for (const pending of held) {
+            await this.authorize(session, admission);
+            yield pending;
+          }
+          await this.authorize(session, admission);
+          yield event;
           return;
         }
-        yield* writer.closeText();
-        const cancelled = event.type === "cancelled";
-        const error = cancelled
-          ? CANCELLED_ERROR
-          : { code: "backend_protocol_error", message: event.message };
-        await this.finishChain(chainId, "terminal", error);
-        await persist(cancelled ? "cancelled" : "failed", error);
-        yield* cancelled
-          ? writer.cancelled(error)
-          : writer.failed(error, { type: "api_error", param: null });
-        return;
+        if (held.length) {
+          held.push(event);
+          continue;
+        }
+        await this.authorize(session, admission);
+        yield event;
       }
-    } catch (cause) {
-      const error =
-        cause instanceof ResponseApiError &&
-        cause.code === "backend_protocol_error"
-          ? { code: cause.code, message: cause.message }
-          : {
-              code: "backend_unavailable",
-              message: `the user-owned runtime stream failed: ${describe(cause)}`,
-            };
-      await this.finishChain(chainId, "terminal", error);
-      await persist("failed", error);
-      yield* writer.failed(error, { type: "api_error", param: null });
+      throw protocolError();
+    } catch (error) {
+      await this.interrupt(
+        chain,
+        admission.controller.signal.aborted
+          ? "cancelled locally; upstream stop is unconfirmed"
+          : "delivery interrupted; continuation is uncertain and will not be replayed",
+      );
+      throw error instanceof ResponseApiError
+        ? error
+        : new ResponseApiError(
+            "backend_unavailable",
+            "OpenClaw response interrupted; use recovery to inspect the checkpoint",
+          );
     } finally {
-      state.busy = false;
+      admission.controller.abort();
+      try {
+        if (!completed)
+          await this.interrupt(
+            chain,
+            "delivery interrupted; no automatic replay",
+          );
+      } finally {
+        this.active.delete(session.sessionId);
+      }
     }
   }
-
-  /**
-   * A provider event after an output was posted is the only evidence available
-   * that the result took effect. A 202 acknowledgement alone is not.
-   */
-  private async observeCallResult(callId: string): Promise<void> {
-    const call = await this.store.getCall(callId);
-    if (!call) return;
-    await this.store.putCall({
-      ...call,
-      result: "provider_observed",
-      updatedAt: this.seconds(),
-    });
+  private validateItem(session: EngineSession, item: ResponseOutputItem) {
+    if (
+      item.type === "function_call" &&
+      !session.tools.some((tool) => tool.name === item.name)
+    )
+      throw new ResponseApiError(
+        "backend_protocol_error",
+        "upstream requested an unapproved application tool",
+      );
   }
-
-  /** Agent Connect extension: chain status plus the latest complete response. */
-  async describeChain(
-    session: EngineSession,
-    responseId: string,
-  ): Promise<ChainView> {
-    this.requireGrant(session.authorizationGrantId);
-    const { chain, response } = await this.requireOwnedResponse(
-      session,
-      responseId,
-    );
-    const live = this.liveRun(chain.chainId);
-    const recovery: RecoveryOutcome =
-      chain.status === "terminal"
-        ? "terminal_reconstructed"
-        : live
-          ? "reattached_live"
-          : "interrupted";
-    if (recovery === "interrupted") await this.markInterrupted(chain);
+  private async interrupt(chain: ChainRecord, message: string) {
+    this.changed(chain.appSessionId);
+    try {
+      const current = (await this.store.getChain(chain.chainId)) ?? chain;
+      await this.store.putChain({
+        ...current,
+        status: "terminal",
+        updatedAt: this.seconds(),
+        terminalError: { code: "backend_unavailable", message },
+      });
+    } catch (error) {
+      this.poisoned.add(chain.appSessionId);
+      throw error;
+    }
+  }
+  async describeChain(session: EngineSession, id: string): Promise<ChainView> {
+    const revision = this.revision(session.sessionId);
+    let { chain, response } = await this.owned(session, id);
+    if (
+      chain.providerKind !== "openclaw" ||
+      (chain.status === "running" && !this.active.has(session.sessionId))
+    ) {
+      await this.interrupt(
+        chain,
+        "interrupted runtime or migrated provider; create a new application session",
+      );
+      chain = (await this.store.getChain(chain.chainId))!;
+    }
+    const head = (await this.store.listChains())
+      .filter((c) => c.appSessionId === session.sessionId)
+      .sort((a, b) => b.sessionTurn - a.sessionTurn)[0];
+    const unavailableCall =
+      chain.status === "waiting_for_output" &&
+      (head?.chainId !== chain.chainId ||
+        this.active.get(session.sessionId)?.controller.signal.aborted === true);
+    await this.authorize(session);
+    const interrupted =
+      !!chain.terminalError ||
+      unavailableCall ||
+      revision !== this.revision(session.sessionId);
+    // A terminal upstream resource is persisted before its call ledger commit.
+    // Recovery must not turn that intermediate write into tool publication.
+    const canPublishCalls =
+      !interrupted && chain.status === "waiting_for_output";
     return {
-      responseId: response.responseId,
-      chainStatus: recovery === "interrupted" ? "terminal" : chain.status,
-      recovery,
+      responseId: id,
+      chainStatus: chain.status,
+      recovery: interrupted
+        ? "interrupted"
+        : chain.status === "terminal"
+          ? "terminal_reconstructed"
+          : "reattached_live",
       response: buildResponseResource({
-        id: response.responseId,
+        id,
         createdAt: response.createdAt,
         completedAt: response.completedAt,
-        status: response.status,
+        status: interrupted ? "failed" : response.status,
         previousResponseId: response.previousResponseId,
-        output: response.output,
-        error: response.error,
+        output: canPublishCalls
+          ? response.output
+          : response.output.filter((item) => item.type !== "function_call"),
+        error: chain.terminalError ?? response.error,
         tools: projectTools(chain.tools),
       }),
     };
   }
-
-  /** Agent Connect extension: unresolved application calls, for redelivery. */
-  async pendingFunctionCalls(
-    session: EngineSession,
-    responseId: string,
-  ): Promise<readonly PendingCallView[]> {
-    this.requireGrant(session.authorizationGrantId);
-    const { chain } = await this.requireOwnedResponse(session, responseId);
-    if (chain.status !== "running" && chain.status !== "waiting_for_output") {
-      // A cancelled, cancelling or interrupted chain cannot accept an output,
-      // so redelivering its parked call would only invite the application to
-      // run a side effect whose result the chain can never take. The record
-      // stays unresolved for the ledger; it just stops being deliverable.
+  async pendingFunctionCalls(session: EngineSession, id: string) {
+    const revision = this.revision(session.sessionId);
+    const view = await this.describeChain(session, id);
+    const { chain } = await this.owned(session, id);
+    const head = (await this.store.listChains())
+      .filter((c) => c.appSessionId === session.sessionId)
+      .sort((a, b) => b.sessionTurn - a.sessionTurn)[0];
+    if (
+      view.recovery === "interrupted" ||
+      chain.status !== "waiting_for_output" ||
+      head?.chainId !== chain.chainId
+    )
       return [];
-    }
-    if (!this.liveRun(chain.chainId)) {
-      await this.markInterrupted(chain);
-      return [];
-    }
     const calls = await this.store.unresolvedCalls(chain.chainId);
+    await this.authorize(session);
+    if (revision !== this.revision(session.sessionId)) return [];
     return calls
-      .filter((call) => call.publication === "published")
+      .filter((call) => call.result === "none")
       .map((call) => ({
         callId: call.callId,
         name: call.name,
@@ -850,384 +543,69 @@ export class ResponseEngine {
         responseId: call.responseId,
       }));
   }
-
-  /** Agent Connect extension: cancel the logical chain. */
-  async cancelChain(
-    session: EngineSession,
-    responseId: string,
-  ): Promise<ChainView> {
-    this.requireGrant(session.authorizationGrantId);
-    const { chain } = await this.requireOwnedResponse(session, responseId);
-    const live = this.active.get(chain.chainId);
-    if (chain.status !== "terminal") {
-      if (live) live.cancelRequested = true;
-      await this.store.putChain({
-        ...chain,
-        status: "cancelling",
-        updatedAt: this.seconds(),
-      });
-      if (live) {
-        await live.run.cancel().catch(() => {});
-      }
-      // Cancellation is an engine-owned decision. Omnigent does not promise a
-      // follow-up cancellation event, so waiting for one can hang the open
-      // segment and allow a later tool call to resurrect the chain.
-      await this.finishChain(chain.chainId, "terminal", CANCELLED_ERROR);
-    }
-    return this.describeChain(session, responseId);
-  }
-
-  /**
-   * Best-effort cancellation requested by an HTTP client disconnect. It is not
-   * an authorization boundary: the request that opened the segment was already
-   * authorized, and the caller is the gateway itself. A completion already
-   * committed wins; otherwise the engine commits cancellation and closes the
-   * retained run itself. Omnigent does not promise a cancellation event that
-   * would wake the segment.
-   */
-  async requestCancellation(responseId: string): Promise<void> {
-    const response = await this.store.getResponse(responseId);
-    if (!response) return;
-    const state = this.active.get(response.chainId);
-    if (!state || !state.busy) return;
-    state.cancelRequested = true;
-    await state.run.cancel().catch(() => {});
-    await this.finishChain(response.chainId, "terminal", CANCELLED_ERROR);
-  }
-
-  /**
-   * Retires every retained run owned by an application session that is ending.
-   * `reason` becomes the chain's terminal error, which is the only durable
-   * record of why the session went away and the one the console reads back.
-   */
-  async expireSession(
-    appSessionId: string,
-    reason: SessionEndReason = "expired",
-  ): Promise<void> {
-    // The claim itself is never deleted here: it is owned by the operation
-    // that took it and released in that operation's own `finally`, and
-    // dropping it would let a second admission run concurrently with the
-    // first. Flagging it is what an admission still inside its awaits needs —
-    // its chain and its run may not exist yet, so the scan below cannot see it.
-    const admission = this.admittingSessions.get(appSessionId);
-    if (admission) admission.ending = true;
-    for (const chain of await this.store.listChains()) {
-      if (chain.appSessionId !== appSessionId || chain.status === "terminal") {
-        continue;
-      }
-      const state = this.active.get(chain.chainId);
-      if (state) {
-        state.cancelRequested = true;
-        await state.run.cancel().catch(() => {});
-      }
-      await this.finishChain(chain.chainId, "terminal", {
-        code: "response_cancelled",
-        message: SESSION_END_MESSAGE[reason],
-      });
-    }
-  }
-
-  /**
-   * Which expiry clock currently governs an application session.
-   *
-   * Deliberately a pure read: it never retires a chain whose run was lost, so
-   * the reaper cannot mutate state while merely deciding. Such a chain simply
-   * stops counting as live, which lets the session fall to the idle clock —
-   * the correct outcome, since it can never continue.
-   */
-  async sessionLifecycle(appSessionId: string): Promise<SessionLifecycle> {
-    // An admission in flight is a session actively starting work, whose chain
-    // record may not exist yet.
-    const admission = this.admittingSessions.get(appSessionId);
-    if (admission) {
-      // The admission's own start time, not the current one. Re-dating it on
-      // every poll would hold `now - since` at zero and make the stalled-turn
-      // cap unable to fire for an admission wedged opening a provider stream.
-      return { kind: "running", since: admission.since };
-    }
-    for (const chain of await this.store.listChains()) {
-      if (chain.appSessionId !== appSessionId) continue;
-      if (chain.status === "terminal") continue;
-      const state = this.active.get(chain.chainId);
-      if (!state || !state.run.isAlive()) continue;
-      if (chain.status !== "waiting_for_output") {
-        return { kind: "running", since: state.lastProgressAt };
-      }
-      const calls = await this.store.unresolvedCalls(chain.chainId);
-      const published = calls.filter(
-        (call) => call.publication === "published",
+  async cancelChain(session: EngineSession, id: string) {
+    const { chain } = await this.owned(session, id);
+    const admission = this.active.get(session.sessionId);
+    if (admission && admission.chainId !== chain.chainId)
+      throw new ResponseApiError(
+        "previous_response_not_continuable",
+        "only the active response may be cancelled",
       );
-      if (published.length === 0) continue;
-      // The clock starts when the application was handed the call, not when
-      // the chain last changed for some other reason.
-      return {
-        kind: "parked",
-        since: published.reduce(
-          (earliest, call) => Math.min(earliest, call.updatedAt),
-          Number.POSITIVE_INFINITY,
-        ),
-      };
+    this.changed(session.sessionId);
+    admission?.controller.abort();
+    await this.interrupt(
+      chain,
+      "cancelled locally; upstream stop is unconfirmed",
+    );
+    return this.describeChain(session, id);
+  }
+  async requestCancellation(id: string) {
+    const response = await this.store.getResponse(id);
+    const chain = response && (await this.store.getChain(response.chainId));
+    if (chain) {
+      this.active.get(chain.appSessionId)?.controller.abort();
+      await this.interrupt(
+        chain,
+        "client disconnected; upstream stop is unconfirmed",
+      );
     }
+  }
+  cancelAdmission(id: string) {
+    this.changed(id);
+    this.active.get(id)?.controller.abort();
+  }
+  async expireSession(id: string, reason: SessionEndReason = "expired") {
+    this.changed(id);
+    this.active.get(id)?.controller.abort();
+    for (const chain of await this.store.listChains())
+      if (chain.appSessionId === id)
+        await this.interrupt(chain, reason + "; upstream stop is unconfirmed");
+  }
+  async sessionLifecycle(id: string): Promise<SessionLifecycle> {
+    const active = this.active.get(id);
+    if (active) return { kind: "running", since: active.since };
+    const head = (await this.store.listChains())
+      .filter((c) => c.appSessionId === id)
+      .sort((a, b) => b.sessionTurn - a.sessionTurn)[0];
+    if (
+      head &&
+      (head.providerKind !== "openclaw" ||
+        head.terminalError ||
+        head.status === "running")
+    )
+      return { kind: "interrupted" };
+    if (
+      head?.providerKind === "openclaw" &&
+      head.status === "waiting_for_output" &&
+      !head.terminalError
+    )
+      return { kind: "parked", since: head.updatedAt };
     return { kind: "idle" };
   }
-
-  /**
-   * Whether an application session still has a chain that is not terminal.
-   * The session-refresh path uses this to refuse repairing a provider session
-   * out from under an active chain: the chain's private call IDs belong to the
-   * old provider session, so a replacement would silently break it.
-   */
-  async hasLiveChain(appSessionId: string): Promise<boolean> {
-    if (this.admittingSessions.has(appSessionId)) return true;
-    return (await this.liveChains(appSessionId)).length > 0;
-  }
-
-  /**
-   * The session's non-terminal chains whose harness run can still be reached.
-   * A chain whose run did not survive is retired to terminal here rather than
-   * counted: it can never continue, and leaving it standing would block both
-   * the next response and the capability refresh that would repair the
-   * session — permanently, since nothing else would ever look at it again.
-   */
-  private async liveChains(
-    appSessionId: string,
-  ): Promise<readonly ChainRecord[]> {
-    const live: ChainRecord[] = [];
-    for (const chain of await this.store.listChains()) {
-      if (chain.appSessionId !== appSessionId) continue;
-      if (chain.status === "terminal") continue;
-      if (this.liveRun(chain.chainId)) live.push(chain);
-      else await this.markInterrupted(chain);
-    }
-    return live;
-  }
-
-  /**
-   * One application session drives one chain at a time. Its provider session
-   * is a single harness conversation, so a second initial response would
-   * interleave two conversations on it and hand the application call IDs from
-   * both.
-   */
-  private async requireNoLiveChain(appSessionId: string): Promise<void> {
-    if ((await this.liveChains(appSessionId)).length > 0) {
-      throw new ResponseApiError(
-        "response_busy",
-        "this application session already has an active response chain",
-      );
-    }
-  }
-
-  /** Releases live runs; used on shutdown and by tests. */
-  async closeAll(): Promise<void> {
-    const runs = [...this.active.values()];
-    this.active.clear();
-    await Promise.all(runs.map((state) => state.run.close().catch(() => {})));
-  }
-
-  /**
-   * The chain's run, only if the harness can still be reached. A run that died
-   * while the chain was parked is not a recovery path, and treating it as one
-   * would report `reattached_live` for a chain that can never continue.
-   */
-  private liveRun(chainId: string): ActiveChain | undefined {
-    const state = this.active.get(chainId);
-    if (!state) return undefined;
-    if (state.run.isAlive()) return state;
-    this.active.delete(chainId);
-    return undefined;
-  }
-
-  private async recordCall(
-    chainId: string,
-    responseId: string,
-    event: Extract<BackendEvent, { type: "tool.call" }>,
-    chain: ChainRecord,
-  ): Promise<Extract<ResponseOutputItem, { type: "function_call" }>> {
-    if (!chain.tools.some((tool) => tool.name === event.name)) {
-      throw new ResponseApiError(
-        "backend_protocol_error",
-        `the runtime requested a function outside the approved snapshot: ${event.name}`,
-      );
-    }
-    const callId = `call_${this.createId()}`;
-    const timestamp = this.seconds();
-    // Durable before publication. This record is the only source of truth for
-    // an unresolved call: the harness snapshot does not report parked calls.
-    await this.store.putCall({
-      callId,
-      chainId,
-      responseId,
-      providerToken: event.providerToken,
-      name: event.name,
-      arguments: event.arguments,
-      publication: "recorded",
-      result: "none",
-      output: null,
-      outputFingerprint: null,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
-    const recorded = await this.store.getCall(callId);
-    if (recorded) {
-      await this.store.putCall({
-        ...recorded,
-        publication: "publication_started",
-        updatedAt: this.seconds(),
-      });
-    }
-    return {
-      type: "function_call",
-      id: `fc_${this.createId()}`,
-      call_id: callId,
-      name: event.name,
-      arguments: event.arguments,
-      status: "completed",
-    };
-  }
-
-  private async publishCall(callId: string): Promise<void> {
-    const call = await this.store.getCall(callId);
-    if (!call) return;
-    await this.store.putCall({
-      ...call,
-      publication: "published",
-      updatedAt: this.seconds(),
-    });
-  }
-
-  private async finishChain(
-    chainId: string,
-    status: ChainRecord["status"],
-    terminalError: ChainRecord["terminalError"],
-  ): Promise<void> {
-    const chain = await this.store.getChain(chainId);
-    if (!chain) return;
-    if (chain.status === "terminal") return;
-    const state = this.active.get(chainId);
-    if (state?.cancelRequested && status !== "terminal") {
-      status = "terminal";
-      terminalError = CANCELLED_ERROR;
-    }
-    await this.store.putChain({
-      ...chain,
-      status,
-      terminalError,
-      updatedAt: this.seconds(),
-    });
-    if (status === "terminal") {
-      this.active.delete(chainId);
-      await state?.run.close().catch(() => {});
-    }
-  }
-
-  /** Deregisters and closes a run, without touching the chain record. */
-  private async retireRun(chainId: string, state: ActiveChain): Promise<void> {
-    if (this.active.get(chainId) === state) this.active.delete(chainId);
-    await state.run.close().catch(() => {});
-  }
-
-  private async markInterrupted(chain: ChainRecord): Promise<void> {
-    if (chain.status === "terminal") return;
-    await this.store.putChain({
-      ...chain,
-      status: "terminal",
-      terminalError: {
-        code: "backend_unavailable",
-        message:
-          "the harness run backing this chain was lost; the chain is interrupted",
-      },
-      updatedAt: this.seconds(),
-    });
-  }
-
-  private async requireOwnedResponse(
-    session: EngineSession,
-    responseId: string,
-  ): Promise<{ chain: ChainRecord; response: ResponseRecord }> {
-    const response = await this.store.getResponse(responseId);
-    const chain = response
-      ? await this.store.getChain(response.chainId)
-      : undefined;
-    if (!response || !chain || !this.chainBelongsTo(chain, session)) {
-      throw new ResponseApiError(
-        "previous_response_not_found",
-        "the response is unknown or not authorized for this application session",
-      );
-    }
-    return { chain, response };
-  }
-
-  private chainBelongsTo(chain: ChainRecord, session: EngineSession): boolean {
-    return (
-      chain.appSessionId === session.sessionId &&
-      chain.appId === session.appId &&
-      chain.origin === session.origin &&
-      chain.toolHash === session.toolHash &&
-      chain.authorizationGrantId === session.authorizationGrantId
-    );
-  }
-
-  private async requireChain(chainId: string): Promise<ChainRecord> {
-    const chain = await this.store.getChain(chainId);
-    if (!chain) {
-      throw new ResponseApiError(
-        "previous_response_not_found",
-        "the response chain record is missing",
-      );
-    }
-    return chain;
-  }
-
-  private requireGrant(grantId: string): void {
-    if (!this.isGrantActive(grantId)) {
-      throw new ResponseApiError(
-        "tool_snapshot_mismatch",
-        "the authorization grant for this application session is no longer active",
-      );
-    }
-  }
-
-  private seconds(): number {
-    return Math.floor(this.now() / 1000);
-  }
 }
-
-const CANCELLED_ERROR: ResponseError = {
-  code: "response_cancelled",
-  message: "the response chain was cancelled",
-};
-
-/** Why an application session is being retired, in the words the owner sees. */
-export type SessionEndReason =
-  "expired" | "idle" | "unanswered_call" | "stalled" | "ended_by_owner";
-
-const SESSION_END_MESSAGE: Readonly<Record<SessionEndReason, string>> = {
-  expired: "the application session expired",
-  idle: "the application session expired after going idle",
-  unanswered_call:
-    "the application session expired without answering a function call",
-  stalled:
-    "the application session was retired after the turn stopped making progress",
-  ended_by_owner: "the session was ended from the gateway's session page",
-};
-
-const CONTINUABLE_TERMINAL_CODES: ReadonlySet<string> = new Set([
-  "response_cancelled",
-  "backend_unavailable",
-  "backend_protocol_error",
-]);
-
-function terminalErrorCode(chain: ChainRecord): ResponseErrorCode {
-  const code = chain.terminalError?.code;
-  return code && CONTINUABLE_TERMINAL_CODES.has(code)
-    ? (code as ResponseErrorCode)
-    : "previous_response_not_found";
-}
-
-function fingerprintOf(output: string): string {
-  return createHash("sha256").update(output).digest("base64url");
-}
-
-function describe(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
+function protocolError() {
+  return new ResponseApiError(
+    "backend_protocol_error",
+    "OpenClaw returned an invalid bounded Responses stream",
+  );
 }

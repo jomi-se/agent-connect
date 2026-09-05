@@ -18,8 +18,8 @@ gateway, SDK example, supported platforms, and verification commands.
 - [Web application integration](guides/web-app-integration.md): package the SDK,
   authorize a gateway, stream a task, handle browser-owned tools, and revoke
   access.
-- [Real Omnigent + Codex gateway](../deploy/real-gateway/README.md): install
-  and operate the source reference profile.
+- [OpenClaw gateway setup](../deploy/openclaw-gateway/README.md): isolated
+  replacement setup, pinned dependency and pending live-runtime acceptance.
 - [Firebase deployment](guides/firebase-demo-deployment.md): deploy the static
   Canvas without placing Firebase credentials on the gateway.
 - [Local code-quality analysis](guides/code-quality-analysis.md): ESLint,
@@ -32,6 +32,9 @@ documents an unstable prototype. It is not the default browser/gateway path.
 
 ## Current design direction
 
+- [ADR 0012: OpenClaw policy gateway](decisions/0012-openclaw-policy-gateway.md)
+  is the active replacement direction; [implementation and evidence gates](plan/openclaw-replacement.md)
+  distinguish shared work from unresolved runtime composition.
 - [ADR 0010: Open Responses at the application boundary](decisions/0010-open-responses-gateway-pivot.md)
 - [ADR 0011: Linear multi-turn continuation](decisions/0011-linear-multi-turn-continuation.md)
   is the leading proposed protocol direction and defines its evidence gates.
@@ -44,6 +47,7 @@ historical. AG-UI is no longer an active core-protocol experiment.
 ## Current accepted decisions
 
 - [ADR 0002: Omnigent as the first provider](decisions/0002-omnigent-conductor.md)
+  is historical provider selection, superseded on the replacement branch by ADR 0012.
 - [ADR 0003: Tailnet HTTPS gateway](decisions/0003-tailnet-https-gateway.md)
 - [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md)
 - [ADR 0007: Runtime card and gateway authorization](decisions/0007-runtime-card-and-gateway-authorization.md)
@@ -57,11 +61,10 @@ historical. AG-UI is no longer an active core-protocol experiment.
 ## Future work
 
 - [Reuse existing gateway components](ideas/reuse-existing-gateway-components.md):
-  deferred investigation into reducing authentication and provisioning ownership;
-  not a replacement plan or a prerequisite for Bookhand.
+  the source idea, now promoted into the active OpenClaw replacement plan.
 - [Multi-turn task continuation](plan/multi-turn-task-continuation.md): explicit
   completed-task follow-up on one durable provider conversation. Implemented;
-  pending the manual real-Codex release gate.
+  replacement acceptance still requires the selected subscription-runtime browser gate.
 - [Hassle-free tunnel ingress](future/hassle-free-tunnel-ingress.md): reaching a
   self-hosted gateway at a stable HTTPS origin without root or a second admin
   console. Surveys zrok, cloudflared, ngrok, and Funnel; depends on ADR 0009.

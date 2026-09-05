@@ -9,9 +9,3 @@ export type {
   GrantView,
   RuntimeCard,
 } from "./connector-auth.js";
-export { OmnigentRuntime } from "./omnigent-runtime.js";
-export type {
-  OmnigentRuntimeOptions,
-  OmnigentSandboxOptions,
-} from "./omnigent-runtime.js";
-export type { AgentRuntime, RuntimeSessionRequest } from "./runtime.js";

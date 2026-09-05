@@ -29,12 +29,8 @@ type GatewayTerminalStep =
 const GATEWAY_TERMINAL_STEPS: readonly GatewayTerminalStep[] = [
   {
     kind: "output",
-    text: "# authenticated Codex + Tailscale required",
+    text: "# Node 24.15+ (<25), Tailscale, and a configured OpenClaw service required",
     tone: "muted",
-  },
-  {
-    kind: "command",
-    text: "curl -fsSL https://omnigent.ai/install.sh | sh -s -- --version 0.5.1",
   },
   {
     kind: "command",
@@ -43,27 +39,40 @@ const GATEWAY_TERMINAL_STEPS: readonly GatewayTerminalStep[] = [
   { kind: "command", text: "npm install && npm run build" },
   {
     kind: "command",
-    text: 'mkdir -p "$HOME/.agent-connect/codex-home" && chmod 700 "$HOME/.agent-connect/codex-home"',
-  },
-  {
-    kind: "command",
-    text: 'CODEX_HOME="$HOME/.agent-connect/codex-home" codex login',
-  },
-  {
-    kind: "command",
-    text: "cp deploy/real-gateway/.env.example deploy/real-gateway/.env && chmod 600 deploy/real-gateway/.env",
+    text: "cp deploy/openclaw-gateway/.env.example deploy/openclaw-gateway/.env && chmod 600 deploy/openclaw-gateway/.env",
   },
   {
     kind: "output",
-    text: "# set Serve URL, Tailscale login, Codex home, workspace",
+    text: "# set literal private upstream URL/token/agent, identity path, Serve URL and Tailscale login",
     tone: "muted",
   },
-  { kind: "command", text: "$EDITOR deploy/real-gateway/.env" },
-  { kind: "command", text: "deploy/real-gateway/run.sh" },
+  {
+    kind: "command",
+    text: "$EDITOR deploy/openclaw-gateway/.env",
+  },
+  {
+    kind: "output",
+    text: "# upstream model/auth setup is separate; see deploy/openclaw-gateway/README.md",
+    tone: "muted",
+  },
+  {
+    kind: "command",
+    text: 'export AGENT_CONNECT_OPENCLAW_ENV_FILE="$PWD/deploy/openclaw-gateway/.env"',
+  },
+  {
+    kind: "output",
+    text: "# new identity only: initialize; never reinitialize existing state",
+    tone: "muted",
+  },
+  { kind: "command", text: "node scripts/openclaw-gateway.mjs initialize" },
   {
     kind: "output",
     text: "runtime card + enrollment passphrase ready",
     tone: "success",
+  },
+  {
+    kind: "command",
+    text: "node scripts/openclaw-gateway.mjs check && node scripts/openclaw-gateway.mjs serve",
   },
   {
     kind: "output",
@@ -838,11 +847,11 @@ function architectureStoryMarkup(layout: "desktop" | "mobile"): string {
     <div class="architecture-intro">
       <div>
         <h2 id="architecture-story-title">How it works today</h2>
-        <p>A real browser-to-Codex path</p>
+        <p>A browser-to-user-owned-agent path</p>
       </div>
     </div>
 
-    <div class="current-architecture" role="img" aria-label="The web app lends browser tools through Tailscale Serve to the Agent Connect Gateway. Inside the user's boundary, the gateway uses Omnigent and the codex-acp adapter to run Codex from the user's subscription.">
+    <div class="current-architecture" role="img" aria-label="The web app lends browser tools through Tailscale Serve to the Agent Connect Gateway. Inside the user's boundary, the gateway mediates OpenClaw Responses with an explicitly configured private agent. Subscription setup remains operator-owned.">
       <article class="architecture-app">
         <div class="architecture-browser-bar" aria-hidden="true"><i></i><i></i><i></i><span>yourapp.com</span></div>
         <div class="architecture-app-body">
@@ -871,14 +880,14 @@ function architectureStoryMarkup(layout: "desktop" | "mobile"): string {
             <p>Identity, consent, origin- and tool-bound grants, opaque sessions, revocation, and recovery.</p>
           </article>
           <article class="architecture-layer architecture-layer-runtime">
-            <div><strong>Omnigent</strong><span>conductor</span></div>
-            <p>Agent lifecycle and a request-scoped MCP relay for the app's tools.</p>
+            <div><strong>OpenClaw</strong><span>agent runtime</span></div>
+            <p>Owns inference and history; receives the app's approved client tools.</p>
           </article>
           <article class="architecture-layer architecture-layer-adapter">
-            <div><strong>codex-acp</strong><span>ACP adapter</span></div>
+            <div><strong>Responses</strong><span>private HTTP boundary</span></div>
           </article>
           <article class="architecture-layer architecture-layer-agent">
-            <div><strong>Codex</strong><span>user's subscription</span></div>
+            <div><strong>User-configured model</strong><span>operator-owned credentials</span></div>
             <p>Reasons, streams events, and calls the tools lent by the app.</p>
           </article>
         </div>
@@ -903,15 +912,15 @@ function desktopFutureStoryMarkup(): string {
     {
       className: "north-conductor",
       label: "Conductor",
-      current: "Omnigent today",
+      current: "OpenClaw runtime",
       status: "transitional" as const,
       future: "any conductor or none",
     },
     {
       className: "north-agent",
       label: "Coding agent",
-      current: "Codex",
-      status: "proven" as const,
+      current: "Operator-selected model",
+      status: "transitional" as const,
       future:
         "Codex · Claude Code<br><span>Pi · Agy · other compatible agents</span>",
     },
@@ -992,8 +1001,12 @@ function desktopFutureStoryMarkup(): string {
 
 function mobileFutureStoryMarkup(): string {
   const rows = [
-    ["Conductor", "Omnigent today", "any conductor or none"],
-    ["Coding agent", "Codex", "Codex, Claude Code, Pi, Agy, and others"],
+    ["Conductor", "OpenClaw runtime", "any conductor or none"],
+    [
+      "Coding agent",
+      "Operator-selected model",
+      "Codex, Claude Code, Pi, Agy, and others",
+    ],
     ["Transport", "Tailscale", "any secure tunnel"],
     ["Deployment", "personal VM", "a simple packaged box"],
   ];
@@ -1485,7 +1498,7 @@ function showRuntimeSummary(runtimeCard: RuntimeCard): void {
 }
 
 function runtimeLabel(runtimeCard: RuntimeCard): string {
-  return `Codex through Omnigent · ${runtimeCard.transportProfile}`;
+  return `User-owned agent · ${runtimeCard.transportProfile}`;
 }
 
 async function copySnippet(button: HTMLButtonElement): Promise<void> {

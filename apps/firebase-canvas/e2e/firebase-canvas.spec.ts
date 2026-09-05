@@ -207,7 +207,7 @@ test("a page refresh starts an independent session under the saved grant", async
 
   await expect.poll(harness.sessionRequestCount).toBe(2);
   await expect(page.locator("#connection-state")).toContainText(
-    "Codex through Omnigent",
+    "User-owned agent",
   );
   await expect(page.locator("#status")).not.toContainText("active task");
 });
@@ -459,7 +459,7 @@ test("the architecture story distinguishes today's proof from the north star", a
   ).toBeVisible();
   await expect(
     page.locator(".current-architecture .architecture-layer-agent strong"),
-  ).toHaveText("Codex");
+  ).toHaveText("User-configured model");
 
   const story = page.locator("[data-future-story]");
   const storyMetrics = await story.evaluate((element) => ({
@@ -512,7 +512,7 @@ async function openAndConnect(
   ).toBeDisabled();
   await page.getByRole("button", { name: "Connect runtime" }).click();
   await expect(page.locator("#connection-state")).toContainText(
-    "Codex through Omnigent",
+    "User-owned agent",
   );
   await expect(
     page.getByRole("button", { name: "Connect runtime" }),

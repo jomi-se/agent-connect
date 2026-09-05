@@ -118,56 +118,68 @@ async function createResponse(
   const parsed = parseResponseRequest(body, session);
   // Validation and chain admission happen before any event is produced, so a
   // rejection is an ordinary HTTP failure rather than a half-written stream.
-  const stream = await engine.createResponse(session, parsed);
+  let finished = false;
+  const onClose = () => {
+    if (!finished && !httpResponse.writableEnded)
+      engine.cancelAdmission(session.sessionId);
+  };
+  httpResponse.on("close", onClose);
+  try {
+    const stream = await engine.createResponse(session, parsed);
 
-  if (!parsed.stream) {
-    let resource: ResponseResource | undefined;
+    if (!parsed.stream) {
+      let resource: ResponseResource | undefined;
+      for await (const event of stream) {
+        if ("response" in event) resource = event.response;
+      }
+      if (!resource) {
+        throw new ResponseApiError(
+          "backend_protocol_error",
+          "the response produced no terminal event",
+        );
+      }
+      sendJson(httpResponse, 200, resource);
+      finished = true;
+      return;
+    }
+
+    httpResponse.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-store",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+
+    let responseId: string | undefined;
+    let terminal = false;
+    let disconnected = false;
+    httpResponse.on("close", () => {
+      if (terminal || httpResponse.writableEnded) return;
+      disconnected = true;
+      // A close during ordinary generation requests best-effort cancellation. A
+      // close after a committed function boundary is the ordinary end of a
+      // segment and never reaches here, because the terminal event was written.
+      if (responseId) void engine.requestCancellation(responseId);
+    });
+
     for await (const event of stream) {
-      if ("response" in event) resource = event.response;
+      if (event.type === "response.created") responseId = event.response.id;
+      if (
+        event.type === "response.completed" ||
+        event.type === "response.failed" ||
+        event.type === "response.incomplete"
+      ) {
+        terminal = true;
+      }
+      if (!disconnected) httpResponse.write(encodeSseEvent(event));
     }
-    if (!resource) {
-      throw new ResponseApiError(
-        "backend_protocol_error",
-        "the response produced no terminal event",
-      );
+    if (!disconnected) {
+      httpResponse.write(SSE_DONE);
+      httpResponse.end();
     }
-    sendJson(httpResponse, 200, resource);
-    return;
-  }
-
-  httpResponse.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-store",
-    Connection: "keep-alive",
-    "X-Accel-Buffering": "no",
-  });
-
-  let responseId: string | undefined;
-  let terminal = false;
-  let disconnected = false;
-  httpResponse.on("close", () => {
-    if (terminal || httpResponse.writableEnded) return;
-    disconnected = true;
-    // A close during ordinary generation requests best-effort cancellation. A
-    // close after a committed function boundary is the ordinary end of a
-    // segment and never reaches here, because the terminal event was written.
-    if (responseId) void engine.requestCancellation(responseId);
-  });
-
-  for await (const event of stream) {
-    if (event.type === "response.created") responseId = event.response.id;
-    if (
-      event.type === "response.completed" ||
-      event.type === "response.failed" ||
-      event.type === "response.incomplete"
-    ) {
-      terminal = true;
-    }
-    if (!disconnected) httpResponse.write(encodeSseEvent(event));
-  }
-  if (!disconnected) {
-    httpResponse.write(SSE_DONE);
-    httpResponse.end();
+    finished = true;
+  } finally {
+    httpResponse.off("close", onClose);
   }
 }
 

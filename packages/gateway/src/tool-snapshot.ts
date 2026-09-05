@@ -56,32 +56,6 @@ export function hashToolSnapshot(
   return createHash("sha256").update(canonicalJson(tools)).digest("base64url");
 }
 
-export function hashOmnigentToolEnvelope(value: unknown): string | undefined {
-  if (!Array.isArray(value)) return undefined;
-  try {
-    return hashToolSnapshot(
-      validateToolSnapshot(
-        value.map((candidate) => {
-          if (!isRecord(candidate) || candidate.type !== "function") {
-            throw new InvalidToolSnapshotError("invalid provider tool");
-          }
-          const fn = candidate.function;
-          if (!isRecord(fn)) {
-            throw new InvalidToolSnapshotError("invalid provider function");
-          }
-          return {
-            name: fn.name,
-            description: fn.description,
-            inputSchema: fn.parameters,
-          };
-        }),
-      ),
-    );
-  } catch {
-    return undefined;
-  }
-}
-
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(",")}]`;

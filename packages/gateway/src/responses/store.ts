@@ -116,6 +116,9 @@ export class InMemoryResponseStore implements ResponseStore {
   }
 
   async putResponse(response: ResponseRecord): Promise<void> {
+    const existing = this.responses.get(response.responseId);
+    if (existing && existing.chainId !== response.chainId)
+      throw new Error("response ID ownership collision");
     this.responses.set(response.responseId, response);
   }
 
@@ -124,6 +127,9 @@ export class InMemoryResponseStore implements ResponseStore {
   }
 
   async putCall(call: CallRecord): Promise<void> {
+    const existing = this.calls.get(call.callId);
+    if (existing && existing.chainId !== call.chainId)
+      throw new Error("call ID ownership collision");
     this.calls.set(call.callId, call);
   }
 

@@ -25,17 +25,15 @@
     "test": "npm run test --workspaces --if-present",
     "test:package:web": "node scripts/smoke-web-sdk-package.mjs",
     "test:webmcp": "npm run test:webmcp --workspace @open-agent-connect/web",
-    "test:codex-acp-policy": "node scripts/test-codex-acp-tool-policy.mjs",
-    "test:codex-auth": "node --test scripts/link-codex-auth.test.mjs",
-    "test:integration:omnigent": "npm run test:integration:omnigent --workspace @agent-connect/gateway",
+    "test:openclaw:fixture": "node --test scripts/openclaw-preflight.test.mjs scripts/openclaw-gateway.test.mjs scripts/openclaw-compat.test.mjs",
+    "test:integration:openclaw": "npm run test:openclaw:fixture && npm run test:integration:openclaw --workspace @agent-connect/gateway",
     "test:integration:response-crash": "npm run test:integration:response-crash --workspace @agent-connect/gateway",
     "pretypecheck": "npm run build --workspace @open-agent-connect/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "verify": "npm run format:check && npm run typecheck && npm test && npm run test:codex-acp-policy && npm run test:codex-auth && npm run build && npm run test:integration:omnigent",
-    "verify:full": "npm run verify && npm run test:integration:response-crash && npm run test:package:web && npm run test:webmcp && npm run test:e2e --workspace @agent-connect/firebase-canvas"
+    "verify": "npm run format:check && npm run typecheck && npm test && npm run build && npm run test:integration:openclaw",
+    "verify:full": "npm run verify && npm run test:package:web && npm run test:webmcp && npm run test:e2e --workspace @agent-connect/firebase-canvas"
   },
   "devDependencies": {
-    "@agentclientprotocol/codex-acp": "1.1.7",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.61.1",
     "dependency-cruiser": "18.1.0",

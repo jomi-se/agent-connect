@@ -2,103 +2,108 @@
 
 Updated: 2026-09-05
 
-This inventory separates implemented behavior from explicit targets. The
-mission defines the product boundary; this file prevents future plans from
-silently treating a target as a shipped guarantee.
+This inventory distinguishes implemented replacement behavior from release
+acceptance. The OpenClaw implementation is isolated on `work/openclaw-gateway`;
+it has not replaced the working personal deployment.
+[ADR 0012](decisions/0012-openclaw-policy-gateway.md) defines the current
+ownership boundary. The [replacement contract](plan/openclaw-replacement.md)
+defines validation and cutover gates.
 
 ## Application and SDK
 
-Implemented: headless conversation state and controls, including linear follow-up,
-tool-activity rendering data and truthful cancellation. Scope, edge cases and
-validation are recorded in [the headless chat contract](plan/headless-chat.md).
+Headless conversation controls and immutable current-document WebMCP discovery
+remain implemented, harness-neutral SDK features. Their existing evidence is
+tracked in the [headless chat](plan/headless-chat.md) and
+[WebMCP](plan/webmcp-tool-source.md) contracts; final browser composition with
+the selected OpenClaw subscription runtime remains pending.
 
-Implemented experimental addition: native WebMCP discovery/execution through an immutable,
-current-document snapshot. Compatibility and lifecycle assertions are tracked
-in [the WebMCP plan](plan/webmcp-tool-source.md); Bookhand integration and a
-generic browser extension remain separate future work.
+| Capability                                        | Status                                               | Current boundary                                                                         |
+| ------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Define typed application tools                    | Implemented                                          | Browser-safe definitions; immutable approved snapshot per logical session                |
+| Verify gateway before disclosure                  | Implemented                                          | Runtime card pins the Ed25519 key; SDK verifies a fresh signed challenge                 |
+| Authorize an HTTPS application without a terminal | Implemented                                          | Gateway consent and S256 PKCE bind Origin, redirect, app ID, scopes and tools            |
+| Dynamically enroll a new Origin                   | Implemented for Tailscale Serve                      | Bootstrap grants no operational access before approval                                   |
+| Create or explicitly reconnect a session          | Implemented                                          | Grants create independent sessions; capabilities name exactly one opaque session         |
+| Stream text, lifecycle and tool activity          | Implemented                                          | Bounded Responses HTTP/SSE and neutral SDK events                                        |
+| Return a browser function result and follow up    | Implemented; final subscription/browser gate pending | Latest owned checkpoint; real OpenClaw deterministic inference tests                     |
+| Start over without reauthorization                | Implemented                                          | Application grant creates a fresh independent session                                    |
+| Revoke application authority                      | Implemented                                          | Grant revocation prohibits subsequent use and tool publication                           |
+| Use a standard Responses client                   | Implemented bounded profile                          | Application-facing model remains `agent-connect/default`; unsupported fields fail closed |
+| Inspect unresolved function calls                 | Implemented bounded recovery                         | Namespaced GET returns only known continuable calls; SDK does not auto-recover them      |
+| Install SDK from a clean package artifact         | Implemented from source                              | Package verification remains separate from npm publication                               |
+| Generic exactly-once effects                      | Explicit non-goal                                    | Applications own idempotency/deduplication                                               |
+| App-instance sender binding/DPoP                  | Deferred                                             | Current grants and capabilities are scoped bearers                                       |
+| Browser ACP/MCP-over-ACP                          | Experimental, not default                            | Draft helpers stay isolated from the supported Responses wire                            |
+| AG-UI application adapter                         | Deferred                                             | Optional future edge integration, not a second core protocol                             |
 
-| Capability                                             | Status                          | Current evidence or boundary                                                                                                               |
-| ------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Define typed application-owned tools                   | Implemented                     | Browser-safe `defineTool`; schemas are fixed for the logical session                                                                       |
-| Connect with an opaque application session             | Implemented                     | Browser APIs never expose Omnigent session IDs                                                                                             |
-| Verify a selected gateway before disclosure            | Implemented                     | Runtime card pins an Ed25519 key; SDK verifies a fresh signed challenge                                                                    |
-| Authorize an HTTPS application without terminal access | Implemented                     | Gateway-owned consent and S256 PKCE grant bind Origin, redirect, app id, scopes, and canonical tools                                       |
-| Dynamically enroll a previously unknown app Origin     | Implemented for Tailscale Serve | The Origin may begin authorization but receives no operational access before approval                                                      |
-| Stream task, text, lifecycle, and tool events          | Implemented                     | Provider-neutral `AgentTaskEvent` surface                                                                                                  |
-| Continue a successfully completed task                 | Implemented                     | Explicit SDK continuation; durable linear head; real Omnigent proves two prompts on one ACP session                                        |
-| Start over without reauthorizing                       | Implemented                     | Connecting with the application grant creates an independent expiring session even while older sessions have live work                     |
-| Execute and return a correlated browser tool result    | Implemented                     | Unknown tools and malformed arguments fail closed                                                                                          |
-| Revoke an application's grant                          | Implemented                     | Self-revocation and gateway-owned grant management invalidate later use                                                                    |
-| Install the SDK from a clean package artifact          | Implemented from source         | `npm run test:package:web`; package is not published to npm                                                                                |
-| Recover an unresolved tool request after disconnect    | Implemented (gateway)           | Namespaced `/v1/agent-connect/responses/:id/pending-function-calls` control endpoint; the SDK does not re-fetch pending calls on reconnect |
-| Provide generic exactly-once side effects              | Explicit non-goal               | Stable action IDs plus app-owned idempotency/deduplication are required                                                                    |
-| Sender-bind grants with app-instance proof/DPoP        | Deferred                        | Current grants are scoped bearer capabilities                                                                                              |
-| Speak Open Responses between application and gateway   | Implemented                     | Bounded v0 profile; standard client, real Omnigent, crash, and real-Codex browser evidence                                                 |
-| Speak AG-UI between browser and gateway                | Deprioritized exploration       | Optional edge adapter only unless Open Responses cannot meet a concrete UI requirement                                                     |
-| Speak browser ACP/MCP-over-ACP                         | Experimental                    | Draft helpers remain isolated and are not the default transport                                                                            |
+## Gateway and runtime
 
-## Gateway and provider
+| Capability                                                       | Status                                  | Current boundary                                                                                               |
+| ---------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Mediate OpenClaw Responses                                       | Implemented                             | Allowlisted body and fresh server-side headers; upstream token never goes to apps                              |
+| Pin private upstream routing                                     | Implemented                             | Operator agent selection and stable private session key; no app routing passthrough                            |
+| Enforce the approved function snapshot                           | Implemented                             | Re-injected every segment; outbound calls checked before publication                                           |
+| Persist calls before publication                                 | Implemented                             | Fsync-backed ledger; includes recovery GET and stream publication boundaries                                   |
+| Prevent output redrive after uncertain delivery                  | Implemented                             | Durable attempt record precedes network submission; identical/conflicting repeats cannot resend                |
+| Enforce independent sessions and latest checkpoints              | Implemented                             | One admitted response per session; no cross-application response/call authority                                |
+| Recover after gateway restart                                    | Implemented bounded recovery            | Known state remains inspectable; interrupted acceptance is not silently replayed                               |
+| Migrate historical provider state                                | Implemented                             | Auth identity/grants remain readable; Omnigent conversations are explicitly unavailable                        |
+| Stop delivery and manage sessions                                | Implemented                             | Owner console, local cancellation, idle/parked/total-request bounds; upstream stopping is separately evidenced |
+| Report cumulative usage or runner liveness                       | Unavailable                             | Console reports unknown, not zero cost or confirmed termination                                                |
+| Supervise harness processes or translate provider events         | Removed from supported gateway path     | OpenClaw owns execution, Responses generation and runtime state                                                |
+| Restrict the selected runtime to application tools               | Required operator profile               | Real inference-boundary observations are required; request shaping alone is not a sandbox                      |
+| Harden host confidentiality with an OS sandbox                   | Not claimed                             | Runtime isolation and credential policy remain operator/runtime responsibilities                               |
+| Support native Codex client-tool execution                       | Blocked in the pinned published adapter | Built-in-loop success must not be presented as native Codex success                                            |
+| Persist identity, devices, grants and capability key             | Implemented                             | Existing owner-only auth state format retained                                                                 |
+| Persist pending consent requests/codes                           | Deferred                                | Short-lived authorization workflow state remains process-local                                                 |
+| Multiple users/hosts/agents or simultaneous tasks in one session | Explicit non-goal                       | Independent app sessions may run concurrently on the selected runtime                                          |
 
-| Capability                                                                 | Status                        | Current evidence or boundary                                                                          |
-| -------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Broker the Omnigent HTTP/SSE Sessions API                                  | Implemented                   | First provider behind an internal adapter                                                             |
-| Provision one downstream runner and heal an unhealthy match                | Implemented                   | Grant-bound tool policy is written before launch                                                      |
-| Restrict Codex's request-scoped relay tools to the authorized snapshot     | Implemented reference profile | Fail-closed manifest and `enabled_tools` compatibility wrapper, pinned to Omnigent 0.5.1              |
-| Keep provider IDs and wire types out of the normal browser API             | Implemented                   | `connectAgent` is neutral; browser-visible Omnigent exports and routes are removed                    |
-| Expose an OAuth-protected Open Responses endpoint                          | Implemented                   | Bounded `POST /v1/responses` plus explicit Agent Connect recovery and cancellation controls           |
-| Run independent application sessions concurrently                          | Implemented                   | One live chain per opaque session; abandoned sessions do not block fresh creation and expire by lease |
-| Bundle response translation with harness runtime supervision               | Implemented for Omnigent      | Response engine and bundled backend share one gateway process; no private facade protocol             |
-| Allocate and release a workspace for each provider session                 | Implemented                   | Failed launches and retired sessions clean up provider sessions and gateway-owned workspaces          |
-| Inspect and terminate sessions as the gateway owner                        | Implemented                   | `/sessions` console; separate idle, parked-call, and stalled-turn expiry clocks                       |
-| Persist gateway identity, devices, grants, revocations, and capability key | Implemented                   | Owner-only gateway state file                                                                         |
-| Persist pending authorization requests, codes, and provider mappings       | Deferred                      | These short-lived/session mappings are memory-only                                                    |
-| Persist unresolved application actions                                     | Implemented                   | Durable `FileResponseStore` writes pending calls before publication                                   |
-| Enforce a hardened real-agent sandbox                                      | Not implemented               | The source profile runs Codex as the gateway's Unix user; runtime posture is operator-owned           |
-| Support multiple users, hosts, agents, or concurrent tasks per session     | Explicit non-goal for MVP     | One online host, one downstream agent, one active task per app session                                |
+The built-in OpenClaw loop projects client outputs as user text after a
+synthetic delegated result. Native tool-role equivalence is not claimed.
+Runtime selection, actual subscription authorization and meaningful
+browser-result consumption remain release prerequisites. See the
+[dependency investigation](research/2026-09-05-openclaw-replacement.md).
 
-## Deployment profiles
+## Deployment and evidence
 
-| Profile                              | Status                          | Assurance boundary                                                                                                         |
-| ------------------------------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Private Tailscale Serve + real Codex | Implemented and manually proven | Loopback gateway trusts Serve-injected allowlisted user identity; runtime card pins gateway key; not a hostile-app sandbox |
-| Localhost development                | Implemented building block      | Reachability is local; production enrollment UX is not defined                                                             |
-| General gateway deployment           | Planned                         | Packaging convenience must not be described as process, credential, or tenant isolation                                    |
-| Per-session container/managed runner | Exploration                     | Potential stronger runtime boundary; no accepted implementation                                                            |
-| Custom URL, relay, or other tunnel   | Deferred                        | Must define destination identity, caller identity, enrollment, and assurance rather than inheriting Tailscale claims       |
+| Profile                                        | Status                                  | Assurance boundary                                                                       |
+| ---------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Private Tailscale Serve gateway                | Retained supported trust profile        | Loopback gateway checks Serve-injected allowlisted identity; enrollment pins gateway key |
+| OpenClaw with deterministic inference          | Executable replacement validation setup | Real pinned dependency; fixture substitutes inference only, not OpenClaw behavior        |
+| Selected subscription runtime plus browser     | Pending acceptance                      | Must demonstrate real tool-result consumption, follow-up and bounded cancellation        |
+| Historical Omnigent/Codex private deployment   | Historical proven baseline              | Still running separately; not evidence for the replacement runtime                       |
+| Localhost development                          | Implemented building block              | Local reachability does not define production enrollment or isolation                    |
+| General public gateway, custom relay or tunnel | Deferred                                | Requires explicit identity, authorization and exposure decisions                         |
+| Per-session managed containers                 | Historical exploration                  | No accepted replacement implementation or isolation guarantee                            |
 
 ## Security and reliability invariants
 
-- HTTPS is necessary but the URL alone is not gateway identity.
-- The runtime card authenticates gateway-key continuity; it does not attest
-  to host integrity or benign software.
-- Transport authentication, gateway enrollment, browser-device enrollment,
-  application authorization, and runtime confinement are separate layers.
-- Authorization grants capability to an app; it does not make the app
-  trustworthy.
-- An application cannot expand the gateway-selected Codex mode, native-tool
-  policy, filesystem, network, credential, or approval authority through the
-  Agent Connect protocol.
-- Application tool results cannot answer gateway, OS, harness, or native-tool
-  approval requests.
-- Unknown provider events, unknown tools, malformed inputs, policy-manifest
-  drift, and ambiguous trusted-proxy identities fail closed.
-- Stable action IDs and durable pending calls support app-owned idempotency;
-  automatic SDK recovery/redelivery remains outside the MVP.
+- HTTPS and hostname recognition do not establish gateway identity or host integrity.
+- Transport authentication, owner enrollment, app consent and runtime confinement
+  are separate layers; authorized applications remain adversarial principals.
+- Applications cannot expand operator-selected routing, runtime credentials,
+  model selection or host/native-tool policy through the public API.
+- Tool results cannot answer gateway, OS or runtime approval requests.
+- Unsupported fields, unknown tools, malformed security-relevant stream
+  structures and ambiguous trusted-proxy identity fail closed.
+- Upstream IDs are not capabilities. Local ownership and the latest admitted
+  checkpoint govern continuation and recovery independently of the upstream cache.
+- Durable recording precedes tool publication; ambiguous output acceptance is
+  never automatically retried. No automatic transcript reconstruction is promised.
+- Local cancellation and actual inference termination are distinct claims.
 
 ## Validation surfaces
 
-1. `npm run verify` covers formatting, type checks, behavior tests, policy
-   checks, builds, and the deterministic real-Omnigent compatibility suite.
-2. `npm run verify:full` additionally kills and restarts real gateway
-   subprocesses at durability boundaries, packs/installs the SDK in a clean
-   consumer, and runs Canvas browser tests.
-3. `npm run test:integration:omnigent` runs that provider gate directly,
-   starting disposable real Omnigent services and a deterministic ACP/MCP agent
-   without model credentials.
-4. The real Tailscale Serve + Omnigent + Codex + deployed-browser flow is a
-   manual composition milestone.
+Default verification exercises the pinned real OpenClaw dependency with
+deterministic inference, alongside formatting, type checks, behavior tests,
+policy checks and builds. Full verification additionally covers gateway
+process crashes, a clean installed SDK consumer and browser tests. Exact
+commands and prerequisites are maintained in the
+[testing strategy](architecture/testing-strategy.md).
 
-Gateway tests validate how Agent Connect consumes trusted-proxy identity;
-they do not attempt to reimplement or prove Tailscale/WireGuard. Runtime posture
-claims must identify whether evidence is configured, provider-reported,
-observed, or externally attested.
+Historical real-Omnigent/ACP tests and earlier Codex browser traces are baseline
+history, not the replacement compatibility oracle. Fresh real OpenClaw,
+installed-SDK and selected subscription/browser evidence must satisfy all
+four replacement contracts before cutover. Runtime posture claims must
+distinguish configured, provider-reported, observed and externally attested
+evidence; gateway tests do not reimplement Tailscale/WireGuard.
