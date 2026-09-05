@@ -8,6 +8,19 @@ only enough completed context to explain them. Product boundaries live in the
 [scope inventory](../scope-inventory.md), and architectural choices live in
 [`docs/decisions/`](../decisions/).
 
+## Active: OpenClaw replacement
+
+User authorized replacing duplicated runtime/Responses machinery with an
+OpenClaw-based implementation while retaining the application SDK and narrow
+application authorization. This takes priority over further Omnigent-specific
+development and the deferred expired-conversation replay UX. Investigation,
+executable setup and unresolved compatibility questions are tracked in
+[the dated replacement investigation](../research/2026-09-05-openclaw-replacement.md).
+The working private gateway remains unchanged until replacement validation and
+an explicit live cutover. Success requires deletion of superseded machinery,
+documented choices and real application/tool/subscription evidence, not simply
+adding another supported backend.
+
 ## Working baseline
 
 The hackathon MVP proved the core loop through a deterministic public fixture
