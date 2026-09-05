@@ -10,6 +10,14 @@ only enough completed context to explain them. Product boundaries live in the
 
 ## Active: OpenClaw replacement
 
+Current next step: [application-delegation research](../research/2026-09-05-openclaw-app-delegation.md).
+José is reconsidering whether a separate Agent Connect gateway is needed at all.
+The intended experience retains the agent's normal owner-approved capabilities
+while restricting the application's control authority. Device-token/Responses,
+browser ingress and consent gaps are now source-traced and partly execution-proven;
+no alternative architecture or live cutover is yet approved. Resolve the remaining
+OpenClaw integration questions before extending the custom response engine.
+
 User authorized replacing duplicated runtime/Responses machinery with an
 OpenClaw-based implementation while retaining the application SDK and narrow
 application authorization. This takes priority over further Omnigent-specific

@@ -4,6 +4,13 @@ Status: accepted, 2026-09-05. José selected the built-in OpenClaw loop using hi
 AI subscription. Release/cutover remains gated on the
 [implementation contract](../plan/openclaw-replacement.md).
 
+Reconsideration, later 2026-09-05: José requested investigating direct OpenClaw
+application delegation instead of assuming a separate gateway survives. The
+desired agent retains its normal owner-approved capabilities; deny-all tools is
+the current isolated demo profile, not the desired final product boundary.
+See [the delegation research](../research/2026-09-05-openclaw-app-delegation.md).
+This records the open decision without silently changing the deployed policy.
+
 ## Decision
 
 Agent Connect is the application-delegation boundary, not another agent platform.
