@@ -1,5 +1,9 @@
 # OpenClaw 2026.9.1: subscription auth for the built-in loop
 
+Update: José selected this route and the bounded live tool/follow-up test passed.
+See [executed evidence](2026-09-05-openclaw-live-subscription.md). The source-only
+investigation below is retained separately from those later measurements.
+
 Source-only investigation, 2026-09-05. No real credentials inspected, login or refresh performed, or service started/restarted. Source pin: official `v2026.9.1`, locally `/tmp/openclaw-contract.suVXov/openclaw-2026.9.1`.
 
 ## Conclusion

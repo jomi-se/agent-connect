@@ -74,7 +74,8 @@ and policy evidence, not proof that the selected subscription-backed runtime
 usefully consumes an actual browser tool result. Final acceptance remains
 governed by the [replacement contract](plan/openclaw-replacement.md).
 
-Runtime selection and the final subscription/browser gate remain open.
+José selected the built-in OpenClaw subscription loop. The final live
+subscription/browser gate remains open.
 Published OpenClaw 2026.9.1's built-in loop supports the tested client-tool
 round trip; the separately packaged native Codex adapter drops client tools.
 Do not call built-in-loop evidence native Codex evidence. The built-in loop

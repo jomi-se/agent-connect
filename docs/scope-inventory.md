@@ -60,7 +60,7 @@ the selected OpenClaw subscription runtime remains pending.
 
 The built-in OpenClaw loop projects client outputs as user text after a
 synthetic delegated result. Native tool-role equivalence is not claimed.
-Runtime selection, actual subscription authorization and meaningful
+The built-in OpenClaw runtime is selected. Actual subscription authorization and meaningful
 browser-result consumption remain release prerequisites. See the
 [dependency investigation](research/2026-09-05-openclaw-replacement.md).
 

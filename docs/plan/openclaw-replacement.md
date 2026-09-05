@@ -1,7 +1,7 @@
 # OpenClaw replacement: scope, contract and progress
 
-Status: investigation complete enough for shared policy-boundary design; runtime
-choice pending user answer. Work only on work/openclaw-gateway in
+Status: shared implementation committed and checked; José selected OpenClaw's
+built-in subscription loop. Live Bookhand acceptance pending. Work only on work/openclaw-gateway in
 /home/dev/agent-connect-openclaw. Personal /home/dev/agent-connect stays on
 main; no live cutover or push authorized by this plan.
 
@@ -147,7 +147,8 @@ production deletion/ownership inventory and consistent source-of-truth docs.
 - Contract review: two sequential independent passes complete; shared implementation ready.
 - Pass 1 incorporated: host-tool isolation, actual cancellation evidence,
   tool-result projection caveat, no-redrive uncertainty and bounded recovery.
-- Runtime selection question pending; do not treat the mission as complete until
+- Runtime selection resolved: built-in OpenClaw with the user's subscription;
+  do not treat the mission as complete until
   the selected subscription-backed path actually works.
 - Shared authority/request-shaping and ledger work can proceed after review;
   runtime-dependent setup, continuation/cancellation proof and final acceptance
@@ -213,9 +214,8 @@ production deletion/ownership inventory and consistent source-of-truth docs.
 - The clean pinned installer and private initialize/check/serve rehearsal passed
   without inference. Default verification now requires actual OpenClaw and
   includes process-crash tests. CI uses the same pin and Node 24.15.
-- **Next release gate:** José must choose whether the built-in OpenClaw loop
-  using his subscription meets the product goal, or whether native Codex is
-  required (its current adapter drops client tools). Then validate that actual
+- **Next release gate:** José chose the built-in OpenClaw loop using his
+  subscription. Native Codex is not required. Validate that actual
   runtime through a browser and meaningful tool-result follow-up. No live
   cutover or full VAL-OC pass is implied by deterministic tests or scrutiny.
 
@@ -252,3 +252,14 @@ It reported two pre-existing SDK issues for separate follow-up, not yet verified
 or fixed here: `agent-session.ts` may label returned tool failures successful in
 activity events, and `responses-provider.ts` maps all HTTP 401 responses to
 `invalid_app_grant`. Do not add a Bookhand-specific transport workaround.
+
+### Selected subscription runtime proven; Bookhand consent next
+
+José chose the built-in OpenClaw subscription loop. Actual model tool-result
+consumption and follow-up passed, with unchanged source auth and no persisted
+credential copy. Background memory plugins are disabled to avoid an auxiliary
+embeddings API dependency. See the [live evidence and operator handoff](../research/2026-09-05-openclaw-live-subscription.md).
+
+The isolated Agent Connect gateway is running in `agc-openclaw` on loopback8789.
+The owner must enable private Serve8446, then approve Bookhand normally. This
+browser acceptance is the remaining composition gate, not another runtime choice.

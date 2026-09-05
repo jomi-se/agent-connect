@@ -1,7 +1,8 @@
 # ADR 0012: Delegate runtime execution and Responses to OpenClaw
 
-Status: accepted implementation direction, 2026-09-05. Runtime selection and
-release/cutover remain gated on the [implementation contract](../plan/openclaw-replacement.md).
+Status: accepted, 2026-09-05. José selected the built-in OpenClaw loop using his
+AI subscription. Release/cutover remains gated on the
+[implementation contract](../plan/openclaw-replacement.md).
 
 ## Decision
 
@@ -48,8 +49,9 @@ Pin OpenClaw 2026.9.1. Native Codex is separately packaged as @openclaw/codex;
 pinning only the gateway does not pin that adapter. Executed tests showed this
 release's native Codex adapter receives no client tool definitions, while the
 built-in OpenClaw loop completes the client-tool round trip. Do not claim native
-Codex support based on a built-in-loop test. User choice between the built-in
-subscription loop and repairing native Codex remains open.
+Codex support based on a built-in-loop test. José selected the built-in
+subscription loop: using his subscription is the requirement, not retaining the
+Codex executable. Native Codex repair is not a prerequisite or current work.
 
 The built-in loop projects returned client output as user text after a synthetic
 delegated result, rather than restoring the native tool-role result. Disclose that

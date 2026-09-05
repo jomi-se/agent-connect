@@ -1,10 +1,12 @@
 # Agent Connect
 
-Bring your own coding agent to any web app.
+Bring your AI subscription to any web app.
 
-Build AI features by leveraging users' coding agents included with their
-subscriptions. This branch replaces the original backend with an OpenClaw policy
-gateway. Subscription-runtime and live browser acceptance gates remain open.
+Build AI features using the user's existing AI subscription instead of requiring
+an API key or a second AI subscription from the application. This branch replaces
+the original backend with an OpenClaw policy
+gateway. The selected runtime is OpenClaw's built-in loop using the user's
+subscription; live browser acceptance remains open.
 
 ## Built with Codex and GPT-5.6
 

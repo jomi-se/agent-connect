@@ -6,7 +6,7 @@ opaque application sessions (`POST /v1/app-sessions`), the bounded Open
 Responses endpoint (`POST /v1/responses`) and namespaced response controls.
 It is not a general OpenClaw reverse proxy or a harness supervisor.
 
-The replacement is implemented on a separate branch. Runtime selection, final
+The replacement uses OpenClaw's built-in subscription loop on a separate branch. Final
 subscription/browser validation and live cutover remain gated by
 [ADR 0012](../../docs/decisions/0012-openclaw-policy-gateway.md) and the
 [replacement contract](../../docs/plan/openclaw-replacement.md).
