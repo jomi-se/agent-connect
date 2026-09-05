@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: PR checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the actual head revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require an up-to-date, rebased PR branch
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          ./scripts/check-pr-rebase.sh origin/main HEAD
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Test the PR ancestry policy
+        run: ./scripts/test-pr-rebase.sh
+
+      - name: Install pinned provider and native browser test tools
+        run: ./scripts/install-ci-test-tools.sh
+
+      - name: Run all credential-free verification gates
+        run: npm run verify:full
+
+      - name: Check lint and dependency boundaries
+        run: |
+          npm run lint
+          npm run analyze:dependencies

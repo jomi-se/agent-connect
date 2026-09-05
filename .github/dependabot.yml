@@ -3,11 +3,45 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
+      interval: monthly
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
+    # Restrict routine version updates, not security fixes (including majors).
+    allow:
+      - dependency-type: all
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      routine-npm:
+        applies-to: version-updates
+        patterns: ["*"]
+        exclude-patterns: ["@agentclientprotocol/*", "@playwright/test"]
+      agent-runtime:
+        applies-to: version-updates
+        patterns: ["@agentclientprotocol/*"]
+      # Playwright stays separate: it changes the tested browser runtime.
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 7
+    allow:
+      - dependency-type: all
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      routine-actions:
+        applies-to: version-updates
+        patterns: ["*"]
+      actions-security:
+        applies-to: security-updates
+        patterns: ["*"]
