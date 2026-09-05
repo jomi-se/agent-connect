@@ -1,7 +1,7 @@
 # Shared machine login, isolated runtime home
 
-Status: implementation complete; live migration and Bookhand retry pending.
-No live credential mutation/restart or push.
+Status: implementation and approved live migration complete; Bookhand retry pending.
+No push.
 
 User requirement: bring the machine's existing subscription into third-party apps.
 Keep the externally triggered Codex home separate, but share authentication. Do
@@ -51,3 +51,15 @@ Funnel configured. Closed the empty agc-demo tmux shell after confirming it had
 no children. Preserved personal agc, .agent-connect/real-connector, its
 grants/identity, all private Serve routes and currently referenced spike paths.
 No data files were deleted. Historical docs are not running deployments.
+
+## Live activation — 2026-09-05
+
+With explicit user approval, stopped agc via Ctrl-C and verified no remaining
+process used its runtime CODEX_HOME. Migrated the standalone credential to a
+symlink targeting /home/dev/.codex/auth.json. The old copy is retained at
+.omnigent-spike/live-e2e-codex-home/auth.json.backup-UfbaXP/auth.json (private
+credential backup; do not commit its contents). Restarted the same launcher in
+agc. Private HTTPS /healthz with Bookhand's :8445 Origin returned 200/ok.
+No gateway identity, grant, .env or Serve configuration was changed. This proves
+startup and reachability, not successful provider authentication; a Bookhand
+Tutor request remains the final check.
