@@ -1,7 +1,10 @@
 # Low-noise dependency maintenance and PR gates
 
-Status: reviewed planning, 2026-09-05. Authenticated as owner jomi-se with admin
-rights; no preexisting main branch protection or rulesets.
+Status: setup activated, 2026-09-05; dependency follow-up in progress.
+Setup PR #17 merged after hosted CI run 33951196619 passed all gates.
+Active rulesets: main-pr-gates 22323851, main-history 22323852.
+Rebase-only repository settings and security updates enabled and read back.
+Authenticated owner jomi-se is the sole admin/bypass actor.
 
 ## Accepted scope
 
@@ -56,6 +59,14 @@ Evidence: live permissions/ruleset/merge-setting API readback and a PR/check run
 Do not activate a nonexistent check gate before the workflow is available.
 
 ## Handoff
+
+Follow-up batch: fast-uri/PostCSS security patches; the pending nonmajor font,
+Prettier, Vitest, Playwright, ACP SDK and codex-acp updates. SDK becomes 0.0.3
+before push. A fresh npm audit also found brace-expansion; include its compatible
+security patch. Keep TypeScript 6, Vite 7, Node 24 types and Actions v6: the pending
+major migrations have no demonstrated need and are deliberately deferred.
+Validate the batch through hosted full CI and a publish dry run, then close
+superseded PRs and explain deferred majors. Do not publish to npm automatically.
 
 Hosted bootstrap findings: pip needs explicit prerelease opt-in for Omnigent's
 beta-only OpenTelemetry FastAPI instrumentation dependency. The previous publish
