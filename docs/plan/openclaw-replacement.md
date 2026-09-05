@@ -245,3 +245,10 @@ Verification was collected in stages rather than repeating successful work:
 Logs named above currently live under `/tmp/agent-connect-command-logs`; the
 source tests and these results are persisted here. A VM restart may remove raw
 logs and disposable dependency installations, but not this checkout or branch.
+
+Bookhand confirmed its installed SDK distribution matches this branch's common
+SDK files and its 18 Tutor tests pass. No application transport patch is needed.
+It reported two pre-existing SDK issues for separate follow-up, not yet verified
+or fixed here: `agent-session.ts` may label returned tool failures successful in
+activity events, and `responses-provider.ts` maps all HTTP 401 responses to
+`invalid_app_grant`. Do not add a Bookhand-specific transport workaround.
