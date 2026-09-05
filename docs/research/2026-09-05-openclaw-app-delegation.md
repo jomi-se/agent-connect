@@ -4,6 +4,13 @@ Date: 2026-09-05. Status: investigation, not a cutover decision.
 
 ## Answer
 
+**Yes: an owner-installed OpenClaw plugin can supply the missing application
+delegation layer without a core patch or a separate Agent Connect server.** A
+disposable implementation now executes against published OpenClaw 2026.9.1:
+originless approval, app-specific native sessions, multiple Responses turns,
+native tools alongside client tools, and revocation. This is executable
+feasibility evidence, not a production-ready plugin or live migration.
+
 OpenClaw is a good execution substrate, but its stock 2026.9.1 Responses ingress
 does not provide the complete third-party browser delegation experience we want.
 A genuine device token is rejected by `/v1/responses`; its WebSocket permissions
@@ -129,7 +136,7 @@ authenticating the app afterward.
 A trusted proxy could map an approved owner/app grant to a distinct internal
 identity and pin routing, but that would be our proposed delegation integration,
 not a stock "just enable OAuth" feature. Session and sandbox creator propagation
-through that path still needs executable verification.
+through the plugin path is now execution-proven below.
 
 ## 4. Does pairing establish website identity?
 
@@ -168,12 +175,76 @@ plugin routes. Do not assume a plugin can transparently replace the existing
 `/v1/responses` authentication by registering the same path. There are exceptional
 dispatch paths; none establishes a supported general auth-replacement extension.
 
-A separate plugin URL that authenticates then delegates to existing execution is
-plausible. A clean typed auth hook at the existing endpoint would be preferable.
-Neither has been prototyped here. A plugin is trusted host code, not sandboxed
+A separate plugin URL that authenticates then delegates to existing execution now
+works in the prototype. A clean typed auth hook at the existing endpoint could
+simplify it further. A plugin is trusted host code, not sandboxed
 merely because the agent's tool execution is sandboxed.
 
 ## Fit and minimum additions
+
+### Follow-up: device-style identity and in-process prototype
+
+José clarified that verified website origins are not a universal requirement.
+An explicitly approved installation key/device flow is acceptable, including
+native/mobile clients and local forks; optional domain metadata must not be
+mistaken for proof that a running binary belongs to that publisher. Reuse the
+distinction in [native client identity](../future/native-client-identity.md):
+pairing method and publisher assurance are separate axes. The preceding origin
+discussion describes a browser option, not a mandatory prerequisite.
+
+A further executable probe used trusted-proxy identities `app:a` and `app:b`,
+with native roles restricting other-session access and agent choice. First-turn
+admission succeeded and sibling access was denied. But testing a second turn
+under **the same identity** exposed `200 -> 403`: the implicitly created Responses
+session had not acquired the authenticated creator provenance. Evidence:
+`/tmp/agent-connect-command-logs/quiet-run.Ea0vK1.log`. No live state was involved.
+
+Source investigation found an executable remedy using a public SDK: an owner-installed plugin
+can register its own public grant-authenticated ingress and a narrow native
+gateway-authenticated session-provisioning route. The latter uses
+`dispatchGatewayMethod('sessions.create', ...)` from
+`openclaw/plugin-sdk/gateway-method-runtime`, with the declared
+`contracts.gatewayMethodDispatch: ['authenticated-request']` entitlement, under
+the same trusted-proxy app identity. It then forwards to existing Responses.
+This retains native creator/sandbox enforcement without a separate process
+or a new response engine. The plugin declares an authenticated-dispatch contract;
+that is not a general grant of administrator authority to incoming app requests.
+
+The [plugin fixture](support/delegation-plugin/README.md) and
+[HTTP probe](support/openclaw-plugin-delegation-probe.mjs) demonstrate:
+
+- An explicitly unverified, originless installation requests access; only the
+  owner approves it. Pending, denied and revoked credentials cannot execute.
+- Native session precreation stamps the app principal, allowing two subsequent
+  turns through the existing JSON/SSE Responses implementation.
+- A real native file-read tool executes while client function tools are offered;
+  client output returns to the model. No new agent loop or response events are
+  manufactured by the plugin.
+- Native Responses rejects a sibling principal and a disallowed agent. Plugin
+  forwarding reconstructs identity, scope and routing headers, rather than
+  passing through the application's assertions.
+- The [sandbox probe](support/openclaw-plugin-sandbox-probe.mjs) records the
+  required-sandbox stamp before Responses. With Docker deliberately unavailable
+  to the disposable service, it fails before inference and does not execute a
+  host command. A separate unsandboxed positive control executes that command.
+  This proves fail-closed behavior, not successful container execution.
+
+These are **plugin-owned app grants**, not stock OpenClaw device tokens magically
+becoming Responses credentials. Native identity roles provide session/agent
+enforcement; the plugin provides the approval-to-identity mapping. Publisher
+verification is optional future metadata, not something this fixture implements.
+
+There is an important deployment constraint: expose only the public plugin
+routes through existing ingress. Do not expose the ordinary trusted-proxy
+listener's root through Tailscale Serve: caller-supplied identity headers could
+then reach core routes as trusted assertions. The private provisioning route
+lives outside the public prefix. A disposable exact-route proxy verifies this
+boundary; actual Tailscale configuration has not been changed or validated.
+Local processes able to reach the trusted listener remain trusted.
+
+See [the feasibility scope and contracts](../plan/openclaw-delegation-spike/README.md).
+The ordinary plugin SDK does not expose an arbitrary authority-minting Responses
+delegate; this proposal composes existing authenticated routes instead.
 
 | Route                                          | Enough today?                              | Remaining responsibility                                                    |
 | ---------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------- |
@@ -194,10 +265,12 @@ delivered only through an untrusted app would not be independent owner approval.
 A practical compatibility fallback is a narrow authorization proxy: terminate
 app authentication, enforce ownership/routing, and forward Responses without a
 second response state machine. That is still some gateway responsibility, but not
-the custom implementation we currently have. Whether this proxy can use existing
-OpenClaw identity roles without dangerous authority amplification needs a spike.
+the custom implementation we currently have. Use of existing OpenClaw identity
+roles is now demonstrated in the in-process spike above.
 
-Recommendation: ask maintainers before writing this addition. Do not repair the
+Next: productize the small plugin boundary only after reviewing its deployment
+constraints; ask maintainers whether a direct app-principal ingress hook is
+preferred. Do not repair the
 entire replacement engine just to preserve it. Do not expose the owner bearer as
 a supposedly restricted app token. Do not promise that existing roles are a
 complete third-party-app security boundary.
@@ -237,11 +310,20 @@ Suggested maintainer question:
 - [Plugin HTTP routes](https://docs.openclaw.ai/plugins/architecture-internals)
 - [Pinned source](https://github.com/openclaw/openclaw/tree/v2026.9.1)
 
-## Still unproven
+## Still unproven or intentionally absent
 
-No actual malicious sibling-app test, full proxy-role-sandbox composition, generic
-browser consent implementation, active-stream revocation experiment, or Bookhand
-hero pass was performed here. Research narrows the missing surface; it does not
-close the replacement's release gate. The earlier real demo still has observed
+The fixture has memory-only grants and sessions: production credential storage,
+expiry, rate/capacity limits, fixed approved tool snapshots, concurrency and
+disconnect policy remain work. It has no owner consent UI, device-key possession
+ceremony, browser CORS/private-network validation, or publisher verification.
+Revocation is checked on the next request; active-stream revocation was not proved.
+Integrating this auth configuration with the owner's normal OpenClaw clients,
+actual route-limited Serve deployment, successful sandboxed execution, and a
+Bookhand/subscription hero still need validation. Unrestricted native host-file
+tools can read secrets; app-token isolation is not tool sandboxing or a solution
+to prompt injection. One native tool proves composition, not all capabilities.
+
+Research establishes the plugin direction; it does not close the replacement's
+release gate. The earlier real demo still has observed
 multi-call rejection and swallowed stream errors, and remains unsuitable as
 evidence of reliable end-to-end integration.

@@ -1,0 +1,14 @@
+{
+  "id": "ac-delegation-probe",
+  "activation": { "onStartup": true },
+  "contracts": { "gatewayMethodDispatch": ["authenticated-request"] },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "ownerSecret": { "type": "string" },
+      "port": { "type": "number" }
+    },
+    "required": ["ownerSecret", "port"],
+    "additionalProperties": false
+  }
+}

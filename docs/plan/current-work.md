@@ -11,12 +11,22 @@ only enough completed context to explain them. Product boundaries live in the
 ## Active: OpenClaw replacement
 
 Current next step: [application-delegation research](../research/2026-09-05-openclaw-app-delegation.md).
+An [in-process plugin feasibility spike](openclaw-delegation-spike/README.md) now
+runs against real published OpenClaw without a core patch or separate AC server.
+It proves originless approval, native session precreation, existing Responses,
+native/client tool composition and required-sandbox failure closed. Publisher
+verification remains optional future work. All three feasibility contracts pass
+independent review and runtime validation; see the
+[validation report](../reviews/2026-09-05-openclaw-plugin-feasibility.md).
+No production deployment or live cutover is implied.
 José is reconsidering whether a separate Agent Connect gateway is needed at all.
 The intended experience retains the agent's normal owner-approved capabilities
 while restricting the application's control authority. Device-token/Responses,
-browser ingress and consent gaps are now source-traced and partly execution-proven;
-no alternative architecture or live cutover is yet approved. Resolve the remaining
-OpenClaw integration questions before extending the custom response engine.
+browser ingress and consent gaps are source-traced and execution-proven. Next is
+a bounded productization decision: durable plugin grants and owner approval UI,
+safe route-limited ingress, then SDK/Bookhand validation. Do not extend the custom
+response engine merely to preserve it. The trusted listener must remain private;
+the prototype is not safe to expose by forwarding its entire root.
 
 User authorized replacing duplicated runtime/Responses machinery with an
 OpenClaw-based implementation while retaining the application SDK and narrow

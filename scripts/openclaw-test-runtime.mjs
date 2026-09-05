@@ -36,7 +36,10 @@ export function preflightOpenClaw() {
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Starts the actual pinned gateway. Only the model's inference HTTP endpoint is a fixture. */
-export async function startOpenClawTestRuntime({ onModelRequest } = {}) {
+export async function startOpenClawTestRuntime({
+  onModelRequest,
+  configure,
+} = {}) {
   const binary = preflightOpenClaw();
   const directory = await mkdtemp(
     join(tmpdir(), "agent-connect-openclaw-test-"),
@@ -210,6 +213,9 @@ export async function startOpenClawTestRuntime({ onModelRequest } = {}) {
         },
       },
     };
+    // Research callers can exercise real auth/plugin configuration in this
+    // disposable runtime without touching a personal installation.
+    if (configure) await configure(config, { directory, token, port });
     await writeFile(env.OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2), {
       mode: 0o600,
     });
