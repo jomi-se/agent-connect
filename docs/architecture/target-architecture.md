@@ -2,7 +2,7 @@
 
 [ADR 0012](../decisions/0012-openclaw-policy-gateway.md) replaces the earlier
 bundled Omnigent runtime/response-translation design. The implementation is on
-the isolated replacement branch; selected subscription runtime, final browser
+the isolated replacement branch; subscription authentication, final browser
 composition and live cutover remain gated by the
 [replacement contract](../plan/openclaw-replacement.md).
 
@@ -126,7 +126,8 @@ confine an agent, and this request boundary does not establish an OS sandbox.
 Published OpenClaw 2026.9.1's built-in loop passes deterministic client-tool
 tests. Its separately pinned native Codex adapter drops the client-tool
 definitions; native Codex support cannot be inferred from built-in-loop tests.
-The selected subscription runtime and final live browser gate remain open.
+The selected runtime is OpenClaw's built-in loop using the user's subscription.
+Its final live browser acceptance gate remains open.
 
 The built-in loop projects submitted client-tool output as user text after a
 synthetic delegated result, not as a restored native tool-role response.
