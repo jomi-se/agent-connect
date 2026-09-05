@@ -9,7 +9,9 @@ User requested low-maintenance Dependabot, formatting/typechecks/tests on PRs,
 owner-only direct pushes to main, up-to-date PRs and linear merges. They clarified
 that GitHub rebase-and-merge (rewritten commit IDs) is acceptable, not strict
 commit-preserving fast-forward. No dependency upgrades or existing PR merges are
-authorized by this setup task.
+authorized by the initial setup task. Follow-up authorization: resolve the
+dependency backlog after setup, fix the publishing typecheck failure, and bump
+the SDK patch before pushing SDK changes.
 
 Monthly grouped nonmajor npm updates: routine group, separately reviewed ACP
 group, separate Playwright update; monthly grouped nonmajor Actions. Seven-day
@@ -54,6 +56,11 @@ Evidence: live permissions/ruleset/merge-setting API readback and a PR/check run
 Do not activate a nonexistent check gate before the workflow is available.
 
 ## Handoff
+
+Hosted bootstrap findings: pip needs explicit prerelease opt-in for Omnigent's
+beta-only OpenTelemetry FastAPI instrumentation dependency. The previous publish
+run also revealed a clean-checkout ordering bug: Canvas imports SDK declarations
+from dist, so root typecheck must build the SDK first (pretypecheck).
 
 Investigation confirms Python package omnigent0.5.1 and Linux x64-compatible
 deterministic fixtures. Official CFT manifest lists linux64 153.0.8010.12.
