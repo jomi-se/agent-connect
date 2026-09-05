@@ -45,6 +45,11 @@ continuation checkpoint. It exposes explicit `streamContinuation()` and
 admitted, not when it is attempted — a request the gateway refuses before
 admitting anything leaves the previous head continuable — and only successful
 completion publishes the next one.
+The Responses adapter observes admission at `response.created`, even before
+any text or tool event. Known preadmission refusals preserve local readiness;
+an unknown transport failure cannot prove that nothing was admitted, so the
+SDK conservatively discards the checkpoint and requires a new session rather
+than risking a replay. The headless chat helper follows these same rules.
 The SDK freezes the application tool snapshot once per session.
 
 Recovery of a chain parked on an unresolved application function call remains

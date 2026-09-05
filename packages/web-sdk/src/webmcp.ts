@@ -1,6 +1,11 @@
 import { AgentConnectError } from "./agent-session.js";
 import { Ajv } from "ajv";
-import type { ApplicationTool, JsonObject, JsonSchema } from "./types.js";
+import type {
+  ApplicationTool,
+  ApplicationToolContext,
+  JsonObject,
+  JsonSchema,
+} from "./types.js";
 
 /** Experimental native Chromium WebMCP snapshot; not a browser polyfill. */
 export interface WebMcpToolSnapshot {
@@ -159,13 +164,18 @@ export async function createWebMcpToolSnapshot(
         name: tool.name,
         description: tool.description,
         inputSchema: inputSchema as JsonSchema,
-        async execute(arguments_: JsonObject) {
+        async execute(
+          arguments_: JsonObject,
+          invocation: ApplicationToolContext,
+        ) {
           assertActive();
           const result = await context.executeTool(
             handle,
             JSON.stringify(arguments_),
             {
-              signal: controller.signal,
+              signal: invocation.signal
+                ? AbortSignal.any([controller.signal, invocation.signal])
+                : controller.signal,
             },
           );
           if (typeof result !== "string") {

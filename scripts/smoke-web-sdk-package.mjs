@@ -57,7 +57,7 @@ writeFileSync(
 );
 writeFileSync(
   join(consumerDir, "check.mjs"),
-  `import { defineTool, parseRuntimeCard, createWebMcpToolSnapshot } from "@open-agent-connect/web";
+  `import { defineTool, parseRuntimeCard, createWebMcpToolSnapshot, AgentSession, createAgentChat, exportAgentChatMarkdown } from "@open-agent-connect/web";
 
 if (typeof createWebMcpToolSnapshot !== "function") throw new Error("Missing WebMCP export");
 try {
@@ -87,6 +87,35 @@ const card = parseRuntimeCard(JSON.stringify({
 }));
 if (tool.name !== "external_consumer_tool" ||
     card.runtimeId !== "sha256:external-consumer") process.exit(1);
+const requests = [];
+const outputs = [];
+const chat = createAgentChat({ session: new AgentSession({
+  tools: [tool],
+  provider: {
+    async *streamTask(request) {
+      requests.push(request);
+      yield { type: "text.delta", delta: "Study note " };
+      yield { type: "tool.requested", requestToken: "r", actionId: "a",
+        name: tool.name, arguments: {} };
+      yield { type: "text.delta", delta: "complete." };
+      yield { type: "task.completed", continuationToken: "opaque-checkpoint" };
+    },
+    async submitToolResult(token, output) { outputs.push({ token, output }); },
+    async cancel() {},
+  },
+}) });
+let changes = 0;
+const unsubscribe = chat.subscribe(() => changes++);
+await chat.send("Explain");
+await chat.send("Follow up");
+if (requests[1].continuationToken !== "opaque-checkpoint" ||
+    outputs.length !== 2 || changes === 0 ||
+    chat.getSnapshot().messages.length !== 4 ||
+    !exportAgentChatMarkdown(chat.getSnapshot()).includes("Study note ")) {
+  throw new Error("Packed chat consumer did not complete the real SDK tool loop");
+}
+unsubscribe();
+await chat.dispose();
 process.stdout.write("external-consumer-ok\\n");
 `,
 );

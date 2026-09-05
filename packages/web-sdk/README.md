@@ -67,6 +67,92 @@ for await (const event of connection.session.streamContinuation(
 }
 ```
 
+## Headless conversations
+
+`createAgentChat` provides conversation state and controls, not a UI or a second
+agent loop. It consumes an existing connected `AgentSession`; React, Vue, plain
+DOM and optional component packages can render the same immutable snapshots.
+
+```ts
+import {
+  createAgentChat,
+  exportAgentChatMarkdown,
+} from "@open-agent-connect/web";
+
+const chat = createAgentChat({ session: connection.session });
+render(chat.getSnapshot());
+const unsubscribe = chat.subscribe(() => render(chat.getSnapshot()));
+
+try {
+  await chat.send("Explain this passage");
+  await chat.send("Give me a worked example");
+  const studyNotes = exportAgentChatMarkdown(chat.getSnapshot());
+  // Save studyNotes in your app; this library does not write storage or files.
+} catch (error) {
+  // Failed turns retain partial content and typed error details in the snapshot.
+  showError(error);
+}
+
+// A stop button calls await chat.stop(). Handle rejection; requesting stop is
+// not proof that a remote run or arbitrary local JavaScript has stopped.
+unsubscribe();
+await chat.dispose();
+```
+
+- `getSnapshot()` has stable identity between changes. `subscribe(callback)`
+  notifies changes only and returns an unsubscribe function. Subscriber failures
+  cannot break the agent loop; use `onSubscriberError` to report them (default:
+  `console.error`). Snapshots, messages, parts and tool arguments are immutable.
+- `messages` contain stable ids, roles and status. Ordered text/tool parts
+  preserve interleaving; the final aggregate text is not appended again. Tool
+  parts expose activity and failures, **not result bodies**. An invalid call can
+  appear as a failed tool part without arguments; a tool failure need not fail
+  the assistant turn. Unsettled tools become `interrupted` when the turn ends.
+- `send(text)` selects initial-task or completed-task continuation. It sends
+  only that prompt, never the displayed history. It resolves with the completed
+  or cancelled assistant message and rejects on failure. Empty/overlapping sends
+  are rejected before appending messages. Check `canSend` and `needsNewSession`;
+  there is no automatic reconnect or replay when a checkpoint is unavailable.
+- `stop()` coalesces repeated requests for the active turn. `stopping` lasts
+  until the stream settles; a completion racing stop stays completed. A stop
+  failure is exposed in `snapshot.error` and rejects the control promise without
+  releasing the active-turn lock. Cancellation remains best effort at the
+  transport layer; it cannot prove rollback or remote delivery.
+- Local handlers receive optional `context.signal`. Stop prevents not-yet-started
+  tools and suppresses submission of late results. A cooperative handler should
+  observe the signal. A handler that ignores it can keep the turn pending.
+  Native WebMCP execution receives both task cancellation and snapshot lifetime
+  signals, so stopping a turn does not itself invalidate the approved snapshot.
+- `dispose()` immediately detaches observers, rejects new sends and requests
+  cancellation; its promise is the cancellation request, not a guarantee that
+  arbitrary local work has drained. Repeated disposal returns the same promise.
+  It does not revoke grants, delete sessions or dispose caller-owned WebMCP tools.
+- The helper is the exclusive consumer of its session. Do not call session task
+  methods from another owner while it is attached. Attaching a previously
+  completed session permits a follow-up, but does not reconstruct old messages.
+
+The helper does not own authentication, connection setup, durable storage,
+restoration, message editing, branching, images/files or model configuration.
+The transcript is display state, not the agent's authoritative conversation.
+`session.canStartTask` and `session.canContinueTask` expose local readiness without
+revealing checkpoints; the gateway can still reject an expired session.
+
+Known preadmission HTTP 4xx refusals (except ambiguous 408 and invalid continuation)
+preserve retry readiness. Unknown network/5xx failures do not prove that nothing
+ran, so they invalidate readiness rather than silently replaying a side effect.
+Responses admission is observed before text; custom providers can emit
+`task.admitted`, with the first other event serving as a compatibility fallback.
+
+### Study-note export
+
+`exportAgentChatMarkdown(snapshot)` exports the displayed text and marks failed,
+cancelled or unfinished turns. `{ includeToolActivity: true }` adds tool names and
+statuses; tool arguments/results are never included. Saving or copying the string
+is application-owned. It is **not** a session restore/checkpoint format. Content
+is untrusted Markdown: sanitize it if you later render HTML.
+
+See [the implementation and validation contract](../../docs/plan/headless-chat.md).
+
 ## Native WebMCP tools (experimental)
 
 An application that already registers tools with `document.modelContext` can
@@ -110,9 +196,10 @@ pending local calls. Inspect `snapshot.signal.aborted` or listen for its abort
 event to show reconnect UI. Rediscover and establish a new authorized connection
 after a change; the adapter never adds tools to a live session. Disposal removes
 listeners. Keep the snapshot alive for as long as you need completed-task
-continuation, then dispose it when disconnecting. To stop both sides, abort or
-dispose the snapshot **and** call `connection.session.cancel()`; local abort
-does not itself cancel a gateway run and cannot roll back a side effect.
+continuation, then dispose it when disconnecting. `connection.session.cancel()`
+also signals the current native tool invocation, without invalidating the whole
+snapshot. Disposing the snapshot alone does not cancel a gateway run and cannot
+roll back a side effect; cancel the session too when ending the interaction.
 
 Compatibility is deliberately narrow: native Chrome for Testing 153.0.8010.12
 with experimental web platform features enabled, whose discovery schemas and

@@ -268,6 +268,112 @@ test("runs native tools through AgentSession, preserving results and validating 
   });
 });
 
+test("chat stop aborts native execution without invalidating its borrowed snapshot", async ({
+  page,
+}) => {
+  const result = await page.evaluate(async (sdkPath) => {
+    const { AgentSession, createAgentChat, createWebMcpToolSnapshot } =
+      (await import(sdkPath)) as typeof import("../src/index.js");
+    const mc = (document as NativeDocument).modelContext;
+    let started!: () => void;
+    let aborted!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const nativeAbort = new Promise<void>((resolve) => {
+      aborted = resolve;
+    });
+    let calls = 0;
+    await mc.registerTool({
+      name: "pending",
+      description: "A cooperatively cancellable native tool",
+      execute: async (_, { signal }) => {
+        calls++;
+        if (calls > 1) return "reused";
+        return new Promise<string>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              aborted();
+              resolve("late cancelled output");
+            },
+            { once: true },
+          );
+          started();
+        });
+      },
+    });
+    const snapshot = await createWebMcpToolSnapshot();
+    const outputs: string[] = [];
+    let cancellations = 0;
+    // A controlled Agent Connect lifecycle fixture, not a provider simulation.
+    const makeProvider = (cancelled: boolean): AgentProvider => ({
+      async *streamTask() {
+        yield {
+          type: "tool.requested",
+          requestToken: "call",
+          actionId: "action",
+          name: "pending",
+          arguments: {},
+        };
+        if (cancelled) yield { type: "task.cancelled" };
+        else yield { type: "task.completed" };
+      },
+      async submitToolResult(_token, output) {
+        outputs.push(output);
+      },
+      async cancel() {
+        cancellations++;
+      },
+    });
+    const chat = createAgentChat({
+      session: new AgentSession({
+        provider: makeProvider(true),
+        tools: snapshot.tools,
+      }),
+    });
+    const sending = chat.send("Start native tool");
+    await ready;
+    await chat.stop();
+    await nativeAbort;
+    const stopped = await sending;
+    const afterStop = chat.getSnapshot();
+    const cancelledOutputs = [...outputs];
+    await chat.dispose();
+    const snapshotStillActive = !snapshot.signal.aborted;
+    const reused = createAgentChat({
+      session: new AgentSession({
+        provider: makeProvider(false),
+        tools: snapshot.tools,
+      }),
+    });
+    const completed = await reused.send("Reuse approved snapshot");
+    await reused.dispose();
+    snapshot.dispose();
+    return {
+      calls,
+      cancellations,
+      cancelledOutputs,
+      outputs,
+      snapshotStillActive,
+      stopped,
+      afterStop,
+      completed,
+    };
+  }, sdkPath);
+  expect(result.calls).toBe(2);
+  expect(result.cancellations).toBe(1);
+  expect(result.cancelledOutputs).toEqual([]);
+  expect(result.outputs).toEqual(["reused"]);
+  expect(result.snapshotStillActive).toBe(true);
+  expect(result.stopped.status).toBe("cancelled");
+  expect(result.stopped.parts).toMatchObject([
+    { type: "tool", status: "interrupted" },
+  ]);
+  expect(result.afterStop.status).toBe("idle");
+  expect(result.completed.status).toBe("completed");
+});
+
 test("removal permanently invalidates consent even after same-name restoration", async ({
   page,
 }) => {
