@@ -1,6 +1,6 @@
 {
   "name": "@open-agent-connect/web",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Harness-neutral browser SDK for lending application tools to user-owned agents",
   "license": "MIT",
   "repository": {
