@@ -1,7 +1,8 @@
 # Deferred: reuse existing gateway components
 
-Status: potential idea, not an accepted migration. Finish proving the Bookhand
-tutor experience first. Recorded 2026-09-05 at the user's request.
+Status: promoted to an authorized OpenClaw replacement initiative on 2026-09-05.
+See [current investigation](../research/2026-09-05-openclaw-replacement.md).
+The original rationale below remains useful; no live cutover has occurred.
 
 Agent Connect exists to bring the user's existing AI subscription into third-party
 applications. It need not own authentication, provisioning or credential lifecycle
@@ -30,4 +31,5 @@ isolated home, while our custom ACP launch path used a stale credential copy.
 Reuse existing mechanisms before inventing another lifecycle.
 
 Success means fewer maintained components and fewer user setup steps, not a
-larger abstraction layer. No replacement work is authorized by this note.
+larger abstraction layer. The subsequent user goal authorizes implementation;
+this original idea note does not establish compatibility or completion.
