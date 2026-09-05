@@ -15,7 +15,7 @@ npm install @open-agent-connect/web
 ```
 
 The package ships browser ESM and TypeScript declarations. It is versioned
-`0.0.x` while the wire format settles, so `^0.0.2` resolves to that exact
+`0.0.x` while the wire format settles, so `^0.0.3` resolves to that exact
 version and every upgrade has to be requested deliberately.
 
 ### Installing from source instead
@@ -33,7 +33,7 @@ npm_config_cache=.agent-connect/npm-cache \
   --pack-destination .agent-connect/packages
 
 cd /path/to/your-web-app
-npm install /path/to/agent-connect/.agent-connect/packages/open-agent-connect-web-0.0.2.tgz
+npm install /path/to/agent-connect/.agent-connect/packages/open-agent-connect-web-0.0.3.tgz
 ```
 
 The tarball filename tracks the version in `packages/web-sdk/package.json`.
