@@ -153,6 +153,22 @@ is untrusted Markdown: sanitize it if you later render HTML.
 
 See [the implementation and validation contract](../../docs/plan/headless-chat.md).
 
+## Content Security Policy and tool validation
+
+Tool schemas and arguments are checked by a CSP-safe interpreter; neither
+AgentSession nor WebMCP discovery requires `unsafe-eval`. Invalid definitions
+fail during setup, and invalid arguments are rejected before calling a handler.
+Validation does not coerce input, apply defaults, or strip extra properties.
+
+The supported boundary is self-contained draft-7 schemas (or no `$schema`),
+including local references and the existing `nullable` extension. Formats remain
+annotations, matching earlier SDK behavior; this is not complete Ajv parity.
+Later-draft keywords previously ignored by the SDK remain ignored: do not use
+them to express required constraints. Other declared dialects, unresolved refs,
+`id`, `$async`, and `multipleOf` are rejected. The latter is deliberately disabled
+because the interpreter's numeric tolerance can accept invalid multiples. Use
+`type: "integer"` for integral values; do not omit required divisibility checks.
+
 ## Native WebMCP tools (experimental)
 
 An application that already registers tools with `document.modelContext` can

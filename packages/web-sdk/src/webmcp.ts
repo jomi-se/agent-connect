@@ -1,5 +1,5 @@
 import { AgentConnectError } from "./agent-session.js";
-import { Ajv } from "ajv";
+import { createToolValidator } from "./tool-schema.js";
 import type {
   ApplicationTool,
   ApplicationToolContext,
@@ -118,7 +118,6 @@ export async function createWebMcpToolSnapshot(
       (tool) => !requested || requested.includes(tool.name),
     );
     if (selected.length === 0) throw new TypeError("No WebMCP tools selected");
-    const ajv = new Ajv({ strict: false });
     const names = new Set<string>();
     const tools = selected.map((tool): ApplicationTool => {
       if (
@@ -150,14 +149,11 @@ export async function createWebMcpToolSnapshot(
         throw new TypeError("WebMCP input schema must describe an object");
       }
       const schema = inputSchema as JsonSchema;
-      if (
-        (schema.type !== undefined && schema.type !== "object") ||
-        !ajv.validateSchema(schema)
-      ) {
+      if (schema.type !== undefined && schema.type !== "object") {
         throw new TypeError("Invalid WebMCP object input schema");
       }
-      // Match AgentSession's compiler before disclosing a candidate to consent.
-      ajv.compile(schema);
+      // Match AgentSession's preflight before disclosing a candidate to consent.
+      createToolValidator(schema);
       freezeJson(inputSchema);
       const handle = Object.freeze({ ...tool });
       return Object.freeze({

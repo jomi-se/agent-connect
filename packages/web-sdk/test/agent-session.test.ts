@@ -338,6 +338,24 @@ describe("AgentSession", () => {
   });
 
   it.each([
+    { type: "object", properties: { x: { $ref: "#/missing" } } },
+    { type: "object", properties: { x: { pattern: "[" } } },
+  ])(
+    "rejects unusable schemas before contacting the provider: %j",
+    (inputSchema) => {
+      const provider = new FakeProvider([]);
+      expect(
+        () =>
+          new AgentSession({
+            provider,
+            tools: [{ ...nonceTool(), inputSchema }],
+          }),
+      ).toThrow();
+      expect(provider.requests).toEqual([]);
+    },
+  );
+
+  it.each([
     ["missing required property", {}],
     ["wrong property type", { prefix: 42 }],
     ["forbidden extra property", { prefix: "x", extra: true }],
