@@ -1,6 +1,6 @@
 # Low-noise dependency maintenance and PR gates
 
-Status: setup activated, 2026-09-05; dependency follow-up in progress.
+Status: setup and dependency follow-up complete, 2026-09-05.
 Setup PR #17 merged after hosted CI run 33951196619 passed all gates.
 Active rulesets: main-pr-gates 22323851, main-history 22323852.
 Rebase-only repository settings and security updates enabled and read back.
@@ -65,8 +65,30 @@ Prettier, Vitest, Playwright, ACP SDK and codex-acp updates. SDK becomes 0.0.3
 before push. A fresh npm audit also found brace-expansion; include its compatible
 security patch. Keep TypeScript 6, Vite 7, Node 24 types and Actions v6: the pending
 major migrations have no demonstrated need and are deliberately deferred.
-Validate the batch through hosted full CI and a publish dry run, then close
-superseded PRs and explain deferred majors. Do not publish to npm automatically.
+The batch passed hosted full CI and a publish dry run and merged as PR #18.
+No npm publication was performed.
+
+## Completion evidence
+
+- Setup: [PR #17](https://github.com/jomi-se/agent-connect/pull/17),
+  [full hosted CI](https://github.com/jomi-se/agent-connect/actions/runs/33951196619).
+- Dependency batch: [PR #18](https://github.com/jomi-se/agent-connect/pull/18),
+  [full hosted CI](https://github.com/jomi-se/agent-connect/actions/runs/33951764867),
+  [publish dry run](https://github.com/jomi-se/agent-connect/actions/runs/33951763443).
+- SDK 0.0.3 was bumped before push. fast-uri 3.1.7, PostCSS 8.5.28 and
+  brace-expansion 5.0.9 resolve the audited issues. npm audit: zero vulnerabilities;
+  GitHub open Dependabot alerts: zero on final readback.
+- Original nonmajor PRs are superseded by the batch; major PRs #1, #2, #5, #8,
+  #9 were closed with explicit deferral explanations. Newly generated grouped
+  proposals #19–21 were deferred to the next maintenance cycle, not represented
+  as applied. Final open PR count: zero. This is a snapshot, not a promise that
+  Dependabot will never open another proposal.
+- Ruleset readback confirms strict required PR checks plus gitleaks, owner/admin
+  bypass only on the PR gate, and no bypass on linear/no-force/no-delete history.
+  Merge settings: rebase true, squash/merge-commit false. Security updates enabled.
+- Publishing fixes: build SDK declarations before root typecheck; pin npm
+  11.19.1 instead of taking an unreviewed npm 12 via latest. The dry run proves
+  packing and installed consumer behavior, not live npm publishing credentials.
 
 Hosted bootstrap findings: pip needs explicit prerelease opt-in for Omnigent's
 beta-only OpenTelemetry FastAPI instrumentation dependency. The previous publish
