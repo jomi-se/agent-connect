@@ -37,17 +37,17 @@
     "@agentclientprotocol/codex-acp": "1.1.2",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.58.2",
-    "dependency-cruiser": "18.1.0",
-    "eslint": "10.7.0",
+    "dependency-cruiser": "18.2.0",
+    "eslint": "10.9.1",
     "eslint-plugin-sonarjs": "4.2.0",
-    "globals": "17.7.0",
-    "jscpd": "5.0.12",
-    "knip": "6.27.0",
+    "globals": "17.11.0",
+    "jscpd": "5.0.16",
+    "knip": "6.33.0",
     "openai": "7.8.0",
-    "prettier": "3.9.0",
-    "typescript": "6.0.2",
-    "typescript-eslint": "8.65.0",
-    "vitest": "4.1.0"
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.68.0",
+    "vitest": "4.1.11"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "1.2.1"
