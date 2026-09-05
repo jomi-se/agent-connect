@@ -177,6 +177,11 @@ application-owned deduplication. Do not claim generic exactly-once execution.
 
 ## Priority 4: compelling applications
 
+Current Bookhand blocker: [shared machine Codex authentication](shared-codex-auth.md).
+Keep the runtime home isolated but share the machine login instead of a stale
+credential copy. Implementation and dummy-file checks precede an explicitly
+approved live migration/restart; gateway grants and identity stay unchanged.
+
 Once the Open Responses scaffold works, validate the product through real
 applications rather than further protocol invention. A useful application
 should:

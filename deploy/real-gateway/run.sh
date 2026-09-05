@@ -23,6 +23,10 @@ set -a
 . "$env_file"
 set +a
 
+# Resolve the machine login independently of the isolated runtime CODEX_HOME,
+# and before this launcher gives Omnigent its private HOME below.
+auth_home=${AGENT_CONNECT_CODEX_AUTH_HOME:-"$HOME/.codex"}
+
 require_env() {
   name=$1
   eval "value=\${$name:-}"
@@ -98,11 +102,14 @@ case "$INITIAL_AGENT_MODE" in
 esac
 
 CODEX_CONFIG=${CODEX_CONFIG:-'{"approvals_reviewer":"user"}'}
-if ! node -e '
+if ! CODEX_CONFIG=$(node -e '
   const value = JSON.parse(process.argv[1]);
   if (!value || typeof value !== "object" || Array.isArray(value)) process.exit(1);
-' "$CODEX_CONFIG" 2>/dev/null; then
+  if (value.cli_auth_credentials_store !== undefined && value.cli_auth_credentials_store !== "file") process.exit(1);
+  console.log(JSON.stringify({ ...value, cli_auth_credentials_store: "file" }));
+' "$CODEX_CONFIG" 2>/dev/null); then
   echo "Agent Connect: CODEX_CONFIG must be a valid JSON object" >&2
+  echo 'Shared login requires cli_auth_credentials_store="file"; keyring/auto overrides are unsupported.' >&2
   exit 78
 fi
 
@@ -123,12 +130,7 @@ esac
 require_absolute_directory CODEX_HOME
 require_absolute_directory AGENT_CONNECT_WORKSPACE
 
-if test ! -f "$CODEX_HOME/auth.json"; then
-  echo "Agent Connect: $CODEX_HOME/auth.json is missing." >&2
-  echo "Authenticate this dedicated runtime first:" >&2
-  echo "  CODEX_HOME='$CODEX_HOME' codex login" >&2
-  exit 78
-fi
+node "$repo_root/scripts/link-codex-auth.mjs" "$auth_home" "$CODEX_HOME"
 
 gateway_port=${AGENT_CONNECT_GATEWAY_PORT:-8787}
 omnigent_port=${OMNIGENT_PORT:-6767}
@@ -147,7 +149,6 @@ chmod 700 \
   "$log_dir" \
   "$operator_home" \
   "$CODEX_HOME"
-chmod 600 "$CODEX_HOME/auth.json"
 
 launcher="$repo_root/scripts/omnigent-codex-private-demo.sh"
 adapter="$repo_root/node_modules/@agentclientprotocol/codex-acp/dist/index.js"
@@ -187,7 +188,13 @@ export OMNIGENT_DATA_DIR="$data_dir"
 export INITIAL_AGENT_MODE
 export CODEX_CONFIG
 export AGENT_CONNECT_CODEX_ACP_ADAPTER="$prepared_adapter"
-export OMNIGENT_RUNNER_ENV_PASSTHROUGH=CODEX_HOME,INITIAL_AGENT_MODE,CODEX_CONFIG,AGENT_CONNECT_CODEX_ACP_ADAPTER
+export AGENT_CONNECT_CODEX_BINARY="${CODEX_PATH:-$repo_root/node_modules/@openai/codex/bin/codex.js}"
+export CODEX_PATH="$repo_root/scripts/codex-file-auth.sh"
+if test "$AGENT_CONNECT_CODEX_BINARY" = "$CODEX_PATH" || test ! -x "$AGENT_CONNECT_CODEX_BINARY"; then
+  echo "Agent Connect: CODEX_PATH must select an executable Codex binary, not the auth wrapper" >&2
+  exit 78
+fi
+export OMNIGENT_RUNNER_ENV_PASSTHROUGH=CODEX_HOME,CODEX_PATH,AGENT_CONNECT_CODEX_BINARY,INITIAL_AGENT_MODE,CODEX_CONFIG,AGENT_CONNECT_CODEX_ACP_ADAPTER
 export HOME="$operator_home"
 export OMNIGENT_URL="$omnigent_url"
 export AGENT_CONNECT_HOST=127.0.0.1
