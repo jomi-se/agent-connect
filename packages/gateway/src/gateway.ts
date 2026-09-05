@@ -18,15 +18,12 @@ import {
   type EnrollmentBundle,
   type PendingAuthorization,
 } from "./connector-auth.js";
-import { OmnigentResponseBackend } from "./omnigent-response-backend.js";
-import { OmnigentRuntime } from "./omnigent-runtime.js";
+import { OpenClawResponses } from "./responses/openclaw.js";
 import { handleResponseRoute, matchResponseRoute } from "./response-routes.js";
-import type { ResponseBackend } from "./responses/backend.js";
 import { ResponseEngine } from "./responses/engine.js";
 import { FileResponseStore } from "./responses/file-store.js";
 import type { ChainRecord, ResponseStore } from "./responses/store.js";
-import type { OmnigentSandboxOptions } from "./omnigent-runtime.js";
-import type { AgentRuntime, RuntimeSessionUsage } from "./runtime.js";
+import type { RuntimeSessionUsage } from "./runtime.js";
 import type {
   EngineSession,
   SessionEndReason,
@@ -43,24 +40,21 @@ export interface GatewayOptions {
   readonly allowedOrigins: ReadonlySet<string>;
   readonly dynamicAppEnrollment?: boolean;
   readonly allowedTailscaleUsers: ReadonlySet<string>;
-  readonly omnigentBaseUrl: string;
-  readonly workspace?: string;
-  readonly omnigentHostId?: string;
-  readonly omnigentSandbox?: OmnigentSandboxOptions;
+  readonly openclawBaseUrl: string;
+  readonly openclawToken: string;
+  readonly openclawAgentId: string;
   readonly capabilityTtlSeconds?: number;
   /** No request and no live chain for this long retires the session. */
   readonly sessionIdleTimeoutSeconds?: number;
   /** How long a published function call may stay unanswered by the application. */
   readonly parkedCallTimeoutSeconds?: number;
-  /** Safety cap on a running turn that stops producing backend events. */
+  /** Hard cap on total upstream request time, independent of event activity. */
   readonly runningTurnTimeoutSeconds?: number;
   readonly authStatePath: string;
   readonly publicEndpoint: string;
   readonly transportProfile?: string;
   /** Internal deterministic-test seam; production startup never reads this from configuration. */
   readonly enrollmentPassphrase?: string;
-  readonly runtime?: AgentRuntime;
-  readonly responseBackend?: ResponseBackend;
   readonly responseStore?: ResponseStore;
   readonly responseStatePath?: string;
   readonly fetch?: typeof globalThis.fetch;
@@ -86,7 +80,6 @@ interface ManagedSession {
    */
   lastActivityAt: number;
   readonly createdAt: number;
-  readonly provisionedInProcess: boolean;
 }
 
 interface ConsoleSession {
@@ -148,16 +141,6 @@ export function createGateway(options: GatewayOptions) {
 
   const fetchImplementation =
     options.fetch ?? globalThis.fetch.bind(globalThis);
-  const omnigentBaseUrl = options.omnigentBaseUrl.replace(/\/$/, "");
-  const runtime =
-    options.runtime ??
-    new OmnigentRuntime({
-      baseUrl: omnigentBaseUrl,
-      workspace: options.workspace ?? process.cwd(),
-      ...(options.omnigentHostId ? { hostId: options.omnigentHostId } : {}),
-      ...(options.omnigentSandbox ? { sandbox: options.omnigentSandbox } : {}),
-      fetch: fetchImplementation,
-    });
   const now = options.now ?? Date.now;
   const connectorAuth = new ConnectorAuth({
     statePath: options.authStatePath,
@@ -184,15 +167,6 @@ export function createGateway(options: GatewayOptions) {
   const managedSessions = new Map<string, ManagedSession>();
   /** In-flight creations per grant/app/tool key, for the capacity check. */
   const pendingCreations = new Map<string, number>();
-  const pendingRepairs = new Map<string, Promise<ManagedSession>>();
-  /**
-   * Final usage of sessions this process retired. Teardown deletes the provider
-   * session, and its cost record goes with it, so the last reading has to be
-   * taken before that. Process-local by design: the durable ledger is the
-   * response store, which does not carry usage, so a restart loses these rather
-   * than reporting them wrongly.
-   */
-  const finalUsage = new Map<string, RuntimeSessionUsage>();
   const responseStore =
     options.responseStore ??
     new FileResponseStore(
@@ -201,12 +175,13 @@ export function createGateway(options: GatewayOptions) {
     );
   const responseEngine = new ResponseEngine({
     store: responseStore,
-    backend:
-      options.responseBackend ??
-      new OmnigentResponseBackend({
-        baseUrl: omnigentBaseUrl,
-        fetch: fetchImplementation,
-      }),
+    upstream: new OpenClawResponses({
+      baseUrl: options.openclawBaseUrl,
+      token: options.openclawToken,
+      agentId: options.openclawAgentId,
+      timeoutMs: runningTurnTimeout * 1000,
+      fetch: fetchImplementation,
+    }),
     isGrantActive: (grantId) => connectorAuth.isGrantActive(grantId),
     now,
   });
@@ -227,6 +202,19 @@ export function createGateway(options: GatewayOptions) {
     );
     for (const chain of chains) {
       if (await responseStore.isSessionRetired(chain.appSessionId)) continue;
+      if (chain.providerKind !== "openclaw" || chain.status === "running") {
+        await responseStore.putChain({
+          ...chain,
+          status: "terminal",
+          terminalError: {
+            code: "backend_unavailable",
+            message:
+              chain.providerKind !== "openclaw"
+                ? "provider migrated; create a new application session"
+                : "gateway restarted during uncertain upstream delivery; no automatic replay",
+          },
+        });
+      }
       // Terminal chains are rehydrated too: a response that completed during an
       // outage must stay retrievable, and that is the reason the chain resource
       // exists at all. When one application session has several chains, the
@@ -251,7 +239,6 @@ export function createGateway(options: GatewayOptions) {
         // application had any chance to reconnect.
         lastActivityAt: Math.floor(now() / 1000),
         createdAt: chain.createdAt,
-        provisionedInProcess: false,
       };
       managedSessions.set(chain.appSessionId, session);
     }
@@ -290,11 +277,7 @@ export function createGateway(options: GatewayOptions) {
       : undefined;
   };
 
-  /**
-   * Retires one session and everything provisioned for it. Shared by the
-   * reaper and by explicit termination from the console, so both paths release
-   * the provider session rather than only the gateway's own record.
-   */
+  /** Retire local authority; OpenClaw owns upstream resource lifetime. */
   const releaseSession = async (
     session: ManagedSession,
     reason: SessionEndReason,
@@ -304,30 +287,7 @@ export function createGateway(options: GatewayOptions) {
     await responseStore.retireSession(session.id);
     managedSessions.delete(session.id);
     await responseEngine.expireSession(session.id, reason);
-    // The last usage reading has to be taken before teardown removes it.
-    const usage = await sessionUsage(session.providerSessionId);
-    if (usage) {
-      if (finalUsage.size >= CONSOLE_RECENT_SESSIONS * 2) {
-        const oldest = finalUsage.keys().next();
-        if (!oldest.done) finalUsage.delete(oldest.value);
-      }
-      finalUsage.set(session.id, usage);
-    }
-    // Teardown last and best-effort: the session is already unusable, and a
-    // provider that cannot be reached must not leave it standing.
-    await destroyProviderSession(session.providerSessionId);
-  };
-
-  const destroyProviderSession = async (
-    providerSessionId: string,
-  ): Promise<void> => {
-    try {
-      await runtime.destroySession?.(providerSessionId);
-    } catch {
-      // A leaked provider session is worse than a silent failure here, but the
-      // gateway has no channel to report it on yet; the console shows the
-      // session as ended either way.
-    }
+    // OpenClaw owns private session lifetime; upstream stop is unconfirmed.
   };
 
   // Deciding expiry now costs a lifecycle read per session, and every request
@@ -355,6 +315,10 @@ export function createGateway(options: GatewayOptions) {
         // session in the sweep, which is what an uncaught throw here would do.
         try {
           const reason = await expiryReason(session);
+          if (!connectorAuth.isGrantActive(session.authorizationGrantId)) {
+            await releaseSession(session, "expired");
+            continue;
+          }
           if (!reason) continue;
           await releaseSession(session, reason);
         } catch {
@@ -586,10 +550,7 @@ export function createGateway(options: GatewayOptions) {
           // response chain must not repair the provider session underneath it:
           // the chain's private call IDs belong to the old one. The chain
           // reports its own recovery outcome through the control extensions.
-          session =
-            (await responseEngine.runIfSessionIdle(session.id, () =>
-              ensureHealthy(session),
-            )) ?? session;
+          // Refresh authority only. Never replace an upstream conversation.
         } else {
           const bearer = bearerCredential(authorization);
           const grant = bearer
@@ -716,9 +677,8 @@ export function createGateway(options: GatewayOptions) {
    * capability's own signed origin claim instead of an ambient one, and which
    * additionally requires the grant's non-browser consent bit.
    *
-   * Deliberately does not call `ensureHealthy`: transparent provider-session
-   * replacement is invalid for an active response chain, whose private call IDs
-   * belong to the old provider session.
+   * Never transparently replaces a provider session: private call IDs belong
+   * to exactly the conversation under which they were issued.
    */
   function authorizeResponseSession(
     request: IncomingMessage,
@@ -813,19 +773,6 @@ export function createGateway(options: GatewayOptions) {
       if (existing) existing.push(chain);
       else chainsBySession.set(chain.appSessionId, [chain]);
     }
-    // Usage is one provider round trip per session, so the page fans them out
-    // rather than paying for them in series.
-    const usageBySession = new Map(
-      await Promise.all(
-        [...managedSessions.values()].map(
-          async (session) =>
-            [
-              session.id,
-              await sessionUsage(session.providerSessionId),
-            ] as const,
-        ),
-      ),
-    );
     const live: ConsoleSession[] = [];
     for (const session of managedSessions.values()) {
       const chains = chainsBySession.get(session.id) ?? [];
@@ -840,7 +787,7 @@ export function createGateway(options: GatewayOptions) {
         capabilityExpiresAt: session.expiresAt,
         retiresInSeconds: retiresInSeconds(session, lifecycle, timestamp),
         turns: chains.length,
-        usage: usageBySession.get(session.id),
+        usage: undefined,
       });
     }
     const ended: ConsoleEndedSession[] = [...chainsBySession.entries()]
@@ -850,7 +797,7 @@ export function createGateway(options: GatewayOptions) {
         appId: chains[0]?.appId ?? "unknown",
         origin: chains[0]?.origin ?? "unknown",
         turns: chains.length,
-        usage: finalUsage.get(sessionId),
+        usage: undefined,
         endedAt: chains.reduce(
           (latest, chain) => Math.max(latest, chain.updatedAt),
           0,
@@ -874,16 +821,6 @@ export function createGateway(options: GatewayOptions) {
       runningTimeoutSeconds: runningTurnTimeout,
       generatedAt: timestamp,
     };
-  }
-
-  async function sessionUsage(
-    providerSessionId: string,
-  ): Promise<RuntimeSessionUsage | undefined> {
-    try {
-      return await runtime.describeSession?.(providerSessionId);
-    } catch {
-      return undefined;
-    }
   }
 
   function retiresInSeconds(
@@ -927,7 +864,6 @@ export function createGateway(options: GatewayOptions) {
     );
     const live = [...managedSessions.values()].filter(
       (session) =>
-        session.provisionedInProcess &&
         sessionKey(
           session.origin,
           session.appId,
@@ -947,12 +883,8 @@ export function createGateway(options: GatewayOptions) {
     }
     pendingCreations.set(key, reserved + 1);
     try {
-      const providerSessionId = await runtime.createSession({
-        appId: input.appId,
-        origin,
-        toolHash: input.toolHash,
-        approvedToolNames: input.tools.map((tool) => tool.name),
-      });
+      const providerSessionId =
+        "agent:" + options.openclawAgentId + ":openresponses:" + randomUUID();
       const created: ManagedSession = {
         id: `acs_${randomUUID()}`,
         appId: input.appId,
@@ -965,7 +897,6 @@ export function createGateway(options: GatewayOptions) {
         expiresAt: Math.floor(now() / 1000) + capabilityTtl,
         lastActivityAt: Math.floor(now() / 1000),
         createdAt: Math.floor(now() / 1000),
-        provisionedInProcess: true,
       };
       managedSessions.set(created.id, created);
       return created;
@@ -973,35 +904,6 @@ export function createGateway(options: GatewayOptions) {
       const outstanding = (pendingCreations.get(key) ?? 1) - 1;
       if (outstanding > 0) pendingCreations.set(key, outstanding);
       else pendingCreations.delete(key);
-    }
-  }
-
-  async function ensureHealthy(
-    session: ManagedSession,
-  ): Promise<ManagedSession> {
-    const pending = pendingRepairs.get(session.id);
-    if (pending) return pending;
-    if (await runtime.isHealthy(session.providerSessionId)) return session;
-    const raced = pendingRepairs.get(session.id);
-    if (raced) return raced;
-    const repair = (async () => {
-      const replaced = session.providerSessionId;
-      session.providerSessionId = await runtime.createSession({
-        appId: session.appId,
-        origin: session.origin,
-        toolHash: session.toolHash,
-        approvedToolNames: session.approvedToolNames,
-      });
-      // The unhealthy provider session is unreachable, not absent: its runner
-      // process and session workspace outlive the replacement unless released.
-      await destroyProviderSession(replaced);
-      return session;
-    })();
-    pendingRepairs.set(session.id, repair);
-    try {
-      return await repair;
-    } finally {
-      pendingRepairs.delete(session.id);
     }
   }
 }
@@ -1435,6 +1337,7 @@ const STATE_LABEL: Readonly<Record<SessionLifecycle["kind"], string>> = {
   running: "Working",
   parked: "Waiting for the application",
   idle: "Idle",
+  interrupted: "Interrupted — create a new session",
 };
 
 function sessionsPage(view: ConsoleView): string {
@@ -1463,8 +1366,8 @@ function sessionsPage(view: ConsoleView): string {
 <section class="policy"><h2>When sessions end by themselves</h2><ul>
 <li><strong>Idle</strong> — after ${escapeHtml(duration(view.idleTimeoutSeconds))} with no request and no work in progress.</li>
 <li><strong>Waiting for the application</strong> — after ${escapeHtml(duration(view.parkedTimeoutSeconds))} without an answer to a tool call.</li>
-<li><strong>Working</strong> — after ${escapeHtml(duration(view.runningTimeoutSeconds))} with no progress from the agent.</li>
-</ul><p>Ending a session does not revoke the application's authorization. Revoke that under <a href="/v1/grants">authorized applications</a>.</p></section>
+<li><strong>Working</strong> — after ${escapeHtml(duration(view.runningTimeoutSeconds))} total request time.</li>
+</ul><p>Ending a session stops local delivery and prevents reuse. Upstream generation stopping is unconfirmed; OpenClaw's configured timeout bounds its lifetime. Usage and runner liveness are unavailable.</p><p>Ending a session does not revoke the application's authorization. Revoke that under <a href="/v1/grants">authorized applications</a>.</p></section>
 ${
   view.live.length === 0
     ? '<p class="empty">No sessions are running right now.</p>'
@@ -1475,7 +1378,7 @@ ${
   past.length === 0
     ? '<p class="empty">No sessions have ended yet.</p>'
     : `<div class="scroll"><table><thead><tr><th>Application</th><th>Turns</th><th>Tokens</th><th>Cost</th><th>Outcome</th><th>Ended</th></tr></thead><tbody>${past}</tbody></table></div>
-<p class="empty">Usage is recorded when a session ends and is kept only until this gateway restarts; the provider deletes its own record with the session.</p>`
+<p class="empty">Usage is unavailable through the upstream Responses API.</p>`
 }
 </main>`,
   );

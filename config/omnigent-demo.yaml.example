@@ -1,7 +1,0 @@
-telemetry: false
-
-acp:
-  agents:
-    - name: Codex ACP
-      command: /workspace/agent-connect/scripts/omnigent-codex-private-demo.sh
-      session_id_mode: server

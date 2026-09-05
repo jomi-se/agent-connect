@@ -1,7 +1,7 @@
 # Integrate Agent Connect into a web application
 
-This guide connects an arbitrary HTTPS web application to the real
-Omnigent/Codex reference gateway. The app declares tools implemented in its
+This guide connects an arbitrary HTTPS web application to Agent Connect.
+The app declares tools implemented in its
 own JavaScript, asks the user to authorize their gateway, and sends tasks
 through an Agent Connect session.
 
@@ -274,12 +274,12 @@ over — it does not recover browser state or replay a pending function call.
 
 ## Gateway requirements
 
-The user must have the [real reference gateway](../../deploy/real-gateway/README.md)
+The user must have the [gateway](../../deploy/openclaw-gateway/README.md)
 running and reachable through Tailscale Serve. _The application must itself use
 HTTPS_ because redirect URIs and dynamically enrolled Origins are HTTPS-only.
 The browser must be signed into the gateway operator's allowed tailnet
 identity.
 
-The current reference scope is one user, one online Omnigent host, one agent,
+The replacement scope is one user, one private OpenClaw gateway, one configured agent,
 one active task per application session, and one fixed tool snapshot per
 downstream session.

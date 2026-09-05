@@ -504,11 +504,12 @@ for await (const event of connection.session.streamTask(prompt)) {
             <h2 id="gateway-setup-title">Run the gateway beside your agent.</h2>
             <p>
               The user runs this part on infrastructure they control. It keeps
-              Codex, Omnigent, and the public transport behind one gateway-owned
-              boundary.
+              OpenClaw, model credentials, and the public transport behind one
+              gateway-owned boundary.
             </p>
             <span
-              >Reference setup · Ubuntu 24.04 ARM64 · read-only by default</span
+              >Replacement setup · Node 24 LTS · upstream configured
+              separately</span
             >
           </div>
           <div data-gateway-terminal></div>
@@ -869,8 +870,8 @@ for await (const event of connection.session.streamTask(prompt)) {
           <details>
             <summary>Why the gateway exists</summary>
             <p>
-              It keeps Codex, Omnigent, and other provider details behind one
-              browser API. Users approve or revoke each app from the gateway.
+              It keeps OpenClaw and model-provider details behind one browser
+              API. Users approve or revoke each app from the gateway.
             </p>
           </details>
           <details>
@@ -928,8 +929,8 @@ const connection = await connectAgent({
             Run the gateway beside your agent.
           </h2>
           <p>
-            This runs on infrastructure the user controls, with a dedicated
-            Codex home and read-only mode by default.
+            This runs on infrastructure the user controls, with a separately
+            configured private OpenClaw service and host tools disabled.
           </p>
           <div data-gateway-terminal></div>
         </section>

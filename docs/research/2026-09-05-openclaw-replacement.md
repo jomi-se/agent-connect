@@ -68,11 +68,12 @@ dependency is removed, not proof for the replacement.
 - No credentials copied, services restarted, code switched, or network ingress
   changed during this investigation.
 
-## Evidence still required before implementation contract
+## Remaining runtime evidence
 
 1. Real OpenClaw client-tool round trip through native Codex, including tool
    result continuation, follow-up, cancellation and restriction of host tools.
-2. A deterministic real-OpenClaw test path that spends no subscription tokens.
+2. Deterministic real-OpenClaw tests now pass for the built-in loop (below);
+   extend that setup for streaming cancellation and the policy gateway.
 3. The smallest retained session/call bookkeeping needed for app isolation,
    duplicate outputs, cancellation, restart and persist-before-publication.
 4. Operator setup and migration path preserving existing gateway identity/grants.
@@ -104,6 +105,13 @@ The common application-authorization boundary remains useful in either case.
 
 Development branch: work/openclaw-gateway. Product changes will use a separate
 checkout so the personal agc installation stays on its working source revision.
+
+The repeatable real-dependency suite now lives in scripts/openclaw-compat.test.mjs
+and scripts/openclaw-test-runtime.mjs. Fresh evidence at
+/tmp/agent-connect-openclaw-test-4TGnQf covers streaming tool/result, non-streaming
+follow-up and actual cancellation: abort closed the intentionally hanging local
+inference connection in 103 ms, without it completing. This is built-in-loop
+evidence only. Run took 11.2 seconds, with no real subscription credentials.
 
 The final goal is a usable replacement with less custom ownership, not an
 additional permanently supported backend. User deferred transcript-replay UX;

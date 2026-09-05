@@ -4,10 +4,12 @@
 
 Agent Connect is an application-to-user-owned-agent bridge. Keep the application-facing API agent- and harness-neutral. Codex, Omnigent, ACP adapters, and transport bridges belong behind internal adapter boundaries.
 
-The public task/tool API is provider-neutral. Omnigent HTTP/SSE is the first
-working provider transport. ACP remains the preferred future standardized
-adapter; MCP-over-ACP is unstable, so keep draft-specific code and types out of
-the default application API.
+The public task/tool API is provider-neutral. On the OpenClaw replacement branch,
+use OpenClaw's public Responses API behind the application authorization boundary
+(ADR 0012). Remove duplicated runtime/event translation rather than preserve a
+second permanent backend. Native harness compatibility must be demonstrated,
+not inferred from independent features in documentation. Keep provider/plugin
+types out of the default application API.
 
 ## Terminology
 
@@ -19,11 +21,12 @@ until a dedicated migration, including `ConnectorAuth`, `connectorPublicKey`,
 
 ## Current scope
 
-The browser-to-Codex spike and gateway-owned provisioning pass. Continue to
-assume one online Omnigent host, one active task per application session, one
-fixed tool snapshot per logical/downstream session, and one downstream agent
-until durability and approval behavior are implemented. Browser APIs must use
-opaque Agent Connect sessions, never raw Omnigent ids.
+The working main checkout uses Omnigent and remains the live personal installation.
+Replacement work is isolated on work/openclaw-gateway; see
+docs/plan/openclaw-replacement.md. Keep one active task per application session,
+independent parallel application sessions, a fixed approved tool snapshot and one
+operator-selected downstream agent. Browser APIs use opaque Agent Connect sessions,
+never private OpenClaw session keys. Do not change the personal runtime during tests.
 
 Do not add generalized multi-agent orchestration, arbitrary MCP features, Android automation, or a second proprietary session protocol without recording a decision under `docs/decisions/`.
 
@@ -41,9 +44,10 @@ npm run verify
 npm run analyze
 ```
 
-`npm run verify` includes the deterministic real-Omnigent compatibility suite
-and therefore requires the pinned Omnigent version from
-`config/omnigent-test-compat.json` on `PATH`. This is intentional: provider
+`npm run verify` includes real-OpenClaw compatibility and process-crash tests.
+Use Node 24 LTS >=24.15 and <25 and the pin in `config/openclaw-test-compat.json`
+on `PATH` or at `OPENCLAW_TEST_BIN`. See `deploy/openclaw-gateway/README.md`.
+This is intentional: provider
 compatibility is a default gate, not an optional check someone must remember.
 
 `npm run analyze` is initially report-first. Treat its metrics as investigation
@@ -183,21 +187,22 @@ judgment. Anything requiring a decision goes back up.
 
 ### Test the dependency you actually ship
 
-If a test's expected result would become meaningless when Omnigent changes,
-run it against real Omnigent. Do not encode assumed Omnigent HTTP/SSE,
+If a test's expected result would become meaningless when OpenClaw changes,
+run it against real OpenClaw. Do not encode assumed OpenClaw HTTP/SSE,
 cancellation, session, or event behavior in a fake backend or a recording and
 then treat the passing test as compatibility evidence.
 
-Use the deterministic ACP agent behind a disposable real Omnigent service for
+Use deterministic inference behind a disposable real OpenClaw service for
 routine compatibility tests. This exercises the real provider boundary without
 spending model allowance or depending on nondeterministic model choices. Keep a
-small real-Codex smoke test only for final composition evidence.
+small selected subscription-runtime browser smoke for final composition evidence.
+The built-in-loop fixture does not prove native Codex compatibility.
 
 In-process doubles remain appropriate for Agent Connect-owned state-machine
 invariants and deliberate faults that are impractical to create through a real
 service, such as a failed disk write, an abruptly ended iterator, a wedged HTTP
 request, or an exact race schedule. Such doubles must be controllable contract
-fixtures: they must not synthesize events merely because Omnigent happens to
+fixtures: they must not synthesize events merely because OpenClaw happens to
 emit—or was once believed to emit—them. See
 [`docs/architecture/testing-strategy.md`](docs/architecture/testing-strategy.md).
 

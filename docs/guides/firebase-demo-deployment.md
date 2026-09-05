@@ -25,13 +25,13 @@ does not need to exist on the gateway host.
 
 The hosted app is independent of the runtime profile. Paste a runtime card from
 a real gateway created with the
-[real gateway guide](../../deploy/real-gateway/README.md). The app verifies
+[gateway guide](../../deploy/openclaw-gateway/README.md). The app verifies
 the gateway key, redirects to gateway-owned authorization, and stores the
 resulting app grant only in the tab's `sessionStorage`.
 
 For the real Tailscale Serve profile, publish only the loopback gateway and
 make the configured public endpoint match the selected HTTPS Serve port
-exactly. Follow the current real-gateway guide rather than copying ports from
+exactly. Follow the current gateway guide rather than copying ports from
 historical spike notes.
 
 ## Credential boundary

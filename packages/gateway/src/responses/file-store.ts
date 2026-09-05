@@ -130,6 +130,9 @@ export class FileResponseStore implements ResponseStore {
 
   async putResponse(response: ResponseRecord): Promise<void> {
     await this.write(() => {
+      const owner = this.chainOfResponse.get(response.responseId);
+      if (owner && owner !== response.chainId)
+        throw new Error("response ID ownership collision");
       const file = this.require(response.chainId);
       return {
         ...file,
@@ -145,6 +148,9 @@ export class FileResponseStore implements ResponseStore {
 
   async putCall(call: CallRecord): Promise<void> {
     await this.write(() => {
+      const owner = this.chainOfCall.get(call.callId);
+      if (owner && owner !== call.chainId)
+        throw new Error("call ID ownership collision");
       const file = this.require(call.chainId);
       return {
         ...file,

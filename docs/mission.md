@@ -2,127 +2,107 @@
 
 ## Objective
 
-Build a web-first SDK and user-owned gateway that let an arbitrary application
-use a long-running agent as its intelligence provider while temporarily
-exposing typed, scoped application capabilities back to that agent.
+Build a web-first SDK and user-owned gateway that let an application use its
+user's agent subscription while temporarily exposing typed, scoped application
+capabilities to that agent. Normal application use must not require installing
+an MCP server, copying provider conversation IDs, or opening a terminal.
 
-The hackathon implementation uses Codex as the demonstrated downstream agent.
-Its provider boundary is compatible with other agent harnesses. Agent Connect
-exposes an OAuth-protected Open Responses endpoint (`POST /v1/responses`) and
-bundles the harness's response translation with the runtime supervision needed
-to deploy it. Omnigent is the first working bundled backend. See
-[ADR 0010](decisions/0010-open-responses-gateway-pivot.md).
+Agent Connect is the application-delegation boundary, not another agent
+platform. The implemented replacement uses OpenClaw's Responses endpoint for
+execution and event generation. Agent Connect retains consent, application
+authority, browser integration and the durable bookkeeping needed to publish
+application calls safely. See [ADR 0012](decisions/0012-openclaw-policy-gateway.md).
 
 ## Product promise
 
 An application can:
 
-1. connect to a runtime owned by its user;
-2. create or resume an agent session;
-3. supply a task and a fixed set of application-owned tools;
-4. receive streamed progress, lifecycle events, and application-tool requests;
-5. execute requested application operations locally;
-6. return tool results without installing an MCP server into Codex;
-7. revoke the application's gateway grant without knowing provider session
-   identifiers.
+1. verify a gateway enrolled by its user before disclosing tools;
+2. obtain a revocable, Origin-bound grant through gateway-owned consent and PKCE;
+3. create an independent opaque session or reconnect using its explicit capability;
+4. send a prompt and consume streamed text and application function calls;
+5. execute application operations locally and return correlated results;
+6. follow up using the latest explicit response checkpoint;
+7. stop local delivery, inspect recoverable state, or revoke its grant.
 
-Stable call IDs and persistence before publication protect function-call
-continuation; explicit response checkpoints provide linear completed-task
-follow-up. Applications remain responsible for idempotent operations.
+Stable call IDs and persistence before publication support application-owned
+idempotency. They do not guarantee exactly-once external side effects. An
+ambiguous output submission is never automatically replayed.
 
 ## Current strategy
 
-Current SDK initiative (2026-09-05): framework-neutral conversation state and
-send/stop/follow-up controls over the existing AgentSession, with optional UI
-packages later. See [the headless chat contract](plan/headless-chat.md).
-Native WebMCP tool support is implemented and browser-validated under
-[its bounded plan](plan/webmcp-tool-source.md). Keep the approved snapshot fixed;
-Bookhand integration remains the next application milestone. Images/files are
-explicitly deferred, not exposed as nonfunctional upload controls.
+- Keep the bounded Open Responses profile as the sole application wire:
+  `POST /v1/responses`, with the SDK coordinating function outputs and linear
+  follow-up through `previous_response_id`.
+- Delegate inference, model history, compaction, runtime credentials and
+  process behavior to OpenClaw. Do not retain a parallel Omnigent backend,
+  custom retained-run protocol or agent event vocabulary.
+- Construct upstream requests from the approved tool snapshot and operator
+  configuration. Applications cannot choose upstream credentials, agent,
+  model, session routing or host tools.
+- Re-inject the immutable approved tools on every response segment. Persist
+  calls before publication and output attempts before upstream submission.
+- Keep local response/call ownership independent of OpenClaw's response cache.
+  A grant creates a session; only an explicit capability selects one. Never
+  repair a conversation by silently substituting a new upstream session.
+- Keep transport ingress, owner authentication, gateway identity, application
+  grants and session authority separate. Tailscale Serve remains the supported
+  private remote trust profile; hostname recognition alone is not identity.
+- Initialize gateway identity once through the trusted operator channel.
+  Subsequent application approval happens on the gateway's OAuth/PKCE page,
+  without per-application SSH, terminal use or restart.
+- Treat applications as adversarial principals. The operator must configure
+  the selected OpenClaw runtime to expose only approved application tools,
+  with host shell/filesystem/network/MCP tools disabled. Agent Connect's
+  request allowlist does not itself establish an OS sandbox.
+- Keep native WebMCP and headless conversation controls harness-neutral.
+  Their contracts are [WebMCP](plan/webmcp-tool-source.md) and
+  [headless chat](plan/headless-chat.md). Images/files remain deferred.
 
-- Use standard Open Responses semantics (`POST /v1/responses`) as the sole public
-  wire. The SDK coordinates function-call segments and explicit completed-task
-  follow-ups through `previous_response_id` without creating a separate public
-  protocol.
-- Use Omnigent internally behind the gateway as the first runtime-supervision
-  and execution backend; the application does not depend on that choice.
-- Supply a fixed tool snapshot on the initial response request. Execute
-  `function_call` requests in the application and return correlated outputs
-  via response continuation.
-- Keep Omnigent wire types behind the gateway while response translation and
-  harness supervision remain bundled in the backend; separating them at
-  deployment time would create another private protocol.
-- Treat AG-UI as an optional future edge integration rather than the leading
-  core protocol unless a concrete UI requirement is found that Open Responses
-  cannot satisfy. Keep ACP and dynamic MCP as backend techniques, not mandatory
-  application dependencies.
-- Audit the existing gateway authorization mechanism against OAuth PKCE,
-  protected-resource and authorization-server metadata, resource indicators,
-  Client ID Metadata Documents, and Rich Authorization Requests. Preserve
-  Agent Connect-specific consent policy only where standards do not replace it.
-- Model remote connectivity as named transport trust profiles. Implement
-  Tailscale Serve first, bind its selected endpoint to an enrolled gateway
-  key, and keep hostname recognition out of the trust decision.
-- Keep transport ingress, gateway-owner authentication, application
-  authorization, and session authorization as separate mechanisms. Use one
-  transport-independent grant/session core with interchangeable owner
-  authenticators; profile-specific shortcuts must validate their prerequisites
-  and state their local-process trust assumptions.
-- Bootstrap that gateway identity once with a runtime card exported through
-  the trusted operator channel. Authorize later web apps through a
-  gateway-hosted OAuth/PKCE page; routine use must not require SSH, terminal
-  access, or gateway restart.
-- Add the smallest durability extension necessary for unresolved application
-  actions after the browser loop works; do not claim generic exactly-once
-  execution.
-- Treat an authenticated application as an adversarial principal. Require the
-  selected runtime to enforce an application-tools-only profile by default,
-  while Agent Connect prevents policy expansion and separates approvals. Add
-  gateway-level ceilings and posture reporting before claiming resistance to
-  subscription abuse or verified confinement; report the configured evidence
-  source, and relevant observations without claiming independent verification.
-  Keep the filesystem, network, persistence, and sandbox mechanism inside the
-  runtime adapter.
+## Current implementation and acceptance boundary
 
-## Current acceptance boundary
+The OpenClaw replacement is implemented in the separate
+`work/openclaw-gateway` checkout. It preserves gateway identity/grant state,
+enrollment, consent, PKCE, explicit session capabilities, streaming and
+non-streaming Responses, cancellation/recovery controls and the owner session
+console. Old-provider conversations are explicitly interrupted; they are not
+reinterpreted as OpenClaw conversations.
 
-The browser tool loop has passed against an automatically provisioned
-Omnigent/Codex session speaking the bounded Open Responses profile. The enrolled
-gateway slice is implemented: the SDK verifies a pinned gateway key before tool
-disclosure, the user enrolls a browser device with a generated passphrase only
-on the gateway origin, and a top-level gateway page issues a PKCE-protected
-revocable grant bound to the exact origin, app id, scopes, and tool snapshot.
+Real OpenClaw tests using deterministic inference exercise client-tool
+continuation, public routes and process-crash boundaries. They are transport
+and policy evidence, not proof that the selected subscription-backed runtime
+usefully consumes an actual browser tool result. Final acceptance remains
+governed by the [replacement contract](plan/openclaw-replacement.md).
 
-Raw Omnigent session identifiers are an internal provider detail. A user starts
-the gateway once; normal application use does not require opening Omnigent,
-copying a conversation id, or restarting a runner when the application tool
-surface changes.
+Runtime selection and the final subscription/browser gate remain open.
+Published OpenClaw 2026.9.1's built-in loop supports the tested client-tool
+round trip; the separately packaged native Codex adapter drops client tools.
+Do not call built-in-loop evidence native Codex evidence. The built-in loop
+projects returned tool output as user text following a synthetic delegated
+result, rather than restoring native tool-role continuation. The actual
+selected runtime must prove useful consumption of that result. See the
+[dated investigation](research/2026-09-05-openclaw-replacement.md).
 
-The reference gateway uses Omnigent internally, but applications integrate with
-Agent Connect's Open Responses endpoint. Adding another agent harness requires a
-bundled harness backend that owns runtime supervision and direct translation to
-Open Responses semantics; it does not require reimplementing OAuth, application
-grants, response transport, or the recovery core.
+Cancellation immediately restricts local publication/admission; upstream
+generation stopping is a separate runtime-specific claim. Recovery and the
+owner console report interruptions and unknown usage honestly. OpenClaw
+resource lifetime must be bounded by operator policy and tested with the
+selected runtime.
 
-The one-shot initializer uses the terminal once to export the gateway's runtime
-card and enrollment passphrase, persists only a salted verifier, and thereafter
-the terminal is needed only for recovery. Normal serving does not accept the
-plaintext passphrase. New apps are approved through the
-gateway's Tailscale-hosted OAuth-style page. The private Tailscale Serve flow
-has passed from a remote mobile browser; the historically proven isolated
-public Funnel profile was removed after the hackathon.
-App-instance sender binding, recovery/key rotation, and durable provider mappings
-remain outstanding.
+No live cutover is implied by these source changes. The historical private
+Tailscale Serve + Omnigent + Codex browser demonstration remains baseline
+evidence, not replacement acceptance. [ADR 0010](decisions/0010-open-responses-gateway-pivot.md)
+records the earlier bundled-runtime strategy; ADR 0012 supersedes that
+implementation choice while retaining its public Open Responses boundary.
+App-instance sender binding and recovery/key rotation remain future hardening.
 
-## Non-goals for the first slice
+## Explicit non-goals
 
-- a finalized universal protocol;
-- full MCP feature coverage;
-- multiple users, hosts, agents, or concurrent tasks;
-- arbitrary device or Android control;
-- production multi-tenancy or billing;
-- importing normal Codex CLI history;
-- replaying every streamed token;
-- generic exactly-once side effects;
-- production identity federation, account recovery, or a public relay;
-- arbitrary custom URLs treated as verified user-owned runtimes.
+- a finalized universal protocol or full MCP feature coverage;
+- multiple users, hosts or downstream agents, or concurrent tasks within one session;
+- arbitrary device/Android control, production multi-tenancy or billing;
+- importing or replaying ordinary Codex CLI history or every streamed token;
+- generic exactly-once side effects or automatic ambiguous-output redelivery;
+- production identity federation, account recovery or a public relay;
+- treating arbitrary custom URLs as verified user-owned runtimes;
+- silently choosing a replacement harness or model before runtime selection.

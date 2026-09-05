@@ -4,8 +4,11 @@ A static web application that lends a connected user-owned agent a ten-tool
 snapshot spanning a shared live-state read plus project-board, document-review,
 and product-research writes. When
 the runtime calls those tools, the loaded page mutates immediately. The tools
-are defined by the page and are not installed into Codex or Omnigent in
-advance. The same SDK path has been proven with Codex through Omnigent.
+are defined by the page and are not installed into the user's runtime in
+advance. The replacement gateway mediates OpenClaw Responses; deterministic
+client-tool compatibility is verified separately from live subscription acceptance.
+Operator setup is documented in
+[`deploy/openclaw-gateway`](../../deploy/openclaw-gateway/README.md).
 
 The Build Week surface is also a self-explaining product demo. Real connection,
 task, tool-call, result, and completion events append to a live activity feed;

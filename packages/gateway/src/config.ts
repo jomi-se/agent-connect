@@ -8,7 +8,6 @@ export interface GatewayRuntimeConfig extends GatewayOptions {
 export function configFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): GatewayRuntimeConfig {
-  const sandbox = sandboxFromEnv(env);
   const transportProfile = env.AGENT_CONNECT_TRANSPORT_PROFILE;
   const host = env.AGENT_CONNECT_HOST ?? "127.0.0.1";
   const dynamicAppEnrollment =
@@ -26,12 +25,9 @@ export function configFromEnv(
   return {
     host,
     port: parsePort(env.AGENT_CONNECT_PORT ?? "8787"),
-    omnigentBaseUrl: env.OMNIGENT_URL ?? "http://127.0.0.1:6767",
-    workspace: env.AGENT_CONNECT_WORKSPACE ?? process.cwd(),
-    ...(env.AGENT_CONNECT_OMNIGENT_HOST_ID
-      ? { omnigentHostId: env.AGENT_CONNECT_OMNIGENT_HOST_ID }
-      : {}),
-    ...(sandbox ? { omnigentSandbox: sandbox } : {}),
+    openclawBaseUrl: requiredEnv(env, "OPENCLAW_BASE_URL"),
+    openclawToken: requiredEnv(env, "OPENCLAW_TOKEN"),
+    openclawAgentId: requiredEnv(env, "OPENCLAW_AGENT_ID"),
     allowedOrigins: csvSet(env.AGENT_CONNECT_ALLOWED_ORIGINS),
     dynamicAppEnrollment,
     allowedTailscaleUsers: csvSet(env.AGENT_CONNECT_ALLOWED_TAILSCALE_USERS),
@@ -47,7 +43,7 @@ export function configFromEnv(
     ),
     // Session lifetime slides on activity and is deliberately much shorter
     // than the capability TTL: losing the session id means starting over, so
-    // holding a slot open for an hour buys nothing and costs a runner.
+    // holding an abandoned application slot indefinitely is unnecessary.
     sessionIdleTimeoutSeconds: parsePositiveInteger(
       env.AGENT_CONNECT_SESSION_IDLE_TIMEOUT_SECONDS ?? "900",
       "AGENT_CONNECT_SESSION_IDLE_TIMEOUT_SECONDS",
@@ -60,27 +56,6 @@ export function configFromEnv(
       env.AGENT_CONNECT_RUNNING_TURN_TIMEOUT_SECONDS ?? "1800",
       "AGENT_CONNECT_RUNNING_TURN_TIMEOUT_SECONDS",
     ),
-  };
-}
-
-function sandboxFromEnv(
-  env: NodeJS.ProcessEnv,
-): GatewayRuntimeConfig["omnigentSandbox"] | undefined {
-  const type = env.AGENT_CONNECT_OMNIGENT_SANDBOX;
-  if (!type) return undefined;
-  if (type !== "linux_bwrap") {
-    throw new TypeError(`Invalid AGENT_CONNECT_OMNIGENT_SANDBOX: ${type}`);
-  }
-  const codexHome = requiredEnv(env, "AGENT_CONNECT_SANDBOX_CODEX_HOME");
-  const hostSentinel = requiredEnv(env, "AGENT_CONNECT_SANDBOX_HOST_SENTINEL");
-  return {
-    type,
-    codexHome,
-    hostSentinel,
-    readPaths: (env.AGENT_CONNECT_SANDBOX_READ_PATHS ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean),
   };
 }
 

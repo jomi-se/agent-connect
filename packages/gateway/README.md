@@ -1,163 +1,193 @@
 # Agent Connect gateway
 
-The gateway is the narrow HTTPS-facing envelope for browser applications. It
-binds to loopback, authenticates the configured Tailscale user, and exposes
-OAuth authorization, application session provisioning (`POST /v1/app-sessions`),
-and the standard Open Responses endpoint (`POST /v1/responses`) along with
-namespaced Agent Connect response control routes. The private reference profile
-can enroll previously unknown HTTPS Origins through gateway-owned consent; a
-static Origin allowlist remains available as an operator policy.
+The gateway is the narrow application-delegation boundary in front of an
+operator-configured OpenClaw service. It exposes gateway-owned authorization,
+opaque application sessions (`POST /v1/app-sessions`), the bounded Open
+Responses endpoint (`POST /v1/responses`) and namespaced response controls.
+It is not a general OpenClaw reverse proxy or a harness supervisor.
 
-It is intentionally not a general Omnigent reverse proxy and never exposes raw
-provider session or stream routes to the client.
+The replacement is implemented on a separate branch. Runtime selection, final
+subscription/browser validation and live cutover remain gated by
+[ADR 0012](../../docs/decisions/0012-openclaw-policy-gateway.md) and the
+[replacement contract](../../docs/plan/openclaw-replacement.md).
 
-## Run locally
+## Operator setup
 
-For the supported Omnigent/Codex supervisor, dedicated Codex home, current
-Tailscale Serve setup, and security boundary, use the
-[real gateway guide](../../deploy/real-gateway/README.md). The commands
-below show the lower-level generic gateway profile.
+Use the [OpenClaw gateway guide](../../deploy/openclaw-gateway/README.md) for
+pinned dependency prerequisites, the private environment file, startup checks,
+the runtime boundary and safe migration. The launcher connects to an already
+running OpenClaw service; it does not install a model, link credentials, choose
+a harness or restart the upstream.
 
-```sh
-export AGENT_CONNECT_ALLOWED_ORIGINS='https://PROJECT--agent-connect-HASH.web.app'
-export AGENT_CONNECT_DYNAMIC_APP_ENROLLMENT='1'
-export AGENT_CONNECT_ALLOWED_TAILSCALE_USERS='you@example.com'
-export AGENT_CONNECT_WORKSPACE='/path/the/codex-agent-may-use'
-export AGENT_CONNECT_STATE_PATH='/owner-only/path/agent-connect.json'
-export AGENT_CONNECT_PUBLIC_ENDPOINT='https://MACHINE.TAILNET.ts.net:8443'
-export AGENT_CONNECT_TRANSPORT_PROFILE='tailscale-serve'
-npm run build --workspace @agent-connect/gateway
-node packages/gateway/dist/initialize-main.js
-npm run start --workspace @agent-connect/gateway
-```
+Required configuration:
 
-Defaults:
+| Variable                                | Meaning                                                        |
+| --------------------------------------- | -------------------------------------------------------------- |
+| `OPENCLAW_BASE_URL`                     | Operator-selected upstream base URL; no implicit default       |
+| `OPENCLAW_TOKEN`                        | Server-only upstream credential                                |
+| `OPENCLAW_AGENT_ID`                     | Explicit operator-selected upstream agent                      |
+| `AGENT_CONNECT_STATE_PATH`              | Owner-only gateway identity/grant state                        |
+| `AGENT_CONNECT_PUBLIC_ENDPOINT`         | Enrolled HTTPS gateway endpoint                                |
+| `AGENT_CONNECT_ALLOWED_TAILSCALE_USERS` | Allowed Tailscale owner identities                             |
+| `AGENT_CONNECT_TRANSPORT_PROFILE`       | Use `tailscale-serve` for the supported private remote profile |
 
-- gateway: `http://127.0.0.1:8787`
-- Omnigent: `http://127.0.0.1:6767`
+`AGENT_CONNECT_DYNAMIC_APP_ENROLLMENT=1` enables consent bootstrap for
+previously unknown HTTPS Origins under the Tailscale Serve profile.
+`AGENT_CONNECT_ALLOWED_ORIGINS` remains an optional stricter Origin policy;
+without dynamic enrollment, at least one allowed Origin is required.
+`AGENT_CONNECT_RESPONSE_STATE_PATH` optionally selects the response ledger
+directory; otherwise it is `responses` beside the auth state file.
 
-Keep the gateway on loopback. Tailscale Serve terminates HTTPS and adds the
-authenticated Tailscale identity headers:
+The gateway listener defaults to `http://127.0.0.1:8787`. Keep it on loopback;
+Tailscale Serve terminates HTTPS and supplies authenticated identity headers.
+Publication and service supervision are operator-owned and not changed by
+the launcher.
 
-```sh
-tailscale serve --bg --https=8443 http://127.0.0.1:8787
-```
+The upstream token never belongs in browser configuration, a frontend
+environment, a URL or the SDK. Agent Connect constructs fresh upstream
+headers with operator-pinned agent selection and a private stable session key.
+It forwards only the bounded request profile and re-injects approved tools on
+every segment. Applications cannot select upstream routing, models or host
+tools.
 
-The browser base URL is then `https://MACHINE.TAILNET.ts.net:8443`. The one-shot
-initializer prints a runtime card and generated enrollment secret as clearly
-separated outputs. Save the secret in a password manager. It persists only a
-salted verifier and refuses to overwrite existing state; normal gateway startup
-refuses uninitialized state. Import only the public card into the app; enter the
-passphrase only on the gateway-owned consent page.
-The app verifies a signed gateway challenge before sending its tools and uses
-S256 PKCE to obtain a revocable origin/app/tool-bound grant.
+The selected runtime must disable host shell/filesystem/network/MCP tools for
+application delegation. This is operator/runtime policy, not an OS sandbox
+created by request filtering. Omnigent launch settings, workspace cleanup,
+Codex-home options and the old Bubblewrap environment are not part of this
+gateway's supported configuration.
 
-With `AGENT_CONNECT_DYNAMIC_APP_ENROLLMENT=1`, an unknown HTTPS Origin may
-reach the signed-challenge and authorization endpoints. This is not ambient
-agent access: Tailscale must authenticate the configured operator, the
-gateway-owned page requires explicit consent, redirects must remain on the
-requesting Origin, and all later requests require the exact bound grant. This
-mode is accepted only with `AGENT_CONNECT_TRANSPORT_PROFILE=tailscale-serve`.
-Applications may revoke their own grant through bearer-authenticated
-`POST /oauth/revoke`; the response deliberately does not reveal whether the
-submitted token existed. Gateway-owned grant listing and administrative
-revocation remain on `/v1/grants`.
+## Enrollment and authorization
 
-The gateway uploads its narrow Codex ACP agent bundle, selects the one online
-Omnigent host, launches the runner, and replaces an unhealthy runner
-automatically. Set `AGENT_CONNECT_OMNIGENT_HOST_ID` when several hosts are
-online. Raw Omnigent session ids never enter the browser configuration. When an
-application session is retired, the gateway deletes the provider session and
-removes the per-session workspace it created, so runners do not accumulate.
+For a new identity only, the one-shot initializer exports a runtime card and
+generated enrollment secret as separate outputs. Save the secret privately.
+It persists only a salted verifier and refuses to overwrite existing state;
+normal serving refuses uninitialized state. Import only the public card into
+the app and enter the passphrase only on the gateway-owned consent page.
+
+The application verifies a fresh signed challenge before disclosing its tools,
+then uses S256 PKCE to obtain a revocable Origin/app/tool-bound grant. Dynamic
+enrollment is not ambient agent access: Tailscale authenticates the configured
+owner, the gateway page requires consent, the redirect stays on the initiating
+Origin, and operational requests require the exact approved authority.
+Originless clients additionally require the grant's explicit non-browser
+consent and the owner-transport checks.
+
+Applications can revoke their own grant through bearer-authenticated
+`POST /oauth/revoke`; its response deliberately does not reveal whether the
+submitted token existed. Owner grant listing and administrative revocation
+remain on `/v1/grants`. Normal per-application authorization does not require
+SSH, terminal access or restart.
 
 ## Selecting a session
 
-Which session a request means is decided by the credential it presents, and
-only by that:
+The credential decides which session a request means:
 
-| Credential         | `POST /v1/app-sessions` means                 |
-| ------------------ | --------------------------------------------- |
-| Application grant  | provision a new independent session, always   |
-| Session capability | refresh the one session that capability names |
-| Neither            | `401` — no session may be selected implicitly |
+| Credential         | `POST /v1/app-sessions` means                        |
+| ------------------ | ---------------------------------------------------- |
+| Application grant  | Create a new independent session, always             |
+| Session capability | Refresh exactly the session named by that capability |
+| Neither            | `401`; no implicit session selection                 |
 
-There is deliberately no third case. The only key a grant-based lookup could
-search by is origin, application, and tool snapshot, which every tab of that
-application shares, so "the newest match" is ambient state the caller neither
-names nor owns; with parallel sessions it would eventually connect one tab to
-another tab's conversation. An extra session is bounded by expiry and capacity.
-A crossed conversation is not.
+A grant never selects the newest matching tab or conversation. The gateway
+allocates a private OpenClaw session key for each opaque application session;
+neither this key nor raw provider routes enter the browser API. Capability
+refresh does not provision, heal or replace the upstream conversation.
 
-Reconnecting to a conversation is therefore something the application prepares
-for: it must persist the session capability (and the continuation checkpoint,
-to resume the conversation rather than only the session) across the reload. A
-client that kept nothing starts a new session.
+An application that wants to reconnect must retain its session capability and
+continuation checkpoint. A client that kept nothing starts a new session.
+A lost session-creation response followed by a grant retry creates another
+session; the orphan counts against capacity and expires normally. There is no
+implicit adoption or client-supplied session-creation idempotency mechanism.
 
-The consequence is that a lost HTTP response followed by a retry provisions an
-orphan session. That is honest and bounded — it retires on its own clock and
-counts against capacity meanwhile. If it ever becomes a real cost, the fix is
-an explicit client-supplied idempotency key, not a guess at which session was
-created most recently.
+The accepted `fresh` request field is redundant and deprecated: a grant already
+means create. It remains rejected alongside a session capability.
 
-The request body still accepts `fresh`, which is now redundant and deprecated:
-presenting the grant already means create. It remains rejected alongside a
-session capability.
+## Responses and recovery
+
+The public model selector remains `agent-connect/default`. OpenClaw owns
+inference, history, compaction and Responses generation; the gateway owns
+application/session/call authority, the latest admitted checkpoint and durable
+publication. One response can be admitted per application session, while
+independent sessions may run concurrently.
+
+Calls are recorded before any corresponding tool publication. Output attempts
+are recorded before upstream submission. Identical retries cannot redeliver an
+output; conflicting outputs are rejected. Ambiguous upstream acceptance is
+reported as interrupted rather than replayed automatically. Applications still
+own side-effect idempotency; no generic exactly-once guarantee is made.
+
+Control extensions are:
+
+- `GET /v1/agent-connect/responses/:id`: inspect the owned recorded checkpoint
+  and its recovery outcome;
+- `GET /v1/agent-connect/responses/:id/pending-function-calls`: inspect only
+  calls whose continuation is known to remain possible;
+- `POST /v1/agent-connect/responses/:id/cancel`: enforce local cancellation.
+
+Upstream response IDs are not capabilities. Local ownership and latest-head
+checks are independent of OpenClaw's cache, and explicit private routing avoids
+implicit conversation adoption. A gateway restart reconstructs response-bearing
+sessions from durable authority records; in-flight uncertain work becomes
+interrupted. A newly issued session with no durable response chain is not
+reconstructed. The SDK does not automatically retrieve pending calls or replay
+transcripts.
+
+The pinned built-in OpenClaw loop supports the tested client-tool round trip,
+but projects returned output as user text after a synthetic delegated result,
+not as native tool-role continuation. The separately packaged native Codex
+adapter drops client tools. Final selected-subscription/browser evidence is
+still required; built-in-loop tests must not be called native Codex support.
+See the [dependency investigation](../../docs/research/2026-09-05-openclaw-replacement.md).
 
 ## Session lifetime
 
-Sessions are cheap and short-lived on purpose. Losing the session id means
-starting a new session, not recovering the old one, so nothing is gained by
-keeping an abandoned one alive. Lifetime slides on activity rather than running
-from issuance, and three clocks govern it:
+Lifetime slides with activity, governed by three separate clocks:
 
-| Variable                                     | Default | Retires a session when                                       |
-| -------------------------------------------- | ------- | ------------------------------------------------------------ |
-| `AGENT_CONNECT_SESSION_IDLE_TIMEOUT_SECONDS` | 900     | no request and no work in progress for this long             |
-| `AGENT_CONNECT_PARKED_CALL_TIMEOUT_SECONDS`  | 180     | a published function call goes unanswered for this long      |
-| `AGENT_CONNECT_RUNNING_TURN_TIMEOUT_SECONDS` | 1800    | a running turn produces nothing from the agent for this long |
+| Variable                                     | Default seconds | Retirement boundary                                  |
+| -------------------------------------------- | --------------- | ---------------------------------------------------- |
+| `AGENT_CONNECT_SESSION_IDLE_TIMEOUT_SECONDS` | 900             | No request and no work in progress for this long     |
+| `AGENT_CONNECT_PARKED_CALL_TIMEOUT_SECONDS`  | 180             | Published function call remains unanswered           |
+| `AGENT_CONNECT_RUNNING_TURN_TIMEOUT_SECONDS` | 1800            | Total upstream request time, even if events continue |
 
-The three are separate because a running turn is legitimately silent for as
-long as the agent thinks, while a parked call means the application is supposed
-to be executing it _right now_. A parked session and an abandoned tab are
-indistinguishable — the segment ended and the gateway holds no socket to the
-browser — so this is a declared policy rather than an attempt to detect which
-one it is.
+An unanswered parked call and an abandoned tab are indistinguishable after
+the segment ends; these are declared lifetime policies, not browser-presence
+detection.
 
-`AGENT_CONNECT_CAPABILITY_TTL_SECONDS` (default 3600) is unrelated: it bounds
-how long a signed capability verifies, not how long the session lives. A
-capability that still verifies but names a retired session is answered
-`401 {"error": "session_expired"}`, so a client can tell "start over" from
-"refresh your token".
+`AGENT_CONNECT_CAPABILITY_TTL_SECONDS` defaults to 3600 and controls signed
+capability validity separately. A still-valid capability naming a retired
+session receives `401 {"error":"session_expired"}`, indicating that the client
+must start over rather than merely refresh its token.
 
-## Session console
+Client disconnect, cancellation, expiry and revocation restrict further local
+publication/admission. They do not independently prove upstream generation has
+stopped. The API/console describe upstream stop as unconfirmed, and OpenClaw's
+operator-configured timeout must bound resource lifetime. Runtime-specific
+disconnect evidence is separate from that local guarantee.
 
-`GET /sessions` is an owner-only page — same Tailscale-authenticated,
-loopback-only path as `/authorize` and `/v1/grants` — showing live sessions
-with their state, turn count, cumulative tokens and cost, last activity, and
-when each will be retired, plus recent ended sessions rebuilt from the durable
-chain ledger. `POST /sessions` with a `session` field ends one immediately,
-which releases its provider session and frees a capacity slot.
+## Owner session console
 
-Token and cost figures come from the provider's own session snapshot. For an
-ended session the final reading is taken just before teardown and kept in
-memory only — the provider deletes its record along with the session, and the
-gateway's durable ledger does not carry usage — so a restart drops the usage of
-already-ended sessions rather than reporting it wrongly.
+`GET /sessions` uses the same owner-only trusted path as `/authorize` and
+`/v1/grants`. It shows live session state, turn count, last activity and local
+retirement timing, plus recent ended sessions from the durable ledger.
+Interrupted sessions are labeled explicitly. Cumulative usage and runner
+liveness are unavailable through this boundary; the console does not invent
+zero cost or confirmed process termination.
 
-Applications refused a session at capacity receive `429` with `Retry-After` and
-a `manageUrl` pointing here, so they have somewhere to send the user.
+`POST /sessions` with a `session` field retires local authority and frees its
+capacity slot. It does not delete an upstream workspace or claim that a harness
+process was terminated. Applications refused capacity receive `429`,
+`Retry-After` and a `manageUrl` pointing to this page.
 
-Gateway keys, enrolled-device token hashes, grant token hashes, revocation,
-and the capability secret are durable. Pending authorization requests, codes,
-provider-session mappings, and rate-limit counters are still memory-only. The
-gateway accepts application-session creation only through an approved grant,
-and it never exposes raw Omnigent session routes.
+## Persistence and migration
 
-An experimental VM-local sandbox can be selected with
-`AGENT_CONNECT_OMNIGENT_SANDBOX=linux_bwrap` plus the required Codex-home,
-host-sentinel, and read-path variables. Read the
-[sandbox spike](../../docs/research/2026-07-14-omnigent-vm-sandbox-spike.md)
-before using it: the outer boundary passes, but the sandboxed dynamic-tool loop
-is currently blocked at MCP startup and the full-access agent can read the
-copied Codex login while network is enabled. It is experimental evidence, not
-a safe malicious-app profile.
+Gateway keys, enrolled-device hashes, grant hashes, revocations and capability
+signing state retain their existing durable format. Response/call ownership and
+private routing for response-bearing sessions are durable too. Pending consent
+requests, authorization codes and rate-limit counters remain process-local.
+
+Preserve the existing identity and original state for rollback; do not
+reinitialize or rotate it during backend migration. Old Omnigent conversations
+are explicitly interrupted, never reinterpreted as OpenClaw sessions. Use a
+separate replacement response-ledger path as described in the setup guide and
+create fresh application sessions. Neither these source changes nor the
+launcher authorizes a live cutover.
