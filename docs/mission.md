@@ -32,10 +32,13 @@ follow-up. Applications remain responsible for idempotent operations.
 
 ## Current strategy
 
-Current SDK initiative (2026-09-04): reuse native WebMCP page tools through the
-existing consent and Open Responses path. Preserve a fixed approved snapshot;
-observed tool changes invalidate it. Prove native browser compatibility before
-integrating Bookhand. See [the bounded plan](plan/webmcp-tool-source.md).
+Current SDK initiative (2026-09-05): framework-neutral conversation state and
+send/stop/follow-up controls over the existing AgentSession, with optional UI
+packages later. See [the headless chat contract](plan/headless-chat.md).
+Native WebMCP tool support is implemented and browser-validated under
+[its bounded plan](plan/webmcp-tool-source.md). Keep the approved snapshot fixed;
+Bookhand integration remains the next application milestone. Images/files are
+explicitly deferred, not exposed as nonfunctional upload controls.
 
 - Use standard Open Responses semantics (`POST /v1/responses`) as the sole public
   wire. The SDK coordinates function-call segments and explicit completed-task

@@ -66,7 +66,7 @@ class RefusingProvider implements AgentProvider {
     this.requests.push(request);
     if (this.refuse) {
       throw new AgentConnectError(
-        "http_error",
+        "task_busy",
         "this application session already has an active response chain",
       );
     }
@@ -81,6 +81,130 @@ class RefusingProvider implements AgentProvider {
 }
 
 describe("AgentSession", () => {
+  it("retries known initial refusals and guards concurrent consumption", async () => {
+    const provider = new RefusingProvider([
+      { type: "task.completed", continuationToken: "head" },
+    ]);
+    const session = new AgentSession({ provider, tools: [nonceTool()] });
+    provider.refuse = true;
+    await expect(session.runTask("first")).rejects.toMatchObject({
+      code: "task_busy",
+    });
+    expect(session.canStartTask).toBe(true);
+    provider.refuse = false;
+    const stream = session.streamTask("first");
+    await stream.next();
+    expect(session.canStartTask).toBe(false);
+    expect(session.canContinueTask).toBe(false);
+    await expect(session.runTask("overlap")).rejects.toMatchObject({
+      code: "task_busy",
+    });
+    for await (const _event of stream) {
+      /* drain */
+    }
+    expect(session.canContinueTask).toBe(true);
+  });
+
+  it("cancels before provider admission without consuming the initial turn", async () => {
+    const provider = new FakeProvider([]);
+    const session = new AgentSession({ provider, tools: [nonceTool()] });
+    const stream = session.streamTask("first");
+    await stream.next();
+    await session.cancel();
+    expect((await stream.next()).value).toEqual({ type: "task.cancelled" });
+    await stream.next();
+    expect(provider.requests).toEqual([]);
+    expect(session.canStartTask).toBe(true);
+  });
+
+  it("does not execute a tool stopped at its request notification", async () => {
+    const execute = vi.fn(() => "result");
+    const provider = new FakeProvider([
+      {
+        type: "tool.requested",
+        requestToken: "call",
+        actionId: "action",
+        name: "get_nonce",
+        arguments: { prefix: "x" },
+      },
+      { type: "task.cancelled" },
+    ]);
+    const session = new AgentSession({ provider, tools: [nonceTool(execute)] });
+    const stream = session.streamTask("first");
+    await stream.next();
+    await stream.next();
+    await session.cancel();
+    expect((await stream.next()).value).toMatchObject({
+      type: "task.cancelled",
+    });
+    await stream.next();
+    expect(execute).not.toHaveBeenCalled();
+    expect(provider.results).toEqual([]);
+  });
+
+  it("coalesces failed cancellation without overriding later completion", async () => {
+    const provider = new FakeProvider([
+      { type: "text.delta", delta: "done" },
+      { type: "task.completed", continuationToken: "head" },
+    ]);
+    const cancel = vi
+      .spyOn(provider, "cancel")
+      .mockRejectedValue(new Error("control failed"));
+    const session = new AgentSession({ provider, tools: [nonceTool()] });
+    const stream = session.streamTask("first");
+    await stream.next();
+    await stream.next();
+    const first = session.cancel();
+    expect(session.cancel()).toBe(first);
+    await expect(first).rejects.toThrow("control failed");
+    expect(session.canContinueTask).toBe(false);
+    expect((await stream.next()).value).toEqual({
+      type: "task.completed",
+      text: "done",
+    });
+    await stream.next();
+    expect(session.canContinueTask).toBe(true);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("signals pending tools and drops late output without inventing cancellation", async () => {
+    let resolve!: (value: string) => void;
+    let entered!: () => void;
+    const running = new Promise<void>((done) => {
+      entered = done;
+    });
+    let signal: AbortSignal | undefined;
+    const provider = new FakeProvider([
+      {
+        type: "tool.requested",
+        requestToken: "call",
+        actionId: "action",
+        name: "get_nonce",
+        arguments: { prefix: "x" },
+      },
+      { type: "task.completed", continuationToken: "head" },
+    ]);
+    const session = new AgentSession({
+      provider,
+      tools: [
+        nonceTool((_args, context) => {
+          signal = context.signal;
+          entered();
+          return new Promise<string>((done) => {
+            resolve = done;
+          });
+        }),
+      ],
+    });
+    const result = session.runTask("first");
+    await running;
+    await session.cancel();
+    expect(signal?.aborted).toBe(true);
+    resolve("late");
+    await expect(result).resolves.toEqual({ text: "" });
+    expect(provider.results).toEqual([]);
+    expect(session.canContinueTask).toBe(true);
+  });
   it("keeps the continuation checkpoint when a turn is refused before admission", async () => {
     const provider = new RefusingProvider([
       { type: "text.delta", delta: "done" },
@@ -198,6 +322,7 @@ describe("AgentSession", () => {
       { prefix: "browser" },
       {
         connectionId: "public-session",
+        signal: expect.any(AbortSignal),
         toolName: "get_nonce",
         meta: null,
         actionId: "action-1",
@@ -312,7 +437,7 @@ describe("AgentSession", () => {
     const provider = new FakeProvider([{ type: "task.cancelled" }]);
     const cancelled = new AgentSession({ provider, tools: [nonceTool()] });
     await cancelled.cancel();
-    expect(provider.cancelled).toBe(true);
+    expect(provider.cancelled).toBe(false);
     await expect(cancelled.runTask("cancel")).rejects.toBeInstanceOf(
       AgentConnectError,
     );

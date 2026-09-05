@@ -1,12 +1,16 @@
 # Scope and capability inventory
 
-Updated: 2026-09-04
+Updated: 2026-09-05
 
 This inventory separates implemented behavior from explicit targets. The
 mission defines the product boundary; this file prevents future plans from
 silently treating a target as a shipped guarantee.
 
 ## Application and SDK
+
+Implemented: headless conversation state and controls, including linear follow-up,
+tool-activity rendering data and truthful cancellation. Scope, edge cases and
+validation are recorded in [the headless chat contract](plan/headless-chat.md).
 
 Implemented experimental addition: native WebMCP discovery/execution through an immutable,
 current-document snapshot. Compatibility and lifecycle assertions are tracked

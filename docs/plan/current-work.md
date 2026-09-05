@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-04
+Updated: 2026-09-05
 
 This is the canonical unfinished-work list. It records current priorities and
 only enough completed context to explain them. Product boundaries live in the
@@ -75,6 +75,19 @@ exactly its own session. Concurrent creates reserve capacity independently.
 The owner-only `/sessions` console exposes live sessions, usage, expiry, and
 termination. Lost creation responses can leave bounded orphan sessions;
 creation idempotency is deferred until this is an observed problem.
+
+## Headless conversation building blocks: implemented
+
+Requested 2026-09-05: a framework-neutral conversation layer over AgentSession,
+with streaming transcript, tool activity and send/stop/follow-up controls.
+See [the contract and handoff](headless-chat.md). UI packages and Bookhand
+integration remain subsequent work; the user explicitly deferred images/files.
+
+`createAgentChat` now exposes immutable ordered transcript snapshots, subscriptions,
+send/stop/dispose controls and truthful continuation readiness. AgentSession owns
+tool execution and cooperative cancellation. `exportAgentChatMarkdown` supports
+portable study notes without exporting tool argument/result bodies. No UI library,
+new protocol or automatic reconnect was introduced. Bookhand composition is next.
 
 ## WebMCP tools: implemented and validated
 

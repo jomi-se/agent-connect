@@ -107,6 +107,45 @@ function provider(responses: readonly (() => Response)[]): {
 }
 
 describe("ResponsesProvider", () => {
+  it("invalidates checkpoints on admission before text and ambiguous transport failure", async () => {
+    for (const fail of [
+      () => segment("resp_2"),
+      () => {
+        throw new Error("network lost");
+      },
+    ]) {
+      const harness = provider([
+        () => segment("resp_1", completed("resp_1")),
+        fail,
+      ]);
+      const session = new AgentSession({
+        provider: harness.provider,
+        tools: [tool],
+      });
+      await session.runTask("first");
+      expect(session.canContinueTask).toBe(true);
+      await expect(session.continueTask("second")).rejects.toBeInstanceOf(
+        AgentConnectError,
+      );
+      expect(session.canContinueTask).toBe(false);
+    }
+  });
+
+  it("does not retry ambiguous initial transport failure", async () => {
+    const harness = provider([
+      () => {
+        throw new Error("network lost");
+      },
+    ]);
+    const session = new AgentSession({
+      provider: harness.provider,
+      tools: [tool],
+    });
+    await expect(session.runTask("first")).rejects.toBeInstanceOf(
+      AgentConnectError,
+    );
+    expect(session.canStartTask).toBe(false);
+  });
   it("chains segments across a function call and preserves runTask", async () => {
     const harness = provider([
       () =>
@@ -391,6 +430,9 @@ describe("ResponsesProvider", () => {
     });
     const stream = task[Symbol.asyncIterator]();
 
+    expect((await stream.next()).value).toMatchObject({
+      type: "task.admitted",
+    });
     const requested = await stream.next();
     expect(requested.value).toMatchObject({ type: "tool.requested" });
     await harness.provider.cancel();

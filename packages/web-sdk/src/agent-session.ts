@@ -53,6 +53,17 @@ export class AgentSession {
   private readonly sessionId: string;
   private continuationToken: string | undefined;
   private initialTaskStarted = false;
+  private activeController: AbortController | undefined;
+  private providerStarted = false;
+  private cancellation: Promise<void> | undefined;
+
+  get canStartTask(): boolean {
+    return !this.activeController && !this.initialTaskStarted;
+  }
+
+  get canContinueTask(): boolean {
+    return !this.activeController && Boolean(this.continuationToken);
+  }
 
   constructor(options: AgentSessionOptions) {
     if (options.tools.length === 0) {
@@ -72,17 +83,18 @@ export class AgentSession {
 
   async *streamTask(prompt: string): AsyncGenerator<AgentTaskEvent> {
     requirePrompt(prompt);
+    this.requireIdle();
     if (this.initialTaskStarted) {
       throw new AgentConnectError(
         "protocol_error",
         "This agent session already started; continue the completed task or create a new session",
       );
     }
-    this.initialTaskStarted = true;
     yield* this.stream(prompt, undefined);
   }
 
   async *streamContinuation(prompt: string): AsyncGenerator<AgentTaskEvent> {
+    this.requireIdle();
     const checkpoint = this.continuationToken;
     if (!checkpoint) {
       throw new AgentConnectError(
@@ -98,134 +110,170 @@ export class AgentSession {
     continuationToken: string | undefined,
   ): AsyncGenerator<AgentTaskEvent> {
     requirePrompt(prompt);
+    this.requireIdle();
+    const controller = new AbortController();
+    this.activeController = controller;
+    const wasStarted = this.initialTaskStarted;
+    this.initialTaskStarted = true;
+    let admitted = false;
 
     const completedActions = new Set<string>();
     let text = "";
     let terminal = false;
 
-    yield { type: "task.started" };
-
-    for await (const event of this.provider.streamTask({
-      prompt,
-      tools: Array.from(this.tools.values(), (tool) => tool.definition),
-      ...(continuationToken ? { continuationToken } : {}),
-    })) {
-      // Once another turn is admitted, an older checkpoint is no longer a safe
-      // branch point. The clock starts at admission, not at the attempt: a
-      // request the gateway refused before admitting anything — a busy
-      // session, a network failure — leaves the previous turn as the head, and
-      // discarding the checkpoint there would strand the application with a
-      // session it can no longer continue. A new checkpoint is published only
-      // after a successful completion.
-      this.continuationToken = undefined;
-      switch (event.type) {
-        case "text.delta":
-          text += event.delta;
-          yield event;
-          break;
-        case "tool.requested": {
-          if (completedActions.has(event.actionId)) {
-            break;
-          }
-          completedActions.add(event.actionId);
-          const tool = this.tools.get(event.name);
-          const arguments_ = asJsonObject(event.arguments);
-          if (!tool) {
-            const error = taskError(
-              "unknown_tool",
-              `The agent requested an unknown application tool: ${event.name}`,
-            );
-            await this.provider.submitToolResult(
-              event.requestToken,
-              serializeToolError(error),
-            );
-            yield toolCompleted(event.actionId, event.name, error);
-            break;
-          }
-          if (!arguments_ || !tool.validate(arguments_)) {
-            const details = tool.validate.errors
-              ?.map(
-                (error) =>
-                  `${error.instancePath || "/"} ${error.message ?? "is invalid"}`,
-              )
-              .join("; ");
-            const error = taskError(
-              "invalid_tool_arguments",
-              `Invalid arguments for ${event.name}${details ? `: ${details}` : ""}`,
-            );
-            await this.provider.submitToolResult(
-              event.requestToken,
-              serializeToolError(error),
-            );
-            yield toolCompleted(event.actionId, event.name, error);
-            break;
-          }
-
-          yield {
-            type: "tool.requested",
-            actionId: event.actionId,
-            name: event.name,
-            arguments: arguments_,
-          };
-
-          try {
-            const result = await tool.execute(arguments_, {
-              connectionId: this.sessionId,
-              toolName: event.name,
-              meta: null,
-              actionId: event.actionId,
-            });
-            await this.provider.submitToolResult(
-              event.requestToken,
-              serializeToolResult(result),
-            );
-            yield {
-              type: "tool.completed",
-              actionId: event.actionId,
-              name: event.name,
-              isError: false,
-            };
-          } catch (cause) {
-            const error = taskError(
-              "tool_execution_failed",
-              cause instanceof Error
-                ? cause.message
-                : "Application tool execution failed",
-            );
-            await this.provider.submitToolResult(
-              event.requestToken,
-              serializeToolError(error),
-            );
-            yield toolCompleted(event.actionId, event.name, error);
-          }
-          break;
-        }
-        case "task.completed":
-          terminal = true;
-          this.continuationToken = event.continuationToken;
-          yield { type: "task.completed", text };
-          break;
-        case "task.failed":
-          terminal = true;
-          yield {
-            type: "task.failed",
-            error: taskError("protocol_error", event.message),
-          };
-          break;
-        case "task.cancelled":
-          terminal = true;
-          yield event;
-          break;
-      }
-      if (terminal) {
+    try {
+      yield { type: "task.started" };
+      if (controller.signal.aborted) {
+        this.initialTaskStarted = wasStarted;
+        yield { type: "task.cancelled" };
         return;
       }
-    }
 
-    throw new AgentConnectError(
-      "protocol_error",
-      "Agent provider stream ended without a terminal event",
-    );
+      this.providerStarted = true;
+      for await (const event of this.provider.streamTask({
+        prompt,
+        tools: Array.from(this.tools.values(), (tool) => tool.definition),
+        ...(continuationToken ? { continuationToken } : {}),
+      })) {
+        // Once another turn is admitted, an older checkpoint is no longer a safe
+        // branch point. The clock starts at admission, not at the attempt: a
+        // request the gateway explicitly refused before admitting anything
+        // leaves the previous turn as the head, and
+        // discarding the checkpoint there would strand the application with a
+        // session it can no longer continue. A new checkpoint is published only
+        // after a successful completion. Unknown transport failures invalidate
+        // the old checkpoint in the catch path: absence of an event is not proof
+        // that the gateway admitted nothing.
+        this.continuationToken = undefined;
+        admitted = true;
+        switch (event.type) {
+          case "task.admitted":
+            break;
+          case "text.delta":
+            text += event.delta;
+            yield event;
+            break;
+          case "tool.requested": {
+            if (completedActions.has(event.actionId)) {
+              break;
+            }
+            completedActions.add(event.actionId);
+            if (controller.signal.aborted) break;
+            const tool = this.tools.get(event.name);
+            const arguments_ = asJsonObject(event.arguments);
+            if (!tool) {
+              const error = taskError(
+                "unknown_tool",
+                `The agent requested an unknown application tool: ${event.name}`,
+              );
+              await this.provider.submitToolResult(
+                event.requestToken,
+                serializeToolError(error),
+              );
+              yield toolCompleted(event.actionId, event.name, error);
+              break;
+            }
+            if (!arguments_ || !tool.validate(arguments_)) {
+              const details = tool.validate.errors
+                ?.map(
+                  (error) =>
+                    `${error.instancePath || "/"} ${error.message ?? "is invalid"}`,
+                )
+                .join("; ");
+              const error = taskError(
+                "invalid_tool_arguments",
+                `Invalid arguments for ${event.name}${details ? `: ${details}` : ""}`,
+              );
+              await this.provider.submitToolResult(
+                event.requestToken,
+                serializeToolError(error),
+              );
+              yield toolCompleted(event.actionId, event.name, error);
+              break;
+            }
+
+            yield {
+              type: "tool.requested",
+              actionId: event.actionId,
+              name: event.name,
+              arguments: arguments_,
+            };
+
+            if (controller.signal.aborted) break;
+
+            try {
+              const result = await tool.execute(arguments_, {
+                connectionId: this.sessionId,
+                toolName: event.name,
+                meta: null,
+                actionId: event.actionId,
+                signal: controller.signal,
+              });
+              if (controller.signal.aborted) break;
+              await this.provider.submitToolResult(
+                event.requestToken,
+                serializeToolResult(result),
+              );
+              yield {
+                type: "tool.completed",
+                actionId: event.actionId,
+                name: event.name,
+                isError: false,
+              };
+            } catch (cause) {
+              if (controller.signal.aborted) break;
+              const error = taskError(
+                "tool_execution_failed",
+                cause instanceof Error
+                  ? cause.message
+                  : "Application tool execution failed",
+              );
+              await this.provider.submitToolResult(
+                event.requestToken,
+                serializeToolError(error),
+              );
+              yield toolCompleted(event.actionId, event.name, error);
+            }
+            break;
+          }
+          case "task.completed":
+            terminal = true;
+            this.continuationToken = event.continuationToken;
+            yield { type: "task.completed", text };
+            break;
+          case "task.failed":
+            terminal = true;
+            yield {
+              type: "task.failed",
+              error: taskError("protocol_error", event.message),
+            };
+            break;
+          case "task.cancelled":
+            terminal = true;
+            yield event;
+            break;
+        }
+        if (terminal) {
+          return;
+        }
+      }
+
+      throw new AgentConnectError(
+        "protocol_error",
+        "Agent provider stream ended without a terminal event",
+      );
+    } catch (cause) {
+      if (!admitted && isKnownRefusal(cause)) {
+        this.initialTaskStarted = wasStarted;
+      } else {
+        this.continuationToken = undefined;
+      }
+      throw cause;
+    } finally {
+      this.activeController = undefined;
+      this.providerStarted = false;
+      this.cancellation = undefined;
+    }
   }
 
   async runTask(prompt: string): Promise<AgentTaskResult> {
@@ -256,8 +304,36 @@ export class AgentSession {
   }
 
   cancel(): Promise<void> {
-    return this.provider.cancel();
+    if (!this.activeController) return Promise.resolve();
+    this.activeController.abort();
+    if (!this.providerStarted) return Promise.resolve();
+    const controller = this.activeController;
+    this.cancellation ??= Promise.resolve().then(() => {
+      if (this.activeController === controller) return this.provider.cancel();
+    });
+    return this.cancellation;
   }
+
+  private requireIdle(): void {
+    if (this.activeController) {
+      throw new AgentConnectError(
+        "task_busy",
+        "This agent session already has an active task",
+      );
+    }
+  }
+}
+
+function isKnownRefusal(cause: unknown): boolean {
+  return (
+    cause instanceof AgentConnectError &&
+    cause.code !== "continuation_unavailable" &&
+    (cause.code === "task_busy" ||
+      (cause.status !== undefined &&
+        cause.status >= 400 &&
+        cause.status < 500 &&
+        cause.status !== 408))
+  );
 }
 
 function requirePrompt(prompt: string): void {

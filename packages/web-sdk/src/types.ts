@@ -29,6 +29,8 @@ export interface ApplicationToolResult {
 }
 
 export interface ApplicationToolContext {
+  /** Cooperative cancellation; handlers remain responsible for their side effects. */
+  readonly signal?: AbortSignal;
   readonly connectionId: string;
   readonly toolName: string;
   readonly meta: Readonly<Record<string, unknown>> | null;
@@ -49,6 +51,7 @@ export interface AgentProviderTaskRequest {
 }
 
 export type AgentProviderEvent =
+  | { readonly type: "task.admitted" }
   | { readonly type: "text.delta"; readonly delta: string }
   | {
       readonly type: "tool.requested";

@@ -163,8 +163,12 @@ streaming and non-streaming tests.
 
 After a successful task, `streamContinuation(prompt)` and
 `continueTask(prompt)` send the retained opaque checkpoint. They fail locally
-before any request when no successful checkpoint exists. Starting any turn
+before any request when no successful checkpoint exists. Observed admission
 clears the prior checkpoint; only successful completion publishes the next one.
+As of the headless-chat pass (2026-09-05), `response.created` explicitly signals
+admission before text. Known preadmission refusals preserve readiness; unknown
+transport errors conservatively invalidate it because no event does not prove
+that nothing ran. See [the headless contract](headless-chat.md).
 Providers that do not publish checkpoints remain source-compatible and cause
 continuation to fail locally with `continuation_unavailable`. The active
 response ID used for cancellation/recovery remains separate provider state.

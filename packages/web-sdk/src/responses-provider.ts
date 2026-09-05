@@ -175,6 +175,7 @@ export class ResponsesProvider implements AgentProvider {
       if (type === "response.created") {
         responseId = responseIdOf(event);
         this.latestResponseId = responseId;
+        yield { type: "task.admitted" };
         continue;
       }
       if (type === "response.output_text.delta") {
@@ -227,9 +228,12 @@ export class ResponsesProvider implements AgentProvider {
   }
 
   async cancel(): Promise<void> {
+    const controller = this.controller;
+    if (!controller) return;
     this.cancelRequested = true;
     const responseId = this.latestResponseId;
     const waiting = this.resolveOutput;
+    const wakeCancelled = this.wakeCancelled;
     this.resolveOutput = undefined;
     this.pendingOutput = undefined;
     if (responseId) {
@@ -244,8 +248,8 @@ export class ResponsesProvider implements AgentProvider {
     }
     // Release a chain parked on an unanswered call, which no HTTP request is
     // currently streaming and which an abort therefore cannot reach.
-    if (waiting) this.wakeCancelled();
-    this.controller?.abort();
+    if (waiting) wakeCancelled();
+    controller.abort();
   }
 
   private awaitOutput(): Promise<PendingOutput | undefined> {

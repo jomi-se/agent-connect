@@ -1,6 +1,17 @@
 export { createBrowserAcpStream } from "./transport.js";
 export { AgentConnectError, AgentSession } from "./agent-session.js";
 export { connectAgent } from "./agent-connection.js";
+export { createAgentChat, exportAgentChatMarkdown } from "./agent-chat.js";
+export type {
+  AgentChat,
+  AgentChatOptions,
+  AgentChatSnapshot,
+  AgentChatMessage,
+  AgentChatPart,
+  AgentChatTextPart,
+  AgentChatToolPart,
+  AgentChatError,
+} from "./agent-chat.js";
 export { createWebMcpToolSnapshot } from "./webmcp.js";
 export type {
   WebMcpToolSnapshot,
