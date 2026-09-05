@@ -65,6 +65,9 @@ describe("WebMCP adapter faults", () => {
     "[]",
     '{"type":"string"}',
     '{"type":"object","required":42}',
+    '{"type":"object","properties":{"x":{"$ref":"#/missing"}}}',
+    '{"type":"object","properties":{"x":{"pattern":"["}}}',
+    '{"type":"object","$schema":"https://json-schema.org/draft/2020-12/schema"}',
   ])(
     "rejects malformed/unsupported schema before consent: %s",
     async (schema) => {

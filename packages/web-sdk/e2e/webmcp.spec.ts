@@ -51,6 +51,123 @@ test.beforeEach(async ({ page }) => {
   ).toBe("function");
 });
 
+test("discovers and executes validated tools under restrictive CSP", async ({
+  page,
+}) => {
+  await page.route("**/csp-fixture", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      headers: {
+        "Content-Security-Policy":
+          "default-src 'self'; script-src 'self'; connect-src 'self'",
+      },
+      body: "<!doctype html><title>CSP SDK fixture</title>",
+    }),
+  );
+  await page.route("**/csp-control.js", (route) =>
+    route.fulfill({
+      contentType: "text/javascript",
+      body: "try { new Function('return 1')(); window.cspBlocked = false; } catch(e) { window.cspBlocked = e instanceof EvalError; }",
+    }),
+  );
+  await page.goto("/csp-fixture");
+  // Prove that browser policy is enforced, then reset the document so the
+  // deliberate violation cannot hide a violation from the actual SDK flow.
+  await page.addScriptTag({ url: "/csp-control.js" });
+  expect(
+    await page.evaluate(
+      () => (window as Window & { cspBlocked: boolean }).cspBlocked,
+    ),
+  ).toBe(true);
+  await page.goto("/csp-fixture");
+  const exercise = async (sdkPath: string) => {
+    const violations: string[] = [];
+    document.addEventListener("securitypolicyviolation", (event) =>
+      violations.push(event.violatedDirective),
+    );
+    const { AgentSession, createWebMcpToolSnapshot } = (await import(
+      sdkPath
+    )) as typeof import("../src/index.js");
+    let executions = 0;
+    await (document as NativeDocument).modelContext.registerTool({
+      name: "increment",
+      description: "Increment a number",
+      inputSchema: {
+        type: "object",
+        properties: { value: { type: "integer", minimum: 0 } },
+        required: ["value"],
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        executions++;
+        return {
+          content: [{ type: "text", text: String(Number(input["value"]) + 1) }],
+        };
+      },
+    });
+    const snapshot = await createWebMcpToolSnapshot();
+    const outputs: string[] = [];
+    const session = new AgentSession({
+      tools: snapshot.tools,
+      provider: {
+        async *streamTask() {
+          yield {
+            type: "tool.requested",
+            requestToken: "bad",
+            actionId: "bad",
+            name: "increment",
+            arguments: { value: -1 },
+          };
+          yield {
+            type: "tool.requested",
+            requestToken: "good",
+            actionId: "good",
+            name: "increment",
+            arguments: { value: 2 },
+          };
+          yield { type: "text.delta", delta: "done" };
+          yield { type: "task.completed" };
+        },
+        async submitToolResult(_token, output) {
+          outputs.push(output);
+        },
+        async cancel() {},
+      },
+    });
+    const task = await session.runTask("Increment");
+    snapshot.dispose();
+    // CSP violation events are queued, not delivered synchronously.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return { executions, outputs, task, violations };
+  };
+  // Execute via a real page script, not CDP Runtime.evaluate (which can allow
+  // unsafe eval). Only observations below use Playwright evaluation.
+  await page.route("**/csp-flow.js", (route) =>
+    route.fulfill({
+      contentType: "text/javascript",
+      body: `(${exercise.toString()})(${JSON.stringify(sdkPath)}).then(result => window.cspResult = result, error => window.cspError = String(error));`,
+    }),
+  );
+  await page.addScriptTag({ url: "/csp-flow.js", type: "module" });
+  await page.waitForFunction(
+    () => "cspResult" in window || "cspError" in window,
+  );
+  const observed = await page.evaluate(() => {
+    const state = window as Window & {
+      cspResult?: Awaited<ReturnType<typeof exercise>>;
+      cspError?: string;
+    };
+    return { result: state.cspResult, error: state.cspError };
+  });
+  expect(observed.error).toBeUndefined();
+  const result = observed.result!;
+  expect(result.executions).toBe(1);
+  expect(JSON.parse(result.outputs[0]!).code).toBe("invalid_tool_arguments");
+  expect(result.outputs[1]).toContain("3");
+  expect(result.task.text).toBe("done");
+  expect(result.violations).toEqual([]);
+});
+
 test("discovers immutable native definitions, selects names and excludes frames", async ({
   page,
 }) => {

@@ -1,4 +1,4 @@
-import { Ajv, type ValidateFunction } from "ajv";
+import { createToolValidator, describeErrors } from "./tool-schema.js";
 
 import type {
   AgentConnectErrorCode,
@@ -16,7 +16,7 @@ import type {
 interface ToolSnapshot {
   readonly definition: AgentToolDefinition;
   readonly execute: ApplicationTool["execute"];
-  readonly validate: ValidateFunction;
+  readonly validate: ReturnType<typeof createToolValidator>;
 }
 
 export class AgentConnectError extends Error {
@@ -73,7 +73,7 @@ export class AgentSession {
     }
     this.provider = options.provider;
     // Tool authorization is fixed for the lifetime of an application session.
-    // Clone and compile it once so later caller mutation cannot change the
+    // Clone and prepare it once so later caller mutation cannot change the
     // browser-side contract underneath the gateway's approved snapshot.
     this.tools = snapshotTools(options.tools);
     this.sessionId =
@@ -173,13 +173,13 @@ export class AgentSession {
               yield toolCompleted(event.actionId, event.name, error);
               break;
             }
-            if (!arguments_ || !tool.validate(arguments_)) {
-              const details = tool.validate.errors
-                ?.map(
-                  (error) =>
-                    `${error.instancePath || "/"} ${error.message ?? "is invalid"}`,
-                )
-                .join("; ");
+            const validation = arguments_
+              ? tool.validate(arguments_)
+              : undefined;
+            if (!arguments_ || !validation?.valid) {
+              const details = validation
+                ? describeErrors(validation)
+                : undefined;
               const error = taskError(
                 "invalid_tool_arguments",
                 `Invalid arguments for ${event.name}${details ? `: ${details}` : ""}`,
@@ -345,7 +345,6 @@ function requirePrompt(prompt: string): void {
 function snapshotTools(
   tools: readonly ApplicationTool[],
 ): ReadonlyMap<string, ToolSnapshot> {
-  const ajv = new Ajv({ allErrors: true, strict: false });
   const snapshots = new Map<string, ToolSnapshot>();
   for (const tool of tools) {
     if (tool.name.trim().length === 0) {
@@ -362,7 +361,7 @@ function snapshotTools(
         inputSchema,
       },
       execute: tool.execute.bind(tool),
-      validate: ajv.compile(inputSchema),
+      validate: createToolValidator(inputSchema),
     });
   }
   return snapshots;
