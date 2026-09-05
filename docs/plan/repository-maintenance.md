@@ -72,6 +72,9 @@ Hosted bootstrap findings: pip needs explicit prerelease opt-in for Omnigent's
 beta-only OpenTelemetry FastAPI instrumentation dependency. The previous publish
 run also revealed a clean-checkout ordering bug: Canvas imports SDK declarations
 from dist, so root typecheck must build the SDK first (pretypecheck).
+The publish dry run then exposed npm@latest advancing to 12 and changing pack
+JSON output. Pin publishing to npm 11.19.1, which supports OIDC and the tested
+pack contract, rather than silently taking a package-manager major upgrade.
 
 Investigation confirms Python package omnigent0.5.1 and Linux x64-compatible
 deterministic fixtures. Official CFT manifest lists linux64 153.0.8010.12.
