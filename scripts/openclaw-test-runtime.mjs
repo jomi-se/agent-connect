@@ -39,6 +39,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export async function startOpenClawTestRuntime({
   onModelRequest,
   configure,
+  tailscaleTestBinary,
 } = {}) {
   const binary = preflightOpenClaw();
   const directory = await mkdtemp(
@@ -55,6 +56,10 @@ export async function startOpenClawTestRuntime({
     TMPDIR: directory,
     OPENCLAW_SKIP_CHANNELS: "1",
     OPENCLAW_SKIP_CRON: "1",
+    // Explicit native test seam; PATH is hardened by OpenClaw at startup.
+    ...(tailscaleTestBinary
+      ? { VITEST: "true", OPENCLAW_TEST_TAILSCALE_BINARY: tailscaleTestBinary }
+      : {}),
   };
   // Do not pass personal auth, provider API keys, HOME, or OpenClaw profile variables.
   const version = execFileSync(binary, ["--version"], {
