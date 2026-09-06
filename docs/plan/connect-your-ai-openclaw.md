@@ -5,6 +5,8 @@ Status: implementation in progress; native app authorization and live acceptance
 
 ## Active execution ledger
 
+For a fresh session, start with [the compact handoff](connect-your-ai-handoff.md).
+
 Started 2026-09-06 toward a clean Tailscale-flavored OpenClaw + SDK + Bookhand
 vertical slice. Parent agent owns integration decisions, review and diagnosis;
 Sol high workers own bounded implementation lanes. No live service migration or
