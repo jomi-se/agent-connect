@@ -18,9 +18,9 @@ push has occurred.
   bounce. Claimed invalid credentials deny rather than fall through to owner
   auth; app-controlled routing overrides are rejected. Native patch is under
   implementation and review; published OpenClaw does not yet supply this seam.
-- AI SDK lane: inspecting the actual published Open Responses adapter's history
-  and continuation behavior, then implementing thin browser-safe execution and
-  WebMCP glue. OAuth endpoint contracts are not guessed independently.
+- AI SDK execution helpers committed as `c8d680b`; browser OAuth client and
+  exports committed as `cf3b3d1`. Bookhand received the built SDK and the separate
+  required dependency patch with verified hashes. Nothing was published to npm.
 - AI SDK source finding: published `@ai-sdk/open-responses` 2.0.39 does not emit
   `previous_response_id`; AI SDK's tool steps replay accumulated messages. A
   reproducible downstream patch and public step hooks now retain native
@@ -31,14 +31,40 @@ push has occurred.
 - Grant service committed as `4c271ed`: durable fixed-snapshot grants, PKCE,
   token rotation, replay-family revocation, expiry and policy rechecks. Focused
   tests include actual file reload and uncertain-persistence fail-closed behavior.
-- OAuth plugin and browser client are being implemented against one shared
-  contract. Model alias is `openclaw/default`. One app-level refresh getter is
+- Actual browser client against the actual OAuth handler passed discovery,
+  consent, issuer-bound callback, token exchange, concurrent refresh and
+  revocation (`dedb8ef`). Owner identity was a test fixture: this does not prove
+  native OpenClaw or Tailscale authentication. Model alias is
+  `openclaw/default`. One app-level refresh getter is
   shared across features; conversations remain feature/book-local. Ambiguous
   admitted failures do not authorize automatic replay of a retained checkpoint.
 - Native policy review caught an unnecessary unconditional sandbox requirement.
   App-tools-only/web-only profiles must have enforced restricted tool policies;
   code execution additionally requires a sandbox. Fingerprinting policy is not
   by itself proof that its initial permissions match the consent description.
+- Real plugin startup exposed two native integration mismatches: agent config is
+  normalized into entries, and registration-time plugin identity is not HTTP
+  request context. The patch now uses native agent resolution and loader-owned
+  registration identity. Rebuilt endpoint verification remains in progress.
+- Security review also established that native `tools.allow: []` is permissive,
+  not deny-all. Application-only profiles require explicit native denial. The
+  acceptance test must inspect the actual inference tool list, including proving
+  approved client functions remain available. Media/file inputs are rejected for
+  the text-only v0 before extraction or URL fetching.
+- Native source-runtime smoke now passes an actual client-tool round trip across
+  access-token refresh, with only the approved function advertised to inference.
+  It also checks cross-grant continuation and owner-route denial, invalid-token
+  rejection, media/schema rejection before inference, and native creator state.
+  Compiled external-plugin loading subsequently passed as recorded below.
+- Consent plugin committed as `995423f`. Actual compiled patched-OpenClaw bundle
+  load, discovery, PAR and forged-owner rejection pass. Default repository
+  `npm run verify` also passes; live Tailscale owner consent and Bookhand
+  subscription-backed hero remain pending.
+- Consent required an additional narrow native helper: ordinary plugin HTTP
+  routes cannot use OpenClaw's Control UI Tailscale auth surface. The new helper
+  accepts the original listener-attributed request and reuses WhoIs, rate limits,
+  durable profiles and role ceilings. Focused host tests pass owner/nonowner and
+  forged-header cases; actual tailnet/browser acceptance is still unproven.
 - Owner-authentication finding: pinned OpenClaw already has listener-attributed,
   WhoIs-verified Tailscale identity handling, but ordinary Responses requests do
   not automatically inherit it. Reuse that trust boundary for owner consent;
@@ -46,6 +72,11 @@ push has occurred.
 - Bookhand checkout is on `work/openclaw-tutor-demo` with substantial pre-existing
   uncommitted Tutor and unrelated work. Preserve all of it; coordinate ownership
   before modifying its integration. Existing live gateways remain untouched.
+- Bookhand acknowledged the package handoff and started Sol-high implementation
+  lanes. Its v0 credentials are memory-only per tab/application lifetime; pending
+  PKCE and feature intent survive the redirect in sessionStorage. A new page
+  lifetime requires reconnecting. Local connection generation survives refresh
+  but not new authorization, and is distinct from each book conversation.
 - Final native app-auth composition, Tailscale owner consent and Bookhand
   subscription-backed tool/follow-up acceptance remain unproven.
 
