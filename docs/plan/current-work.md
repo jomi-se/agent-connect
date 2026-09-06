@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-05
+Updated: 2026-09-06
 
 This is the canonical unfinished-work list. It records current priorities and
 only enough completed context to explain them. Product boundaries live in the
@@ -8,7 +8,20 @@ only enough completed context to explain them. Product boundaries live in the
 [scope inventory](../scope-inventory.md), and architectural choices live in
 [`docs/decisions/`](../decisions/).
 
-## Active: OpenClaw replacement
+## Accepted direction: Connect your AI
+
+The [north star](../vision.md) is now the product framing: a portable discovery
+and authorization profile around Open Responses, an optional SDK, and provider
+implementations. OpenClaw is the first implementation candidate, not a required
+part of the public contract. No mandatory central registry, relay or Agent
+Connect account. Same-app interoperability across two independent providers is
+the eventual proof; exact profile details and the second provider remain open.
+
+This documents direction, not a new release gate or live cutover. Keep existing
+implementation evidence distinct from proposed standard behavior; do not let
+the prototype's private routes/headers dictate the public profile.
+
+## Active implementation candidate: OpenClaw replacement
 
 Current next step: [application-delegation research](../research/2026-09-05-openclaw-app-delegation.md).
 An [in-process plugin feasibility spike](openclaw-delegation-spike/README.md) now

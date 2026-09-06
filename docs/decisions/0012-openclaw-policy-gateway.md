@@ -11,6 +11,14 @@ the current isolated demo profile, not the desired final product boundary.
 See [the delegation research](../research/2026-09-05-openclaw-app-delegation.md).
 This records the open decision without silently changing the deployed policy.
 
+Product framing, 2026-09-06: the accepted [Connect your AI north star](../vision.md)
+makes OpenClaw a provider implementation of a portable authorization/discovery
+profile around Open Responses, not a dependency imposed on every app/provider.
+The separate gateway and prototype ingress arrangement are implementation choices,
+not universal protocol requirements. Native capabilities remain owner-policy
+choices; the isolated demo's deny-all-host-tools configuration is not the endgame.
+This clarification does not change live configuration or close release gates.
+
 ## Decision
 
 Agent Connect is the application-delegation boundary, not another agent platform.

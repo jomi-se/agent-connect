@@ -2,10 +2,18 @@
 
 ## Objective
 
-Build a web-first SDK and user-owned gateway that let an application use its
-user's agent subscription while temporarily exposing typed, scoped application
-capabilities to that agent. Normal application use must not require installing
-an MCP server, copying provider conversation IDs, or opening a terminal.
+Make **Connect your AI** a portable application capability: users choose their AI
+provider, approve scoped access on its trusted surface, and return to the app with
+an authorized Open Responses connection backed by their account/allowance.
+The [accepted north star](vision.md), recorded 2026-09-06, defines the long-term
+app/provider boundary and proposed interoperability direction. It is not a claim
+of an already published standard or completed implementation.
+
+Build a web-first SDK and a provider reference implementation to prove that
+contract. A separate Agent Connect gateway, OpenClaw, Tailscale, or a specific
+harness is not a requirement for every future provider. Normal application use
+must not require installing an MCP server, copying provider conversation IDs,
+or opening a terminal.
 
 Agent Connect is the application-delegation boundary, not another agent
 platform. The implemented replacement uses OpenClaw's Responses endpoint for
@@ -14,6 +22,10 @@ authority, browser integration and the durable bookkeeping needed to publish
 application calls safely. See [ADR 0012](decisions/0012-openclaw-policy-gateway.md).
 
 ## Product promise
+
+The list below describes the current browser implementation contract, not the
+complete future interoperability profile. In particular, Origin-bound enrollment
+and our session capabilities must not silently become universal requirements.
 
 An application can:
 
@@ -51,10 +63,11 @@ ambiguous output submission is never automatically replayed.
 - Initialize gateway identity once through the trusted operator channel.
   Subsequent application approval happens on the gateway's OAuth/PKCE page,
   without per-application SSH, terminal use or restart.
-- Treat applications as adversarial principals. The operator must configure
-  the selected OpenClaw runtime to expose only approved application tools,
-  with host shell/filesystem/network/MCP tools disabled. Agent Connect's
-  request allowlist does not itself establish an OS sandbox.
+- Treat applications as adversarial principals. The isolated replacement demo
+  disables host tools; this is not the final product's capability ceiling.
+  The north star permits owner-approved native capabilities alongside app tools,
+  with explicit data/execution restrictions. Agent Connect's request allowlist
+  does not itself establish an OS sandbox or prevent prompt injection.
 - Keep native WebMCP and headless conversation controls harness-neutral.
   Their contracts are [WebMCP](plan/webmcp-tool-source.md) and
   [headless chat](plan/headless-chat.md). Images/files remain deferred.
