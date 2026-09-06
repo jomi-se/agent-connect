@@ -231,6 +231,15 @@ than proof. Preserve original error/cause chains internally and expose only
 safe bounded diagnostics, never raw SDK request/response objects. This fix is
 explicitly requested and remains pending in Bookhand.
 
+The Bookhand owner then ran an offline probe through the pinned native
+`normalizeToolParameterSchema` and `normalizeStrictOpenAIJsonSchema`, using
+the actual updated tool declaration and selected OpenAI model. Both outputs
+remove `oneOf` and `dependentRequired`, merge all 17 properties, require only
+`kind` and allow additional properties. Thus closed local validation is not
+model-visible closure. Keep the local correctness fix and actionable field
+guidance; record provider normalization as an upstream compatibility limitation,
+not a solved model-facing contract. No live call or mutation replay was used.
+
 For native app-only policy, use explicit `tools.deny: ["*"]`: an empty native
 allowlist is permissive. Managed Tailscale owner authentication uses the actual
 listener-attributed request; ordinary HTTPS owner login remains outside v0.
