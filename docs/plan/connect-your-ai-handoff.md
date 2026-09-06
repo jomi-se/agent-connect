@@ -240,6 +240,18 @@ model-visible closure. Keep the local correctness fix and actionable field
 guidance; record provider normalization as an upstream compatibility limitation,
 not a solved model-facing contract. No live call or mutation replay was used.
 
+Bookhand follow-up is implemented: private `getFailureCause()` retains the
+original nested error identity; bounded diagnostics and partial-effects UI are
+separate, with no raw logging/persistence or retry changes. Root reviewed the
+catch path and regression without a blocking finding. Bookhand reports 22
+focused Tutor tests, 36 tool tests, typecheck and production build passing;
+the body-read regression covers an error-result tool, not a successful mutation.
+Its ledger confirms the new production asset is served on the private preview.
+Owner must refresh and approve the changed tool catalog when ready, then confirm
+the already-saved lesson survives and its source link reaches the right passage.
+Do not manipulate the owner's tab or spend model calls to substitute for that
+local-storage acceptance check.
+
 For native app-only policy, use explicit `tools.deny: ["*"]`: an empty native
 allowlist is permissive. Managed Tailscale owner authentication uses the actual
 listener-attributed request; ordinary HTTPS owner login remains outside v0.
