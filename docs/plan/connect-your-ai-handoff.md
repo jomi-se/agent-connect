@@ -145,7 +145,7 @@ The remaining native-patch validation path, if retained, is:
 
 ## Contract reminders
 
-Operator constraint confirmed after the composition checkpoint: the user
+Historical operator constraint after the composition checkpoint: the user
 allows replacing/stopping the Bookhand test deployment, but explicitly rejects
 granting agents Tailscale operator rights. Do not request blanket sudo, sudo
 credential caching, or install a privileged helper as a workaround. The user
@@ -160,6 +160,15 @@ equivalent authentication path. A supported manual-Serve deployment mode would
 need an explicit implementation/design decision and validation. Removing the
 old route alone did not unblock live startup. Do not claim a provider is ready
 or restart subscription services until that deployment boundary is resolved.
+
+Superseding operator decision: the user subsequently granted the local account
+Tailscale operator access and removed Funnel permission in tailnet policy.
+Read-only checks confirmed no Funnel capabilities and no public exposure.
+Authorized changes remain limited to private demo Serve, not DNS, SSH, exit
+nodes, subnet routes, logout or unrelated routes. Manual-Serve implementation
+is no longer required for this live slice. The isolated demo runtime is being
+replaced using its existing subscription state (no credential copy); personal
+`agc` is untouched. Owner bootstrap precedes enabling app consent.
 
 Bookhand uses memory-only per-tab credentials, with pending PKCE/intent in
 sessionStorage. One shared connection generation/getter spans features; book
