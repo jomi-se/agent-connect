@@ -170,6 +170,16 @@ is no longer required for this live slice. The isolated demo runtime is being
 replaced using its existing subscription state (no credential copy); personal
 `agc` is untouched. Owner bootstrap precedes enabling app consent.
 
+Live checkpoint: the user successfully logged into native Control UI and sent
+chat messages. A single real owner profile was observed, then explicitly bound
+to the owner role and consent allowlist. The demo now has default-denied roles
+and a dedicated application-tools-only agent; native tools remain denied.
+Multi-agent configuration requires `agents.ownership: explicit` in this pin.
+The consent-enabled host restarted successfully; actual private HTTPS OAuth
+discovery returned 200. Existing subscription state was reused, not copied.
+The Bookhand agent was notified that native OAuth is ready. Fresh app consent
+and the Bookhand tool/artifact/follow-up acceptance still remain unproven.
+
 Bookhand uses memory-only per-tab credentials, with pending PKCE/intent in
 sessionStorage. One shared connection generation/getter spans features; book
 conversations have independent lifetimes. Every request carries the full fixed
