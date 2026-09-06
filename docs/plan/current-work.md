@@ -258,6 +258,30 @@ one narrow application before expanding into a generic application platform.
 
 ## Bounded maintenance
 
+### Deferred: remove personal deployment metadata and sanitize shared history
+
+Requested by José on 2026-09-06. History rewriting is acceptable if needed, but
+defer this coordinated repository cleanup while the OpenClaw branch is active.
+Do not perform a shared-history rewrite or force-push as part of implementation.
+
+- Replace the personal hostname in `apps/firebase-canvas/vite.config.ts` with
+  explicit local configuration; do not weaken host validation to allow all hosts.
+- Inventory personal deployment metadata across tracked files, branches, tags
+  and history. Keep exact private identifiers in gitignored local evidence, not
+  in this public task description. Review scope before deleting useful evidence.
+- Coordinate active branches/worktrees and prepare a persistent private recovery
+  backup. Use a history-rewriting tool such as `git filter-repo` to scrub agreed
+  metadata from affected shared history, not just the latest file versions.
+- Verify final files, rewritten refs, secret scans and absence of targeted
+  metadata. Obtain explicit confirmation before any force-push; document how
+  collaborators replace/rebase their clones without reintroducing old history.
+- Account for hosting-provider cached views, pull-request refs and forks: a Git
+  rewrite alone cannot promise removal of every previously published copy.
+
+The OpenClaw branch's three unpublished documentation commits were already
+collapsed into a cleaned commit. That did not scrub shared ancestors. A private
+recovery bundle is retained under the ignored local-evidence directory.
+
 Maintenance is justified when it unblocks one of the priorities above:
 
 - preserve provider-neutral browser APIs and keep Omnigent/Codex types internal;
