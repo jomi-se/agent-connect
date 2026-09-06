@@ -180,6 +180,16 @@ discovery returned 200. Existing subscription state was reused, not copied.
 The Bookhand agent was notified that native OAuth is ready. Fresh app consent
 and the Bookhand tool/artifact/follow-up acceptance still remain unproven.
 
+Browser consent correction: the user reached the form but approval returned
+"Consent could not be completed." A disposable Chromium reproduction found
+`Referrer-Policy: no-referrer` makes native form POST Origin `null`, rejected
+by our exact-origin check. `same-origin` retains that check and suppresses
+cross-origin referrer leakage. The same browser regression then exposed CSP
+`form-action 'self'` blocking the 303 callback; consent pages now additionally
+allow the validated pending request's redirect origin. The focused browser and
+OAuth tests cover this; handcrafted HTTP requests had bypassed both browser
+behaviors. Fresh live consent is still required; do not replay the failed POST.
+
 Bookhand uses memory-only per-tab credentials, with pending PKCE/intent in
 sessionStorage. One shared connection generation/getter spans features; book
 conversations have independent lifetimes. Every request carries the full fixed
