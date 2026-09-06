@@ -145,6 +145,22 @@ The remaining native-patch validation path, if retained, is:
 
 ## Contract reminders
 
+Operator constraint confirmed after the composition checkpoint: the user
+allows replacing/stopping the Bookhand test deployment, but explicitly rejects
+granting agents Tailscale operator rights. Do not request blanket sudo, sudo
+credential caching, or install a privileged helper as a workaround. The user
+removed the private HTTPS 443 route manually; a read-only status check confirmed
+it absent, with no public Funnel enabled. Other routes remain unchanged.
+
+Live startup is still blocked by the pinned host's managed-Serve lifecycle:
+`server-runtime-state.ts` opens an ephemeral loopback ingress and awaits
+`prepareManagedTailscaleIngress`; `server-tailscale.ts` then requires its own
+active CLI route claim. A manual proxy to ordinary gateway ingress is not an
+equivalent authentication path. A supported manual-Serve deployment mode would
+need an explicit implementation/design decision and validation. Removing the
+old route alone did not unblock live startup. Do not claim a provider is ready
+or restart subscription services until that deployment boundary is resolved.
+
 Bookhand uses memory-only per-tab credentials, with pending PKCE/intent in
 sessionStorage. One shared connection generation/getter spans features; book
 conversations have independent lifetimes. Every request carries the full fixed
