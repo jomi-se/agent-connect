@@ -261,6 +261,7 @@ export class OpenClawOAuthHandler {
         policies,
         defaultPolicyIndex,
       }),
+      pending.redirectUri,
     );
   }
 

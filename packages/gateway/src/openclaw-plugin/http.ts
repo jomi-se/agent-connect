@@ -147,15 +147,22 @@ export function sendHtml(
   response: ServerResponse,
   status: number,
   body: string,
+  authorizedRedirectUri?: string,
 ): void {
+  // Browsers apply form-action to the eventual 303 target as well as the POST.
+  // Callers supply only the redirect URI from the validated authorization request.
+  const redirectOrigin = authorizedRedirectUri
+    ? new URL(authorizedRedirectUri).origin
+    : undefined;
   response.writeHead(status, {
     "content-type": "text/html; charset=utf-8",
     "content-length": Buffer.byteLength(body),
-    "content-security-policy":
-      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "content-security-policy": `default-src 'none'; style-src 'unsafe-inline'; form-action 'self'${redirectOrigin ? ` ${redirectOrigin}` : ""}; frame-ancestors 'none'; base-uri 'none'`,
     "x-frame-options": "DENY",
     "x-content-type-options": "nosniff",
-    "referrer-policy": "no-referrer",
+    // HTML form POSTs use an opaque Origin under no-referrer in Chromium.
+    // Preserve same-origin CSRF verification without cross-origin referrer leaks.
+    "referrer-policy": "same-origin",
   });
   response.end(body);
 }
