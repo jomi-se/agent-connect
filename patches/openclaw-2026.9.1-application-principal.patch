@@ -1,0 +1,1751 @@
+diff --git a/package.json b/package.json
+index 43a8e6d..3ec6f6e 100644
+--- a/package.json
++++ b/package.json
+@@ -794,6 +794,14 @@
+       "types": "./dist/plugin-sdk/gateway-method-runtime.d.ts",
+       "default": "./dist/plugin-sdk/gateway-method-runtime.js"
+     },
++    "./plugin-sdk/openresponses-application-policy": {
++      "types": "./dist/plugin-sdk/openresponses-application-policy.d.ts",
++      "default": "./dist/plugin-sdk/openresponses-application-policy.js"
++    },
++    "./plugin-sdk/authenticated-http-principal": {
++      "types": "./dist/plugin-sdk/authenticated-http-principal.d.ts",
++      "default": "./dist/plugin-sdk/authenticated-http-principal.js"
++    },
+     "./plugin-sdk/gateway-runtime": {
+       "types": "./dist/plugin-sdk/gateway-runtime.d.ts",
+       "default": "./dist/plugin-sdk/gateway-runtime.js"
+diff --git a/src/agents/agent-command.ts b/src/agents/agent-command.ts
+index 97b0c95..72ca446 100644
+--- a/src/agents/agent-command.ts
++++ b/src/agents/agent-command.ts
+@@ -10,6 +10,7 @@ import {
+ } from "../config/sessions/lifecycle.js";
+ import { buildRestartRecoveryClaimCleanupPatch } from "../config/sessions/restart-recovery-state.js";
+ import type { RestartRecoveryTerminalDeliveryEvidenceResult } from "../config/sessions/restart-recovery-types.js";
++import { buildSessionCreationStamp } from "../config/sessions/session-entry-provenance.js";
+ import {
+   assertAgentRunLifecycleGenerationCurrent,
+   captureAgentRunLifecycleGeneration,
+@@ -341,6 +342,9 @@ async function agentCommandInternal(
+         assertAgentRunLifecycleGenerationCurrent(lifecycleGeneration);
+         const next = {
+           ...entry,
++          ...(!currentStoreEntry && !sessionEntry && opts.sessionCreation
++            ? buildSessionCreationStamp(opts.sessionCreation)
++            : {}),
+           sessionId,
+           updatedAt: now,
+           sessionStartedAt: isSessionRollover ? now : entry.sessionStartedAt,
+diff --git a/src/agents/command/types.ts b/src/agents/command/types.ts
+index e397e16..738f91f 100644
+--- a/src/agents/command/types.ts
++++ b/src/agents/command/types.ts
+@@ -7,6 +7,7 @@ import type { SpawnedRunMetadata } from "../../agents/spawned-context.js";
+ import type { PromptMode } from "../../agents/system-prompt.types.js";
+ import type { SourceReplyDeliveryMode } from "../../auto-reply/get-reply-options.types.js";
+ import type { ChannelOutboundTargetMode } from "../../channels/plugins/types.public.js";
++import type { TrustedSessionCreation } from "../../gateway/server-methods/session-creation-provenance.js";
+ import type { MediaFact } from "../../media/media-facts.js";
+ import type { PromptImageOrderEntry } from "../../media/prompt-image-order.js";
+ import type { PluginHookChannelContext } from "../../plugins/hook-types.js";
+@@ -234,6 +235,8 @@ export type AgentCommandOpts = {
+   suppressPromptPersistence?: boolean;
+   /** Gateway/channel ingress can provide a canonical user-turn persistence owner. */
+   userTurnTranscriptRecorder?: UserTurnTranscriptRecorder;
++  /** Trusted create-on-run provenance; private Gateway ingress only. */
++  sessionCreation?: TrustedSessionCreation;
+ };
+ 
+ /** Restricted option surface for external ingress callsites. */
+@@ -250,6 +253,7 @@ export type AgentCommandIngressOpts = Omit<
+   | "cronCreatorAuthorityCapability"
+   | "onAdmittedRunContext"
+   | "onPostAdmittedRunContext"
++  | "sessionCreation"
+ > & {
+   /** @deprecated Public ingress ignores owner claims; use the host-injected channel runtime. */
+   senderIsOwner?: boolean;
+@@ -270,4 +274,5 @@ export type AgentCommandGatewayIngressOpts = AgentCommandIngressOpts &
+     | "cronCreatorAuthorityCapability"
+     | "onAdmittedRunContext"
+     | "onPostAdmittedRunContext"
++    | "sessionCreation"
+   >;
+diff --git a/src/gateway/auth.ts b/src/gateway/auth.ts
+index a6b6e05..38d816a 100644
+--- a/src/gateway/auth.ts
++++ b/src/gateway/auth.ts
+@@ -62,7 +62,11 @@ type ConnectAuth = {
+   password?: string;
+ };
+ 
+-type GatewayAuthSurface = "http" | "http-user-profile-avatar" | "ws-control-ui";
++type GatewayAuthSurface =
++  | "http"
++  | "http-user-profile-avatar"
++  | "http-plugin-owner-consent"
++  | "ws-control-ui";
+ 
+ /** Inputs needed to authorize one HTTP or websocket gateway connection. */
+ type AuthorizeGatewayConnectParams = {
+@@ -254,7 +258,11 @@ function authorizeTrustedProxy(params: {
+ }
+ 
+ function shouldAllowTailscaleHeaderAuth(authSurface: GatewayAuthSurface): boolean {
+-  return authSurface === "ws-control-ui" || authSurface === "http-user-profile-avatar";
++  return (
++    authSurface === "ws-control-ui" ||
++    authSurface === "http-user-profile-avatar" ||
++    authSurface === "http-plugin-owner-consent"
++  );
+ }
+ 
+ function authorizeHttpBrowserOrigin(params: {
+@@ -602,6 +610,17 @@ export async function authorizeUserProfileAvatarHttpGatewayConnect(
+   });
+ }
+ 
++/** Authorize a plugin-owned consent request only through managed Tailscale identity. */
++export async function authorizePluginOwnerConsentHttpGatewayConnect(
++  params: Omit<AuthorizeGatewayConnectParams, "authSurface" | "connectAuth">,
++): Promise<GatewayAuthResult> {
++  return authorizeGatewayConnect({
++    ...params,
++    connectAuth: null,
++    authSurface: "http-plugin-owner-consent",
++  });
++}
++
+ /** Authorize a Control UI websocket request with the WS-specific auth surface. */
+ export async function authorizeWsControlUiGatewayConnect(
+   params: Omit<AuthorizeGatewayConnectParams, "authSurface">,
+diff --git a/src/gateway/http-auth-utils.ts b/src/gateway/http-auth-utils.ts
+index 7744da5..ca2cf56 100644
+--- a/src/gateway/http-auth-utils.ts
++++ b/src/gateway/http-auth-utils.ts
+@@ -25,6 +25,7 @@ import {
+ } from "./auth-rate-limit.js";
+ import {
+   authorizeHttpGatewayConnect,
++  authorizePluginOwnerConsentHttpGatewayConnect,
+   authorizeUserProfileAvatarHttpGatewayConnect,
+   type GatewayAuthResult,
+   type ResolvedGatewayAuth,
+@@ -86,6 +87,15 @@ export type AuthorizedGatewayHttpRequest = {
+   trustDeclaredOperatorScopes: boolean;
+   authenticatedUserProfile?: GatewayClient["authenticatedUserProfile"];
+   operatorRolePolicy?: GatewayOperatorRoleDefinition;
++  /** Verified only by the endpoint-specific native OpenResponses plugin seam. */
++  applicationPrincipal?: {
++    pluginId: string;
++    subject: string;
++    profileId: string;
++    agentId: string;
++    policyRef: string;
++    policyFingerprint: string;
++  };
+   controlUiPluginGrants?: ControlUiPluginTabAuthGrant[];
+   controlUiPluginGrant?: ControlUiPluginTabAuthGrant;
+ };
+@@ -121,6 +131,52 @@ type GatewayHttpConnectAuthorizer = (
+   params: Parameters<typeof authorizeHttpGatewayConnect>[0],
+ ) => Promise<GatewayAuthResult>;
+ 
++type ManagedTailscaleOwnerConsentContext = {
++  auth: ResolvedGatewayAuth;
++  trustedProxies?: string[];
++  allowRealIpFallback?: boolean;
++  rateLimiter?: AuthRateLimiter;
++  cfg: OpenClawConfig;
++};
++
++const managedTailscaleOwnerConsentContexts = new WeakMap<
++  IncomingMessage,
++  ManagedTailscaleOwnerConsentContext
++>();
++
++/** Attach listener-owned auth dependencies without authenticating the request. */
++export function prepareManagedTailscaleOwnerConsentRequest(
++  req: IncomingMessage,
++  context: ManagedTailscaleOwnerConsentContext,
++): void {
++  managedTailscaleOwnerConsentContexts.set(req, context);
++}
++
++/** Resolve only managed-Tailscale WhoIs identity into its durable role-capped principal. */
++export async function authenticateManagedTailscaleOwnerConsentRequest(
++  req: IncomingMessage,
++): Promise<{ profileId: string; scopes: readonly string[] } | undefined> {
++  const context = managedTailscaleOwnerConsentContexts.get(req);
++  if (!context) {
++    return undefined;
++  }
++  const result = await checkGatewayHttpRequestAuthWith(
++    { req, ...context },
++    authorizePluginOwnerConsentHttpGatewayConnect,
++  );
++  if (!result.ok || result.requestAuth.authMethod !== "tailscale") {
++    return undefined;
++  }
++  const profileId = result.requestAuth.authenticatedUserProfile?.profileId;
++  if (!profileId) {
++    return undefined;
++  }
++  return {
++    profileId,
++    scopes: resolveTrustedHttpOperatorScopes(req, result.requestAuth),
++  };
++}
++
+ export type AuthorizedControlUiReadRequest = {
+   authMethod: NonNullable<GatewayAuthResult["method"]>;
+   operatorScopes: string[];
+diff --git a/src/gateway/http-utils.ts b/src/gateway/http-utils.ts
+index 0b83e2b..6f9a5a6 100644
+--- a/src/gateway/http-utils.ts
++++ b/src/gateway/http-utils.ts
+@@ -324,6 +324,9 @@ export function authorizeOpenAiCompatibleHttpSession(params: {
+     cfg,
+     client: createSyntheticPluginRuntimeClient({
+       ...(authenticatedUserProfile ? { authenticatedUserProfile } : {}),
++      ...(params.requestAuth.operatorRolePolicy
++        ? { operatorRolePolicy: params.requestAuth.operatorRolePolicy }
++        : {}),
+       ...(params.senderIsOwner && !authenticatedUserProfile
+         ? { operatorRoleActor: { kind: "system" as const } }
+         : {}),
+diff --git a/src/gateway/openresponses-application-auth.ts b/src/gateway/openresponses-application-auth.ts
+new file mode 100644
+index 0000000..4a95a07
+--- /dev/null
++++ b/src/gateway/openresponses-application-auth.ts
+@@ -0,0 +1,152 @@
++import type { IncomingMessage, ServerResponse } from "node:http";
++import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
++import { getOpenResponsesApplicationAuthRegistration } from "../plugins/runtime.js";
++import type {
++  OpenClawOpenResponsesApplicationAuthProvider,
++  OpenClawOpenResponsesApplicationPrincipal,
++} from "../plugins/types.js";
++import { ensureProfileForApplicationPrincipal } from "../state/user-profiles.js";
++import type { AuthorizedGatewayHttpRequest } from "./http-auth-utils.js";
++import { sendJson } from "./http-common.js";
++import { resolveOpenResponsesApplicationPolicy } from "./openresponses-application-policy.js";
++
++type CorsGrant = { origin: string; allowHeaders: readonly string[] };
++
++export type AuthorizedOpenResponsesApplicationRequest = {
++  provider: OpenClawOpenResponsesApplicationAuthProvider;
++  principal: OpenClawOpenResponsesApplicationPrincipal;
++  requestAuth: AuthorizedGatewayHttpRequest;
++};
++
++export type OpenResponsesApplicationAuthDecision =
++  | { status: "pass" }
++  | { status: "handled" }
++  | ({ status: "authorized" } & AuthorizedOpenResponsesApplicationRequest);
++
++function applyCors(res: ServerResponse, cors: CorsGrant): void {
++  res.setHeader("access-control-allow-origin", cors.origin);
++  res.setHeader("access-control-allow-methods", "POST, OPTIONS");
++  res.setHeader("access-control-allow-headers", cors.allowHeaders.join(", "));
++  res.setHeader("vary", "Origin");
++}
++
++async function authorizeCors(params: {
++  req: IncomingMessage;
++  res: ServerResponse;
++  provider: OpenClawOpenResponsesApplicationAuthProvider;
++}): Promise<boolean> {
++  const origin = normalizeOptionalString(params.req.headers.origin);
++  if (!origin) {
++    return true;
++  }
++  const cors = await params.provider.resolveBrowserOrigin?.(params.req);
++  if (!cors || cors.origin !== origin) {
++    sendJson(params.res, 403, { error: { message: "origin forbidden", type: "forbidden" } });
++    return false;
++  }
++  const requestedHeaders = normalizeOptionalString(
++    params.req.headers["access-control-request-headers"],
++  )
++    ?.split(",")
++    .map((header) => header.trim().toLowerCase())
++    .filter(Boolean);
++  const allowed = new Set(cors.allowHeaders.map((header) => header.trim().toLowerCase()));
++  if (requestedHeaders?.some((header) => !allowed.has(header))) {
++    sendJson(params.res, 403, { error: { message: "headers forbidden", type: "forbidden" } });
++    return false;
++  }
++  applyCors(params.res, cors);
++  return true;
++}
++
++/** Runs before stock Gateway auth so a plugin credential never becomes a shared operator token. */
++export async function authorizeOpenResponsesApplicationRequest(params: {
++  req: IncomingMessage;
++  res: ServerResponse;
++}): Promise<OpenResponsesApplicationAuthDecision> {
++  const registration = getOpenResponsesApplicationAuthRegistration();
++  if (!registration) {
++    return { status: "pass" };
++  }
++  if (params.req.method === "OPTIONS") {
++    if (
++      normalizeOptionalString(
++        params.req.headers["access-control-request-method"],
++      )?.toUpperCase() !== "POST"
++    ) {
++      sendJson(params.res, 405, { error: { message: "method forbidden", type: "forbidden" } });
++      return { status: "handled" };
++    }
++    if (!(await authorizeCors({ ...params, provider: registration.provider }))) {
++      return { status: "handled" };
++    }
++    params.res.writeHead(204);
++    params.res.end();
++    return { status: "handled" };
++  }
++  const auth = await registration.provider.authenticate(params.req);
++  if (auth.status === "pass") {
++    return { status: "pass" };
++  }
++  if (!(await authorizeCors({ ...params, provider: registration.provider }))) {
++    return { status: "handled" };
++  }
++  if (auth.status === "deny") {
++    sendJson(params.res, 401, { error: { message: "unauthorized", type: "unauthorized" } });
++    return { status: "handled" };
++  }
++  const principal = auth.principal;
++  const cfg = (await import("../config/io.js")).getRuntimeConfig();
++  const policy = resolveOpenResponsesApplicationPolicy({
++    cfg,
++    policyRef: principal.policyRef,
++    agentId: principal.agentId,
++    nativeCapabilities: principal.nativeCapabilities,
++    expectedFingerprint: principal.policyFingerprint,
++    integration: {
++      pluginId: registration.pluginId,
++      ...(registration.pluginVersion ? { pluginVersion: registration.pluginVersion } : {}),
++    },
++  });
++  if (!policy) {
++    sendJson(params.res, 403, {
++      error: { message: "application policy changed or is unavailable", type: "forbidden" },
++    });
++    return { status: "handled" };
++  }
++  try {
++    const profile = ensureProfileForApplicationPrincipal({
++      pluginId: registration.pluginId,
++      subject: principal.subject,
++    });
++    const applicationPrincipal = {
++      pluginId: registration.pluginId,
++      subject: principal.subject,
++      profileId: profile.id,
++      agentId: principal.agentId,
++      policyRef: principal.policyRef,
++      policyFingerprint: principal.policyFingerprint,
++    };
++    return {
++      status: "authorized",
++      provider: registration.provider,
++      principal,
++      requestAuth: {
++        trustDeclaredOperatorScopes: false,
++        authenticatedUserProfile: {
++          profileId: profile.id,
++          displayName: profile.displayName,
++          hasAvatar: Boolean(profile.avatarMime),
++          updatedAt: profile.updatedAt,
++        },
++        operatorRolePolicy: policy.role,
++        applicationPrincipal,
++      },
++    };
++  } catch {
++    sendJson(params.res, 503, {
++      error: { message: "application profile unavailable", type: "server_error" },
++    });
++    return { status: "handled" };
++  }
++}
+diff --git a/src/gateway/openresponses-application-policy.test.ts b/src/gateway/openresponses-application-policy.test.ts
+new file mode 100644
+index 0000000..b4df2d3
+--- /dev/null
++++ b/src/gateway/openresponses-application-policy.test.ts
+@@ -0,0 +1,123 @@
++import { describe, expect, it } from "vitest";
++import type { OpenClawConfig } from "../config/types.openclaw.js";
++import type { OpenClawOpenResponsesNativeCapability } from "../plugins/types.js";
++import { fingerprintOpenResponsesApplicationPolicy } from "./openresponses-application-policy.js";
++
++function config(): OpenClawConfig {
++  return {
++    gateway: {
++      roles: {
++        definitions: {
++          bookhand: {
++            sessions: { others: "none" },
++            agents: ["bookhand"],
++            scopes: ["operator.write"],
++            sandbox: "required",
++          },
++        },
++      },
++    },
++    agents: {
++      defaults: { sandbox: { mode: "all" } },
++      list: [
++        {
++          id: "bookhand",
++          workspace: "/srv/openclaw-apps/bookhand",
++          contextInjection: "never",
++          tools: { allow: ["web_search"] },
++        },
++      ],
++    },
++    tools: { allow: ["web_search", "exec"] },
++  };
++}
++
++const integration = { pluginId: "agent-connect", pluginVersion: "1.0.0" };
++const webSearch = ["public_web_search"] as const;
++
++function fingerprint(
++  config: OpenClawConfig,
++  capabilities: readonly OpenClawOpenResponsesNativeCapability[] = webSearch,
++) {
++  return fingerprintOpenResponsesApplicationPolicy(
++    config,
++    "bookhand",
++    "bookhand",
++    capabilities,
++    integration,
++  );
++}
++
++describe("OpenResponses application policy fingerprint", () => {
++  it("changes when effective native tool policy changes", () => {
++    const before = config();
++    const after = config();
++    after.tools = { allow: ["web_search", "exec", "read"] };
++    expect(fingerprint(before)).toMatch(/^sha256:/);
++    expect(fingerprint(after)).not.toBe(fingerprint(before));
++  });
++
++  it("fails closed without an explicit isolated role and agent", () => {
++    const missingRole = config();
++    delete missingRole.gateway?.roles;
++    expect(fingerprint(missingRole)).toBeUndefined();
++
++    const broad = config();
++    broad.gateway!.roles!.definitions.bookhand = {
++      sessions: { others: "write" },
++      agents: "*",
++      scopes: ["operator.admin"],
++    };
++    expect(fingerprint(broad)).toBeUndefined();
++
++    const implicitAgent = config();
++    implicitAgent.agents!.list = [];
++    expect(fingerprint(implicitAgent)).toBeUndefined();
++  });
++
++  it("requires an exact closed native tool upper bound for advertised capabilities", () => {
++    const noNativeTools = config();
++    noNativeTools.agents!.list![0]!.tools = { deny: ["*"] };
++    expect(fingerprint(noNativeTools, [])).toMatch(/^sha256:/);
++
++    const emptyAllowIsPermissive = config();
++    emptyAllowIsPermissive.agents!.list![0]!.tools = { allow: [] };
++    expect(fingerprint(emptyAllowIsPermissive, [])).toBeUndefined();
++
++    const appToolsWithHostExec = config();
++    appToolsWithHostExec.agents!.list![0]!.tools = { allow: ["exec"] };
++    expect(fingerprint(appToolsWithHostExec, [])).toBeUndefined();
++
++    const missingAllowlist = config();
++    delete missingAllowlist.agents!.list![0]!.tools;
++    expect(fingerprint(missingAllowlist)).toBeUndefined();
++  });
++
++  it("rejects policy layers that remove an advertised native capability", () => {
++    const globalDeny = config();
++    globalDeny.tools = { deny: ["web_search"] };
++    expect(fingerprint(globalDeny)).toBeUndefined();
++
++    const sandboxDeny = config();
++    sandboxDeny.tools = { sandbox: { tools: { deny: ["web_search"] } } };
++    expect(fingerprint(sandboxDeny)).toBeUndefined();
++
++    const providerDependent = config();
++    providerDependent.agents!.list![0]!.tools!.byProvider = {
++      openai: { allow: ["web_search"] },
++    };
++    expect(fingerprint(providerDependent)).toBeUndefined();
++  });
++
++  it("requires sandbox isolation only for native code execution", () => {
++    const webOnly = config();
++    webOnly.gateway!.roles!.definitions.bookhand.sandbox = "inherit";
++    expect(fingerprint(webOnly)).toMatch(/^sha256:/);
++
++    const code = config();
++    code.agents!.list![0]!.tools = { allow: ["process", "exec"] };
++    expect(fingerprint(code, ["sandbox_code_execution"])).toMatch(/^sha256:/);
++    code.gateway!.roles!.definitions.bookhand.sandbox = "inherit";
++    expect(fingerprint(code, ["sandbox_code_execution"])).toBeUndefined();
++  });
++});
+diff --git a/src/gateway/openresponses-application-policy.ts b/src/gateway/openresponses-application-policy.ts
+new file mode 100644
+index 0000000..5a60ca3
+--- /dev/null
++++ b/src/gateway/openresponses-application-policy.ts
+@@ -0,0 +1,175 @@
++import { createHash } from "node:crypto";
++import { stableStringify } from "@openclaw/normalization-core";
++import { resolveAgentConfig, resolveAgentEntry } from "../agents/agent-scope-config.js";
++import { createToolPolicyMatcher } from "../agents/tool-policy-match.js";
++import type { GatewayOperatorRoleDefinition } from "../config/types.gateway.js";
++import type { OpenClawConfig } from "../config/types.openclaw.js";
++import type { OpenClawOpenResponsesNativeCapability } from "../plugins/types.js";
++import { VERSION } from "../version.js";
++
++export type OpenResponsesApplicationPolicyIntegration = {
++  pluginId: string;
++  pluginVersion?: string;
++};
++
++export type ResolvedOpenResponsesApplicationPolicy = {
++  role: GatewayOperatorRoleDefinition;
++  fingerprint: string;
++};
++
++function getOwnRole(
++  cfg: OpenClawConfig,
++  policyRef: string,
++): GatewayOperatorRoleDefinition | undefined {
++  const definitions = cfg.gateway?.roles?.definitions;
++  return definitions && Object.hasOwn(definitions, policyRef) ? definitions[policyRef] : undefined;
++}
++
++function policyFingerprintPayload(
++  cfg: OpenClawConfig,
++  policyRef: string,
++  agentId: string,
++  role: GatewayOperatorRoleDefinition,
++  nativeCapabilities: readonly OpenClawOpenResponsesNativeCapability[],
++  integration: OpenResponsesApplicationPolicyIntegration,
++) {
++  const agentEntry = resolveAgentEntry(cfg, agentId);
++  const resolvedAgent = resolveAgentConfig(cfg, agentId);
++  return {
++    version: 1,
++    runtimeVersion: VERSION,
++    integration,
++    policyRef,
++    agentId,
++    role,
++    nativeCapabilities,
++    agentEntry: agentEntry ?? null,
++    resolvedAgent: resolvedAgent ?? null,
++    agentDefaults: cfg.agents?.defaults ?? null,
++    tools: cfg.tools ?? null,
++  };
++}
++
++const CAPABILITY_TO_NATIVE_TOOLS: Record<OpenClawOpenResponsesNativeCapability, readonly string[]> =
++  {
++    public_web_search: ["web_search"],
++    sandbox_code_execution: ["exec", "process"],
++  };
++
++function resolveNativeCapabilityPolicy(
++  capabilities: readonly OpenClawOpenResponsesNativeCapability[],
++): { capabilities: OpenClawOpenResponsesNativeCapability[]; tools: string[] } | undefined {
++  const unique = new Set<OpenClawOpenResponsesNativeCapability>();
++  for (const capability of capabilities) {
++    if (!Object.hasOwn(CAPABILITY_TO_NATIVE_TOOLS, capability) || unique.has(capability)) {
++      return undefined;
++    }
++    unique.add(capability);
++  }
++  const normalizedCapabilities = [...unique].sort();
++  return {
++    capabilities: normalizedCapabilities,
++    tools: [
++      ...new Set(normalizedCapabilities.flatMap((item) => CAPABILITY_TO_NATIVE_TOOLS[item])),
++    ].sort(),
++  };
++}
++
++function normalizedPolicyEntries(entries: readonly string[] | undefined): string[] {
++  return [...new Set((entries ?? []).map((entry) => entry.trim()).filter(Boolean))].sort();
++}
++
++function hasExactPolicyEntries(
++  actual: readonly string[] | undefined,
++  expected: readonly string[],
++): boolean {
++  return normalizedPolicyEntries(actual).join("\0") === [...expected].sort().join("\0");
++}
++
++function policyAllowsEvery(
++  policy: { allow?: string[]; deny?: string[] } | undefined,
++  toolNames: readonly string[],
++): boolean {
++  const matches = createToolPolicyMatcher(policy);
++  return toolNames.every((toolName) => matches(toolName));
++}
++
++export function fingerprintOpenResponsesApplicationPolicy(
++  cfg: OpenClawConfig,
++  policyRef: string,
++  agentId: string,
++  nativeCapabilities: readonly OpenClawOpenResponsesNativeCapability[],
++  integration: OpenResponsesApplicationPolicyIntegration,
++): string | undefined {
++  const role = getOwnRole(cfg, policyRef);
++  if (!role || role.sessions.others !== "none" || role.agents === "*") {
++    return undefined;
++  }
++  if (!role.agents.includes(agentId) || role.scopes.includes("operator.admin")) {
++    return undefined;
++  }
++  const agentEntry = resolveAgentEntry(cfg, agentId);
++  const agent = resolveAgentConfig(cfg, agentId);
++  const capabilityPolicy = resolveNativeCapabilityPolicy(nativeCapabilities);
++  const agentTools = agent?.tools;
++  const noNativeTools = capabilityPolicy?.tools.length === 0;
++  if (
++    !agentEntry ||
++    !agent ||
++    !capabilityPolicy ||
++    (!agentEntry.workspace?.trim() && !agentEntry.cwd?.trim()) ||
++    agent.contextInjection !== "never" ||
++    !agentTools ||
++    agentTools.alsoAllow !== undefined ||
++    agentTools.profile !== undefined ||
++    agentTools.byProvider !== undefined ||
++    agentTools.toolsBySender !== undefined ||
++    cfg.tools?.profile !== undefined ||
++    cfg.tools?.byProvider !== undefined ||
++    cfg.tools?.toolsBySender !== undefined ||
++    (noNativeTools
++      ? !hasExactPolicyEntries(agentTools.deny, ["*"])
++      : !hasExactPolicyEntries(agentTools.allow, capabilityPolicy.tools) ||
++        normalizedPolicyEntries(agentTools.deny).length > 0) ||
++    !policyAllowsEvery(cfg.tools, capabilityPolicy.tools) ||
++    !policyAllowsEvery(cfg.tools?.sandbox?.tools, capabilityPolicy.tools) ||
++    !policyAllowsEvery(agentTools.sandbox?.tools, capabilityPolicy.tools) ||
++    (capabilityPolicy.capabilities.includes("sandbox_code_execution") &&
++      role.sandbox !== "required")
++  ) {
++    return undefined;
++  }
++  return `sha256:${createHash("sha256")
++    .update(
++      stableStringify(
++        policyFingerprintPayload(
++          cfg,
++          policyRef,
++          agentId,
++          role,
++          capabilityPolicy.capabilities,
++          integration,
++        ),
++      ),
++    )
++    .digest("base64url")}`;
++}
++
++export function resolveOpenResponsesApplicationPolicy(params: {
++  cfg: OpenClawConfig;
++  policyRef: string;
++  agentId: string;
++  nativeCapabilities: readonly OpenClawOpenResponsesNativeCapability[];
++  expectedFingerprint: string;
++  integration: OpenResponsesApplicationPolicyIntegration;
++}): ResolvedOpenResponsesApplicationPolicy | undefined {
++  const role = getOwnRole(params.cfg, params.policyRef);
++  const fingerprint = fingerprintOpenResponsesApplicationPolicy(
++    params.cfg,
++    params.policyRef,
++    params.agentId,
++    params.nativeCapabilities,
++    params.integration,
++  );
++  return role && fingerprint === params.expectedFingerprint ? { role, fingerprint } : undefined;
++}
+diff --git a/src/gateway/openresponses-http.ts b/src/gateway/openresponses-http.ts
+index 948ad98..9ad067c 100644
+--- a/src/gateway/openresponses-http.ts
++++ b/src/gateway/openresponses-http.ts
+@@ -39,6 +39,7 @@ import {
+ } from "../media/input-files.js";
+ import { bindGatewayContextResolver } from "../plugins/runtime/gateway-request-scope.js";
+ import { retainGatewayRootWorkAdmissionContinuation } from "../process/gateway-work-admission.js";
++import { buildAgentMainSessionKey } from "../routing/session-key.js";
+ import { defaultRuntime } from "../runtime.js";
+ import {
+   isReplaceableAssistantStreamEvent,
+@@ -49,9 +50,11 @@ import type { AuthRateLimiter } from "./auth-rate-limit.js";
+ import type { ResolvedGatewayAuth } from "./auth.js";
+ import {
+   parseGatewayJsonRequest,
++  readJsonBodyOrError,
+   sendInvalidRequest,
+   sendJson,
+   sendMissingScopeForbidden,
++  sendMethodNotAllowed,
+   setSseHeaders,
+   watchClientDisconnect,
+   writeDone,
+@@ -90,11 +93,14 @@ import {
+   toolChoiceConstraintPrompt,
+   type ToolChoiceConstraint,
+ } from "./openai-tool-choice.js";
++import { authorizeOpenResponsesApplicationRequest } from "./openresponses-application-auth.js";
+ import { wrapUntrustedFileContent } from "./openresponses-file-content.js";
+ import { buildAgentPrompt } from "./openresponses-prompt.js";
+ import { createAssistantOutputItem, createFunctionCallOutputItem } from "./openresponses-shape.js";
+ import { authorizeGatewaySessionCreation } from "./operator-role-policy.js";
++import type { TrustedSessionCreation } from "./server-methods/session-creation-provenance.js";
+ import type { GatewayContextResolver } from "./server-methods/types.js";
++import { createSyntheticPluginRuntimeClient } from "./server-plugin-runtime-client.js";
+ 
+ type OpenResponsesHttpOptions = {
+   auth: ResolvedGatewayAuth;
+@@ -141,6 +147,10 @@ function resolveResponseSessionAuthSubject(params: {
+   auth: ResolvedGatewayAuth;
+   requestAuth: AuthorizedGatewayHttpRequest;
+ }): string {
++  const application = params.requestAuth.applicationPrincipal;
++  if (application) {
++    return `application:${application.pluginId}:${application.subject}`;
++  }
+   // Proxy-verified identity owns continuation; forwarded bearers are unverified.
+   if (params.requestAuth.authMethod === "trusted-proxy") {
+     return `trusted-proxy:${params.requestAuth.user}`;
+@@ -311,6 +321,18 @@ function extractClientTools(body: CreateResponseBody): ClientToolDefinition[] {
+   }));
+ }
+ 
++function hasMediaInput(body: CreateResponseBody): boolean {
++  return (
++    Array.isArray(body.input) &&
++    body.input.some(
++      (item) =>
++        item.type === "message" &&
++        Array.isArray(item.content) &&
++        item.content.some((part) => part.type === "input_image" || part.type === "input_file"),
++    )
++  );
++}
++
+ function applyToolChoice(params: {
+   tools: ClientToolDefinition[];
+   toolChoice: CreateResponseBody["tool_choice"];
+@@ -413,6 +435,7 @@ async function runResponsesAgentCommand(params: {
+   senderIsOwner: boolean;
+   deps: CliDeps;
+   resolveGatewayContext?: GatewayContextResolver;
++  sessionCreation?: TrustedSessionCreation;
+   abortSignal?: AbortSignal;
+ }) {
+   return agentCommandFromGatewayIngress(
+@@ -431,6 +454,7 @@ async function runResponsesAgentCommand(params: {
+       bestEffortDeliver: false,
+       allowModelOverride: params.modelOverride !== undefined,
+       abortSignal: params.abortSignal,
++      ...(params.sessionCreation ? { sessionCreation: params.sessionCreation } : {}),
+       ...(params.resolveGatewayContext
+         ? {
+             onAdmittedRunContext: (context: AdmittedRunContext) =>
+@@ -449,22 +473,37 @@ export async function handleOpenResponsesHttpRequest(
+   res: ServerResponse,
+   opts: OpenResponsesHttpOptions,
+ ): Promise<boolean> {
++  if (new URL(req.url ?? "/", "http://localhost").pathname !== "/v1/responses") {
++    return false;
++  }
+   const limits = resolveResponsesLimits(opts.config);
+   const maxBodyBytes =
+     opts.maxBodyBytes ??
+     Math.max(limits.maxBodyBytes, limits.files.maxBytes * 2, limits.images.maxBytes * 2);
+-  const handled = await handleGatewayPostJsonEndpoint(req, res, {
+-    pathname: "/v1/responses",
+-    requiredOperatorMethod: "chat.send",
+-    // Compat HTTP uses a different scope model from generic HTTP helpers:
+-    // shared-secret bearer auth is treated as full operator access here.
+-    resolveOperatorScopes: resolveOpenAiCompatibleHttpOperatorScopes,
+-    auth: opts.auth,
+-    trustedProxies: opts.trustedProxies,
+-    allowRealIpFallback: opts.allowRealIpFallback,
+-    rateLimiter: opts.rateLimiter,
+-    maxBodyBytes,
+-  });
++  const applicationDecision = await authorizeOpenResponsesApplicationRequest({ req, res });
++  if (applicationDecision.status === "handled") {
++    return true;
++  }
++  const application = applicationDecision.status === "authorized" ? applicationDecision : undefined;
++  const handled = application
++    ? req.method !== "POST"
++      ? (sendMethodNotAllowed(res), undefined)
++      : {
++          body: await readJsonBodyOrError(req, res, maxBodyBytes),
++          requestAuth: application.requestAuth,
++        }
++    : await handleGatewayPostJsonEndpoint(req, res, {
++        pathname: "/v1/responses",
++        requiredOperatorMethod: "chat.send",
++        // Compat HTTP uses a different scope model from generic HTTP helpers:
++        // shared-secret bearer auth is treated as full operator access here.
++        resolveOperatorScopes: resolveOpenAiCompatibleHttpOperatorScopes,
++        auth: opts.auth,
++        trustedProxies: opts.trustedProxies,
++        allowRealIpFallback: opts.allowRealIpFallback,
++        rateLimiter: opts.rateLimiter,
++        maxBodyBytes,
++      });
+   if (handled === false) {
+     return false;
+   }
+@@ -484,9 +523,59 @@ export async function handleOpenResponsesHttpRequest(
+   const stream = Boolean(payload.stream);
+   const model = payload.model;
+   const user = payload.user;
++  if (
++    application &&
++    (user !== undefined ||
++      model.trim() !== "openclaw/default" ||
++      getHeader(req, "x-openclaw-session-key") !== undefined ||
++      getHeader(req, "x-openclaw-agent-id") !== undefined ||
++      getHeader(req, "x-openclaw-model") !== undefined ||
++      getHeader(req, "x-openclaw-message-channel") !== undefined)
++  ) {
++    sendJson(res, 403, {
++      error: { message: "application routing overrides are forbidden", type: "forbidden" },
++    });
++    return true;
++  }
++  const clientTools = extractClientTools(payload);
++  if (application) {
++    if (hasMediaInput(payload)) {
++      sendJson(res, 403, {
++        error: { message: "application media inputs are not authorized", type: "forbidden" },
++      });
++      return true;
++    }
++    if (payload.tools?.some((tool) => tool.strict !== undefined || !tool.description?.trim())) {
++      sendJson(res, 403, {
++        error: {
++          message: "application tools must use the exact consented description with strict omitted",
++          type: "forbidden",
++        },
++      });
++      return true;
++    }
++    const allowed = await application.provider.authorize({
++      principal: application.principal,
++      request: {
++        agentId: application.principal.agentId,
++        clientTools: (payload.tools ?? []).map((tool) => ({
++          name: tool.name,
++          description: tool.description!,
++          inputSchema: tool.parameters,
++        })),
++        toolChoice: payload.tool_choice,
++      },
++    });
++    if (!allowed) {
++      sendJson(res, 403, {
++        error: { message: "application grant does not authorize this request", type: "forbidden" },
++      });
++      return true;
++    }
++  }
+   let agentId: string;
+   try {
+-    agentId = resolveAgentIdForRequest({ req, model });
++    agentId = application?.principal.agentId ?? resolveAgentIdForRequest({ req, model });
+   } catch (err) {
+     if (
+       isAgentSelectionRequiredError(err) ||
+@@ -500,9 +589,18 @@ export async function handleOpenResponsesHttpRequest(
+   }
+   const creationAuth = authorizeGatewaySessionCreation({
+     cfg: getRuntimeConfig(),
+-    ...(senderIsOwner && !handled.requestAuth.authenticatedUserProfile
+-      ? { actor: { kind: "system" as const } }
+-      : { profileId: handled.requestAuth.authenticatedUserProfile?.profileId }),
++    client: createSyntheticPluginRuntimeClient({
++      ...(handled.requestAuth.authenticatedUserProfile
++        ? { authenticatedUserProfile: handled.requestAuth.authenticatedUserProfile }
++        : {}),
++      ...(handled.requestAuth.operatorRolePolicy
++        ? { operatorRolePolicy: handled.requestAuth.operatorRolePolicy }
++        : {}),
++      ...(senderIsOwner && !handled.requestAuth.authenticatedUserProfile
++        ? { operatorRoleActor: { kind: "system" as const } }
++        : {}),
++      scopes: [],
++    }),
+     agentId,
+   });
+   if (creationAuth) {
+@@ -615,7 +713,6 @@ export async function handleOpenResponsesHttpRequest(
+     return true;
+   }
+ 
+-  const clientTools = extractClientTools(payload);
+   let toolChoicePrompt: string | undefined;
+   let toolChoiceConstraint: ToolChoiceConstraint | undefined;
+   let resolvedClientTools = clientTools;
+@@ -634,14 +731,23 @@ export async function handleOpenResponsesHttpRequest(
+   }
+   let resolved: ReturnType<typeof resolveGatewayRequestContext>;
+   try {
+-    resolved = resolveGatewayRequestContext({
+-      req,
+-      model,
+-      user,
+-      sessionPrefix: "openresponses",
+-      defaultMessageChannel: "webchat",
+-      useMessageChannelHeader: true,
+-    });
++    resolved = application
++      ? {
++          agentId: application.principal.agentId,
++          sessionKey: buildAgentMainSessionKey({
++            agentId: application.principal.agentId,
++            mainKey: `openresponses:${randomUUID()}`,
++          }),
++          messageChannel: "webchat",
++        }
++      : resolveGatewayRequestContext({
++          req,
++          model,
++          user,
++          sessionPrefix: "openresponses",
++          defaultMessageChannel: "webchat",
++          useMessageChannelHeader: true,
++        });
+   } catch (err) {
+     if (
+       isAgentSelectionRequiredError(err) ||
+@@ -666,8 +772,30 @@ export async function handleOpenResponsesHttpRequest(
+     payload.previous_response_id,
+     responseSessionScope,
+   );
++  if (application && payload.previous_response_id && !previousSessionKey) {
++    sendJson(res, 403, {
++      error: {
++        message: "previous response is not owned by this application grant",
++        type: "forbidden",
++      },
++    });
++    return true;
++  }
+   const sessionKey = previousSessionKey ?? resolved.sessionKey;
+   const messageChannel = resolved.messageChannel;
++  const sessionCreation: TrustedSessionCreation | undefined = application
++    ? {
++        via: "run",
++        actor: {
++          type: "human",
++          source: "profile",
++          id: application.requestAuth.authenticatedUserProfile!.profileId,
++        },
++        ...(application.requestAuth.operatorRolePolicy?.sandbox === "required"
++          ? { sandbox: "required" as const }
++          : {}),
++      }
++    : undefined;
+   const sessionAuth = authorizeOpenAiCompatibleHttpSession({
+     agentId: resolved.agentId,
+     sessionKey,
+@@ -746,6 +874,7 @@ export async function handleOpenResponsesHttpRequest(
+         senderIsOwner,
+         deps,
+         resolveGatewayContext: opts.resolveGatewayContext,
++        sessionCreation,
+         abortSignal: abortController.signal,
+       });
+ 
+@@ -1176,6 +1305,7 @@ export async function handleOpenResponsesHttpRequest(
+         senderIsOwner,
+         deps,
+         resolveGatewayContext: opts.resolveGatewayContext,
++        sessionCreation,
+         abortSignal: abortController.signal,
+       });
+ 
+diff --git a/src/gateway/operator-role-policy.ts b/src/gateway/operator-role-policy.ts
+index fb0b130..23057ad 100644
+--- a/src/gateway/operator-role-policy.ts
++++ b/src/gateway/operator-role-policy.ts
+@@ -141,6 +141,9 @@ export function resolveOperatorRolePolicy(
+   client: GatewayClient | null,
+   cfg: OpenClawConfig,
+ ): GatewayOperatorRoleDefinition | undefined {
++  if (client?.internal?.operatorRolePolicy) {
++    return client.internal.operatorRolePolicy;
++  }
+   const actor = resolveGatewayOperatorRoleActor(client);
+   if (actor?.kind === "system") {
+     return undefined;
+@@ -167,7 +170,10 @@ export function authorizeGatewaySessionCreation(
+     return undefined;
+   }
+   const profileId = actor?.profileId ?? params.profileId;
+-  const role = resolveOperatorRolePolicyForProfile(profileId, params.cfg);
++  const role =
++    "client" in params
++      ? resolveOperatorRolePolicy(params.client ?? null, params.cfg)
++      : resolveOperatorRolePolicyForProfile(profileId, params.cfg);
+   if (!role || role.agents === "*" || role.agents.includes(params.agentId)) {
+     return undefined;
+   }
+diff --git a/src/gateway/server-http.ts b/src/gateway/server-http.ts
+index 7de9055..3f132b4 100644
+--- a/src/gateway/server-http.ts
++++ b/src/gateway/server-http.ts
+@@ -42,7 +42,10 @@ import {
+   classifyWorkerGatewayPath,
+   classifyWorkerBootstrapArtifactTransferPath,
+ } from "./gateway-http-route-contracts.js";
+-import type { AuthorizedGatewayHttpRequest } from "./http-auth-utils.js";
++import {
++  prepareManagedTailscaleOwnerConsentRequest,
++  type AuthorizedGatewayHttpRequest,
++} from "./http-auth-utils.js";
+ import {
+   finishFailedGatewayHttpResponse,
+   sendGatewayAuthFailure,
+@@ -342,6 +345,10 @@ export function createGatewayHttpServer(opts: {
+         allowRealIpFallback,
+         rateLimiter,
+       };
++      prepareManagedTailscaleOwnerConsentRequest(req, {
++        ...routeAuth,
++        cfg: configSnapshot,
++      });
+       const controlUiRouteOptions = {
+         basePath: controlUiBasePath,
+         config: configSnapshot,
+diff --git a/src/gateway/server-methods/client-types.ts b/src/gateway/server-methods/client-types.ts
+index 5d74e33..eab1756 100644
+--- a/src/gateway/server-methods/client-types.ts
++++ b/src/gateway/server-methods/client-types.ts
+@@ -1,5 +1,6 @@
+ import type { ConnectParams } from "../../../packages/gateway-protocol/src/schema/frames.js";
+ import type { TranscriptSenderIdentity } from "../../chat/sender-identity.js";
++import type { GatewayOperatorRoleDefinition } from "../../config/types.gateway.js";
+ import type { PluginSubagentRequesterContext } from "../../plugins/runtime/subagent-requester-context.js";
+ import type { RuntimePluginToolGrant } from "../../plugins/runtime/tool-grant.js";
+ import type { AgentRuntimeIdentity } from "../agent-runtime-identity-token.js";
+@@ -57,6 +58,8 @@ export type GatewayClient = {
+     syntheticClient?: true;
+     /** Host-owned role authority retained separately from an autonomous run principal. */
+     operatorRoleActor?: GatewayOperatorRoleActor;
++    /** Host-resolved request-local ceiling; never accepted from Gateway wire params. */
++    operatorRolePolicy?: GatewayOperatorRoleDefinition;
+     /** Overrides persisted sender attribution without changing the authorizing client identity. */
+     senderAttribution?: { id: string; name?: string; identity?: TranscriptSenderIdentity };
+     /** Trusted session creation provenance; never accepted from Gateway wire params. */
+diff --git a/src/gateway/server-plugin-runtime-client.ts b/src/gateway/server-plugin-runtime-client.ts
+index cfa70d7..bd6133c 100644
+--- a/src/gateway/server-plugin-runtime-client.ts
++++ b/src/gateway/server-plugin-runtime-client.ts
+@@ -7,6 +7,7 @@ import {
+ import { PROTOCOL_VERSION } from "../../packages/gateway-protocol/src/version.js";
+ import { isKnownCoreToolId } from "../agents/tool-catalog.js";
+ import { normalizeToolPolicyName } from "../agents/tool-policy.js";
++import type { GatewayOperatorRoleDefinition } from "../config/types.gateway.js";
+ import { getActivePluginRegistry } from "../plugins/runtime.js";
+ import type { PluginSubagentRequesterContext } from "../plugins/runtime/subagent-requester-context.js";
+ import type { RuntimePluginToolGrant } from "../plugins/runtime/tool-grant.js";
+@@ -27,6 +28,7 @@ export function createSyntheticPluginRuntimeClient(params?: {
+   agentToolCaller?: TrustedAgentToolCaller;
+   agentRunTracking?: GatewayAgentRunTaskOwner;
+   operatorRoleActor?: GatewayOperatorRoleActor;
++  operatorRolePolicy?: GatewayOperatorRoleDefinition;
+   cronRunContinuation?: boolean;
+   internalDeliveryMediaUrls?: string[];
+   internalDeliverySuppressText?: boolean;
+@@ -62,6 +64,7 @@ export function createSyntheticPluginRuntimeClient(params?: {
+     internal: {
+       syntheticClient: true,
+       ...(params?.operatorRoleActor ? { operatorRoleActor: params.operatorRoleActor } : {}),
++      ...(params?.operatorRolePolicy ? { operatorRolePolicy: params.operatorRolePolicy } : {}),
+       ...(params?.sessionCreation ? { sessionCreation: params.sessionCreation } : {}),
+       ...(params?.agentToolCaller ? { agentToolCaller: params.agentToolCaller } : {}),
+       allowModelOverride: params?.allowModelOverride === true,
+diff --git a/src/gateway/server.plugin-http-role-scopes.test.ts b/src/gateway/server.plugin-http-role-scopes.test.ts
+index d083066..07b90db 100644
+--- a/src/gateway/server.plugin-http-role-scopes.test.ts
++++ b/src/gateway/server.plugin-http-role-scopes.test.ts
+@@ -7,8 +7,16 @@ import { WebSocketServer } from "ws";
+ import type { GatewayOperatorRoleDefinition } from "../config/types.gateway.js";
+ import type { OpenClawConfig } from "../config/types.openclaw.js";
+ import { createSubsystemLogger } from "../logging/subsystem.js";
++import {
++  authenticateManagedTailscaleOwnerConsent,
++  getAuthenticatedPluginHttpPrincipal,
++} from "../plugin-sdk/authenticated-http-principal.js";
+ import { getPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
+-import { ensureProfileForEmail, setUserProfileRole } from "../state/user-profiles.js";
++import {
++  ensureProfileForEmail,
++  ensureProfileForTailscaleIdentity,
++  setUserProfileRole,
++} from "../state/user-profiles.js";
+ import { withOpenClawTestState } from "../test-utils/openclaw-test-state.js";
+ import { authorizeOperatorScopesForMethod, CLI_DEFAULT_OPERATOR_SCOPES } from "./method-scopes.js";
+ import { invalidateOperatorRolePolicy } from "./operator-role-policy.js";
+@@ -22,6 +30,7 @@ import {
+   shouldEnforceGatewayAuthForPluginPath,
+ } from "./server/plugins-http.js";
+ import { createPreauthConnectionBudget } from "./server/preauth-connection-budget.js";
++import { testTailscaleWhois } from "./test-helpers.js";
+ import { withTempConfig } from "./test-temp-config.js";
+ 
+ const routePath = "/role-scoped-plugin";
+@@ -68,6 +77,7 @@ function observeRuntimeScope() {
+   return {
+     scopes,
+     profileId: client?.authenticatedUserProfile?.profileId,
++    ownerPrincipal: getAuthenticatedPluginHttpPrincipal(),
+     writeAllowed: authorizeOperatorScopesForMethod("node.invoke", scopes ?? []).allowed,
+   };
+ }
+@@ -181,6 +191,7 @@ describe.each(["write-default", "trusted-operator"] as const)(
+                 const expected = {
+                   scopes: expectedScopes,
+                   profileId: profile.id,
++                  ownerPrincipal: { profileId: profile.id, scopes: expectedScopes },
+                   writeAllowed: expectedScopes.some(
+                     (scope) => scope === "operator.write" || scope === "operator.admin",
+                   ),
+@@ -209,3 +220,100 @@ describe.each(["write-default", "trusted-operator"] as const)(
+     });
+   },
+ );
++
++describe("managed-Tailscale plugin owner consent", () => {
++  it("accepts only listener-attributed WhoIs identity with the configured owner role", async () => {
++    await withOpenClawTestState({ scenario: "minimal" }, async () => {
++      const ownerLogin = "owner@example.test";
++      const guestLogin = "guest@example.test";
++      const owner = ensureProfileForTailscaleIdentity({ login: ownerLogin, name: "Owner" });
++      const guest = ensureProfileForTailscaleIdentity({ login: guestLogin, name: "Guest" });
++      setUserProfileRole(owner.id, "owner");
++      setUserProfileRole(guest.id, "denied");
++      const auth = { mode: "token", token: "secret", allowTailscale: true } as const;
++      const cfg: OpenClawConfig = {
++        gateway: {
++          auth,
++          roles: {
++            default: "denied",
++            definitions: {
++              denied: { sessions: { others: "none" }, agents: [], scopes: [] },
++              owner: {
++                sessions: { others: "write" },
++                agents: "*",
++                scopes: ["operator.admin"],
++              },
++            },
++          },
++        },
++      };
++      const path = "/tailscale-owner-consent";
++      const registry = createGatewayTestRegistry({
++        httpRoutes: [
++          {
++            pluginId: "owner-consent-test",
++            source: "owner-consent-test",
++            path,
++            auth: "plugin",
++            match: "exact",
++            handler: async (req: IncomingMessage, res: ServerResponse) => {
++              const principal = await authenticateManagedTailscaleOwnerConsent(req);
++              const allowed =
++                principal?.profileId === owner.id && principal.scopes.includes("operator.admin");
++              res.statusCode = allowed ? 200 : 403;
++              res.end(JSON.stringify(principal ?? null));
++              return true;
++            },
++          },
++        ],
++      });
++      const log = createSubsystemLogger("test/tailscale-owner-consent");
++      const server = createTestGatewayServer({
++        resolvedAuth: auth,
++        overrides: {
++          ingressTransport: { kind: "managed-tailscale", mode: "serve" },
++          getRuntimeConfig: () => cfg,
++          handlePluginRequest: createGatewayPluginRequestHandler({ registry, log }),
++          shouldEnforcePluginGatewayAuth: (pathContext) =>
++            shouldEnforceGatewayAuthForPluginPath(registry, pathContext),
++          isPluginAuthenticatedRoute: (pathContext) =>
++            registry.httpRoutes.some(
++              (route) => route.auth === "plugin" && pathContext.candidates.includes(route.path),
++            ),
++        },
++      });
++      const request = async (login: string, forwarded = true) => {
++        testTailscaleWhois.value = { login, name: login };
++        return await sendRequest(server, {
++          path,
++          remoteAddress: "127.0.0.1",
++          headers: {
++            "tailscale-user-login": login,
++            ...(forwarded
++              ? {
++                  "x-forwarded-for": "100.64.0.10",
++                  "x-forwarded-proto": "https",
++                  "x-forwarded-host": "gateway.example",
++                }
++              : {}),
++          },
++        });
++      };
++      try {
++        const accepted = await request(ownerLogin);
++        expect(accepted.res.statusCode).toBe(200);
++        expect(JSON.parse(accepted.getBody())).toEqual({
++          profileId: owner.id,
++          scopes: ["operator.read", "operator.write", "operator.admin"],
++        });
++
++        expect((await request(guestLogin)).res.statusCode).toBe(403);
++        expect((await request(ownerLogin, false)).res.statusCode).toBe(403);
++      } finally {
++        testTailscaleWhois.value = null;
++        invalidateOperatorRolePolicy(owner.id);
++        invalidateOperatorRolePolicy(guest.id);
++      }
++    });
++  });
++});
+diff --git a/src/plugin-sdk/authenticated-http-principal.test.ts b/src/plugin-sdk/authenticated-http-principal.test.ts
+new file mode 100644
+index 0000000..2b7a40b
+--- /dev/null
++++ b/src/plugin-sdk/authenticated-http-principal.test.ts
+@@ -0,0 +1,46 @@
++import { describe, expect, it } from "vitest";
++import { PROTOCOL_VERSION } from "../../packages/gateway-protocol/src/index.js";
++import { withPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
++import { getAuthenticatedPluginHttpPrincipal } from "./authenticated-http-principal.js";
++
++function scope(profileId?: string) {
++  return {
++    isWebchatConnect: () => false,
++    client: {
++      ...(profileId
++        ? {
++            authenticatedUserProfile: {
++              profileId,
++              displayName: null,
++              hasAvatar: false,
++              updatedAt: 1,
++            },
++          }
++        : {}),
++      connect: {
++        minProtocol: PROTOCOL_VERSION,
++        maxProtocol: PROTOCOL_VERSION,
++        client: { id: "gateway-client", version: "test", platform: "node", mode: "backend" },
++        role: "operator",
++        scopes: ["operator.admin"],
++      },
++    },
++  } as Parameters<typeof withPluginRuntimeGatewayRequestScope>[0];
++}
++
++describe("authenticated plugin HTTP principal", () => {
++  it("returns a host-resolved durable profile and scopes", () => {
++    withPluginRuntimeGatewayRequestScope(scope("profile-owner"), () => {
++      expect(getAuthenticatedPluginHttpPrincipal()).toEqual({
++        profileId: "profile-owner",
++        scopes: ["operator.admin"],
++      });
++    });
++  });
++
++  it("does not turn an unprofiled shared-secret owner into a consent identity", () => {
++    withPluginRuntimeGatewayRequestScope(scope(), () => {
++      expect(getAuthenticatedPluginHttpPrincipal()).toBeUndefined();
++    });
++  });
++});
+diff --git a/src/plugin-sdk/authenticated-http-principal.ts b/src/plugin-sdk/authenticated-http-principal.ts
+new file mode 100644
+index 0000000..6908800
+--- /dev/null
++++ b/src/plugin-sdk/authenticated-http-principal.ts
+@@ -0,0 +1,36 @@
++import type { IncomingMessage } from "node:http";
++import { authenticateManagedTailscaleOwnerConsentRequest } from "../gateway/http-auth-utils.js";
++import { getPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
++
++export type AuthenticatedPluginHttpPrincipal = {
++  profileId: string;
++  scopes: readonly string[];
++};
++
++/**
++ * Returns only host-verified durable identity from an authenticated plugin HTTP
++ * route. Callers still enforce their configured owner allowlist and admin scope.
++ */
++export function getAuthenticatedPluginHttpPrincipal():
++  | AuthenticatedPluginHttpPrincipal
++  | undefined {
++  const client = getPluginRuntimeGatewayRequestScope()?.client;
++  const profileId = client?.authenticatedUserProfile?.profileId;
++  if (!profileId || client?.internal?.syntheticClient) {
++    return undefined;
++  }
++  return { profileId, scopes: [...(client.connect.scopes ?? [])] };
++}
++
++/**
++ * Verifies managed-Tailscale ingress for one plugin-owned consent request.
++ * Callers still require admin scope, their owner allowlist, Origin, and CSRF.
++ */
++export async function authenticateManagedTailscaleOwnerConsent(
++  req: IncomingMessage,
++): Promise<AuthenticatedPluginHttpPrincipal | undefined> {
++  if (!getPluginRuntimeGatewayRequestScope()?.pluginId) {
++    return undefined;
++  }
++  return await authenticateManagedTailscaleOwnerConsentRequest(req);
++}
+diff --git a/src/plugin-sdk/openresponses-application-policy.ts b/src/plugin-sdk/openresponses-application-policy.ts
+new file mode 100644
+index 0000000..01f741a
+--- /dev/null
++++ b/src/plugin-sdk/openresponses-application-policy.ts
+@@ -0,0 +1,31 @@
++import type { OpenClawConfig } from "../config/types.openclaw.js";
++import { fingerprintOpenResponsesApplicationPolicy as fingerprintPolicy } from "../gateway/openresponses-application-policy.js";
++import { getPluginRegistrationContext } from "../plugins/runtime.js";
++import { getPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
++import type { OpenClawOpenResponsesNativeCapability } from "../plugins/types.js";
++
++export type { ResolvedOpenResponsesApplicationPolicy } from "../gateway/openresponses-application-policy.js";
++
++/** Fingerprint live native policy under the calling plugin's pinned identity. */
++export function fingerprintOpenResponsesApplicationPolicy(
++  cfg: OpenClawConfig,
++  params: {
++    policyRef: string;
++    agentId: string;
++    nativeCapabilities: readonly OpenClawOpenResponsesNativeCapability[];
++  },
++): string | undefined {
++  const registration = getPluginRegistrationContext();
++  const scope = getPluginRuntimeGatewayRequestScope();
++  const pluginId = registration?.pluginId ?? scope?.pluginId;
++  if (!pluginId) {
++    return undefined;
++  }
++  const registry = registration?.registry ?? scope?.pluginRegistry;
++  const plugin = registry?.plugins.find((candidate) => candidate.id === pluginId);
++  const pluginVersion = registration?.pluginVersion ?? plugin?.version;
++  return fingerprintPolicy(cfg, params.policyRef, params.agentId, params.nativeCapabilities, {
++    pluginId,
++    ...(pluginVersion ? { pluginVersion } : {}),
++  });
++}
+diff --git a/src/plugin-sdk/plugin-test-api.ts b/src/plugin-sdk/plugin-test-api.ts
+index 783ca5f..22d6cec 100644
+--- a/src/plugin-sdk/plugin-test-api.ts
++++ b/src/plugin-sdk/plugin-test-api.ts
+@@ -22,6 +22,7 @@ export function createTestPluginApi(api: TestPluginApiInput = {}): OpenClawPlugi
+     registerTool() {},
+     registerHook() {},
+     registerHttpRoute() {},
++    registerOpenResponsesApplicationAuth() {},
+     registerHostedMediaResolver() {},
+     registerWidgetPresenter() {},
+     registerMcpServerConnectionResolver() {},
+diff --git a/src/plugins/api-builder.ts b/src/plugins/api-builder.ts
+index 0989277..b23158d 100644
+--- a/src/plugins/api-builder.ts
++++ b/src/plugins/api-builder.ts
+@@ -24,6 +24,7 @@ const noops = {
+   registerTool: () => {},
+   registerHook: () => {},
+   registerHttpRoute: () => {},
++  registerOpenResponsesApplicationAuth: () => {},
+   registerHostedMediaResolver: () => {},
+   registerWidgetPresenter: () => {},
+   registerMcpServerConnectionResolver: () => {},
+@@ -140,6 +141,8 @@ export function buildPluginApi(params: BuildPluginApiParams): OpenClawPluginApi
+     registerTool: handlers.registerTool ?? noops.registerTool,
+     registerHook: handlers.registerHook ?? noops.registerHook,
+     registerHttpRoute: handlers.registerHttpRoute ?? noops.registerHttpRoute,
++    registerOpenResponsesApplicationAuth:
++      handlers.registerOpenResponsesApplicationAuth ?? noops.registerOpenResponsesApplicationAuth,
+     registerHostedMediaResolver:
+       handlers.registerHostedMediaResolver ?? noops.registerHostedMediaResolver,
+     registerWidgetPresenter: handlers.registerWidgetPresenter ?? noops.registerWidgetPresenter,
+diff --git a/src/plugins/loader-cli-registry.ts b/src/plugins/loader-cli-registry.ts
+index 1861133..51ed11a 100644
+--- a/src/plugins/loader-cli-registry.ts
++++ b/src/plugins/loader-cli-registry.ts
+@@ -351,7 +351,7 @@ export async function loadOpenClawPluginCliRegistry(
+     });
+     try {
+       withProfile({ pluginId: record.id, source: record.source }, "cli-metadata:register", () =>
+-        runPluginRegisterSyncInRegistry(register, api, registry, record.id),
++        runPluginRegisterSyncInRegistry(register, api, registry, record.id, record.version),
+       );
+       registry.plugins.push(record);
+       seenIds.set(pluginId, candidate.origin);
+diff --git a/src/plugins/loader-module-runtime.ts b/src/plugins/loader-module-runtime.ts
+index b29dcbd..04e8f4c 100644
+--- a/src/plugins/loader-module-runtime.ts
++++ b/src/plugins/loader-module-runtime.ts
+@@ -97,8 +97,14 @@ export function runPluginRegisterSyncInRegistry(
+   api: Parameters<NonNullable<OpenClawPluginDefinition["register"]>>[0],
+   registry: PluginRegistry,
+   pluginId: string,
++  pluginVersion?: string,
+ ): void {
+-  withPluginRegistrationContext(registry, pluginId, () => runPluginRegisterSync(register, api));
++  withPluginRegistrationContext(
++    registry,
++    pluginId,
++    () => runPluginRegisterSync(register, api),
++    pluginVersion,
++  );
+ }
+ 
+ export function createPluginModuleLoader(options: {
+diff --git a/src/plugins/loader-runtime-candidate.ts b/src/plugins/loader-runtime-candidate.ts
+index 95edfca..0bd5f58 100644
+--- a/src/plugins/loader-runtime-candidate.ts
++++ b/src/plugins/loader-runtime-candidate.ts
+@@ -554,7 +554,7 @@ export function loadRuntimePluginCandidate(params: {
+     withProfile(
+       { pluginId: record.id, source: record.source },
+       `${registrationPlan.mode}:register`,
+-      () => runPluginRegisterSyncInRegistry(register, api, registry, record.id),
++      () => runPluginRegisterSyncInRegistry(register, api, registry, record.id, record.version),
+     );
+     // Dashboard entries stay inside the same registry snapshot as their RPC handlers.
+     // Non-activating snapshots are private until cached activation; rollback restores both.
+diff --git a/src/plugins/plugin-api.types.ts b/src/plugins/plugin-api.types.ts
+index e4052b4..ddf01e7 100644
+--- a/src/plugins/plugin-api.types.ts
++++ b/src/plugins/plugin-api.types.ts
+@@ -66,6 +66,7 @@ import type {
+   OpenClawGatewayDiscoveryService,
+   OpenClawPluginHostedMediaResolver,
+   OpenClawPluginHttpRouteParams,
++  OpenClawOpenResponsesApplicationAuthProvider,
+   OpenClawPluginNodeCliFeatureOptions,
+   OpenClawPluginNodeInvokePolicy,
+   OpenClawPluginReloadRegistration,
+@@ -211,6 +212,10 @@ export type OpenClawPluginApi = {
+     opts?: OpenClawPluginHookOptions,
+   ) => void;
+   registerHttpRoute: (params: OpenClawPluginHttpRouteParams) => void;
++  /** Register the single application-auth provider for native OpenResponses. */
++  registerOpenResponsesApplicationAuth: (
++    provider: OpenClawOpenResponsesApplicationAuthProvider,
++  ) => void;
+   /** Register a plugin-owned resolver for browser-style hosted media URLs. */
+   registerHostedMediaResolver: (resolver: OpenClawPluginHostedMediaResolver) => void;
+   /** Register a plugin-owned destination for presenting hosted widget documents. */
+diff --git a/src/plugins/plugin-registration.types.ts b/src/plugins/plugin-registration.types.ts
+index 57c6a2e..abc54fd 100644
+--- a/src/plugins/plugin-registration.types.ts
++++ b/src/plugins/plugin-registration.types.ts
+@@ -68,6 +68,71 @@ export type OpenClawPluginHttpRouteParams = {
+   replaceExisting?: boolean;
+ };
+ 
++export type OpenClawOpenResponsesApplicationTool = {
++  name: string;
++  description: string;
++  inputSchema: unknown;
++};
++
++export type OpenClawOpenResponsesNativeCapability = "public_web_search" | "sandbox_code_execution";
++
++export type OpenClawOpenResponsesApplicationPrincipal = {
++  /** Stable grant identity. Access-token rotation must not change this value. */
++  subject: string;
++  /** Operator-configured agent selected by the verified grant, never by the request. */
++  agentId: string;
++  /** Native capabilities in the owner-approved policy snapshot. */
++  nativeCapabilities: readonly OpenClawOpenResponsesNativeCapability[];
++  /** Explicit operator role name. The host never falls back to the default role. */
++  policyRef: string;
++  /** Fingerprint captured when the owner approved the grant. */
++  policyFingerprint: string;
++  /** Provider-private verified grant context, returned only to `authorize`. */
++  context?: unknown;
++};
++
++export type OpenClawOpenResponsesApplicationAuthResult =
++  | { status: "pass" }
++  | { status: "deny"; reason?: string }
++  | {
++      status: "authenticated";
++      principal: OpenClawOpenResponsesApplicationPrincipal;
++    };
++
++export type OpenClawOpenResponsesApplicationRequest = {
++  agentId: string;
++  clientTools: readonly OpenClawOpenResponsesApplicationTool[];
++  toolChoice: unknown;
++};
++
++/**
++ * Authenticates application credentials on native `/v1/responses` only.
++ * The host owns routing, profile resolution, role enforcement, and session creation.
++ */
++export type OpenClawOpenResponsesApplicationAuthProvider = {
++  /**
++   * Resolve an exact allowed browser origin for this endpoint. Called without a
++   * bearer for preflight and again on the actual request. Returning null denies
++   * cross-origin access. The host emits the CORS headers on success and errors.
++   */
++  resolveBrowserOrigin?: (req: IncomingMessage) =>
++    | Promise<{ origin: string; allowHeaders: readonly string[] } | null>
++    | {
++        origin: string;
++        allowHeaders: readonly string[];
++      }
++    | null;
++  authenticate: (
++    req: IncomingMessage,
++  ) =>
++    | Promise<OpenClawOpenResponsesApplicationAuthResult>
++    | OpenClawOpenResponsesApplicationAuthResult;
++  authorize: (params: {
++    principal: OpenClawOpenResponsesApplicationPrincipal;
++    request: OpenClawOpenResponsesApplicationRequest;
++  }) => Promise<boolean> | boolean;
++};
++
+ export type OpenClawPluginHostedMediaResolver = (
+   mediaUrl: string,
+ ) => string | null | undefined | Promise<string | null | undefined>;
+diff --git a/src/plugins/registry-api.ts b/src/plugins/registry-api.ts
+index e42477d..3e2d9f1 100644
+--- a/src/plugins/registry-api.ts
++++ b/src/plugins/registry-api.ts
+@@ -58,6 +58,7 @@ export function createPluginApiFactory(
+     registerTool,
+     registerHook,
+     registerHttpRoute,
++    registerOpenResponsesApplicationAuth,
+     registerHostedMediaResolver,
+     registerMcpServerConnectionResolver,
+     registerProvider,
+@@ -184,6 +185,8 @@ export function createPluginApiFactory(
+               registerHook: (events, handler, opts) =>
+                 registerHook(record, events, handler, opts, params.config, params.pluginConfig),
+               registerHttpRoute: (routeParams) => registerHttpRoute(record, routeParams),
++              registerOpenResponsesApplicationAuth: (provider) =>
++                registerOpenResponsesApplicationAuth(record, provider),
+               registerHostedMediaResolver: (resolver) =>
+                 registerHostedMediaResolver(record, resolver),
+               registerMcpServerConnectionResolver: (resolver) =>
+diff --git a/src/plugins/registry-empty.ts b/src/plugins/registry-empty.ts
+index 0d67d62..50c76b0 100644
+--- a/src/plugins/registry-empty.ts
++++ b/src/plugins/registry-empty.ts
+@@ -48,6 +48,7 @@ export function createEmptyPluginRegistry(): PluginRegistry {
+     boardWidgetContentKinds: new Map(),
+     coreGatewayMethodNames: [],
+     httpRoutes: [],
++    openResponsesApplicationAuth: undefined,
+     hostedMediaResolvers: [],
+     widgetPresenters: [],
+     mcpServerConnectionResolvers: [],
+diff --git a/src/plugins/registry-registrars-network.ts b/src/plugins/registry-registrars-network.ts
+index 5d7f8f3..bcd74b2 100644
+--- a/src/plugins/registry-registrars-network.ts
++++ b/src/plugins/registry-registrars-network.ts
+@@ -24,6 +24,7 @@ import type {
+   OpenClawPluginChannelRegistration,
+   OpenClawPluginHostedMediaResolver,
+   OpenClawPluginHttpRouteParams,
++  OpenClawOpenResponsesApplicationAuthProvider,
+   OpenClawPluginMcpServerConnectionResolver,
+   PluginRegistrationMode,
+ } from "./types.js";
+@@ -210,6 +211,34 @@ export function createNetworkRegistrars(state: PluginRegistryState) {
+     registry.httpRoutes.push(registration);
+   };
+ 
++  const registerOpenResponsesApplicationAuth = (
++    record: PluginRecord,
++    provider: OpenClawOpenResponsesApplicationAuthProvider,
++  ) => {
++    if (
++      !provider ||
++      typeof provider.authenticate !== "function" ||
++      typeof provider.authorize !== "function"
++    ) {
++      reportRegistrationError(record, "OpenResponses application auth provider is invalid");
++      return;
++    }
++    const existing = registry.openResponsesApplicationAuth;
++    if (existing && existing.pluginId !== record.id) {
++      reportRegistrationError(
++        record,
++        `OpenResponses application auth is already owned by ${existing.pluginId}`,
++      );
++      return;
++    }
++    registry.openResponsesApplicationAuth = {
++      pluginId: record.id,
++      ...(record.version ? { pluginVersion: record.version } : {}),
++      provider,
++      source: record.source,
++    };
++  };
++
+   const registerHostedMediaResolver = (
+     record: PluginRecord,
+     resolver: OpenClawPluginHostedMediaResolver,
+@@ -373,6 +402,7 @@ export function createNetworkRegistrars(state: PluginRegistryState) {
+     registerGatewayMethod,
+     registerSessionCatalog,
+     registerHttpRoute,
++    registerOpenResponsesApplicationAuth,
+     registerHostedMediaResolver,
+     registerMcpServerConnectionResolver,
+     registerChannel,
+diff --git a/src/plugins/registry-types.ts b/src/plugins/registry-types.ts
+index b76f6fc..c383576 100644
+--- a/src/plugins/registry-types.ts
++++ b/src/plugins/registry-types.ts
+@@ -75,6 +75,8 @@ type OpenClawPluginGatewayRuntimeScopeSurface =
+   import("./types.js").OpenClawPluginGatewayRuntimeScopeSurface;
+ type OpenClawGatewayDiscoveryService = import("./types.js").OpenClawGatewayDiscoveryService;
+ type OpenClawPluginHttpRouteHandler = import("./types.js").OpenClawPluginHttpRouteHandler;
++type OpenClawOpenResponsesApplicationAuthProvider =
++  import("./types.js").OpenClawOpenResponsesApplicationAuthProvider;
+ type OpenClawPluginHttpRouteMatch = import("./types.js").OpenClawPluginHttpRouteMatch;
+ type OpenClawPluginHostedMediaResolver = import("./types.js").OpenClawPluginHostedMediaResolver;
+ type OpenClawPluginReloadRegistration = import("./types.js").OpenClawPluginReloadRegistration;
+@@ -140,6 +142,13 @@ export type PluginHttpRouteRegistration = {
+   source?: string;
+ };
+ 
++export type PluginOpenResponsesApplicationAuthRegistration = {
++  pluginId: string;
++  pluginVersion?: string;
++  provider: OpenClawOpenResponsesApplicationAuthProvider;
++  source: string;
++};
++
+ type PluginHostedMediaResolverRegistration = {
+   pluginId: string;
+   pluginName?: string;
+@@ -571,6 +580,7 @@ export type PluginRegistry = {
+   boardWidgetContentKinds: Map<string, PluginBoardWidgetContentKindRegistration>;
+   coreGatewayMethodNames: string[];
+   httpRoutes: PluginHttpRouteRegistration[];
++  openResponsesApplicationAuth?: PluginOpenResponsesApplicationAuthRegistration;
+   hostedMediaResolvers: PluginHostedMediaResolverRegistration[];
+   widgetPresenters: PluginWidgetPresenterRegistration[];
+   mcpServerConnectionResolvers: PluginMcpServerConnectionResolverRegistration[];
+diff --git a/src/plugins/runtime-state.ts b/src/plugins/runtime-state.ts
+index eff3282..c0e7c52 100644
+--- a/src/plugins/runtime-state.ts
++++ b/src/plugins/runtime-state.ts
+@@ -14,7 +14,7 @@ export type RegistryState = {
+   workspaceDir: string | null;
+   runtimeSubagentMode: "default" | "explicit" | "gateway-bindable";
+   importedPluginIds: Set<string>;
+-  registrationContext?: { registry: PluginRegistry; pluginId: string };
++  registrationContext?: { registry: PluginRegistry; pluginId: string; pluginVersion?: string };
+   commandRegistryClearTail?: Promise<void>;
+   commandRegistryClearRegistries?: Map<PluginRegistry, number>;
+ };
+diff --git a/src/plugins/runtime.ts b/src/plugins/runtime.ts
+index 51f3743..61988b2 100644
+--- a/src/plugins/runtime.ts
++++ b/src/plugins/runtime.ts
+@@ -17,6 +17,7 @@ import { settlePreparedMessageToolCatalog } from "./prepared-message-tool-catalo
+ import { createEmptyPluginRegistry } from "./registry-empty.js";
+ import { markPluginRegistryActive, markPluginRegistryRetired } from "./registry-lifecycle.js";
+ import type { PluginRegistry } from "./registry-types.js";
++import type { PluginOpenResponsesApplicationAuthRegistration } from "./registry-types.js";
+ import { getActivePluginChannelRegistrySnapshotFromState } from "./runtime-channel-state.js";
+ import { PLUGIN_REGISTRY_STATE, type RegistryState } from "./runtime-state.js";
+ import { getPluginRuntimeGatewayRequestScope } from "./runtime/gateway-request-scope.js";
+@@ -47,6 +48,12 @@ const state: RegistryState = (() => {
+   return registryState;
+ })();
+ 
++export function getOpenResponsesApplicationAuthRegistration():
++  | PluginOpenResponsesApplicationAuthRegistration
++  | undefined {
++  return asPluginRegistry(state.activeRegistry)?.openResponsesApplicationAuth;
++}
++
+ function registryHasPluginHostCleanupWork(registry: PluginRegistry | null): boolean {
+   if (!registry) {
+     return false;
+@@ -291,9 +298,10 @@ export function withPluginRegistrationContext<T>(
+   registry: PluginRegistry,
+   pluginId: string,
+   run: () => T,
++  pluginVersion?: string,
+ ): T {
+   const previous = state.registrationContext;
+-  state.registrationContext = { registry, pluginId };
++  state.registrationContext = { registry, pluginId, pluginVersion };
+   try {
+     return run();
+   } finally {
+diff --git a/src/state/user-profiles.ts b/src/state/user-profiles.ts
+index bafb83c..03df606 100644
+--- a/src/state/user-profiles.ts
++++ b/src/state/user-profiles.ts
+@@ -373,6 +373,24 @@ function ensureProfileForProviderIdentity(params: {
+   );
+ }
+ 
++/** Resolve a plugin-namespaced application subject without accepting a profile id. */
++export function ensureProfileForApplicationPrincipal(
++  params: { pluginId: string; subject: string; displayName?: string },
++  options: OpenClawStateDatabaseOptions = {},
++): UserProfile {
++  const pluginId = params.pluginId.trim();
++  const subject = params.subject.trim();
++  if (!pluginId || !subject || pluginId.length > 128 || subject.length > 512) {
++    throw new TypeError("application principal requires bounded plugin and subject identifiers");
++  }
++  return ensureProfileForProviderIdentity({
++    provider: `plugin-application:${pluginId}`,
++    subject,
++    initialDisplayName: normalizeInitialDisplayName(params.displayName),
++    options,
++  });
++}
++
+ function mergeUserProfiles(
+   db: DatabaseSync,
+   sourceProfileId: string,
