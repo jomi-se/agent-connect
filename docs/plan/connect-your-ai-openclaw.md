@@ -1,7 +1,56 @@
 # Connect your AI: OpenClaw-first implementation plan
 
 Date: 2026-09-06.
-Status: accepted plan; implementation and live acceptance remain pending.
+Status: implementation in progress; native app authorization and live acceptance remain pending.
+
+## Active execution ledger
+
+Started 2026-09-06 toward a clean Tailscale-flavored OpenClaw + SDK + Bookhand
+vertical slice. Parent agent owns integration decisions, review and diagnosis;
+Sol high workers own bounded implementation lanes. No live service migration or
+push has occurred.
+
+- Native app-principal lane: inspecting the exact supported plugin/core seam
+  for delegated Responses authorization and native session/policy propagation.
+  Initial seam approved: an endpoint-specific plugin verifier for native
+  Responses, a stable plugin-namespaced app subject, and mandatory closed native
+  policy. Core propagates creator/sandbox state without a private HTTP session
+  bounce. Claimed invalid credentials deny rather than fall through to owner
+  auth; app-controlled routing overrides are rejected. Native patch is under
+  implementation and review; published OpenClaw does not yet supply this seam.
+- AI SDK lane: inspecting the actual published Open Responses adapter's history
+  and continuation behavior, then implementing thin browser-safe execution and
+  WebMCP glue. OAuth endpoint contracts are not guessed independently.
+- AI SDK source finding: published `@ai-sdk/open-responses` 2.0.39 does not emit
+  `previous_response_id`; AI SDK's tool steps replay accumulated messages. A
+  reproducible downstream patch and public step hooks now retain native
+  continuity. The real pinned OpenClaw integration passed two sequential local
+  tools and a separate contextual follow-up in one native session, without
+  duplicate result history. This used internal test authorization, not app
+  consent, and is not subscription-model or Bookhand acceptance evidence.
+- Grant service committed as `4c271ed`: durable fixed-snapshot grants, PKCE,
+  token rotation, replay-family revocation, expiry and policy rechecks. Focused
+  tests include actual file reload and uncertain-persistence fail-closed behavior.
+- OAuth plugin and browser client are being implemented against one shared
+  contract. Model alias is `openclaw/default`. One app-level refresh getter is
+  shared across features; conversations remain feature/book-local. Ambiguous
+  admitted failures do not authorize automatic replay of a retained checkpoint.
+- Native policy review caught an unnecessary unconditional sandbox requirement.
+  App-tools-only/web-only profiles must have enforced restricted tool policies;
+  code execution additionally requires a sandbox. Fingerprinting policy is not
+  by itself proof that its initial permissions match the consent description.
+- Owner-authentication finding: pinned OpenClaw already has listener-attributed,
+  WhoIs-verified Tailscale identity handling, but ordinary Responses requests do
+  not automatically inherit it. Reuse that trust boundary for owner consent;
+  app requests must use their own scoped principal afterward.
+- Bookhand checkout is on `work/openclaw-tutor-demo` with substantial pre-existing
+  uncommitted Tutor and unrelated work. Preserve all of it; coordinate ownership
+  before modifying its integration. Existing live gateways remain untouched.
+- Final native app-auth composition, Tailscale owner consent and Bookhand
+  subscription-backed tool/follow-up acceptance remain unproven.
+
+Resume from the lane artifacts and current diff, not the earlier separate-gateway
+demo's success claims. Compatibility providers remain deferred.
 
 This records José's refinements to the
 [implementation brief](../../agent-connect-implementation-brief.md) and
