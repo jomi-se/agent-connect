@@ -35,6 +35,7 @@ deploy/judge-demo/.env
 deploy/real-connector/.env
 
 # Private, local research evidence (for example raw visitor telemetry).
+# Also keep machine-specific deployment addresses and operator handoffs here.
 docs/research/local-evidence/
 
 # Secrets and operator-owned runtime state. Keep reviewed templates trackable.

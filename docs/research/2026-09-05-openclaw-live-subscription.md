@@ -13,12 +13,12 @@ copied, changed, or refreshed by this setup.
 The corrected live test completed three Responses segments: an application tool
 request, consumption of its newly generated library shelf label, and a follow-up
 recalling that same label. This is real subscription-backed inference, not the
-deterministic model fixture. Raw evidence is private under
-`.agent-connect/openclaw-demo/attempt-1788612953121`.
+deterministic model fixture. Raw evidence is retained privately; machine-specific
+artifact locations and deployment notes are not part of the public repository.
 
 Transcript-store provenance independently records API `openai-chatgpt-responses`,
 provider `openai`, model `gpt-5.6-sol`; the secret-free `model-provenance.json`
-artifact is in that evidence directory.
+artifact was retained with the private evidence.
 
 The first attempt is retained separately: subscription inference and tool return
 worked, but describing the fixture value as a secret triggered a refusal on the
@@ -36,30 +36,19 @@ test inspected an exclusively locked, unrelated SQLite database. Narrowing the
 audit to actual auth stores fixed that setup error. The service was restarted
 without further inference. Before/after startup audits confirmed unchanged source
 auth, no persisted source credential bytes and no managed OpenAI OAuth profile.
-Evidence and running PID are referenced by the private `summary.json`.
+This is dated test evidence, not a statement about a currently running service.
 
-## Private Bookhand demo
+## Browser acceptance boundary
 
-- Upstream: loopback `127.0.0.1:45529`, agent `main`.
-- Agent Connect: tmux `agc-openclaw`, loopback `127.0.0.1:8789`; health passed.
-- Intended private HTTPS gateway: `https://artifex-box.tail246db1.ts.net:8446`.
-- Bookhand origin: `https://artifex-box.tail246db1.ts.net:8445`.
-- Public card: `.agent-connect/openclaw-demo/agent-connect/public-runtime-card.json`.
-- Private gateway environment and independent auth/response state are adjacent.
-  The gateway identity and passphrase verifier were retained, but grants/devices
-  were cleared and a new capability secret generated for this isolated profile.
-  No mutable authority store is shared with the original gateway.
+A direct upstream subscription smoke and a successful HTTPS health check do not
+prove browser-to-model composition. Acceptance requires the application to
+complete normal owner consent and then a real tool/result/follow-up flow under
+its actual browser policy. That acceptance was not established by this test.
 
-The new Serve route requires the owner to run:
-
-```sh
-sudo tailscale serve --bg --https=8446 http://127.0.0.1:8789
-```
-
-This setup does not alter the existing private gateway or its routes. Bookhand's
-agent has the public card path and must wait for normal owner consent. Actual
-Bookhand browser-to-model acceptance remains open; the direct upstream smoke
-does not substitute for it.
+For reproducible setup instructions, see the
+[gateway deployment guide](../../deploy/openclaw-gateway/README.md). Keep actual
+hostnames, service sessions, evidence paths and operator coordination in
+gitignored local notes rather than this research report.
 
 ## Auth lifetime boundary
 

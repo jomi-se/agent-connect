@@ -1,5 +1,10 @@
 # OpenClaw replacement: scope, contract and progress
 
+Implementation direction superseded on 2026-09-06 by the
+[OpenClaw-first Connect your AI plan](connect-your-ai-openclaw.md). This document
+retains prior implementation and validation evidence; its separate mediation
+layer is no longer a requirement for the next implementation.
+
 Status: shared implementation committed and checked; José selected OpenClaw's
 built-in subscription loop. Live Bookhand acceptance pending. Work only on work/openclaw-gateway in
 /home/dev/agent-connect-openclaw. Personal /home/dev/agent-connect stays on
@@ -258,8 +263,8 @@ activity events, and `responses-provider.ts` maps all HTTP 401 responses to
 José chose the built-in OpenClaw subscription loop. Actual model tool-result
 consumption and follow-up passed, with unchanged source auth and no persisted
 credential copy. Background memory plugins are disabled to avoid an auxiliary
-embeddings API dependency. See the [live evidence and operator handoff](../research/2026-09-05-openclaw-live-subscription.md).
+embeddings API dependency. See the [subscription composition evidence](../research/2026-09-05-openclaw-live-subscription.md).
 
-The isolated Agent Connect gateway is running in `agc-openclaw` on loopback8789.
-The owner must enable private Serve8446, then approve Bookhand normally. This
-browser acceptance is the remaining composition gate, not another runtime choice.
+Browser acceptance requires a reachable isolated deployment and normal owner
+approval. It is a separate composition gate, not another runtime choice. Actual
+service addresses and operator steps belong in private local notes.

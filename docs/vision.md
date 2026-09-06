@@ -9,6 +9,14 @@ that the current implementation already satisfies it.
 
 ## The ambition
 
+Implementation refinement (2026-09-06): the accepted
+[OpenClaw-first plan](plan/connect-your-ai-openclaw.md) uses AI SDK for the
+application-side model/tool loop and Agent Connect for connection glue. Owner
+authentication may be Tailscale-flavored or ordinary HTTPS; grants and bearer
+verification are shared. Optional code execution means an isolated sandbox,
+not ambient host filesystem access. Compatibility providers follow Bookhand's
+native app-scoped connection. These are planned changes, not completed support.
+
 Make **Connect your AI** an ordinary application capability, like connecting a
 calendar or payment account. A developer integrates once; the user chooses who
 supplies the intelligence and authorizes the application to use it.

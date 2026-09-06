@@ -50,7 +50,7 @@ https://agent-connect-demo.web.app
           |
           | exact-origin browser requests
           v
-https://artifex-box.tail246db1.ts.net:10000
+https://<gateway-host>.<tailnet>.ts.net:10000
   Tailscale Funnel: public HTTPS
           |
           | loopback proxy only

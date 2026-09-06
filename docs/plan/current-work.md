@@ -23,7 +23,16 @@ the prototype's private routes/headers dictate the public profile.
 
 ## Active implementation candidate: OpenClaw replacement
 
-Current next step: [application-delegation research](../research/2026-09-05-openclaw-app-delegation.md).
+Current execution order is the accepted
+[OpenClaw-first Connect your AI plan](connect-your-ai-openclaw.md): implement
+app-scoped provider authorization, connect AI SDK's Open Responses adapter, and
+power Bookhand. Tailscale and ordinary HTTPS differ in owner authentication but
+share grant/token machinery. Optional code execution means a sandbox, not host
+filesystem access. Other providers come last. This supersedes the earlier
+replacement implementation prescription; existing evidence below remains valid
+only for what its fixtures actually tested.
+
+Starting evidence: [application-delegation research](../research/2026-09-05-openclaw-app-delegation.md).
 An [in-process plugin feasibility spike](openclaw-delegation-spike/README.md) now
 runs against real published OpenClaw without a core patch or separate AC server.
 It proves originless approval, native session precreation, existing Responses,
@@ -36,8 +45,10 @@ José is reconsidering whether a separate Agent Connect gateway is needed at all
 The intended experience retains the agent's normal owner-approved capabilities
 while restricting the application's control authority. Device-token/Responses,
 browser ingress and consent gaps are source-traced and execution-proven. Next is
-a bounded productization decision: durable plugin grants and owner approval UI,
-safe route-limited ingress, then SDK/Bookhand validation. Do not extend the custom
+a bounded productization decision: supported plugin work versus a small
+upstreamable core change, then shared grants and SDK/Bookhand validation. The
+earlier route-limited ingress is a prototype constraint, not the required final
+deployment architecture. Do not extend the custom
 response engine merely to preserve it. The trusted listener must remain private;
 the prototype is not safe to expose by forwarding its entire root.
 
