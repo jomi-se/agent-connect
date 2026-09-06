@@ -93,6 +93,33 @@ Corrected probe passed against the published, unpatched pinned runtime on
 the original prompt remained in the second inference request. This confirms
 the execution building blocks, not the missing authorization composition.
 
+Owner-auth investigation found another stock supported seam:
+`api.registerGatewayMethod(name, handler, { scope: "operator.admin" })`.
+`docs/plugins/sdk-overview.md` documents required authenticated-profile checks
+by default; `src/plugins/registry-registrars-network.ts` records the scope and
+profile requirement. The handler receives `client`, including its authenticated
+profile. Thus an approval RPC could check the configured owner profile and
+commit our existing grant without either new HTTP-principal helper. This is
+source evidence only; an actual plugin RPC authorization test is outstanding.
+
+A provider-hosted consent page could use the published browser-safe
+`@openclaw/gateway-client/browser` surface to call that RPC. Owner credentials
+must stay at the provider origin; Bookhand receives only app credentials.
+Do not treat the read-only embedded-frame cookie as mutation authorization.
+The stock documented generic-client bootstrap requires device identity and
+pairing. Tailscale's special WebSocket path recognizes operator UI client IDs;
+claiming the built-in Control UI identity is not yet established as a supported
+third-party plugin login contract. Therefore **seamless Tailscale consent is
+still unproven**, even though stock authenticated RPC is a plausible alternative
+to implementing password verification ourselves.
+
+Investigation outcome: retain the native patch path for the current vertical
+slice; preserve patchless deployment as a concrete follow-up, not a second
+simultaneous implementation. The supported execution probe removes one major
+unknown. The remaining cost is a plugin-owned Responses adapter and a validated
+owner WebSocket login/approval surface. Finish the already-built native consent
+composition test next; do not switch live routes without owner approval.
+
 The remaining native-patch validation path, if retained, is:
 
 1. Prove the **combined positive** isolated flow using the actual compiled plugin:
