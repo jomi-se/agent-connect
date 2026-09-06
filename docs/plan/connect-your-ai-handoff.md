@@ -28,6 +28,73 @@ and idle. Continue to use quiet commands and preserve unrelated work.
 
 ## Exact next work
 
+Before further implementation, investigate a **patchless plugin deployment**
+alongside the upstream hooks/patch approach. Both may be useful; native
+`/v1/responses` is not itself a product requirement. Do not abandon the working
+patch or start a second implementation before comparing the supported seams.
+
+Source inspection on 2026-09-06 found a concrete candidate:
+`api.runtime.agent.runEmbeddedAgent`, documented in OpenClaw's
+`docs/plugins/sdk-runtime.md`. The pinned source's public runtime parameter type
+includes `clientTools`, `onPartialReply`, `onAgentEvent`, session identity and
+sandbox-agent selection; its result includes `pendingToolCalls`. These source
+files are unchanged by our patch. This establishes API availability, not an
+end-to-end compatibility pass.
+
+The important limitation is in
+`src/plugins/runtime/runtime-embedded-agent.runtime.ts`: admission identifies
+the registered plugin and rejects caller-supplied host admission authority.
+An application grant is not automatically a native restricted principal.
+Next inspect how plugin-selected agent policy can enforce confinement, and how
+client tool outputs enter the next turn (the native HTTP path has separate
+`openresponses-prompt.ts` conversion). Determine what Responses framing/session
+bookkeeping the plugin would have to own. Also retain the separate question of
+owner authentication without our managed-Tailscale helper patch. Do not equate
+available callbacks with a complete secure patchless deployment.
+
+Follow-up source findings:
+
+- Native `openresponses-prompt.ts` renders `function_call_output` as a `Tool:`
+  conversation entry and ultimately a message string. The public embedded-run
+  parameters expose a prompt, not a Responses continuation operation. A plugin
+  would own this conversion, grant-bound response-ID/session mapping and SSE
+  framing; the native HTTP handler owns those today. This is not evidence of a
+  broken continuation, but it is real adapter work, not endpoint registration
+  alone.
+- **Correction:** both exports in `authenticated-http-principal.ts`, including
+  `getAuthenticatedPluginHttpPrincipal`, are additions in our patch. Neither
+  is evidence of a stock supported owner-identity API.
+- Stock `docs/plugins/sdk-overview.md` describes authenticated external-tab
+  bootstrap cookies, but explicitly limits them to GET/HEAD and operator.read.
+  Tab visibility scopes do not authorize mutations. That mechanism alone
+  cannot approve our OAuth grant.
+- The embedded-run wrapper admits the plugin identity, not a caller-supplied
+  host authority envelope. Dedicated configured agents/sandbox selection are
+  a candidate confinement mechanism, not yet a proven replacement for our
+  native app principal. Test confinement through the actual public wrapper
+  before recommending it.
+
+Decision remains open: patchless deployment could reuse the runtime but must
+replace both Responses adaptation and owner-consent authentication. Do not
+launch a parallel production implementation based only on the available types.
+
+The bounded stock-runtime probe is
+`scripts/openclaw-plugin-runtime-probe.test.mjs`. It uses the existing disposable
+real provider harness and deterministic inference, not personal credentials.
+It exercises a gateway-authenticated test-only plugin route, a dedicated
+deny-all native-tools agent plus one client tool, streaming callbacks and a
+second prompt with a tool-result marker. It is **not** OAuth, native app-role
+enforcement, exact Responses call-ID validation, or sandbox-escape evidence.
+The initial assertion incorrectly read pending calls at the result root;
+actual public runtime results carry them in `result.meta.pendingToolCalls`.
+Corrected probe passed against the published, unpatched pinned runtime on
+2026-09-06 (quiet-run handle `XH3D7L`): exactly two inference requests, only
+`lookup_book` offered, pending call returned, second-turn text streamed, and
+the original prompt remained in the second inference request. This confirms
+the execution building blocks, not the missing authorization composition.
+
+The remaining native-patch validation path, if retained, is:
+
 1. Prove the **combined positive** isolated flow using the actual compiled plugin:
    PAR → managed-ingress/WhoIs test fixture consent → issued token → native
    Responses. This has not run. Separate OAuth and native-fixture passes do not
