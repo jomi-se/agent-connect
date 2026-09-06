@@ -43,6 +43,13 @@ ambiguous output submission is never automatically replayed.
 
 ## Current strategy
 
+The following describes the existing replacement implementation. New work
+follows the [accepted OpenClaw-first plan](plan/connect-your-ai-openclaw.md):
+provider-owned app grants, shared token enforcement across owner-authentication
+flavors, AI SDK execution and Bookhand integration. Do not preserve the custom
+SDK loop or gateway bookkeeping solely because they appear in this baseline.
+Any changed reliability or consent guarantees must be made explicit.
+
 - Keep the bounded Open Responses profile as the sole application wire:
   `POST /v1/responses`, with the SDK coordinating function outputs and linear
   follow-up through `previous_response_id`.
