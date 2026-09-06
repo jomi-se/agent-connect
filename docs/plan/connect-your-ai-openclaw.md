@@ -94,8 +94,16 @@ push has occurred.
   PKCE and feature intent survive the redirect in sessionStorage. A new page
   lifetime requires reconnecting. Local connection generation survives refresh
   but not new authorization, and is distinct from each book conversation.
-- Final native app-auth composition, Tailscale owner consent and Bookhand
-  subscription-backed tool/follow-up acceptance remain unproven.
+- Superseding live checkpoint: compiled native app-auth composition passed;
+  the owner completed real phone/Tailscale consent and reports contextual
+  Bookhand chat, a saved source-linked Study lesson and subsequent follow-ups.
+  Reload/source-link persistence remains unverified. An earlier turn had
+  partial effects then a response-body read failure after the user switched
+  to Termux. The disconnect cause is unknown; do not replay that mutation.
+  Bookhand confirmed a separate `upsert_study_item` declaration/runtime
+  mismatch and is correcting the approved catalog (fresh consent required).
+  Cause-preserving safe diagnostics are also explicitly requested. See the
+  compact handoff for the evidence boundary; full acceptance is not complete.
 
 Resume from the lane artifacts and current diff, not the earlier separate-gateway
 demo's success claims. Compatibility providers remain deferred.

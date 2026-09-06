@@ -197,6 +197,40 @@ approved tool declarations. Refresh uses caller-owned atomic compare-and-swap;
 cross-tab CAS alone does not serialize refresh requests. The required separate
 AI SDK dependency patch and installation steps are in `connect-your-ai-sdk.md`.
 
+Live Bookhand follow-up: owner consent and contextual multi-turn chat now work.
+A request for a Study note plus permanent highlight had partial effects (the
+user saw a saved annotation), then displayed an `upsert_study_item` error and
+`Failed to process successful response`. The target provider run logged three
+tool-call segments around 23:26–23:27 followed by client disconnect at 23:27:26.
+The installed AI SDK can produce this exact error on response-body read failure;
+malformed SSE JSON produces a different error. Bookhand independently confirmed
+that an application result with `isError` does not abort continuation. The
+historical nested error was discarded, so the physical disconnect cause is
+unknown, not a proven schema defect. Do not replay mutations or claim the
+artifact/follow-up acceptance has passed. Bookhand's owning agent is adding
+bounded safe diagnostics and partial-effects messaging; no runtime restart or
+transport relaxation is justified by this evidence.
+
+The user subsequently reports a successful new conversation: the agent saved
+the source-linked "Lineland: Context and Significance" lesson using
+`create_study_lesson`, then answered contextual follow-ups. It reports repeated
+`upsert_study_item` rejections because a prose block included fields for other
+block kinds, allegedly following a flattened advertised schema. This is a
+concrete lead for Bookhand's owner to verify against declaration and handler,
+not independent proof of the model's diagnosis or its no-duplicates claim.
+The successful later run does not explain the earlier transport failure;
+reload/source-link persistence acceptance remains to be checked.
+
+Bookhand's owner subsequently verified the schema mismatch: root properties
+include every kind's fields, while `oneOf` requires but does not exclude them;
+the handler rejects foreign fields even when empty. Closed kind-specific
+branches are being implemented without relaxing handler validation. The new
+catalog requires fresh consent. The user also reports switching to Termux
+during the interrupted turn, a possible suspension/network explanation rather
+than proof. Preserve original error/cause chains internally and expose only
+safe bounded diagnostics, never raw SDK request/response objects. This fix is
+explicitly requested and remains pending in Bookhand.
+
 For native app-only policy, use explicit `tools.deny: ["*"]`: an empty native
 allowlist is permissive. Managed Tailscale owner authentication uses the actual
 listener-attributed request; ordinary HTTPS owner login remains outside v0.
