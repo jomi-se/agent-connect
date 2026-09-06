@@ -1,0 +1,129 @@
+diff --git a/node_modules/@ai-sdk/open-responses/dist/index.d.ts b/node_modules/@ai-sdk/open-responses/dist/index.d.ts
+index 1fa4cc3..2af4c96 100644
+--- a/node_modules/@ai-sdk/open-responses/dist/index.d.ts
++++ b/node_modules/@ai-sdk/open-responses/dist/index.d.ts
+@@ -136,7 +136,10 @@ declare function createOpenResponses(options: OpenResponsesProviderSettings): Op
+ declare const openResponsesLanguageModelOptions: _ai_sdk_provider_utils.LazySchema<{
+     reasoningEffort?: string | null | undefined;
+     reasoningSummary?: "auto" | "concise" | "detailed" | null | undefined;
++    previousResponseId?: string | null | undefined;
+ }>;
+ type OpenResponsesLanguageModelOptions = InferSchema<typeof openResponsesLanguageModelOptions>;
+ 
+-export { type OpenResponsesExtension as Experimental_OpenResponsesExtension, type OpenResponsesExtensionContentPart as Experimental_OpenResponsesExtensionContentPart, type OpenResponsesExtensionEvent as Experimental_OpenResponsesExtensionEvent, type OpenResponsesExtensionInputPart as Experimental_OpenResponsesExtensionInputPart, type OpenResponsesExtensionItem as Experimental_OpenResponsesExtensionItem, type OpenResponsesExtensionRecord as Experimental_OpenResponsesExtensionRecord, type OpenResponsesExtensionStreamPart as Experimental_OpenResponsesExtensionStreamPart, type OpenResponsesNamespacedType as Experimental_OpenResponsesNamespacedType, type OpenResponsesLanguageModelOptions, type OpenResponsesLanguageModelOptions as OpenResponsesOptions, type OpenResponsesProvider, type OpenResponsesProviderSettings, VERSION, createOpenResponses };
++declare const AGENT_CONNECT_CONTINUATION_PATCH: "2.0.39.1";
++
++export { AGENT_CONNECT_CONTINUATION_PATCH, type OpenResponsesExtension as Experimental_OpenResponsesExtension, type OpenResponsesExtensionContentPart as Experimental_OpenResponsesExtensionContentPart, type OpenResponsesExtensionEvent as Experimental_OpenResponsesExtensionEvent, type OpenResponsesExtensionInputPart as Experimental_OpenResponsesExtensionInputPart, type OpenResponsesExtensionItem as Experimental_OpenResponsesExtensionItem, type OpenResponsesExtensionRecord as Experimental_OpenResponsesExtensionRecord, type OpenResponsesExtensionStreamPart as Experimental_OpenResponsesExtensionStreamPart, type OpenResponsesNamespacedType as Experimental_OpenResponsesNamespacedType, type OpenResponsesLanguageModelOptions, type OpenResponsesLanguageModelOptions as OpenResponsesOptions, type OpenResponsesProvider, type OpenResponsesProviderSettings, VERSION, createOpenResponses };
+diff --git a/node_modules/@ai-sdk/open-responses/dist/index.js b/node_modules/@ai-sdk/open-responses/dist/index.js
+index 174aa73..7a6f25b 100644
+--- a/node_modules/@ai-sdk/open-responses/dist/index.js
++++ b/node_modules/@ai-sdk/open-responses/dist/index.js
+@@ -729,7 +729,11 @@ var openResponsesLanguageModelOptions = lazySchema2(
+        * Controls reasoning summary output from the model.
+        * Valid values: 'concise', 'detailed', 'auto'.
+        */
+-      reasoningSummary: z2.enum(["concise", "detailed", "auto"]).nullish()
++      reasoningSummary: z2.enum(["concise", "detailed", "auto"]).nullish(),
++      /**
++       * ID of the previous response to continue from.
++       */
++      previousResponseId: z2.string().nullish()
+     })
+   )
+ );
+@@ -917,6 +921,7 @@ var OpenResponsesLanguageModel = class _OpenResponsesLanguageModel {
+         model: this.modelId,
+         input,
+         instructions,
++        previous_response_id: (openResponsesOptions == null ? void 0 : openResponsesOptions.previousResponseId) != null ? openResponsesOptions.previousResponseId : void 0,
+         max_output_tokens: maxOutputTokens,
+         temperature,
+         top_p: topP,
+@@ -1201,7 +1206,14 @@ var OpenResponsesLanguageModel = class _OpenResponsesLanguageModel {
+               }
+               return;
+             }
+-            if (chunk.type === "response.output_item.added" && chunk.item.type === "function_call") {
++            if (chunk.type === "response.created") {
++              controller.enqueue({
++                type: "response-metadata",
++                id: chunk.response.id,
++                timestamp: chunk.response.created_at != null ? new Date(chunk.response.created_at * 1e3) : void 0,
++                modelId: chunk.response.model
++              });
++            } else if (chunk.type === "response.output_item.added" && chunk.item.type === "function_call") {
+               toolCallsByItemId.set(chunk.item.id, {
+                 toolName: chunk.item.name,
+                 toolCallId: chunk.item.call_id,
+@@ -1536,7 +1548,9 @@ function createOpenResponses(options) {
+   };
+   return provider;
+ }
++var AGENT_CONNECT_CONTINUATION_PATCH = "2.0.39.1";
+ export {
++  AGENT_CONNECT_CONTINUATION_PATCH,
+   VERSION,
+   createOpenResponses
+ };
+diff --git a/node_modules/@ai-sdk/open-responses/src/index.ts b/node_modules/@ai-sdk/open-responses/src/index.ts
+index 8c4329c..f35b550 100644
+--- a/node_modules/@ai-sdk/open-responses/src/index.ts
++++ b/node_modules/@ai-sdk/open-responses/src/index.ts
+@@ -1,4 +1,6 @@
+ export { VERSION } from './version';
++/** Downstream-only marker used to fail closed if the temporary patch is absent. */
++export const AGENT_CONNECT_CONTINUATION_PATCH = '2.0.39.1' as const;
+ export { createOpenResponses } from './open-responses-provider';
+ export type {
+   OpenResponsesProvider,
+diff --git a/node_modules/@ai-sdk/open-responses/src/responses/open-responses-language-model-options.ts b/node_modules/@ai-sdk/open-responses/src/responses/open-responses-language-model-options.ts
+index 842947c..8d0be58 100644
+--- a/node_modules/@ai-sdk/open-responses/src/responses/open-responses-language-model-options.ts
++++ b/node_modules/@ai-sdk/open-responses/src/responses/open-responses-language-model-options.ts
+@@ -19,6 +19,11 @@ export const openResponsesLanguageModelOptions = lazySchema(() =>
+        * Valid values: 'concise', 'detailed', 'auto'.
+        */
+       reasoningSummary: z.enum(['concise', 'detailed', 'auto']).nullish(),
++
++      /**
++       * ID of the previous response to continue from.
++       */
++      previousResponseId: z.string().nullish(),
+     }),
+   ),
+ );
+diff --git a/node_modules/@ai-sdk/open-responses/src/responses/open-responses-language-model.ts b/node_modules/@ai-sdk/open-responses/src/responses/open-responses-language-model.ts
+index a945a1c..f685041 100644
+--- a/node_modules/@ai-sdk/open-responses/src/responses/open-responses-language-model.ts
++++ b/node_modules/@ai-sdk/open-responses/src/responses/open-responses-language-model.ts
+@@ -298,6 +298,8 @@ export class OpenResponsesLanguageModel implements LanguageModelV4 {
+         model: this.modelId,
+         input,
+         instructions,
++        previous_response_id:
++          openResponsesOptions?.previousResponseId ?? undefined,
+         max_output_tokens: maxOutputTokens,
+         temperature,
+         top_p: topP,
+@@ -628,8 +630,20 @@ export class OpenResponsesLanguageModel implements LanguageModelV4 {
+               return;
+             }
+ 
++            if (chunk.type === 'response.created') {
++              controller.enqueue({
++                type: 'response-metadata',
++                id: chunk.response.id,
++                timestamp:
++                  chunk.response.created_at != null
++                    ? new Date(chunk.response.created_at * 1000)
++                    : undefined,
++                modelId: chunk.response.model,
++              });
++            }
++
+             // Tool call events (single-shot tool-call when complete)
+-            if (
++            else if (
+               chunk.type === 'response.output_item.added' &&
+               chunk.item.type === 'function_call'
+             ) {

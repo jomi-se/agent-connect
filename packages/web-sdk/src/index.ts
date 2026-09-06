@@ -1,4 +1,16 @@
 export { createBrowserAcpStream } from "./transport.js";
+export {
+  createAiSdkApplicationTools,
+  createAiSdkOpenResponsesGenerationOptions,
+  createAiSdkOpenResponsesModel,
+  createAiSdkOpenResponsesPrepareStep,
+  selectAiSdkOpenResponsesCheckpoint,
+} from "./ai-sdk.js";
+export type {
+  AiSdkApplicationToolsOptions,
+  AiSdkOpenResponsesFinalStep,
+  AiSdkOpenResponsesModelOptions,
+} from "./ai-sdk.js";
 export { AgentConnectError, AgentSession } from "./agent-session.js";
 export { connectAgent } from "./agent-connection.js";
 export { createAgentChat, exportAgentChatMarkdown } from "./agent-chat.js";
