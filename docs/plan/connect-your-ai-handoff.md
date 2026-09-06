@@ -122,10 +122,15 @@ composition test next; do not switch live routes without owner approval.
 
 The remaining native-patch validation path, if retained, is:
 
-1. Prove the **combined positive** isolated flow using the actual compiled plugin:
-   PAR → managed-ingress/WhoIs test fixture consent → issued token → native
-   Responses. This has not run. Separate OAuth and native-fixture passes do not
-   prove registration/request fingerprint parity for the actual bundle.
+1. **Passed 2026-09-06:** combined isolated actual compiled plugin flow:
+   PAR → managed-ingress/WhoIs fixture consent → issued token → native client
+   tool call → refresh rotation → function output → final model text. Ordinary
+   listener forged identity headers fail. Exactly two deterministic inference
+   requests, only the approved tool. Reproduction:
+   `scripts/openclaw-consent-composition.test.mjs`; quiet-run `03MTsz`.
+   The fixture must use the explicit test-only Tailscale binary override:
+   PATH shadowing failed because OpenClaw hardens PATH. This does not prove
+   live owner authentication or subscription/browser acceptance.
 2. Obtain owner approval before changing live Tailscale routes or subscription
    runtime setup. Follow the two-stage owner bootstrap in
    `openclaw-native-application-principal-seam.md`. Never approve real consent

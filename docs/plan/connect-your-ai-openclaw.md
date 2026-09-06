@@ -14,6 +14,14 @@ candidate and unresolved authority, continuation and owner-auth questions.
 Use one implementation lane for now; earlier parallel-lane entries below are
 historical status, not instructions to restart workers.
 
+2026-09-06 composition checkpoint: the actual compiled consent plugin passed
+PAR, managed-ingress fixture owner consent, token issuance, native client tool
+call, refresh rotation and result continuation to final text (`03MTsz`). The
+ordinary listener rejects forged owner headers. Test:
+`scripts/openclaw-consent-composition.test.mjs`. Tailscale/owner and inference
+are disposable fixtures; the remaining live gate still requires owner approval
+for runtime/routes and a real Bookhand acceptance run.
+
 Started 2026-09-06 toward a clean Tailscale-flavored OpenClaw + SDK + Bookhand
 vertical slice. Parent agent owns integration decisions, review and diagnosis;
 Sol high workers own bounded implementation lanes. No live service migration or

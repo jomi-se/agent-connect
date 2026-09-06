@@ -164,6 +164,18 @@ work and must not be inferred from this seam.
 
 ### Reproducible isolated build and smoke
 
+The actual compiled Agent Connect consent plugin has a separate composition
+probe in `scripts/openclaw-consent-composition.test.mjs`. Build the plugin first,
+then run it with Node 24 and `OPENCLAW_TEST_BIN` pointing to the patched host.
+It requires the pinned source mirror under
+`.agent-connect/openclaw-app-principal-work` for the disposable owner schema.
+It uses a fake Tailscale CLI through OpenClaw's explicit test-only binary
+override, not PATH shadowing (the host hardens PATH). The test environment flag
+is set only in the disposable child. No personal credentials are inherited.
+Owner identity/WhoIs and inference are fixtures; HTTP consent, CSRF, token
+exchange, policy verification and Responses execution use actual implementations.
+This is not proof of a live tailnet login or a subscription-backed browser run.
+
 Use the version and integrity recorded in `config/openclaw-test-compat.json` and
 a Node version inside that file's supported range. Starting from an untouched
 checkout of that exact OpenClaw release:
