@@ -11,6 +11,32 @@ export type {
   AiSdkOpenResponsesFinalStep,
   AiSdkOpenResponsesModelOptions,
 } from "./ai-sdk.js";
+export {
+  OpenClawConnectionError,
+  beginOpenClawAuthorization,
+  completeOpenClawAuthorization,
+  createOpenClawAccessTokenGetter,
+  discoverOpenClawProvider,
+  parseOpenClawAuthorizationTransaction,
+  refreshOpenClawConnection,
+  revokeOpenClawConnection,
+  serializeOpenClawAuthorizationTransaction,
+} from "./openclaw-connection.js";
+export type {
+  BeginOpenClawAuthorizationOptions,
+  CompleteOpenClawAuthorizationOptions,
+  CreateOpenClawAccessTokenGetterOptions,
+  DiscoverOpenClawProviderOptions,
+  OpenClawApplicationTool,
+  OpenClawAuthorizationStart,
+  OpenClawAuthorizationTransaction,
+  OpenClawConnection,
+  OpenClawConnectionErrorCode,
+  OpenClawConnectionExperience,
+  OpenClawProvider,
+  RefreshOpenClawConnectionOptions,
+  RevokeOpenClawConnectionOptions,
+} from "./openclaw-connection.js";
 export { AgentConnectError, AgentSession } from "./agent-session.js";
 export { connectAgent } from "./agent-connection.js";
 export { createAgentChat, exportAgentChatMarkdown } from "./agent-chat.js";
