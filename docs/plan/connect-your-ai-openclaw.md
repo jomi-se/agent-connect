@@ -7,6 +7,13 @@ Status: implementation in progress; native app authorization and live acceptance
 
 For a fresh session, start with [the compact handoff](connect-your-ai-handoff.md).
 
+Latest sequencing decision: inspect the supported patchless plugin execution
+path before more implementation. We may support both plugin deployment and
+upstream native hooks. The handoff records the concrete `runEmbeddedAgent`
+candidate and unresolved authority, continuation and owner-auth questions.
+Use one implementation lane for now; earlier parallel-lane entries below are
+historical status, not instructions to restart workers.
+
 Started 2026-09-06 toward a clean Tailscale-flavored OpenClaw + SDK + Bookhand
 vertical slice. Parent agent owns integration decisions, review and diagnosis;
 Sol high workers own bounded implementation lanes. No live service migration or
