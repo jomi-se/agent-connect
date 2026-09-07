@@ -174,6 +174,29 @@ describe("stock OpenClaw scoped Responses proxy", () => {
       clientId: APP,
       resource: RESOURCE,
     });
+    for (const [size, expectedStatus] of [
+      [4 * 1024 * 1024 + 1, 400],
+      [8 * 1024 * 1024, 413],
+    ]) {
+      const oversized = await post(baseUrl, refreshed.accessToken, APP, {
+        model: "openclaw/default",
+        previous_response_id: "resp_1",
+        input: [
+          {
+            type: "function_call_output",
+            call_id: "call_1",
+            output: "x".repeat(size),
+          },
+        ],
+        tools: [wireTool()],
+      });
+      expect(oversized.status).toBe(expectedStatus);
+      expect(upstream).toHaveLength(1);
+    }
+    // Section source includes XHTML, stylesheets and JSON escaping, not a tiny ID.
+    const sectionSource = JSON.stringify({
+      xhtml: '<p class="source">triangle</p>\n'.repeat(20_000),
+    });
     const continued = await post(baseUrl, refreshed.accessToken, APP, {
       model: "openclaw/default",
       instructions: "Explain the current book using the application tools.",
@@ -182,7 +205,7 @@ describe("stock OpenClaw scoped Responses proxy", () => {
         {
           type: "function_call_output",
           call_id: "call_1",
-          output: "book-id-42",
+          output: sectionSource,
         },
       ],
       tools: [wireTool()],
@@ -193,6 +216,13 @@ describe("stock OpenClaw scoped Responses proxy", () => {
       upstream[0]?.headers.get("x-openclaw-session-key"),
     );
     expect(upstream[1]?.body.tools).toEqual([wireTool()]);
+    expect(upstream[1]?.body.input).toEqual([
+      {
+        type: "function_call_output",
+        call_id: "call_1",
+        output: sectionSource,
+      },
+    ]);
     expect(upstream[1]?.body.instructions).toBe(
       "Explain the current book using the application tools.",
     );
@@ -275,7 +305,8 @@ describe("stock OpenClaw scoped Responses proxy", () => {
       input: "x".repeat(300_000),
       tools: [wireTool()],
     });
-    expect(oversized.status).toBe(413);
+    // Chat text keeps its smaller field limit even though source tools are larger.
+    expect(oversized.status).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
   });
 

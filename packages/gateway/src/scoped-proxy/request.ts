@@ -3,7 +3,10 @@ import type {
   VerifiedDelegatedGrant,
 } from "../delegated-grants.js";
 
-export const MAX_RESPONSE_REQUEST_BYTES = 256 * 1024;
+// Full source-reading tools return documents, not just short chat messages.
+// The total wire cap includes JSON escaping, instructions and the tool catalog.
+export const MAX_RESPONSE_REQUEST_BYTES = 8 * 1024 * 1024;
+export const MAX_TOOL_OUTPUT_BYTES = 4 * 1024 * 1024;
 const MAX_TEXT_BYTES = 64 * 1024;
 const MAX_INSTRUCTIONS_BYTES = 16 * 1024;
 const MAX_INPUT_ITEMS = 64;
@@ -173,7 +176,7 @@ function validateInputItem(value: unknown): Record<string, unknown> {
   if (item.type === "function_call_output") {
     requireOnly(item, ["type", "call_id", "output"]);
     const callId = requiredId(item.call_id, "call_id");
-    const output = requiredText(item.output, "output", MAX_TEXT_BYTES);
+    const output = requiredText(item.output, "output", MAX_TOOL_OUTPUT_BYTES);
     return { type: "function_call_output", call_id: callId, output };
   }
   if (item.type === "message") {
