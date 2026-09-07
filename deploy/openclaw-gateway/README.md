@@ -1,4 +1,117 @@
-# OpenClaw gateway setup (replacement branch)
+# Stock OpenClaw scoped-proxy setup
+
+This is the current setup on `work/openclaw-scoped-proxy`. Agent Connect is a
+small authorization/request-confinement proxy; the pinned published OpenClaw
+process owns Responses execution. No OpenClaw core patch or Agent Connect plugin
+is installed. The parent native-patch experiment and the older replacement
+engine remain in the repository for review/rollback only.
+
+## Security and lifecycle contract
+
+- Both processes listen on loopback. An operator-managed HTTPS ingress may expose
+  only discovery, delegated OAuth/owner-login, `POST /v1/responses`, the scoped
+  cancel extension and optional health. There is no catch-all upstream proxy.
+- Private/tailnet reachability is not owner identity. Consent uses the one-time
+  gateway enrollment secret to create an HttpOnly owner session. Forwarding and
+  `Tailscale-User-Login` headers are ignored for owner authentication and rejected
+  on Responses.
+- `OPENCLAW_TOKEN` is the stock operator bearer. Keep it in the two private local
+  configuration files only: the proxy env and OpenClaw's JSON. Never put it in a
+  browser, URL, command argument, frontend environment, shared log or runtime
+  card. Upstream subscription/API credentials remain entirely OpenClaw-owned.
+- OpenClaw config reload is off. The proxy hashes the full private config and
+  policy files and rechecks them before upstream effects. To change either, stop
+  both services, replace the files, restart OpenClaw, restart the proxy and obtain
+  fresh app consent. This is a supervised static composition, not an atomic
+  hot-reload fence. Starting OpenClaw with a different config while reusing the
+  same token/port is unsupported.
+- Continuation mappings are process-local, capped, single-use and expire after 30
+  minutes. Proxy restart, grant expiry/revocation, policy change or an ambiguously
+  admitted failure ends that conversation. Nothing is replayed automatically and
+  no exactly-once guarantee is made.
+
+## Prepare private configuration
+
+Use Node 24 LTS `>=24.15.0` and `<25`. Install the published pin into a new
+absolute prefix with the integrity-checking installer:
+
+```sh
+node scripts/openclaw-install.mjs /absolute/new/pinned-openclaw
+```
+
+Copy all examples outside the checkout or to ignored private files, replace every
+placeholder literally, and make them owner-only:
+
+```sh
+cp deploy/openclaw-gateway/openclaw.scoped-proxy.example.json /absolute/private/openclaw-scoped/openclaw.json
+cp deploy/openclaw-gateway/scoped-policies.example.json /absolute/private/agent-connect/scoped-policies.json
+cp deploy/openclaw-gateway/.env.scoped-proxy.example deploy/openclaw-gateway/.env.scoped-proxy
+chmod 600 /absolute/private/openclaw-scoped/openclaw.json
+chmod 600 /absolute/private/agent-connect/scoped-policies.json
+chmod 600 deploy/openclaw-gateway/.env.scoped-proxy
+```
+
+The example policy offers one app-tools-only agent. Its workspace must be a
+dedicated private empty directory, never the owner's normal OpenClaw workspace.
+The validator requires context injection, skills, search memory, bootstrap,
+memory plugins, model fallbacks, tool search and elevation to be disabled. A
+policy that adds `sandbox_code_execution` must use exactly `exec` and `process`
+with a per-session Docker/Podman sandbox, no network, no host binds and read-only
+or absent host workspace access.
+
+The OpenClaw JSON contains the upstream operator token literally so the proxy can
+compare it without resolving shell/config substitutions. The same literal value
+goes in `OPENCLAW_TOKEN` in the private proxy env. Do not use the placeholder form
+from the older subscription example on this path.
+
+## Initialize, verify and serve
+
+Build once. For a **new owner identity only**, initialize and save the printed
+secret in the owner's password manager. Existing identity files are never
+reinitialized.
+
+```sh
+npm run build:scoped-proxy
+export AGENT_CONNECT_OPENCLAW_ENV_FILE=/absolute/repository/deploy/openclaw-gateway/.env.scoped-proxy
+node scripts/openclaw-scoped-proxy.mjs initialize
+```
+
+Start the pinned stock OpenClaw binary under a supervisor with exactly the private
+`OPENCLAW_CONFIG_PATH`, state/home/cache directories and credential environment
+selected by the operator. This repository deliberately does not orchestrate or
+restart that service. Once it is healthy, the read-only preflight validates the
+package provenance, static config/policy, owner/grant state and authenticated
+loopback health without an inference call:
+
+```sh
+node scripts/openclaw-scoped-proxy.mjs check
+node scripts/openclaw-scoped-proxy.mjs serve
+```
+
+The stock compatibility gates use deterministic inference and no subscription:
+
+```sh
+export OPENCLAW_TEST_BIN=/absolute/new/pinned-openclaw/node_modules/.bin/openclaw
+npm run test:openclaw:fixture
+npm run test:integration:openclaw
+```
+
+The first consent navigation shows an explicit owner sign-in form. Enter the
+saved gateway enrollment secret there; never paste OpenClaw credentials. After
+sign-in, the unchanged SDK completes PAR/PKCE consent, token exchange and normal
+AI SDK use against `openclaw/default`.
+
+## Retained replacement/native experiment material
+
+The remainder of this document describes the parent replacement/native
+experiment and selected subscription bootstrap. It is retained as evidence and
+may still inform the separately authorized live smoke. Its launcher, response
+ledger, plugin build and patched-source steps are **not** prerequisites for the
+stock scoped proxy above.
+
+---
+
+## Earlier replacement branch setup
 
 The selected runtime is the **built-in OpenClaw loop**, using the operator's
 existing ChatGPT subscription, not native Codex app-server execution. Pin

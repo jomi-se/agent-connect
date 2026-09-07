@@ -1,0 +1,332 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Server } from "node:http";
+
+import { isStepCount, streamText } from "ai";
+import { describe, expect, it } from "vitest";
+
+import {
+  startOpenClawTestRuntime,
+  type OpenClawTestRuntime,
+} from "../../../scripts/openclaw-test-runtime.mjs";
+import {
+  createAiSdkApplicationTools,
+  createAiSdkOpenResponsesGenerationOptions,
+  createAiSdkOpenResponsesModel,
+  selectAiSdkOpenResponsesCheckpoint,
+} from "../../web-sdk/src/ai-sdk.js";
+import {
+  beginOpenClawAuthorization,
+  completeOpenClawAuthorization,
+  discoverOpenClawProvider,
+  refreshOpenClawConnection,
+  revokeOpenClawConnection,
+} from "../../web-sdk/src/openclaw-connection.js";
+import type { ApplicationTool } from "../../web-sdk/src/types.js";
+import { ConnectorAuth } from "../src/connector-auth.js";
+import { verifyPublishedOpenClaw } from "../src/scoped-proxy/config.js";
+import {
+  DelegatedGrantService,
+  type DelegatedGrantStore,
+} from "../src/delegated-grants.js";
+import { createScopedResponsesProxy } from "../src/scoped-proxy/server.js";
+
+const integration =
+  process.env.RUN_OPENCLAW_INTEGRATION === "1" ? describe : describe.skip;
+const ISSUER = "https://scoped-proxy.example";
+const APP = "https://bookhand.example";
+const RESOURCE = `${ISSUER}/v1/responses`;
+const PASSPHRASE = "fixture owner enrollment phrase";
+
+class MemoryStore implements DelegatedGrantStore {
+  value: unknown;
+  load() {
+    return structuredClone(this.value);
+  }
+  save(value: unknown) {
+    this.value = structuredClone(value);
+  }
+}
+
+integration("scoped proxy with the published OpenClaw process", () => {
+  it(
+    "composes owner login, OAuth, two application calls, refresh, follow-up and revoke",
+    { timeout: 150_000 },
+    async () => {
+      const executed: string[] = [];
+      let runtime: OpenClawTestRuntime | undefined;
+      let proxy: Server | undefined;
+      let inferenceStep = 0;
+      const first = applicationTool("first_action", async () => {
+        executed.push("first_action");
+        return "first-result-42";
+      });
+      const second = applicationTool("second_action", async () => {
+        executed.push("second_action");
+        return "second-result-84";
+      });
+      try {
+        verifyPublishedOpenClaw(process.env.OPENCLAW_TEST_BIN as string);
+        runtime = await startOpenClawTestRuntime({
+          async configure(config, { directory }) {
+            config.agents.defaults.skipBootstrap = true;
+            config.agents.entries = {
+              restricted: {
+                workspace: join(directory, "restricted-workspace"),
+                contextInjection: "never",
+                model: { primary: "fixture/fixture" },
+                tools: { deny: ["*"] },
+              },
+            };
+          },
+          onModelRequest(body, inference) {
+            expect(body.tools?.map((tool) => tool.function.name)).toEqual([
+              "first_action",
+              "second_action",
+            ]);
+            inferenceStep += 1;
+            const wire = JSON.stringify(body.messages);
+            if (wire.includes("FOLLOWUP")) {
+              expect(wire).toContain("first-result-42");
+              expect(wire).toContain("second-result-84");
+              inference.text(
+                "Both prior application results remain in context.",
+              );
+            } else if (wire.includes("second-result-84")) {
+              inference.text("Both application actions completed.");
+            } else if (wire.includes("first-result-42")) {
+              inference.tool("second_action", {});
+            } else {
+              inference.tool("first_action", {});
+            }
+          },
+        });
+        expect(runtime.stockPackage).toMatchObject({
+          version: "2026.9.1",
+          patchedApplicationPrincipal: false,
+        });
+        const grants = new DelegatedGrantService({
+          resource: RESOURCE,
+          store: new MemoryStore(),
+          offeredPolicies: [
+            {
+              ref: "application-tools-only",
+              label: "Application tools only",
+              agentId: "restricted",
+              fingerprint: "sha256:stock-integration-policy",
+              nativeCapabilities: [],
+            },
+          ],
+        });
+        const state = mkdtempSync(
+          join(tmpdir(), "ac-scoped-stock-integration-"),
+        );
+        const ownerAuth = new ConnectorAuth({
+          statePath: join(state, "owner.json"),
+          publicEndpoint: ISSUER,
+          enrollmentPassphrase: PASSPHRASE,
+        });
+        proxy = createScopedResponsesProxy({
+          issuer: ISSUER,
+          resource: RESOURCE,
+          upstreamBaseUrl: runtime.baseUrl,
+          upstreamToken: runtime.token,
+          grantService: grants,
+          ownerAuth,
+          policySnapshot: { assertUnchanged() {} },
+        });
+        const loopback = await listen(proxy);
+        const applicationFetch = mappedFetch(loopback, APP);
+        const transportFetch = mappedFetch(loopback);
+
+        const provider = await discoverOpenClawProvider({
+          providerUrl: ISSUER,
+          experience: "https",
+          fetch: applicationFetch,
+        });
+        const started = await beginOpenClawAuthorization({
+          provider,
+          redirectUri: `${APP}/oauth/callback`,
+          tools: [first, second],
+          fetch: applicationFetch,
+        });
+        const login = await transportFetch(started.authorizationUrl, {
+          redirect: "manual",
+        });
+        expect(login.status).toBe(401);
+        const challenge = hiddenValue(await login.text(), "challenge");
+        const authenticated = await transportFetch(
+          `${ISSUER}/agent-connect/owner/login`,
+          {
+            method: "POST",
+            redirect: "manual",
+            headers: {
+              origin: ISSUER,
+              "content-type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({ challenge, passphrase: PASSPHRASE }),
+          },
+        );
+        expect(authenticated.status).toBe(303);
+        const ownerCookie = authenticated.headers
+          .get("set-cookie")
+          ?.split(";", 1)[0];
+        expect(ownerCookie).toMatch(/^agent_connect_owner=/);
+        const consent = await transportFetch(started.authorizationUrl, {
+          headers: { cookie: ownerCookie as string },
+        });
+        expect(consent.status).toBe(200);
+        const consentHtml = await consent.text();
+        const approved = await transportFetch(
+          `${ISSUER}/agent-connect/oauth/authorize`,
+          {
+            method: "POST",
+            redirect: "manual",
+            headers: {
+              cookie: ownerCookie as string,
+              origin: ISSUER,
+              "content-type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+              request_uri: hiddenValue(consentHtml, "request_uri"),
+              csrf_token: hiddenValue(consentHtml, "csrf_token"),
+              decision: "allow",
+              policy_choice: "0",
+            }),
+          },
+        );
+        expect(approved.status).toBe(303);
+        let connection = await completeOpenClawAuthorization({
+          provider,
+          redirectUri: `${APP}/oauth/callback`,
+          transaction: started.transaction,
+          callbackUrl: approved.headers.get("location") as string,
+          fetch: applicationFetch,
+        });
+
+        const model = () =>
+          createAiSdkOpenResponsesModel({
+            endpoint: connection.endpoint,
+            model: connection.model,
+            getAccessToken: () => connection.accessToken,
+            fetch: applicationFetch,
+          });
+        const tools = createAiSdkApplicationTools([first, second], {
+          connectionId: "stock-scoped-integration",
+        });
+        const initial = streamText({
+          model: model(),
+          prompt: "Run both application actions in order.",
+          tools,
+          ...createAiSdkOpenResponsesGenerationOptions(),
+          stopWhen: isStepCount(5),
+        });
+        await initial.consumeStream();
+        const final = await initial.finalStep;
+        expect(final.text).toBe("Both application actions completed.");
+        expect(executed).toEqual(["first_action", "second_action"]);
+        const checkpoint = selectAiSdkOpenResponsesCheckpoint(undefined, final);
+        expect(checkpoint).toBeTruthy();
+
+        connection = await refreshOpenClawConnection({
+          connection,
+          fetch: applicationFetch,
+        });
+        const followup = streamText({
+          model: model(),
+          prompt: "FOLLOWUP: confirm both earlier results.",
+          tools,
+          ...createAiSdkOpenResponsesGenerationOptions(checkpoint),
+        });
+        await followup.consumeStream();
+        expect(await followup.text).toBe(
+          "Both prior application results remain in context.",
+        );
+        expect(inferenceStep).toBe(4);
+
+        await revokeOpenClawConnection({ connection, fetch: applicationFetch });
+        const afterRevoke = await applicationFetch(RESOURCE, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${connection.accessToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "openclaw/default",
+            input: "must not run",
+            tools: [wireTool(first), wireTool(second)],
+          }),
+        });
+        expect(afterRevoke.status).toBe(401);
+        expect(inferenceStep).toBe(4);
+      } finally {
+        if (proxy) await close(proxy);
+        await runtime?.close();
+      }
+    },
+  );
+});
+
+function applicationTool(
+  name: string,
+  execute: ApplicationTool["execute"],
+): ApplicationTool {
+  return {
+    name,
+    description: `Execute ${name}`,
+    inputSchema: { type: "object", additionalProperties: false },
+    execute,
+  };
+}
+
+function wireTool(tool: ApplicationTool) {
+  return {
+    type: "function",
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.inputSchema,
+  };
+}
+
+function hiddenValue(html: string, name: string): string {
+  const value = html.match(new RegExp(`name="${name}" value="([^"]+)"`))?.[1];
+  if (!value) throw new Error(`Missing ${name}`);
+  return value;
+}
+
+function mappedFetch(
+  loopback: string,
+  browserOrigin?: string,
+): typeof globalThis.fetch {
+  return (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    if (input instanceof Request) throw new Error("Unexpected Request input");
+    const logical = new URL(input.toString());
+    if (logical.origin !== ISSUER) throw new Error("Unexpected logical origin");
+    const headers = new Headers(init.headers);
+    if (browserOrigin && !headers.has("origin"))
+      headers.set("origin", browserOrigin);
+    return fetch(new URL(`${logical.pathname}${logical.search}`, loopback), {
+      ...init,
+      headers,
+    });
+  }) as typeof globalThis.fetch;
+}
+
+function listen(server: Server): Promise<string> {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      const address = server.address();
+      if (!address || typeof address === "string")
+        return reject(new Error("No address"));
+      resolve(`http://127.0.0.1:${address.port}`);
+    });
+  });
+}
+
+function close(server: Server): Promise<void> {
+  server.closeAllConnections();
+  return new Promise((resolve) => server.close(() => resolve()));
+}

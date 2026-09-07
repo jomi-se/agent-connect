@@ -1,54 +1,63 @@
 # Testing strategy
 
-Tests should fail when the dependency we ship changes, not stay green because
-our imitation agrees with yesterday's assumptions.
+Tests should fail when the dependency we operate changes, not stay green because
+an imitation agrees with an old assumption.
 
-> If changing OpenClaw could invalidate the assertion, exercise real OpenClaw.
+> If changing OpenClaw could invalidate the assertion, exercise stock OpenClaw.
 
-## Three evidence layers
+## Evidence layers
 
-1. **Agent Connect-owned invariants.** Narrow tests cover profile parsing,
-   authorization, snapshot binding, durable ownership, no-redrive rules and
-   exact races. Fault injectors may delay writes, sever streams or deliberately
-   corrupt data. They are not provider compatibility evidence.
-2. **Real dependency compatibility.** Start pinned published OpenClaw in an
-   isolated profile. Only inference is deterministic. Exercise actual HTTP/SSE,
-   client calls, continuation, tool isolation and cancellation; do not simulate
-   OpenClaw or replay recorded events. Gateway process-death cases also use the
-   real dependency. See the [test inventory](../../packages/gateway/test/README.md).
-3. **Selected subscription-runtime composition.** A final real browser flow
-   proves authorization, SDK, actual model, tool execution and meaningful use of
-   its result, followed by a second turn. Run for release or a consequential
-   default switch, not every edit: this spends model allowance.
+1. **Agent Connect-owned invariants.** Focused Vitest cases cover request/header
+   allowlists, exact consented tools, origin/grant/policy binding, bounded
+   continuations, expiry/restart/disconnect, revocation, SSE inspection and
+   redaction. A controlled Fetch double creates deliberate malformed, delayed or
+   conflicting responses; it is not OpenClaw compatibility evidence.
+2. **Published-package policy proof.** Start the version/tarball/integrity-pinned
+   unpatched OpenClaw package with isolated state and deterministic inference.
+   Exercise operator-origin `/exec`, elevation and unoffered native-call attempts
+   against a dedicated deny-all agent. Exercise required container-sandbox startup
+   with an unavailable backend and require failure before inference.
+3. **Stock composition.** Use the real web SDK, OAuth/PAR/PKCE, explicit owner
+   login and native stock Responses endpoint. Complete two app function calls and
+   outputs, final text, a contextual follow-up, refresh and revoke. Only inference
+   is deterministic; the test does not synthesize OpenClaw events.
+4. **Selected live composition.** Separately demonstrate the configured
+   subscription model, real browser/HTTPS ingress, meaningful result use and a
+   follow-up. This spends model allowance and requires explicit operator
+   coordination, so it is never an ordinary repository gate.
 
-The deterministic fixture uses the **built-in OpenClaw loop**. It does not prove
-native Codex compatibility or subscription authentication. The pinned native
-Codex adapter drops client tools; the built-in loop projects client output as
-user text. Final acceptance remains open until the selected composition is
-demonstrated and accepted. See [research](../research/2026-09-05-openclaw-replacement.md).
+## Commands
 
-## Commands and evidence
-
-Use Node 24 LTS >=24.15 and <25 and the dependency pinned in
-`config/openclaw-test-compat.json`. The [setup guide](../../deploy/openclaw-gateway/README.md)
-documents the integrity-checked installer and `OPENCLAW_TEST_BIN` override.
+Use Node 24 LTS `>=24.15.0` and `<25` plus the pin in
+`config/openclaw-test-compat.json`. Install it into a disposable dedicated prefix
+with `node scripts/openclaw-install.mjs /absolute/new/prefix`, then set
+`OPENCLAW_TEST_BIN` and ensure the matching Node is on `PATH`.
 
 ```sh
-./scripts/quiet-run.sh --detach "verify" npm run verify
-# Or just the provider boundary, including process-crash cases:
-./scripts/quiet-run.sh --detach "OpenClaw compatibility" npm run test:integration:openclaw
+./scripts/quiet-run.sh --detach "scoped proxy verification" npm run verify:scoped-proxy
+
+# Individual stock boundaries:
+npm run test:openclaw:fixture
+npm run test:integration:openclaw
 ```
 
-Default verification includes real dependency and process-crash tests. Missing
-or wrong dependencies fail, never silently skip. `verify:full` additionally runs
-installed-package, WebMCP and Canvas browser checks.
+`verify:scoped-proxy` formats/checks the repository, builds only the standalone
+proxy and its imported OAuth/grant adapters, runs focused authority tests, and
+runs the published stock proofs/composition. Missing or mismatched dependencies
+fail rather than skip. The repository-wide `npm run verify` additionally compiles
+and tests preserved historical implementations; it is useful regression evidence
+but not a scoped-proxy deployment prerequisite.
 
-Amortize service startup and control inference to keep checks fast and free of
-model usage. Cancellation evidence observes actual inference connection closure
-before the independent fixture timeout; a local terminal event proves nothing
-about upstream termination.
+The fixture is disposable, loopback-only and model-free. It must report the
+published package provenance and absence of the patch-only application-principal
+export. Never use an expanded local OpenClaw checkout as stock evidence.
 
-Name evidence precisely: ownership invariant, real OpenClaw integration, or live
-subscription-runtime composition. None replaces the others. When the real
-dependency contradicts a fixture, correct the implementation and remove the
-false assumption rather than teaching both sides the same fiction.
+## Interpreting failures
+
+Name evidence precisely: an Agent Connect invariant, published-package policy
+proof, stock composition or selected live composition. None substitutes for the
+others. A local disconnect proves proxy admission is no longer replayable; it
+does not prove all upstream effects stopped. A static config hash proves the file
+did not change; it is not an atomic attestation of an independently managed
+process. When stock behavior contradicts a double, correct the implementation or
+the claim instead of teaching the double to mimic an assumption.

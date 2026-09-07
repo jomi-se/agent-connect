@@ -1,7 +1,9 @@
 # ADR 0013: Native provider delegation and AI SDK execution
 
 Date: 2026-09-06.
-Status: accepted direction; implementation and composition verification in progress.
+Status: superseded on 2026-09-07 by
+[ADR 0014](0014-stock-openclaw-scoped-proxy.md). Retained as the native-patch
+experiment record; it is not the mandatory execution path on the child branch.
 
 Architectural hardening, 2026-09-07: native admission is the authority
 linearization point. After plugin authentication and parsed-request authorization,

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "policies": [
+    {
+      "ref": "application-tools-only",
+      "label": "Application tools only",
+      "description": "The approved application functions; no native OpenClaw tools",
+      "agentId": "agent-connect-app-only",
+      "nativeCapabilities": []
+    }
+  ]
+}
