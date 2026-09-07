@@ -1,9 +1,10 @@
 # ADR 0012: Delegate runtime execution and Responses to OpenClaw
 
-Implementation prescription superseded on 2026-09-06 by
-[ADR 0013](0013-native-provider-delegation-and-ai-sdk.md). Retain this document
-as the earlier policy-gateway decision and evidence boundary, not a requirement
-to preserve that server or its custom SDK loop.
+Implementation prescription superseded after two experiments: ADR 0013 records
+the 2026-09-06 native-patch direction; current
+[ADR 0014](0014-stock-openclaw-scoped-proxy.md) selects a smaller authorization
+proxy to stock OpenClaw. Retain this document as earlier rationale, not a
+requirement to preserve its custom Responses engine or durable ledger.
 
 Status: accepted, 2026-09-05. José selected the built-in OpenClaw loop using his
 AI subscription. Release/cutover remains gated on the

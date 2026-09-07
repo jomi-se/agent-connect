@@ -28,9 +28,15 @@ export interface OpenClawTestRuntime {
   model: "openclaw";
   directory: string;
   modelRequests: ModelObservation[];
+  stockPackage?: {
+    version: string;
+    resolved?: string;
+    integrity?: string;
+    patchedApplicationPrincipal: boolean;
+  };
   request(
     body: Record<string, unknown>,
-    options?: { sessionKey?: string; signal?: AbortSignal },
+    options?: { agentId?: string; sessionKey?: string; signal?: AbortSignal },
   ): Promise<Response>;
   close(): Promise<void>;
 }
@@ -47,6 +53,10 @@ export const compatibility: {
 export function preflightOpenClaw(): string;
 export function isSupportedOpenClawNode(version: string): boolean;
 export function startOpenClawTestRuntime(options?: {
+  configure?: (
+    config: Record<string, any>,
+    state: { directory: string; token: string; port: number },
+  ) => void | Promise<void>;
   onModelRequest?: (
     body: ModelRequestBody,
     inference: InferenceFixture,

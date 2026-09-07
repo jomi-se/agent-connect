@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.build.json",
+  "files": ["src/scoped-proxy/main.ts", "src/scoped-proxy/initialize-main.ts"],
+  "include": []
+}

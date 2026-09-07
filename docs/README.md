@@ -18,8 +18,8 @@ gateway, SDK example, supported platforms, and verification commands.
 - [Web application integration](guides/web-app-integration.md): package the SDK,
   authorize a gateway, stream a task, handle browser-owned tools, and revoke
   access.
-- [OpenClaw gateway setup](../deploy/openclaw-gateway/README.md): isolated
-  replacement setup, pinned dependency and pending live-runtime acceptance.
+- [OpenClaw scoped-proxy setup](../deploy/openclaw-gateway/README.md): pinned
+  stock dependency, static policy, explicit owner login and pending live acceptance.
 - [Firebase deployment](guides/firebase-demo-deployment.md): deploy the static
   Canvas without placing Firebase credentials on the gateway.
 - [Local code-quality analysis](guides/code-quality-analysis.md): ESLint,
@@ -32,9 +32,9 @@ documents an unstable prototype. It is not the default browser/gateway path.
 
 ## Current design direction
 
-- [ADR 0012: OpenClaw policy gateway](decisions/0012-openclaw-policy-gateway.md)
-  is the active replacement direction; [implementation and evidence gates](plan/openclaw-replacement.md)
-  distinguish shared work from unresolved runtime composition.
+- [ADR 0014: Scoped proxy to stock OpenClaw](decisions/0014-stock-openclaw-scoped-proxy.md)
+  is the active implementation; its [plan and evidence gates](plan/openclaw-scoped-proxy.md)
+  distinguish deterministic stock proof from unresolved live composition.
 - [ADR 0010: Open Responses at the application boundary](decisions/0010-open-responses-gateway-pivot.md)
 - [ADR 0011: Linear multi-turn continuation](decisions/0011-linear-multi-turn-continuation.md)
   is the leading proposed protocol direction and defines its evidence gates.
@@ -52,6 +52,7 @@ historical. AG-UI is no longer an active core-protocol experiment.
 - [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md)
 - [ADR 0007: Runtime card and gateway authorization](decisions/0007-runtime-card-and-gateway-authorization.md)
 - [ADR 0008: Control plane and runtime confinement boundary](decisions/0008-control-plane-and-runtime-confinement-boundary.md)
+- [ADR 0014: Scoped proxy to stock OpenClaw](decisions/0014-stock-openclaw-scoped-proxy.md)
 
 ## Proposed decisions
 
@@ -61,7 +62,7 @@ historical. AG-UI is no longer an active core-protocol experiment.
 ## Future work
 
 - [Reuse existing gateway components](ideas/reuse-existing-gateway-components.md):
-  the source idea, now promoted into the active OpenClaw replacement plan.
+  source rationale now realized narrowly by the active scoped proxy.
 - [Multi-turn task continuation](plan/multi-turn-task-continuation.md): explicit
   completed-task follow-up on one durable provider conversation. Implemented;
   replacement acceptance still requires the selected subscription-runtime browser gate.
@@ -83,6 +84,8 @@ historical. AG-UI is no longer an active core-protocol experiment.
 - [ADR 0001: ACP-first application boundary](decisions/0001-acp-first-application-boundary.md)
 - [ADR 0004: Pairing and session broker](decisions/0004-pairing-and-session-broker.md)
 - [ADR 0006: Explore AG-UI application boundary](decisions/0006-explore-ag-ui-application-boundary.md)
+- [ADR 0012: OpenClaw policy gateway](decisions/0012-openclaw-policy-gateway.md)
+- [ADR 0013: Native provider delegation](decisions/0013-native-provider-delegation-and-ai-sdk.md)
 
 ## Evidence and research
 

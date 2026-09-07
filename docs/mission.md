@@ -16,10 +16,12 @@ must not require installing an MCP server, copying provider conversation IDs,
 or opening a terminal.
 
 Agent Connect is the application-delegation boundary, not another agent
-platform. The implemented replacement uses OpenClaw's Responses endpoint for
-execution and event generation. Agent Connect retains consent, application
-authority, browser integration and the durable bookkeeping needed to publish
-application calls safely. See [ADR 0012](decisions/0012-openclaw-policy-gateway.md).
+platform. On `work/openclaw-scoped-proxy`, the implemented reference path uses a
+trusted authorization proxy in front of stock OpenClaw's Responses endpoint.
+Agent Connect retains consent, application authority, browser integration and a
+bounded grant-to-conversation map; stock OpenClaw owns execution, native events,
+context, tools and sandboxing. See
+[ADR 0014](decisions/0014-stock-openclaw-scoped-proxy.md).
 
 ## Product promise
 
@@ -43,12 +45,9 @@ ambiguous output submission is never automatically replayed.
 
 ## Current strategy
 
-The following describes the existing replacement implementation. New work
-follows the [accepted OpenClaw-first plan](plan/connect-your-ai-openclaw.md):
-provider-owned app grants, shared token enforcement across owner-authentication
-flavors, AI SDK execution and Bookhand integration. Do not preserve the custom
-SDK loop or gateway bookkeeping solely because they appear in this baseline.
-Any changed reliability or consent guarantees must be made explicit.
+The following describes the scoped-proxy child-branch implementation. The
+native-patch experiment remains preserved but is no longer mandatory. Any changed
+reliability or consent guarantees must be made explicit.
 
 - Keep the bounded Open Responses profile as the sole application wire:
   `POST /v1/responses`, with the SDK coordinating function outputs and linear
@@ -59,19 +58,21 @@ Any changed reliability or consent guarantees must be made explicit.
 - Construct upstream requests from the approved tool snapshot and operator
   configuration. Applications cannot choose upstream credentials, agent,
   model, session routing or host tools.
-- Re-inject the immutable approved tools on every response segment. Persist
-  calls before publication and output attempts before upstream submission.
-- Keep local response/call ownership independent of OpenClaw's response cache.
-  A grant creates a session; only an explicit capability selects one. Never
-  repair a conversation by silently substituting a new upstream session.
+- Re-inject the immutable approved tools on every response segment. Inspect
+  native output before publishing a client call, and reject unapproved names.
+- Keep a bounded current-checkpoint map independent of OpenClaw's response cache.
+  It is intentionally process-local: restart/expiry interrupts continuation,
+  and an admitted failure is never automatically replayed.
 - Keep transport ingress, owner authentication, gateway identity, application
-  grants and session authority separate. Tailscale Serve remains the supported
-  private remote trust profile; hostname recognition alone is not identity.
+  grants and session authority separate. Tailscale Serve may supply private HTTPS
+  reachability, but owner consent requires the explicit enrollment-secret-backed
+  owner session; no forwarding header or tailnet membership is identity.
 - Initialize gateway identity once through the trusted operator channel.
   Subsequent application approval happens on the gateway's OAuth/PKCE page,
   without per-application SSH, terminal use or restart.
-- Treat applications as adversarial principals. The isolated replacement demo
-  disables host tools; this is not the final product's capability ceiling.
+- Treat applications as adversarial principals. Dedicated static policies can
+  expose only app tools, public web search, or sandboxed code execution; the
+  app-only default disables native tools.
   The north star permits owner-approved native capabilities alongside app tools,
   with explicit data/execution restrictions. Agent Connect's request allowlist
   does not itself establish an OS sandbox or prevent prompt injection.
@@ -81,18 +82,19 @@ Any changed reliability or consent guarantees must be made explicit.
 
 ## Current implementation and acceptance boundary
 
-The OpenClaw replacement is implemented in the separate
-`work/openclaw-gateway` checkout. It preserves gateway identity/grant state,
-enrollment, consent, PKCE, explicit session capabilities, streaming and
-non-streaming Responses, cancellation/recovery controls and the owner session
-console. Old-provider conversations are explicitly interrupted; they are not
-reinterpreted as OpenClaw conversations.
+The stock scoped proxy is implemented on `work/openclaw-scoped-proxy`. It reuses
+delegated OAuth/PAR/PKCE, rotating refresh, revocation and the public AI SDK
+contract. It constrains requests, selects a dedicated agent/private session,
+streams observed native events, and binds one current response checkpoint to an
+application grant. Parent-branch native-patch and replacement-engine artifacts
+remain for review but are outside this path's required build/start/test surface.
 
-Real OpenClaw tests using deterministic inference exercise client-tool
-continuation, public routes and process-crash boundaries. They are transport
-and policy evidence, not proof that the selected subscription-backed runtime
-usefully consumes an actual browser tool result. Final acceptance remains
-governed by the [replacement contract](plan/openclaw-replacement.md).
+Real published OpenClaw tests using deterministic inference exercise stock
+deny-all/sandbox enforcement and the complete owner-login -> OAuth -> two-tool ->
+refresh -> follow-up -> revoke composition. They are transport and policy
+evidence, not proof that the selected subscription-backed runtime usefully
+consumes an actual browser tool result. Final acceptance remains governed by the
+[scoped proxy plan](plan/openclaw-scoped-proxy.md).
 
 José selected the built-in OpenClaw subscription loop. The final live
 subscription/browser gate remains open.
@@ -104,17 +106,16 @@ result, rather than restoring native tool-role continuation. The actual
 selected runtime must prove useful consumption of that result. See the
 [dated investigation](research/2026-09-05-openclaw-replacement.md).
 
-Cancellation immediately restricts local publication/admission; upstream
-generation stopping is a separate runtime-specific claim. Recovery and the
-owner console report interruptions and unknown usage honestly. OpenClaw
-resource lifetime must be bounded by operator policy and tested with the
-selected runtime.
+Cancellation aborts the active upstream request and prevents continuation, but
+generation stopping and already-started effects remain separate runtime-specific
+claims. The scoped proxy does not offer restart recovery, usage accounting or an
+owner session console; it reports interruptions without replay.
 
 No live cutover is implied by these source changes. The historical private
 Tailscale Serve + Omnigent + Codex browser demonstration remains baseline
 evidence, not replacement acceptance. [ADR 0010](decisions/0010-open-responses-gateway-pivot.md)
-records the earlier bundled-runtime strategy; ADR 0012 supersedes that
-implementation choice while retaining its public Open Responses boundary.
+records the earlier bundled-runtime strategy; ADR 0014 supersedes its custom
+engine/ledger prescription while retaining the public Open Responses boundary.
 App-instance sender binding and recovery/key rotation remain future hardening.
 
 ## Explicit non-goals

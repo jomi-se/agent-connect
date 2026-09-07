@@ -2,9 +2,9 @@ import http from "node:http";
 import { spawn, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, writeFile, appendFile, readFile } from "node:fs/promises";
-import { openSync, closeSync } from "node:fs";
+import { openSync, closeSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export const compatibility = JSON.parse(
   await readFile(
@@ -75,6 +75,32 @@ export async function startOpenClawTestRuntime({
     throw new Error(
       `Expected OpenClaw ${compatibility.version}; got ${version.trim()}`,
     );
+  }
+  const packageDirectory = dirname(realpathSync(binary));
+  const packageJsonPath = join(packageDirectory, "package.json");
+  let stockPackage;
+  try {
+    const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
+    const packageLock = JSON.parse(
+      await readFile(
+        join(dirname(dirname(packageDirectory)), "package-lock.json"),
+        "utf8",
+      ),
+    );
+    const locked = packageLock.packages?.["node_modules/openclaw"];
+    stockPackage = {
+      version: packageJson.version,
+      resolved: locked?.resolved,
+      integrity: locked?.integrity,
+      patchedApplicationPrincipal: Boolean(
+        packageJson.exports?.["./plugin-sdk/openresponses-application-policy"],
+      ),
+    };
+  } catch {
+    // A wrapper executable may not live below the package. Version enforcement
+    // above remains mandatory; tests that require provenance inspect the
+    // wrapper's target separately. `stockPackage` stays undefined so a caller
+    // cannot mistake an unverified wrapper for stock provenance.
   }
   let child;
   let log;
@@ -266,10 +292,12 @@ export async function startOpenClawTestRuntime({
       model: "openclaw",
       directory,
       modelRequests,
+      stockPackage,
       close,
       async request(
         body,
         {
+          agentId = "main",
           sessionKey = `agent:main:openresponses:${randomUUID()}`,
           signal,
         } = {},
@@ -279,7 +307,7 @@ export async function startOpenClawTestRuntime({
           headers: {
             "content-type": "application/json",
             authorization: `Bearer ${token}`,
-            "x-openclaw-agent-id": "main",
+            "x-openclaw-agent-id": agentId,
             "x-openclaw-session-key": sessionKey,
           },
           body: JSON.stringify({ model: "openclaw", ...body }),

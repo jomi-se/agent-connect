@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-06
+Updated: 2026-09-07
 
 This is the canonical unfinished-work list. It records current priorities and
 only enough completed context to explain them. Product boundaries live in the
@@ -21,9 +21,31 @@ This documents direction, not a new release gate or live cutover. Keep existing
 implementation evidence distinct from proposed standard behavior; do not let
 the prototype's private routes/headers dictate the public profile.
 
-## Active implementation candidate: OpenClaw replacement
+## Active implementation: stock OpenClaw scoped proxy
 
-Current execution order is the accepted
+On `work/openclaw-scoped-proxy`, the accepted implementation is the bounded
+authorization proxy in [ADR 0014](../decisions/0014-stock-openclaw-scoped-proxy.md)
+and its [execution plan](openclaw-scoped-proxy.md). It keeps the existing public
+OAuth and AI SDK contract while privately operating the integrity-pinned stock
+OpenClaw Responses endpoint. The app cannot select native agent/model/session,
+headers, scopes, media fetches or unknown request features.
+
+Credential-free stock tests now prove the dedicated deny-all/native-command
+ceiling, unavailable-sandbox failure before inference, and the full owner-login,
+OAuth, two application-tool results, refresh, source conversation follow-up and
+revocation composition. Static OpenClaw/policy files are fingerprinted and any
+change fails closed until supervised restart and fresh consent. No deployment,
+personal configuration, subscription call, Tailscale change or Bookhand change
+has been made. The next external milestone is the separately authorized real
+subscription/browser/Bookhand acceptance smoke after final branch review.
+
+The parent native application-principal patch and earlier replacement engine are
+retained as experiment/rollback artifacts. They are not mandatory dependencies
+of the scoped proxy and must not be mistaken for stock compatibility evidence.
+
+## Superseded implementation candidate: native OpenClaw delegation
+
+Historical execution order was the accepted
 [OpenClaw-first Connect your AI plan](connect-your-ai-openclaw.md): implement
 app-scoped provider authorization, connect AI SDK's Open Responses adapter, and
 power Bookhand. Tailscale and ordinary HTTPS differ in owner authentication but

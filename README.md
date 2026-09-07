@@ -3,10 +3,10 @@
 Bring your AI subscription to any web app.
 
 Build AI features using the user's existing AI subscription instead of requiring
-an API key or a second AI subscription from the application. This branch replaces
-the original backend with an OpenClaw policy
-gateway. The selected runtime is OpenClaw's built-in loop using the user's
-subscription; live browser acceptance remains open.
+an API key or a second AI subscription from the application. On this branch a
+small trusted authorization proxy privately operates stock OpenClaw's native
+Responses endpoint. OpenClaw owns execution, context, tools, sandboxing and
+subscription credentials; live browser acceptance remains open.
 
 ## Built with Codex and GPT-5.6
 
@@ -30,7 +30,7 @@ demo and existing personal installation are not changed by this branch.
 
 The anonymous judge profile is retired; connect to a gateway you own.
 
-## Run the OpenClaw replacement
+## Run the stock OpenClaw scoped proxy
 
 The [gateway guide](deploy/openclaw-gateway/README.md) covers isolated setup,
 the pinned dependency and the private launcher. Use Node 24 LTS >=24.15 and <25.
@@ -39,24 +39,25 @@ its harness, manage credentials or restart personal services.
 
 ```sh
 npm install
-npm run build
-cp deploy/openclaw-gateway/.env.example deploy/openclaw-gateway/.env
-chmod 600 deploy/openclaw-gateway/.env
+npm run build:scoped-proxy
+cp deploy/openclaw-gateway/.env.scoped-proxy.example deploy/openclaw-gateway/.env.scoped-proxy
+chmod 600 deploy/openclaw-gateway/.env.scoped-proxy
 # Edit private literal values; follow the guide for new identity initialization.
-export AGENT_CONNECT_OPENCLAW_ENV_FILE="$PWD/deploy/openclaw-gateway/.env"
-node scripts/openclaw-gateway.mjs check
-node scripts/openclaw-gateway.mjs serve
+export AGENT_CONNECT_OPENCLAW_ENV_FILE="$PWD/deploy/openclaw-gateway/.env.scoped-proxy"
+node scripts/openclaw-scoped-proxy.mjs check
+node scripts/openclaw-scoped-proxy.mjs serve
 ```
 
-The gateway mediates private OpenClaw Responses. Tailscale Serve can expose only
-Agent Connect over authenticated HTTPS. OpenClaw's operator token stays on the
-server. Preserve existing identity state during migration; old Omnigent
-conversations cannot become OpenClaw conversations.
+The proxy mediates private stock OpenClaw Responses. Tailscale Serve may provide
+HTTPS reachability, but owner consent requires the explicit gateway enrollment
+secret and never trusts a forwarding header as identity. The OpenClaw operator
+token stays on the server. Config changes require supervised restart and fresh
+consent; process restart ends in-memory continuations.
 
-The pinned built-in OpenClaw loop passes deterministic client-tool tests, but
-its native Codex adapter drops those tools. The built-in loop also projects
-client output as user text. See the [measured findings](docs/research/2026-09-05-openclaw-replacement.md):
-this is not yet a proven subscription-backed replacement.
+The published pinned runtime passes deterministic app-tool, continuation,
+native-tool denial and sandbox-failure tests. These tests use fixture inference,
+not subscription credentials, so the selected live subscription/browser flow is
+still a separate acceptance gate.
 
 On a first connection, the gateway shows the exact
 Origin, callback, scopes, and tools before approval. The resulting grant is
@@ -91,20 +92,33 @@ const tools = [
   }),
 ];
 
-const connection = await connectAgent({
-  baseUrl: runtimeCard.endpoint,
-  appId: "my-shopping-list",
-  tools,
-  accessToken: approvedGrant,
+const provider = await discoverOpenClawProvider({
+  providerUrl: userOwnedGatewayUrl,
+  experience: "https",
 });
+const authorization = await beginOpenClawAuthorization({
+  provider,
+  redirectUri: `${location.origin}/oauth/callback`,
+  tools,
+});
+// Persist authorization.transaction, redirect to authorization.authorizationUrl,
+// then exchange the callback with completeOpenClawAuthorization.
 
-for await (const event of connection.session.streamTask(prompt)) {
-  renderAgentActivity(event);
-}
+const model = createAiSdkOpenResponsesModel({
+  endpoint: connection.endpoint,
+  model: connection.model,
+  getAccessToken,
+});
+const result = streamText({
+  model,
+  prompt,
+  tools: createAiSdkApplicationTools(tools, { connectionId }),
+  ...createAiSdkOpenResponsesGenerationOptions(previousResponseId),
+});
 ```
 
-The full guide includes signed runtime-card verification and the gateway
-authorization redirect.
+The full guide includes PAR/PKCE transaction storage, token refresh, explicit
+continuation checkpoints and revocation.
 
 ## Architecture
 
@@ -115,7 +129,7 @@ Web application
         │ sequential calls & previous_response_id continuation
         ▼
 User-owned Agent Connect gateway
-  identity, consent, grants, profile and durable call ownership
+  explicit owner login, consent, grants, bounded conversation ownership
         │ private operator-authenticated Open Responses
         ▼
 OpenClaw → operator-configured runtime/model
@@ -124,14 +138,14 @@ OpenClaw → operator-configured runtime/model
 
 Open Responses HTTP/SSE is the standard public wire between applications and the
 gateway. OpenClaw owns the runtime loop and provider integration. Agent Connect
-retains the untrusted-application boundary and durable ownership checks, not
-another agent loop. See [ADR 0012](docs/decisions/0012-openclaw-policy-gateway.md).
+retains the untrusted-application authorization boundary, not another agent
+loop. See [ADR 0014](docs/decisions/0014-stock-openclaw-scoped-proxy.md).
 
 ## Supported platforms
 
 - Web SDK: modern HTTPS browsers with Fetch, SSE, Web Crypto, and Web Storage.
 - Development/operator checks: Node.js 24 LTS >=24.15 and <25.
-- Replacement setup: pinned OpenClaw 2026.9.1, tested in isolation on this Linux VM.
+- Scoped-proxy setup: pinned unpatched OpenClaw 2026.9.1, tested in isolation on this Linux VM.
 
 Other Linux distributions and architectures may work but have not passed the
 complete replacement acceptance flow. Windows and macOS gateway hosting are not
@@ -139,10 +153,12 @@ currently tested.
 
 ## Security boundary
 
-The runtime card pins the gateway public key before the app sends tools or
-prompts. Tailscale authenticates the private transport user. Gateway-owned
-consent and PKCE create a revocable capability bound to the exact application
-and tool snapshot. These mechanisms authorize an application.
+The scoped client pins the configured HTTPS origin through exact OAuth metadata;
+it does not independently attest the host or OpenClaw process. A saved enrollment
+secret establishes the owner browser session; tailnet membership or
+caller-provided identity headers do not. Gateway-owned consent and PKCE create a
+revocable capability bound to the exact application and tool snapshot. The
+runtime-card signature remains part of the preserved older gateway/Canvas flow.
 
 Treat every authorized app as a potentially adversarial principal. The real
 profile is not a hardened sandbox for arbitrary hostile apps. The selected
@@ -164,15 +180,18 @@ server-side backstop.
 
 ```sh
 npm install
-npm run verify
+npm run verify:scoped-proxy
 ```
 
-`npm run verify` runs formatting checks, type checks, unit and behavior tests,
-all package builds, real-OpenClaw compatibility and process-crash tests. It
+`npm run verify:scoped-proxy` runs formatting checks, the standalone proxy build,
+focused authority tests and real stock-OpenClaw compatibility/composition. It
 requires the pin in `config/openclaw-test-compat.json` on PATH or at
 `OPENCLAW_TEST_BIN`; install using the guide above. Only inference is
 deterministic: no subscription credentials or model credits are needed.
 A missing or mismatched dependency fails instead of skipping tests.
+
+`npm run verify` remains the repository-wide compatibility gate, including
+preserved historical implementation tests and all package builds.
 
 For local maintainability diagnostics, run `npm run analyze`. It reports
 complexity, dependency boundaries, unused code, and production duplication
@@ -186,7 +205,7 @@ Additional real-boundary checks:
 # Run the isolated real-OpenClaw compatibility suite directly.
 npm run test:integration:openclaw
 
-# Test gateway response durability across process death.
+# Run preserved legacy process-death evidence (not a scoped-proxy prerequisite).
 npm run test:integration:response-crash
 
 # Pack the SDK, install it into a clean external npm project, and import it.
@@ -204,9 +223,9 @@ compatibility tests, and selected subscription-runtime composition smoke tests.
 ## Project status
 
 This is a hackathon MVP and is still in hackathon MVP state.
-The current boundary is one user, one private OpenClaw gateway, one configured
-agent, one active task per app session, and one fixed tool snapshot per logical
-session. Use at your own risk ^^.
+The current boundary is one user, one private stock OpenClaw, one supervised
+scoped proxy, preconfigured dedicated agents, one fixed tool snapshot per grant
+conversation, and bounded process-local continuation. Use at your own risk ^^.
 
 See [the documentation index](docs/README.md), [mission](docs/mission.md), and
 [accepted decisions](docs/decisions/).

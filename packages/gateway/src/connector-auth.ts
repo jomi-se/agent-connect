@@ -140,6 +140,7 @@ const MAX_PENDING_AUTHORIZATIONS = 256;
 const MAX_AUTHORIZATION_CODES = 256;
 const MAX_PASSPHRASE_FAILURES = 256;
 const MAX_CONCURRENT_PASSPHRASE_VERIFICATIONS = 2;
+const MAX_ENROLLED_DEVICES = 256;
 const ALLOWED_SCOPES = new Set([
   "agent:prompt",
   "agent:result",
@@ -274,6 +275,12 @@ export class ConnectorAuth {
     );
   }
 
+  isOwnerSession(token: string | undefined, ownerSubject: string): boolean {
+    return token?.startsWith("aco_") === true
+      ? this.isDeviceEnrolled(token, ownerSubject)
+      : false;
+  }
+
   async enrollDevice(
     passphrase: string,
     tailscaleUser: string,
@@ -333,6 +340,70 @@ export class ConnectorAuth {
     } finally {
       this.activeEnrollmentRequests.delete(authorizationRequestId);
     }
+  }
+
+  /**
+   * Establishes an explicit owner-browser session from the one-time enrollment
+   * secret. This is the non-Tailscale owner-auth path used by the scoped
+   * Responses proxy: network provenance is deliberately not treated as proof
+   * of owner identity.
+   */
+  async enrollOwnerSession(
+    passphrase: string,
+    ownerSubject: string,
+  ): Promise<string> {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$/.test(ownerSubject)) {
+      throw new ConnectorAuthError("invalid_owner_subject");
+    }
+    this.pruneTransientState();
+    const attemptKey = `owner\u0000${ownerSubject}`;
+    this.requirePassphraseAllowed(attemptKey);
+    if (
+      this.activePassphraseVerifications >=
+      MAX_CONCURRENT_PASSPHRASE_VERIFICATIONS
+    ) {
+      throw new ConnectorAuthError("enrollment_busy");
+    }
+    this.activePassphraseVerifications += 1;
+    let actual: Buffer;
+    try {
+      actual = await deriveEnrollmentVerifier(
+        passphrase,
+        Buffer.from(this.state.enrollmentSalt, "base64url"),
+      );
+    } finally {
+      this.activePassphraseVerifications -= 1;
+    }
+    const expected = Buffer.from(this.state.enrollmentVerifier, "base64url");
+    if (
+      actual.length !== expected.length ||
+      !timingSafeEqual(actual, expected)
+    ) {
+      this.recordPassphraseFailure(attemptKey, "explicit-owner-login");
+      throw new ConnectorAuthError("invalid_enrollment_passphrase");
+    }
+    this.failedPassphrases.delete(attemptKey);
+    const activeDevices = this.state.devices.filter(
+      (device) =>
+        device.expiresAt > this.now() && device.revokedAt === undefined,
+    );
+    this.state.devices.splice(0, this.state.devices.length, ...activeDevices);
+    if (this.state.devices.length >= MAX_ENROLLED_DEVICES) {
+      throw new ConnectorAuthError("enrollment_capacity");
+    }
+    const token = `aco_${randomBytes(32).toString("base64url")}`;
+    const now = this.now();
+    this.state.devices.push({
+      id: `owner_${randomBytes(12).toString("base64url")}`,
+      tokenHash: sha256(token),
+      // This legacy internal field stores the explicit owner subject for this
+      // path. No Tailscale header participates in verification.
+      tailscaleUser: ownerSubject,
+      createdAt: now,
+      expiresAt: now + this.deviceTtlSeconds * 1000,
+    });
+    this.persist();
+    return token;
   }
 
   approve(
@@ -528,7 +599,11 @@ export class ConnectorAuth {
       if (record.expiresAt <= now) this.codes.delete(code);
     }
     for (const [key, failure] of this.failedPassphrases) {
-      if (failure.resetAt <= now || !this.pending.has(failure.requestId)) {
+      if (
+        failure.resetAt <= now ||
+        (failure.requestId.startsWith("ar_") &&
+          !this.pending.has(failure.requestId))
+      ) {
         this.failedPassphrases.delete(key);
       }
     }
