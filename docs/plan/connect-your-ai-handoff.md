@@ -279,3 +279,16 @@ while the SDK's uncancelled refresh is still running. Disconnect/replacement
 must invalidate sibling tabs and prevent late results resurrecting old access;
 retain the address for reconnects. Do not persist/replay chat checkpoints as
 part of this request. Expired/revoked grants or changed tools require consent.
+
+Implemented in Bookhand's existing branch: versioned credentials and separate
+preferences, validated restore, full-lock rotation with credential-free marker,
+cross-tab invalidation, initiating-tab failure cleanup and stale-resync
+suppression during disconnect. Parent Bookhand verification reports 26 focused
+connection tests, panel/redirect-return tests, typecheck/build and focused lint
+passing. Root reviewed rotation/error handling and independently fetched the
+private preview: `index-CnwyuI8u.js` matches local built bytes, SHA-256
+`216d09758b141cb2f204a562efd77b76a492908b579b35f15ed7eda3b656530c`.
+No real credentials, consent or model calls were used for these checks. One
+owner connection after reload establishes the saved record; existing memory-only
+state cannot be migrated from an already-running old page automatically. The
+new persistent flow has deterministic SDK/store evidence, not a phone test yet.
