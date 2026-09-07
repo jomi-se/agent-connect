@@ -992,7 +992,9 @@ function sendHtml(
     ...safeResponseHeaders("text/html; charset=utf-8", Buffer.byteLength(body)),
     "content-security-policy":
       "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
-    "referrer-policy": "no-referrer",
+    // Preserve Origin on same-origin browser form POSTs without leaking
+    // referrers to the application's cross-origin OAuth callback.
+    "referrer-policy": "same-origin",
   });
   response.end(body);
 }

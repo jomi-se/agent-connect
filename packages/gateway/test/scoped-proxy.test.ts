@@ -55,6 +55,7 @@ describe("stock OpenClaw scoped Responses proxy", () => {
       headers: { "tailscale-user-login": "local-owner" },
     });
     expect(login.status).toBe(401);
+    expect(login.headers.get("referrer-policy")).toBe("same-origin");
     const challenge = hiddenValue(await login.text(), "challenge");
     const tampered = await globalThis.fetch(
       `${baseUrl}/agent-connect/owner/login`,
