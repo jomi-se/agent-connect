@@ -176,6 +176,7 @@ describe("stock OpenClaw scoped Responses proxy", () => {
     });
     const continued = await post(baseUrl, refreshed.accessToken, APP, {
       model: "openclaw/default",
+      instructions: "Explain the current book using the application tools.",
       previous_response_id: "resp_1",
       input: [
         {
@@ -192,6 +193,9 @@ describe("stock OpenClaw scoped Responses proxy", () => {
       upstream[0]?.headers.get("x-openclaw-session-key"),
     );
     expect(upstream[1]?.body.tools).toEqual([wireTool()]);
+    expect(upstream[1]?.body.instructions).toBe(
+      "Explain the current book using the application tools.",
+    );
 
     grants.revokeByToken(refreshed.accessToken, APP);
     const revoked = await post(baseUrl, refreshed.accessToken, APP, {
