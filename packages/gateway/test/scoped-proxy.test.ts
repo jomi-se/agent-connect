@@ -11,6 +11,7 @@ import {
   DelegatedGrantService,
   type DelegatedGrantStore,
 } from "../src/delegated-grants.js";
+import { ContinuationRegistry } from "../src/scoped-proxy/continuations.js";
 import { createScopedResponsesProxy } from "../src/scoped-proxy/server.js";
 
 const ISSUER = "https://gateway.example";
@@ -430,6 +431,101 @@ describe("stock OpenClaw scoped Responses proxy", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("rechecks grant authority after the runtime lookup without consuming continuation", async () => {
+    const grants = service();
+    const token = issue(grants, APP).accessToken;
+    const registry = new ContinuationRegistry();
+    const entered = deferred();
+    const release = deferred();
+    let runtimeChecks = 0;
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json({
+        id: "resp_existing",
+        status: "completed",
+        output: [],
+      }),
+    );
+    const { baseUrl } = await startProxy(
+      grants,
+      fetch,
+      () => {},
+      async () => {
+        runtimeChecks += 1;
+        if (runtimeChecks === 2) {
+          entered.resolve();
+          await release.promise;
+        }
+      },
+      registry,
+    );
+    const initial = await post(baseUrl, token, APP, {
+      model: "openclaw/default",
+      input: "first",
+      tools: [wireTool()],
+    });
+    expect(initial.status).toBe(200);
+    expect(registry.size).toBe(1);
+
+    const continued = post(baseUrl, token, APP, {
+      model: "openclaw/default",
+      previous_response_id: "resp_existing",
+      input: "continue",
+      tools: [wireTool()],
+    });
+    await entered.promise;
+    grants.revokeByToken(token, APP);
+    release.resolve();
+    expect((await continued).status).toBe(401);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(registry.size).toBe(1);
+  });
+
+  it("does not reserve or dispatch after disconnect during runtime lookup", async () => {
+    const grants = service();
+    const token = issue(grants, APP).accessToken;
+    const registry = new ContinuationRegistry();
+    const entered = deferred();
+    const release = deferred();
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const { baseUrl } = await startProxy(
+      grants,
+      fetch,
+      () => {},
+      async () => {
+        entered.resolve();
+        await release.promise;
+      },
+      registry,
+    );
+    const controller = new AbortController();
+    const pending = globalThis.fetch(`${baseUrl}/v1/responses`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        origin: APP,
+      },
+      body: JSON.stringify({
+        model: "openclaw/default",
+        input: "disconnect",
+        tools: [wireTool()],
+      }),
+    });
+    const aborted = pending.then(
+      () => false,
+      () => true,
+    );
+    await entered.promise;
+    controller.abort();
+    expect(await aborted).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    release.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(fetch).not.toHaveBeenCalled();
+    expect(registry.size).toBe(0);
+  });
+
   it("drops a partially observed response mapping when the browser disconnects", async () => {
     const grants = service();
     const token = issue(grants, APP).accessToken;
@@ -540,6 +636,7 @@ async function startProxy(
   fetch: typeof globalThis.fetch,
   assertUnchanged: () => void = () => {},
   assertRuntimeCurrent: () => Promise<void> = async () => {},
+  continuationRegistry?: ContinuationRegistry,
 ): Promise<{ baseUrl: string }> {
   const directory = mkdtempSync(join(tmpdir(), "ac-scoped-proxy-test-"));
   const ownerAuth = new ConnectorAuth({
@@ -555,6 +652,7 @@ async function startProxy(
     grantService: grants,
     ownerAuth,
     policySnapshot: { assertUnchanged, assertRuntimeCurrent },
+    ...(continuationRegistry ? { continuationRegistry } : {}),
     fetch,
   });
   servers.push(server);
@@ -595,6 +693,14 @@ function wireTool() {
 
 function sse(value: unknown): string {
   return `data: ${JSON.stringify(value)}\n\n`;
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 function hiddenValue(html: string, name: string): string {

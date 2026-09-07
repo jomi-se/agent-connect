@@ -117,7 +117,7 @@ function validatePolicyConfig(
 ): void {
   assertOnlyKeys(
     config,
-    ["gateway", "auth", "agents", "tools", "plugins"],
+    ["gateway", "auth", "agents", "tools", "plugins", "models"],
     "root",
   );
   const gateway = requiredRecord(config.gateway, "gateway");
@@ -159,14 +159,12 @@ function validatePolicyConfig(
   }
 
   const agents = requiredRecord(config.agents, "agents");
+  if (config.auth !== undefined) requiredRecord(config.auth, "auth");
+  if (config.models !== undefined) requiredRecord(config.models, "models");
   const defaults = requiredRecord(agents.defaults, "agents.defaults");
   const entries = requiredRecord(agents.entries, "agents.entries");
   assertOnlyKeys(agents, ["defaults", "entries"], "agents");
   validateDefaults(defaults);
-  if (Object.keys(entries).length !== 1)
-    throw new Error(
-      "The scoped profile must contain exactly one dedicated agent",
-    );
 
   const globalTools = requiredRecord(config.tools, "tools");
   const elevated = requiredRecord(globalTools.elevated, "tools.elevated");
@@ -194,8 +192,10 @@ function validatePolicyConfig(
       "OpenClaw config must disable tool search, elevation, bootstrap and memory plugins",
     );
 
-  validateProviderAuth(requiredRecord(config.auth, "auth"));
-  for (const policy of policies) validateDedicatedAgent(config, policy);
+  const selectedModels = policies.map((policy) =>
+    validateDedicatedAgent(config, policy),
+  );
+  validateSelectedModels(defaults, selectedModels);
 }
 
 function validateDefaults(defaults: JsonRecord): void {
@@ -208,22 +208,31 @@ function validateDefaults(defaults: JsonRecord): void {
     defaults.heartbeat,
     "agents.defaults.heartbeat",
   );
-  const models = requiredRecord(defaults.models, "agents.defaults.models");
+  requiredRecord(defaults.models, "agents.defaults.models");
   assertOnlyKeys(heartbeat, ["every"], "agents.defaults.heartbeat");
   if (
     heartbeat.every !== "0m" ||
     typeof defaults.timeoutSeconds !== "number" ||
     !Number.isInteger(defaults.timeoutSeconds) ||
     defaults.timeoutSeconds < 1 ||
-    defaults.timeoutSeconds > 1800 ||
-    Object.keys(models).length !== 1
+    defaults.timeoutSeconds > 1800
   )
     throw new Error(
       "OpenClaw agent defaults must match the narrow scoped template",
     );
-  for (const [modelId, value] of Object.entries(models)) {
+}
+
+function validateSelectedModels(
+  defaults: JsonRecord,
+  selectedModelIds: readonly string[],
+): void {
+  const models = requiredRecord(defaults.models, "agents.defaults.models");
+  for (const modelId of new Set(selectedModelIds)) {
     requireIdentity(modelId, "default model id");
-    const model = requiredRecord(value, `agents.defaults.models.${modelId}`);
+    const model = requiredRecord(
+      models[modelId],
+      `agents.defaults.models.${modelId}`,
+    );
     const runtime = requiredRecord(
       model.agentRuntime,
       `agents.defaults.models.${modelId}.agentRuntime`,
@@ -245,31 +254,7 @@ function validateDefaults(defaults: JsonRecord): void {
   }
 }
 
-function validateProviderAuth(auth: JsonRecord): void {
-  assertOnlyKeys(auth, ["profiles", "order"], "auth");
-  const profiles = requiredRecord(auth.profiles, "auth.profiles");
-  const order = requiredRecord(auth.order, "auth.order");
-  if (Object.keys(profiles).length !== 1 || Object.keys(order).length !== 1) {
-    throw new Error(
-      "OpenClaw auth must select exactly one OAuth provider profile",
-    );
-  }
-  for (const [profileId, value] of Object.entries(profiles)) {
-    requireIdentity(profileId, "auth profile id");
-    const profile = requiredRecord(value, `auth.profiles.${profileId}`);
-    assertOnlyKeys(profile, ["provider", "mode"], `auth.profiles.${profileId}`);
-    if (
-      typeof profile.provider !== "string" ||
-      profile.mode !== "oauth" ||
-      !exactStrings(order[profile.provider], [profileId])
-    )
-      throw new Error(
-        "OpenClaw auth must use one exactly ordered OAuth profile",
-      );
-  }
-}
-
-function validateDedicatedAgent(config: JsonRecord, policy: Policy): void {
+function validateDedicatedAgent(config: JsonRecord, policy: Policy): string {
   requireIdentity(policy.ref, "policy ref");
   requireIdentity(policy.label, "policy label");
   requireIdentity(policy.agentId, "agent id");
@@ -289,8 +274,6 @@ function validateDedicatedAgent(config: JsonRecord, policy: Policy): void {
     entries[policy.agentId],
     `agents.entries.${policy.agentId}`,
   );
-  if (Object.keys(entries)[0] !== policy.agentId)
-    throw new Error(`Dedicated agent ${policy.agentId} is not the sole agent`);
   assertOnlyKeys(
     agent,
     [
@@ -354,16 +337,6 @@ function validateDedicatedAgent(config: JsonRecord, policy: Policy): void {
     memorySearch.enabled !== false
   )
     throw new Error(`Dedicated agent ${policy.agentId} is not closed`);
-  const defaults = requiredRecord(
-    requiredRecord(config.agents, "agents").defaults,
-    "agents.defaults",
-  );
-  const models = requiredRecord(defaults.models, "agents.defaults.models");
-  if (!Object.hasOwn(models, model.primary)) {
-    throw new Error(
-      `Dedicated agent ${policy.agentId} model is outside the pinned default model`,
-    );
-  }
   if (expectedTools.length === 0) {
     if (!exactStrings(tools.deny, ["*"]) || tools.allow !== undefined) {
       throw new Error(
@@ -412,6 +385,7 @@ function validateDedicatedAgent(config: JsonRecord, policy: Policy): void {
       `Dedicated agent ${policy.agentId} must omit sandbox without code execution`,
     );
   }
+  return model.primary;
 }
 
 function parsePolicyFile(bytes: Buffer): ScopedProxyPolicyFile {

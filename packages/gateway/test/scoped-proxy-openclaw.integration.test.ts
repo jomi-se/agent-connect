@@ -36,6 +36,7 @@ import {
   createOpenClawRuntimePolicyVerifier,
   readStockOpenClawConfig,
 } from "../src/scoped-proxy/runtime-config.js";
+import { loadStaticOpenClawPolicy } from "../src/scoped-proxy/policy.js";
 
 const integration =
   process.env.RUN_OPENCLAW_INTEGRATION === "1" ? describe : describe.skip;
@@ -75,13 +76,29 @@ integration("scoped proxy with the published OpenClaw process", () => {
         verifyPublishedOpenClaw(process.env.OPENCLAW_TEST_BIN as string);
         runtime = await startOpenClawTestRuntime({
           async configure(config, { directory }) {
+            delete config.agents.defaults.workspace;
+            delete config.agents.defaults.model;
             config.agents.defaults.skipBootstrap = true;
+            config.agents.defaults.heartbeat = { every: "0m" };
+            config.agents.defaults.models = {
+              "fixture/fixture": { agentRuntime: { id: "openclaw" } },
+            };
             config.gateway.reload = { mode: "off" };
+            config.tools = {
+              toolSearch: false,
+              elevated: { enabled: false },
+            };
+            config.plugins = {
+              slots: { memory: "none" },
+              entries: { "memory-core": { enabled: false } },
+            };
             config.agents.entries = {
               restricted: {
                 workspace: join(directory, "restricted-workspace"),
                 contextInjection: "never",
-                model: { primary: "fixture/fixture" },
+                model: { primary: "fixture/fixture", fallbacks: [] },
+                skills: [],
+                memory: { search: { enabled: false } },
                 tools: { deny: ["*"] },
               },
             };
@@ -112,19 +129,6 @@ integration("scoped proxy with the published OpenClaw process", () => {
           version: "2026.9.1",
           patchedApplicationPrincipal: false,
         });
-        const grants = new DelegatedGrantService({
-          resource: RESOURCE,
-          store: new MemoryStore(),
-          offeredPolicies: [
-            {
-              ref: "application-tools-only",
-              label: "Application tools only",
-              agentId: "restricted",
-              fingerprint: "sha256:stock-integration-policy",
-              nativeCapabilities: [],
-            },
-          ],
-        });
         const state = mkdtempSync(
           join(tmpdir(), "ac-scoped-stock-integration-"),
         );
@@ -132,6 +136,28 @@ integration("scoped proxy with the published OpenClaw process", () => {
           statePath: join(state, "owner.json"),
           publicEndpoint: ISSUER,
           enrollmentPassphrase: PASSPHRASE,
+        });
+        const policyPath = join(state, "scoped-policies.json");
+        await writeFile(
+          policyPath,
+          JSON.stringify({
+            version: 1,
+            policies: [
+              {
+                ref: "application-tools-only",
+                label: "Application tools only",
+                agentId: "restricted",
+                nativeCapabilities: [],
+              },
+            ],
+          }),
+          { mode: 0o600 },
+        );
+        const staticPolicy = loadStaticOpenClawPolicy({
+          configPath: join(runtime.directory, "openclaw.json"),
+          policyPath,
+          upstreamToken: runtime.token,
+          upstreamBaseUrl: runtime.baseUrl,
         });
         const stockConfig = await readStockOpenClawConfig({
           upstreamBaseUrl: runtime.baseUrl,
@@ -155,14 +181,14 @@ integration("scoped proxy with the published OpenClaw process", () => {
               upstreamBaseUrl: runtime?.baseUrl as string,
               upstreamToken: runtime?.token as string,
             }),
-          validateSourceConfig(value) {
-            expect(value).toMatchObject({
-              gateway: {
-                auth: { token: "__OPENCLAW_REDACTED__" },
-                reload: { mode: "off" },
-              },
-            });
-          },
+          validateSourceConfig: (value) =>
+            staticPolicy.assertRuntimeConfig(value),
+        });
+        const boundPolicy = staticPolicy.withRuntimeVerifier(runtimeVerifier);
+        const grants = new DelegatedGrantService({
+          resource: RESOURCE,
+          store: new MemoryStore(),
+          offeredPolicies: boundPolicy.offeredPolicies,
         });
         proxy = createScopedResponsesProxy({
           issuer: ISSUER,
@@ -171,10 +197,7 @@ integration("scoped proxy with the published OpenClaw process", () => {
           upstreamToken: runtime.token,
           grantService: grants,
           ownerAuth,
-          policySnapshot: {
-            assertUnchanged() {},
-            assertRuntimeCurrent: () => runtimeVerifier.assertCurrent(),
-          },
+          policySnapshot: boundPolicy,
         });
         const loopback = await listen(proxy);
         const applicationFetch = mappedFetch(loopback, APP);
