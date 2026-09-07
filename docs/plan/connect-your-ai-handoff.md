@@ -1,8 +1,10 @@
 # Compact continuation handoff
 
 Checkpoint: 2026-09-06, native seam `9ef0b39` on `work/openclaw-gateway`.
-Goal remains a real Tailscale-flavored OpenClaw → SDK → Bookhand vertical slice.
-It is **not complete**. No push or live service migration has occurred.
+Goal: a real Tailscale-flavored OpenClaw → SDK → Bookhand vertical slice.
+Owner acceptance completed on 2026-09-07, as recorded at the end of this
+handoff. Earlier checkpoints below are historical, not outstanding gates.
+No push occurred; the isolated private demo changed, not the personal gateway.
 
 ## Resume economically
 
@@ -291,4 +293,26 @@ private preview: `index-CnwyuI8u.js` matches local built bytes, SHA-256
 No real credentials, consent or model calls were used for these checks. One
 owner connection after reload establishes the saved record; existing memory-only
 state cannot be migrated from an already-running old page automatically. The
-new persistent flow has deterministic SDK/store evidence, not a phone test yet.
+new persistent flow initially had deterministic SDK/store evidence only.
+
+## Owner acceptance complete, September 7
+
+The owner now confirms credentials survive phone reload without entering the
+provider address or repeating consent. An initial attempt failed, then a later
+attempt succeeded; the owner explicitly requested no investigation of that
+first attempt now. Do not claim the unexplained failure was fixed.
+
+The accepted slice consists of native Tailscale owner authentication and scoped
+consent, subscription-backed Bookhand chat, application tools producing a useful
+Study lesson, contextual follow-ups, lesson persistence and working source
+navigation after reload, plus remembered scoped connection credentials. Live
+owner reports establish these product behaviors. Deterministic native/provider
+and installed-SDK tests separately establish token rotation, isolation, recovery
+and failure handling; phone reload alone does not prove token rotation.
+
+Known limitations remain explicit: provider schema flattening, mobile transport
+interruptions, imperfect UI, and the generic native declaration-build check
+noted above. Optional expanded native capabilities, patchless deployment,
+public release/branch packaging and further UI polish are follow-up work, not
+implemented by this slice. App-only demo policy remains in force. Preserve
+Bookhand's unrelated dirty work during any later commit packaging.
