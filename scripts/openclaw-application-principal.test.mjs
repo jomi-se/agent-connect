@@ -62,20 +62,24 @@ test("native OpenResponses application principal stays closed and refresh-stable
         `import { fingerprintOpenResponsesApplicationPolicy } from "openclaw/plugin-sdk/openresponses-application-policy";
 
 const grants = new Map([
-  ["ac_access_alpha_v1", "agent-connect:grant:alpha"],
-  ["ac_access_alpha_v2", "agent-connect:grant:alpha"],
-  ["ac_access_beta_v1", "agent-connect:grant:beta"],
+  ["ac_access_alpha_v1", { subject: "agent-connect:grant:alpha", policyRef: "application-test" }],
+  ["ac_access_alpha_v2", { subject: "agent-connect:grant:alpha", policyRef: "application-test" }],
+  ["ac_access_beta_v1", { subject: "agent-connect:grant:beta", policyRef: "application-test" }],
+  ["ac_access_sandbox_v1", { subject: "agent-connect:grant:sandbox", policyRef: "application-sandbox-test" }],
 ]);
 
 export default {
   id: "application-principal-test",
   register(api) {
-    const policyFingerprint = fingerprintOpenResponsesApplicationPolicy(api.config, {
-      policyRef: "application-test",
-      agentId: "application-test",
-      nativeCapabilities: [],
-    });
-    if (!policyFingerprint) throw new Error("closed test policy unavailable");
+    const policyFingerprints = new Map(
+      ["application-test", "application-sandbox-test"].map((policyRef) => [
+        policyRef,
+        fingerprintOpenResponsesApplicationPolicy(api.config, { policyRef }),
+      ]),
+    );
+    if ([...policyFingerprints.values()].some((fingerprint) => !fingerprint)) {
+      throw new Error("closed test policy unavailable");
+    }
     api.registerHttpRoute({
       path: "/application-owner-only",
       auth: "gateway",
@@ -92,25 +96,23 @@ export default {
       authenticate(req) {
         const bearer = req.headers.authorization?.match(/^Bearer ([^ ]+)$/)?.[1];
         if (!bearer?.startsWith("ac_access_")) return { status: "pass" };
-        const subject = grants.get(bearer);
-        if (!subject) return { status: "deny" };
+        const grant = grants.get(bearer);
+        if (!grant) return { status: "deny" };
         return {
           status: "authenticated",
           principal: {
-            subject,
-            agentId: "application-test",
-            policyRef: "application-test",
-            policyFingerprint,
-            nativeCapabilities: [],
+            subject: grant.subject,
+            policyRef: grant.policyRef,
+            policyRevision: policyFingerprints.get(grant.policyRef),
           },
         };
       },
       authorize({ principal, request }) {
         const tool = request.clientTools[0];
-        return principal.policyFingerprint === policyFingerprint &&
-          principal.nativeCapabilities.length === 0 &&
-          request.agentId === "application-test" &&
+        return principal.policyRevision === policyFingerprints.get(principal.policyRef) &&
+          !request.hasMediaInput &&
           request.clientTools.length === 1 &&
+          request.clientTools.every((candidate) => candidate.strict === undefined) &&
           tool.name === "lookup_book" &&
           tool.description === "Look up a book by its exact title" &&
           JSON.stringify(tool.inputSchema) === ${JSON.stringify(
@@ -134,6 +136,12 @@ export default {
           "application-test": {
             sessions: { others: "none" },
             sandbox: "inherit",
+            agents: ["application-test"],
+            scopes: [],
+          },
+          "application-sandbox-test": {
+            sessions: { others: "none" },
+            sandbox: "required",
             agents: ["application-test"],
             scopes: [],
           },
@@ -188,6 +196,16 @@ export default {
     });
     assert.equal(ownerOnly.status, 401);
 
+    const stockOperator = await fetch(`${runtime.baseUrl}/v1/responses`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${runtime.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ model: MODEL, stream: false }),
+    });
+    assert.equal(stockOperator.status, 400);
+
     const invalid = await respond("ac_access_invalid", {
       input: "no inference",
     });
@@ -227,6 +245,13 @@ export default {
       ],
     });
     assert.equal(changedTools.status, 403);
+    assert.equal(runtime.modelRequests.length, 0);
+
+    const unavailableSandbox = await respond("ac_access_sandbox_v1", {
+      input: "must fail before inference",
+      tools: [APPROVED_TOOL],
+    });
+    assert.equal(unavailableSandbox.status, 500);
     assert.equal(runtime.modelRequests.length, 0);
 
     const first = await respond("ac_access_alpha_v1", {
@@ -282,12 +307,44 @@ export default {
     try {
       const sessions = rows
         .prepare(
-          "SELECT session_key, created_actor_id, created_via FROM session_nodes",
+          "SELECT session_key, created_actor_type, created_actor_id, created_via, entry_json FROM session_nodes",
         )
         .all();
-      assert.equal(sessions.length, 1);
-      assert.equal(sessions[0].created_via, "run");
-      assert.ok(sessions[0].created_actor_id);
+      assert.equal(sessions.length, 2);
+      const entries = sessions.map((session) => ({
+        session,
+        entry: JSON.parse(session.entry_json),
+      }));
+      const alpha = entries.find(
+        ({ entry }) =>
+          entry.createdActor?.subject === "agent-connect:grant:alpha",
+      );
+      const sandbox = entries.find(
+        ({ entry }) =>
+          entry.createdActor?.subject === "agent-connect:grant:sandbox",
+      );
+      assert.ok(alpha);
+      assert.ok(sandbox);
+      assert.equal(alpha.session.created_via, "run");
+      assert.equal(alpha.session.created_actor_type, "system");
+      assert.ok(alpha.session.created_actor_id);
+      assert.deepEqual(alpha.entry.createdActor, {
+        type: "system",
+        source: "application",
+        id: alpha.session.created_actor_id,
+        pluginId: "application-principal-test",
+        subject: "agent-connect:grant:alpha",
+      });
+      assert.equal(alpha.entry.sandbox, undefined);
+      assert.equal(sandbox.session.created_actor_type, "system");
+      assert.deepEqual(sandbox.entry.createdActor, {
+        type: "system",
+        source: "application",
+        id: sandbox.session.created_actor_id,
+        pluginId: "application-principal-test",
+        subject: "agent-connect:grant:sandbox",
+      });
+      assert.equal(sandbox.entry.sandbox, "required");
     } finally {
       rows.close();
     }

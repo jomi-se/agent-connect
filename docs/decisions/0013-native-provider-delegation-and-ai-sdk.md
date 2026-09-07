@@ -3,6 +3,17 @@
 Date: 2026-09-06.
 Status: accepted direction; implementation and composition verification in progress.
 
+Architectural hardening, 2026-09-07: native admission is the authority
+linearization point. After plugin authentication and parsed-request authorization,
+core fences the exact plugin lifecycle generation, resolves the current opaque
+host-policy revision, and carries that immutable effective config through native
+runtime preparation. Pre-admission retirement or revision denies; post-admission
+revocation does not actively cancel. Agent Connect capability/strict/media/tool
+recipe semantics remain in the plugin. Grant sessions use nonhuman application
+creation provenance while reusing the profile store only as an internal ownership
+key. Owner HTTP authentication is a separate generic verified-principal hook whose
+current accepted method remains listener-proven Tailscale WhoIs.
+
 ## Decision
 
 Follow the [OpenClaw-first plan](../plan/connect-your-ai-openclaw.md). Replace

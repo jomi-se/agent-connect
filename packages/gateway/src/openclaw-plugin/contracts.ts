@@ -52,8 +52,9 @@ export interface OpenClawPluginConfig {
 
 export interface OpenResponsesClientTool {
   readonly name: string;
-  readonly description: string;
+  readonly description?: string;
   readonly inputSchema: Readonly<Record<string, unknown>>;
+  readonly strict?: boolean;
 }
 
 export interface OpenResponsesApplicationAuthProvider {
@@ -71,19 +72,17 @@ export interface OpenResponsesApplicationAuthProvider {
   authorize(input: {
     readonly principal: OpenResponsesApplicationPrincipal;
     readonly request: {
-      readonly agentId: string;
       readonly clientTools: readonly OpenResponsesClientTool[];
       readonly toolChoice: unknown;
+      readonly hasMediaInput: boolean;
     };
   }): boolean;
 }
 
 export interface OpenResponsesApplicationPrincipal {
   readonly subject: string;
-  readonly agentId: string;
   readonly policyRef: string;
-  readonly policyFingerprint: string;
-  readonly nativeCapabilities: readonly DelegatedNativeCapability[];
+  readonly policyRevision: string;
   readonly context?: unknown;
 }
 
@@ -110,8 +109,6 @@ export type PolicyFingerprint = (
   config: unknown,
   policy: {
     readonly policyRef: string;
-    readonly agentId: string;
-    readonly nativeCapabilities: readonly DelegatedNativeCapability[];
   },
 ) => string | undefined;
 

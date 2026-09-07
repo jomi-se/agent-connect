@@ -17,6 +17,19 @@ index 43a8e6d..3ec6f6e 100644
      "./plugin-sdk/gateway-runtime": {
        "types": "./dist/plugin-sdk/gateway-runtime.d.ts",
        "default": "./dist/plugin-sdk/gateway-runtime.js"
+diff --git a/src/agents/agent-command-execution-identity.ts b/src/agents/agent-command-execution-identity.ts
+index 0e07346..fad8472 100644
+--- a/src/agents/agent-command-execution-identity.ts
++++ b/src/agents/agent-command-execution-identity.ts
+@@ -224,6 +224,8 @@ export function sanitizePublicAgentCommandIngressOpts(
+     cronCreatorAuthorityCapability: undefined,
+     onAdmittedRunContext: undefined,
+     onPostAdmittedRunContext: undefined,
++    sessionCreation: undefined,
++    executionPolicyConfig: undefined,
+   });
+ }
+ 
 diff --git a/src/agents/agent-command.ts b/src/agents/agent-command.ts
 index 97b0c95..72ca446 100644
 --- a/src/agents/agent-command.ts
@@ -39,43 +52,108 @@ index 97b0c95..72ca446 100644
            sessionId,
            updatedAt: now,
            sessionStartedAt: isSessionRollover ? now : entry.sessionStartedAt,
+diff --git a/src/agents/command/prepare.ts b/src/agents/command/prepare.ts
+index 27f12ae..97b7cfd 100644
+--- a/src/agents/command/prepare.ts
++++ b/src/agents/command/prepare.ts
+@@ -122,13 +122,15 @@ export async function prepareAgentCommandExecution(
+     );
+   }
+ 
+-  const cfg = await resolveAgentRuntimeConfig(runtime, {
+-    runtimeTargetsChannelSecrets: opts.deliver === true,
+-    runtimeChannelSecretScope:
+-      opts.deliver !== true && shouldResolveExplicitRecipientSession && recipientChannel
+-        ? { channel: recipientChannel, accountId: opts.accountId }
+-        : undefined,
+-  });
++  const cfg =
++    opts.executionPolicyConfig ??
++    (await resolveAgentRuntimeConfig(runtime, {
++      runtimeTargetsChannelSecrets: opts.deliver === true,
++      runtimeChannelSecretScope:
++        opts.deliver !== true && shouldResolveExplicitRecipientSession && recipientChannel
++          ? { channel: recipientChannel, accountId: opts.accountId }
++          : undefined,
++    }));
+   const normalizedSpawned = normalizeSpawnedRunMetadata({
+     spawnedBy: opts.spawnedBy,
+     groupId: opts.groupId,
 diff --git a/src/agents/command/types.ts b/src/agents/command/types.ts
-index e397e16..738f91f 100644
+index e397e16..c005c72 100644
 --- a/src/agents/command/types.ts
 +++ b/src/agents/command/types.ts
-@@ -7,6 +7,7 @@ import type { SpawnedRunMetadata } from "../../agents/spawned-context.js";
+@@ -7,6 +7,8 @@ import type { SpawnedRunMetadata } from "../../agents/spawned-context.js";
  import type { PromptMode } from "../../agents/system-prompt.types.js";
  import type { SourceReplyDeliveryMode } from "../../auto-reply/get-reply-options.types.js";
  import type { ChannelOutboundTargetMode } from "../../channels/plugins/types.public.js";
++import type { OpenClawConfig } from "../../config/types.openclaw.js";
 +import type { TrustedSessionCreation } from "../../gateway/server-methods/session-creation-provenance.js";
  import type { MediaFact } from "../../media/media-facts.js";
  import type { PromptImageOrderEntry } from "../../media/prompt-image-order.js";
  import type { PluginHookChannelContext } from "../../plugins/hook-types.js";
-@@ -234,6 +235,8 @@ export type AgentCommandOpts = {
+@@ -234,6 +236,10 @@ export type AgentCommandOpts = {
    suppressPromptPersistence?: boolean;
    /** Gateway/channel ingress can provide a canonical user-turn persistence owner. */
    userTurnTranscriptRecorder?: UserTurnTranscriptRecorder;
 +  /** Trusted create-on-run provenance; private Gateway ingress only. */
 +  sessionCreation?: TrustedSessionCreation;
++  /** Host-admitted immutable effective config; private Gateway ingress only. */
++  executionPolicyConfig?: OpenClawConfig;
  };
  
  /** Restricted option surface for external ingress callsites. */
-@@ -250,6 +253,7 @@ export type AgentCommandIngressOpts = Omit<
+@@ -250,6 +256,8 @@ export type AgentCommandIngressOpts = Omit<
    | "cronCreatorAuthorityCapability"
    | "onAdmittedRunContext"
    | "onPostAdmittedRunContext"
 +  | "sessionCreation"
++  | "executionPolicyConfig"
  > & {
    /** @deprecated Public ingress ignores owner claims; use the host-injected channel runtime. */
    senderIsOwner?: boolean;
-@@ -270,4 +274,5 @@ export type AgentCommandGatewayIngressOpts = AgentCommandIngressOpts &
+@@ -270,4 +278,6 @@ export type AgentCommandGatewayIngressOpts = AgentCommandIngressOpts &
      | "cronCreatorAuthorityCapability"
      | "onAdmittedRunContext"
      | "onPostAdmittedRunContext"
 +    | "sessionCreation"
++    | "executionPolicyConfig"
    >;
+diff --git a/src/config/sessions/session-entry-provenance.ts b/src/config/sessions/session-entry-provenance.ts
+index cd92473..c83a534 100644
+--- a/src/config/sessions/session-entry-provenance.ts
++++ b/src/config/sessions/session-entry-provenance.ts
+@@ -10,12 +10,26 @@ export type SessionActor = {
+ 
+ /** Only trusted creation owners may stamp a Gateway profile namespace. */
+ export type SessionCreatedActor = SessionActor &
+-  ({ type: "human"; source: "profile" | "channel" | "unknown" } | { type: "agent" | "system" });
++  (
++    | { type: "human"; source: "profile" | "channel" | "unknown" }
++    | { type: "agent" }
++    | {
++        type: "system";
++        source?: "application";
++        /** Internal profile key used only for grant-owned session authorization. */
++        id?: string;
++        pluginId?: string;
++        subject?: string;
++      }
++  );
+ 
+ export function sessionCreatorProfileId(
+   actor: (SessionActor & { source?: unknown }) | undefined,
+ ): string | undefined {
+-  return actor?.type === "human" && actor.source === "profile" ? actor.id : undefined;
++  return (actor?.type === "human" && actor.source === "profile") ||
++    (actor?.type === "system" && actor.source === "application")
++    ? actor.id
++    : undefined;
+ }
+ 
+ export type { SessionParticipant } from "../../../packages/gateway-protocol/src/schema/session-participant.js";
 diff --git a/src/gateway/auth.ts b/src/gateway/auth.ts
-index a6b6e05..38d816a 100644
+index a6b6e05..2e28f46 100644
 --- a/src/gateway/auth.ts
 +++ b/src/gateway/auth.ts
 @@ -62,7 +62,11 @@ type ConnectAuth = {
@@ -86,7 +164,7 @@ index a6b6e05..38d816a 100644
 +type GatewayAuthSurface =
 +  | "http"
 +  | "http-user-profile-avatar"
-+  | "http-plugin-owner-consent"
++  | "http-verified-principal"
 +  | "ws-control-ui";
  
  /** Inputs needed to authorize one HTTP or websocket gateway connection. */
@@ -99,7 +177,7 @@ index a6b6e05..38d816a 100644
 +  return (
 +    authSurface === "ws-control-ui" ||
 +    authSurface === "http-user-profile-avatar" ||
-+    authSurface === "http-plugin-owner-consent"
++    authSurface === "http-verified-principal"
 +  );
  }
  
@@ -108,14 +186,14 @@ index a6b6e05..38d816a 100644
    });
  }
  
-+/** Authorize a plugin-owned consent request only through managed Tailscale identity. */
-+export async function authorizePluginOwnerConsentHttpGatewayConnect(
++/** Resolve a host-verified HTTP principal; this v0 surface admits managed WhoIs only. */
++export async function authorizeVerifiedPrincipalHttpGatewayConnect(
 +  params: Omit<AuthorizeGatewayConnectParams, "authSurface" | "connectAuth">,
 +): Promise<GatewayAuthResult> {
 +  return authorizeGatewayConnect({
 +    ...params,
 +    connectAuth: null,
-+    authSurface: "http-plugin-owner-consent",
++    authSurface: "http-verified-principal",
 +  });
 +}
 +
@@ -123,18 +201,34 @@ index a6b6e05..38d816a 100644
  export async function authorizeWsControlUiGatewayConnect(
    params: Omit<AuthorizeGatewayConnectParams, "authSurface">,
 diff --git a/src/gateway/http-auth-utils.ts b/src/gateway/http-auth-utils.ts
-index 7744da5..ca2cf56 100644
+index 7744da5..b0ad268 100644
 --- a/src/gateway/http-auth-utils.ts
 +++ b/src/gateway/http-auth-utils.ts
-@@ -25,6 +25,7 @@ import {
+@@ -11,6 +11,7 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
+ import { verifyDeviceToken } from "../infra/device-pairing-tokens.js";
+ import { listDevicePairing } from "../infra/device-pairing.js";
+ import { verifyPairingToken } from "../infra/pairing-token.js";
++import { resolveGlobalSingleton } from "../shared/global-singleton.js";
+ import { roleScopesAllow } from "../shared/operator-scope-compat.js";
+ import {
+   ensureProfileForEmail,
+@@ -25,6 +26,7 @@ import {
  } from "./auth-rate-limit.js";
  import {
    authorizeHttpGatewayConnect,
-+  authorizePluginOwnerConsentHttpGatewayConnect,
++  authorizeVerifiedPrincipalHttpGatewayConnect,
    authorizeUserProfileAvatarHttpGatewayConnect,
    type GatewayAuthResult,
    type ResolvedGatewayAuth,
-@@ -86,6 +87,15 @@ export type AuthorizedGatewayHttpRequest = {
+@@ -43,6 +45,7 @@ import { sendGatewayAuthFailure, sendJson, sendMissingScopeForbidden } from "./h
+ import {
+   prepareGatewayIngressAttribution,
+   PROXY_ATTRIBUTION_REQUIRED_REASON,
++  type GatewayIngressAttribution,
+ } from "./ingress-attribution.js";
+ import {
+   ADMIN_SCOPE,
+@@ -86,6 +89,15 @@ export type AuthorizedGatewayHttpRequest = {
    trustDeclaredOperatorScopes: boolean;
    authenticatedUserProfile?: GatewayClient["authenticatedUserProfile"];
    operatorRolePolicy?: GatewayOperatorRoleDefinition;
@@ -145,49 +239,64 @@ index 7744da5..ca2cf56 100644
 +    profileId: string;
 +    agentId: string;
 +    policyRef: string;
-+    policyFingerprint: string;
++    policyRevision: string;
 +  };
    controlUiPluginGrants?: ControlUiPluginTabAuthGrant[];
    controlUiPluginGrant?: ControlUiPluginTabAuthGrant;
  };
-@@ -121,6 +131,52 @@ type GatewayHttpConnectAuthorizer = (
+@@ -115,12 +127,68 @@ type GatewayHttpRequestAuthParams = {
+ 
+ type GatewayHttpRequestAuthCheckParams = Omit<GatewayHttpRequestAuthParams, "res"> & {
+   cfg?: OpenClawConfig;
++  ingressAttribution?: GatewayIngressAttribution;
+ };
+ 
+ type GatewayHttpConnectAuthorizer = (
    params: Parameters<typeof authorizeHttpGatewayConnect>[0],
  ) => Promise<GatewayAuthResult>;
  
-+type ManagedTailscaleOwnerConsentContext = {
++type VerifiedHttpPrincipalContext = {
 +  auth: ResolvedGatewayAuth;
 +  trustedProxies?: string[];
 +  allowRealIpFallback?: boolean;
 +  rateLimiter?: AuthRateLimiter;
 +  cfg: OpenClawConfig;
++  ingressAttribution: GatewayIngressAttribution;
 +};
 +
-+const managedTailscaleOwnerConsentContexts = new WeakMap<
-+  IncomingMessage,
-+  ManagedTailscaleOwnerConsentContext
-+>();
++const VERIFIED_HTTP_PRINCIPAL_CONTEXTS_KEY: unique symbol = Symbol.for(
++  "openclaw.verifiedHttpPrincipalContexts",
++);
++const verifiedHttpPrincipalContexts = resolveGlobalSingleton<
++  WeakMap<IncomingMessage, VerifiedHttpPrincipalContext>
++>(VERIFIED_HTTP_PRINCIPAL_CONTEXTS_KEY, () => new WeakMap());
 +
 +/** Attach listener-owned auth dependencies without authenticating the request. */
-+export function prepareManagedTailscaleOwnerConsentRequest(
++export function prepareVerifiedHttpPrincipalRequest(
 +  req: IncomingMessage,
-+  context: ManagedTailscaleOwnerConsentContext,
++  context: VerifiedHttpPrincipalContext,
 +): void {
-+  managedTailscaleOwnerConsentContexts.set(req, context);
++  verifiedHttpPrincipalContexts.set(req, context);
 +}
 +
-+/** Resolve only managed-Tailscale WhoIs identity into its durable role-capped principal. */
-+export async function authenticateManagedTailscaleOwnerConsentRequest(
++/** Resolve listener-bound, host-verified identity under explicit accepted auth methods. */
++export async function authenticateVerifiedHttpPrincipalRequest(
 +  req: IncomingMessage,
-+): Promise<{ profileId: string; scopes: readonly string[] } | undefined> {
-+  const context = managedTailscaleOwnerConsentContexts.get(req);
++  options: { authMethods: readonly "tailscale"[] },
++): Promise<{ profileId: string; scopes: readonly string[]; authMethod: "tailscale" } | undefined> {
++  const context = verifiedHttpPrincipalContexts.get(req);
 +  if (!context) {
 +    return undefined;
 +  }
 +  const result = await checkGatewayHttpRequestAuthWith(
 +    { req, ...context },
-+    authorizePluginOwnerConsentHttpGatewayConnect,
++    authorizeVerifiedPrincipalHttpGatewayConnect,
 +  );
-+  if (!result.ok || result.requestAuth.authMethod !== "tailscale") {
++  if (
++    !result.ok ||
++    result.requestAuth.authMethod !== "tailscale" ||
++    !options.authMethods.includes(result.requestAuth.authMethod)
++  ) {
 +    return undefined;
 +  }
 +  const profileId = result.requestAuth.authenticatedUserProfile?.profileId;
@@ -197,17 +306,43 @@ index 7744da5..ca2cf56 100644
 +  return {
 +    profileId,
 +    scopes: resolveTrustedHttpOperatorScopes(req, result.requestAuth),
++    authMethod: result.requestAuth.authMethod,
 +  };
 +}
 +
  export type AuthorizedControlUiReadRequest = {
    authMethod: NonNullable<GatewayAuthResult["method"]>;
    operatorScopes: string[];
+@@ -602,6 +670,7 @@ async function checkGatewayHttpRequestAuthWith(
+     allowRealIpFallback: params.allowRealIpFallback,
+     rateLimiter: params.rateLimiter,
+     browserOriginPolicy,
++    ingressAttribution: params.ingressAttribution,
+   });
+   if (!authResult.ok) {
+     return { ok: false, authResult };
 diff --git a/src/gateway/http-utils.ts b/src/gateway/http-utils.ts
-index 0b83e2b..6f9a5a6 100644
+index 0b83e2b..74132dc 100644
 --- a/src/gateway/http-utils.ts
 +++ b/src/gateway/http-utils.ts
-@@ -324,6 +324,9 @@ export function authorizeOpenAiCompatibleHttpSession(params: {
+@@ -15,6 +15,7 @@ import { modelKey, parseModelRef, resolveDefaultModelForAgent } from "../agents/
+ import { createModelVisibilityPolicy } from "../agents/model-visibility-policy.js";
+ import { getRuntimeConfig } from "../config/io.js";
+ import { resolveSessionEntryAccessTarget } from "../config/sessions/session-accessor.js";
++import type { OpenClawConfig } from "../config/types.openclaw.js";
+ import { getCurrentPluginMetadataSnapshot } from "../plugins/current-plugin-metadata-snapshot.js";
+ import { getActivePluginRegistryWorkspaceDirFromState } from "../plugins/runtime-state.js";
+ import {
+@@ -317,13 +318,17 @@ export function authorizeOpenAiCompatibleHttpSession(params: {
+   sessionKey: string;
+   requestAuth: AuthorizedGatewayHttpRequest;
+   senderIsOwner: boolean;
++  cfg?: OpenClawConfig;
+ }): { allowed: true } | { allowed: false; message: string } {
+-  const cfg = getRuntimeConfig();
++  const cfg = params.cfg ?? getRuntimeConfig();
+   const authenticatedUserProfile = params.requestAuth.authenticatedUserProfile;
+   const authorizationError = authorizeResolvedSessionMutation({
      cfg,
      client: createSyntheticPluginRuntimeClient({
        ...(authenticatedUserProfile ? { authenticatedUserProfile } : {}),
@@ -217,29 +352,49 @@ index 0b83e2b..6f9a5a6 100644
        ...(params.senderIsOwner && !authenticatedUserProfile
          ? { operatorRoleActor: { kind: "system" as const } }
          : {}),
+diff --git a/src/gateway/ingress-attribution.ts b/src/gateway/ingress-attribution.ts
+index 622b1bd..9ea44ea 100644
+--- a/src/gateway/ingress-attribution.ts
++++ b/src/gateway/ingress-attribution.ts
+@@ -67,7 +67,7 @@ export type GatewayAttributedIngress = Exclude<
+   { kind: "unattributable-proxy" }
+ >;
+ 
+-type TailscaleWhoisLookup = (ip: string) => Promise<TailscaleWhoisIdentity | null>;
++export type TailscaleWhoisLookup = (ip: string) => Promise<TailscaleWhoisIdentity | null>;
+ 
+ const requestTransport = new WeakMap<IncomingMessage, GatewayIngressTransport>();
+ const preparedAttribution = new WeakMap<IncomingMessage, GatewayIngressAttribution>();
 diff --git a/src/gateway/openresponses-application-auth.ts b/src/gateway/openresponses-application-auth.ts
 new file mode 100644
-index 0000000..4a95a07
+index 0000000..61aefde
 --- /dev/null
 +++ b/src/gateway/openresponses-application-auth.ts
-@@ -0,0 +1,152 @@
+@@ -0,0 +1,191 @@
 +import type { IncomingMessage, ServerResponse } from "node:http";
 +import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
-+import { getOpenResponsesApplicationAuthRegistration } from "../plugins/runtime.js";
-+import type {
-+  OpenClawOpenResponsesApplicationAuthProvider,
-+  OpenClawOpenResponsesApplicationPrincipal,
-+} from "../plugins/types.js";
++import {
++  captureOpenResponsesApplicationAuthRegistration,
++  type CapturedOpenResponsesApplicationAuthRegistration,
++} from "../plugins/runtime.js";
++import type { OpenClawOpenResponsesApplicationPrincipal } from "../plugins/types.js";
 +import { ensureProfileForApplicationPrincipal } from "../state/user-profiles.js";
 +import type { AuthorizedGatewayHttpRequest } from "./http-auth-utils.js";
 +import { sendJson } from "./http-common.js";
-+import { resolveOpenResponsesApplicationPolicy } from "./openresponses-application-policy.js";
++import {
++  resolveOpenResponsesApplicationPolicy,
++  type ResolvedOpenResponsesApplicationPolicy,
++} from "./openresponses-application-policy.js";
 +
 +type CorsGrant = { origin: string; allowHeaders: readonly string[] };
 +
 +export type AuthorizedOpenResponsesApplicationRequest = {
-+  provider: OpenClawOpenResponsesApplicationAuthProvider;
++  captured: CapturedOpenResponsesApplicationAuthRegistration;
 +  principal: OpenClawOpenResponsesApplicationPrincipal;
++};
++
++export type AdmittedOpenResponsesApplicationRequest = AuthorizedOpenResponsesApplicationRequest & {
++  policy: ResolvedOpenResponsesApplicationPolicy;
 +  requestAuth: AuthorizedGatewayHttpRequest;
 +};
 +
@@ -255,16 +410,34 @@ index 0000000..4a95a07
 +  res.setHeader("vary", "Origin");
 +}
 +
++function providerUnavailable(res: ServerResponse): void {
++  sendJson(res, 503, {
++    error: { message: "application authorization provider unavailable", type: "server_error" },
++  });
++}
++
 +async function authorizeCors(params: {
 +  req: IncomingMessage;
 +  res: ServerResponse;
-+  provider: OpenClawOpenResponsesApplicationAuthProvider;
++  captured: CapturedOpenResponsesApplicationAuthRegistration;
 +}): Promise<boolean> {
 +  const origin = normalizeOptionalString(params.req.headers.origin);
 +  if (!origin) {
 +    return true;
 +  }
-+  const cors = await params.provider.resolveBrowserOrigin?.(params.req);
++  let cors: CorsGrant | null | undefined;
++  try {
++    cors = await params.captured.runInPluginScope(() =>
++      params.captured.registration.provider.resolveBrowserOrigin?.(params.req),
++    );
++  } catch {
++    providerUnavailable(params.res);
++    return false;
++  }
++  if (!params.captured.isCurrent()) {
++    providerUnavailable(params.res);
++    return false;
++  }
 +  if (!cors || cors.origin !== origin) {
 +    sendJson(params.res, 403, { error: { message: "origin forbidden", type: "forbidden" } });
 +    return false;
@@ -284,13 +457,13 @@ index 0000000..4a95a07
 +  return true;
 +}
 +
-+/** Runs before stock Gateway auth so a plugin credential never becomes a shared operator token. */
++/** Runs before stock Gateway auth so a claimed plugin credential cannot become an operator token. */
 +export async function authorizeOpenResponsesApplicationRequest(params: {
 +  req: IncomingMessage;
 +  res: ServerResponse;
 +}): Promise<OpenResponsesApplicationAuthDecision> {
-+  const registration = getOpenResponsesApplicationAuthRegistration();
-+  if (!registration) {
++  const captured = captureOpenResponsesApplicationAuthRegistration();
++  if (!captured) {
 +    return { status: "pass" };
 +  }
 +  if (params.req.method === "OPTIONS") {
@@ -302,98 +475,114 @@ index 0000000..4a95a07
 +      sendJson(params.res, 405, { error: { message: "method forbidden", type: "forbidden" } });
 +      return { status: "handled" };
 +    }
-+    if (!(await authorizeCors({ ...params, provider: registration.provider }))) {
++    if (!(await authorizeCors({ ...params, captured }))) {
 +      return { status: "handled" };
 +    }
 +    params.res.writeHead(204);
 +    params.res.end();
 +    return { status: "handled" };
 +  }
-+  const auth = await registration.provider.authenticate(params.req);
++  let auth: Awaited<ReturnType<typeof captured.registration.provider.authenticate>>;
++  try {
++    auth = await captured.runInPluginScope(() =>
++      captured.registration.provider.authenticate(params.req),
++    );
++  } catch {
++    providerUnavailable(params.res);
++    return { status: "handled" };
++  }
 +  if (auth.status === "pass") {
 +    return { status: "pass" };
 +  }
-+  if (!(await authorizeCors({ ...params, provider: registration.provider }))) {
++  if (!(await authorizeCors({ ...params, captured }))) {
 +    return { status: "handled" };
 +  }
 +  if (auth.status === "deny") {
 +    sendJson(params.res, 401, { error: { message: "unauthorized", type: "unauthorized" } });
 +    return { status: "handled" };
 +  }
-+  const principal = auth.principal;
-+  const cfg = (await import("../config/io.js")).getRuntimeConfig();
++  if (!captured.isCurrent()) {
++    providerUnavailable(params.res);
++    return { status: "handled" };
++  }
++  return { status: "authorized", captured, principal: auth.principal };
++}
++
++/**
++ * Native execution admission linearizes here. There are no awaits between the
++ * lifecycle check, current config read, revision validation, and immutable
++ * policy capture. Later runtime preparation must consume `policy.config`.
++ */
++export async function admitOpenResponsesApplicationRequest(
++  application: AuthorizedOpenResponsesApplicationRequest,
++): Promise<AdmittedOpenResponsesApplicationRequest | undefined> {
++  const { getRuntimeConfig } = await import("../config/io.js");
++  if (!application.captured.isCurrent()) {
++    return undefined;
++  }
++  const registration = application.captured.registration;
++  const cfg = getRuntimeConfig();
 +  const policy = resolveOpenResponsesApplicationPolicy({
 +    cfg,
-+    policyRef: principal.policyRef,
-+    agentId: principal.agentId,
-+    nativeCapabilities: principal.nativeCapabilities,
-+    expectedFingerprint: principal.policyFingerprint,
++    policyRef: application.principal.policyRef,
++    expectedRevision: application.principal.policyRevision,
 +    integration: {
 +      pluginId: registration.pluginId,
 +      ...(registration.pluginVersion ? { pluginVersion: registration.pluginVersion } : {}),
 +    },
 +  });
-+  if (!policy) {
-+    sendJson(params.res, 403, {
-+      error: { message: "application policy changed or is unavailable", type: "forbidden" },
-+    });
-+    return { status: "handled" };
++  if (!policy || !application.captured.isCurrent()) {
++    return undefined;
 +  }
-+  try {
-+    const profile = ensureProfileForApplicationPrincipal({
-+      pluginId: registration.pluginId,
-+      subject: principal.subject,
-+    });
-+    const applicationPrincipal = {
-+      pluginId: registration.pluginId,
-+      subject: principal.subject,
-+      profileId: profile.id,
-+      agentId: principal.agentId,
-+      policyRef: principal.policyRef,
-+      policyFingerprint: principal.policyFingerprint,
-+    };
-+    return {
-+      status: "authorized",
-+      provider: registration.provider,
-+      principal,
-+      requestAuth: {
-+        trustDeclaredOperatorScopes: false,
-+        authenticatedUserProfile: {
-+          profileId: profile.id,
-+          displayName: profile.displayName,
-+          hasAvatar: Boolean(profile.avatarMime),
-+          updatedAt: profile.updatedAt,
-+        },
-+        operatorRolePolicy: policy.role,
-+        applicationPrincipal,
++  const profile = ensureProfileForApplicationPrincipal({
++    pluginId: registration.pluginId,
++    subject: application.principal.subject,
++    displayName: `${registration.pluginId} application`,
++  });
++  return {
++    ...application,
++    policy,
++    requestAuth: {
++      trustDeclaredOperatorScopes: false,
++      authenticatedUserProfile: {
++        profileId: profile.id,
++        displayName: profile.displayName,
++        hasAvatar: Boolean(profile.avatarMime),
++        updatedAt: profile.updatedAt,
 +      },
-+    };
-+  } catch {
-+    sendJson(params.res, 503, {
-+      error: { message: "application profile unavailable", type: "server_error" },
-+    });
-+    return { status: "handled" };
-+  }
++      operatorRolePolicy: policy.role,
++      applicationPrincipal: {
++        pluginId: registration.pluginId,
++        subject: application.principal.subject,
++        profileId: profile.id,
++        agentId: policy.agentId,
++        policyRef: application.principal.policyRef,
++        policyRevision: application.principal.policyRevision,
++      },
++    },
++  };
 +}
 diff --git a/src/gateway/openresponses-application-policy.test.ts b/src/gateway/openresponses-application-policy.test.ts
 new file mode 100644
-index 0000000..b4df2d3
+index 0000000..7f9f413
 --- /dev/null
 +++ b/src/gateway/openresponses-application-policy.test.ts
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,96 @@
 +import { describe, expect, it } from "vitest";
 +import type { OpenClawConfig } from "../config/types.openclaw.js";
-+import type { OpenClawOpenResponsesNativeCapability } from "../plugins/types.js";
-+import { fingerprintOpenResponsesApplicationPolicy } from "./openresponses-application-policy.js";
++import {
++  fingerprintOpenResponsesApplicationPolicy,
++  resolveOpenResponsesApplicationPolicy,
++} from "./openresponses-application-policy.js";
 +
 +function config(): OpenClawConfig {
 +  return {
 +    gateway: {
 +      roles: {
 +        definitions: {
-+          bookhand: {
++          delegated: {
 +            sessions: { others: "none" },
-+            agents: ["bookhand"],
++            agents: ["application-agent"],
 +            scopes: ["operator.write"],
 +            sandbox: "required",
 +          },
@@ -404,8 +593,8 @@ index 0000000..b4df2d3
 +      defaults: { sandbox: { mode: "all" } },
 +      list: [
 +        {
-+          id: "bookhand",
-+          workspace: "/srv/openclaw-apps/bookhand",
++          id: "application-agent",
++          workspace: "/srv/openclaw-apps/application-agent",
 +          contextInjection: "never",
 +          tools: { allow: ["web_search"] },
 +        },
@@ -415,108 +604,77 @@ index 0000000..b4df2d3
 +  };
 +}
 +
-+const integration = { pluginId: "agent-connect", pluginVersion: "1.0.0" };
-+const webSearch = ["public_web_search"] as const;
++const integration = { pluginId: "delegation-plugin", pluginVersion: "1.0.0" };
 +
-+function fingerprint(
-+  config: OpenClawConfig,
-+  capabilities: readonly OpenClawOpenResponsesNativeCapability[] = webSearch,
-+) {
-+  return fingerprintOpenResponsesApplicationPolicy(
-+    config,
-+    "bookhand",
-+    "bookhand",
-+    capabilities,
-+    integration,
-+  );
-+}
-+
-+describe("OpenResponses application policy fingerprint", () => {
-+  it("changes when effective native tool policy changes", () => {
++describe("OpenResponses delegated execution policy revision", () => {
++  it("changes whenever the effective agent or native tool configuration changes", () => {
 +    const before = config();
 +    const after = config();
 +    after.tools = { allow: ["web_search", "exec", "read"] };
-+    expect(fingerprint(before)).toMatch(/^sha256:/);
-+    expect(fingerprint(after)).not.toBe(fingerprint(before));
++    const revision = fingerprintOpenResponsesApplicationPolicy(before, "delegated", integration);
++    expect(revision).toMatch(/^sha256:/);
++    expect(fingerprintOpenResponsesApplicationPolicy(after, "delegated", integration)).not.toBe(
++      revision,
++    );
 +  });
 +
-+  it("fails closed without an explicit isolated role and agent", () => {
++  it("requires a non-admin role closed to exactly one real agent", () => {
 +    const missingRole = config();
 +    delete missingRole.gateway?.roles;
-+    expect(fingerprint(missingRole)).toBeUndefined();
++    expect(
++      fingerprintOpenResponsesApplicationPolicy(missingRole, "delegated", integration),
++    ).toBeUndefined();
 +
 +    const broad = config();
-+    broad.gateway!.roles!.definitions.bookhand = {
++    broad.gateway!.roles!.definitions.delegated = {
 +      sessions: { others: "write" },
 +      agents: "*",
 +      scopes: ["operator.admin"],
 +    };
-+    expect(fingerprint(broad)).toBeUndefined();
++    expect(
++      fingerprintOpenResponsesApplicationPolicy(broad, "delegated", integration),
++    ).toBeUndefined();
 +
-+    const implicitAgent = config();
-+    implicitAgent.agents!.list = [];
-+    expect(fingerprint(implicitAgent)).toBeUndefined();
++    const multiple = config();
++    multiple.gateway!.roles!.definitions.delegated.agents = ["application-agent", "other"];
++    expect(
++      fingerprintOpenResponsesApplicationPolicy(multiple, "delegated", integration),
++    ).toBeUndefined();
 +  });
 +
-+  it("requires an exact closed native tool upper bound for advertised capabilities", () => {
-+    const noNativeTools = config();
-+    noNativeTools.agents!.list![0]!.tools = { deny: ["*"] };
-+    expect(fingerprint(noNativeTools, [])).toMatch(/^sha256:/);
-+
-+    const emptyAllowIsPermissive = config();
-+    emptyAllowIsPermissive.agents!.list![0]!.tools = { allow: [] };
-+    expect(fingerprint(emptyAllowIsPermissive, [])).toBeUndefined();
-+
-+    const appToolsWithHostExec = config();
-+    appToolsWithHostExec.agents!.list![0]!.tools = { allow: ["exec"] };
-+    expect(fingerprint(appToolsWithHostExec, [])).toBeUndefined();
-+
-+    const missingAllowlist = config();
-+    delete missingAllowlist.agents!.list![0]!.tools;
-+    expect(fingerprint(missingAllowlist)).toBeUndefined();
++  it("does not encode plugin capability or deployment-recipe vocabulary", () => {
++    const permissive = config();
++    permissive.agents!.list![0]!.contextInjection = "always";
++    permissive.agents!.list![0]!.tools = { allow: ["read", "write", "exec"] };
++    expect(fingerprintOpenResponsesApplicationPolicy(permissive, "delegated", integration)).toMatch(
++      /^sha256:/,
++    );
 +  });
 +
-+  it("rejects policy layers that remove an advertised native capability", () => {
-+    const globalDeny = config();
-+    globalDeny.tools = { deny: ["web_search"] };
-+    expect(fingerprint(globalDeny)).toBeUndefined();
-+
-+    const sandboxDeny = config();
-+    sandboxDeny.tools = { sandbox: { tools: { deny: ["web_search"] } } };
-+    expect(fingerprint(sandboxDeny)).toBeUndefined();
-+
-+    const providerDependent = config();
-+    providerDependent.agents!.list![0]!.tools!.byProvider = {
-+      openai: { allow: ["web_search"] },
-+    };
-+    expect(fingerprint(providerDependent)).toBeUndefined();
-+  });
-+
-+  it("requires sandbox isolation only for native code execution", () => {
-+    const webOnly = config();
-+    webOnly.gateway!.roles!.definitions.bookhand.sandbox = "inherit";
-+    expect(fingerprint(webOnly)).toMatch(/^sha256:/);
-+
-+    const code = config();
-+    code.agents!.list![0]!.tools = { allow: ["process", "exec"] };
-+    expect(fingerprint(code, ["sandbox_code_execution"])).toMatch(/^sha256:/);
-+    code.gateway!.roles!.definitions.bookhand.sandbox = "inherit";
-+    expect(fingerprint(code, ["sandbox_code_execution"])).toBeUndefined();
++  it("returns the exact config object as the immutable admitted ceiling", () => {
++    const cfg = config();
++    const revision = fingerprintOpenResponsesApplicationPolicy(cfg, "delegated", integration)!;
++    const resolved = resolveOpenResponsesApplicationPolicy({
++      cfg,
++      policyRef: "delegated",
++      expectedRevision: revision,
++      integration,
++    });
++    expect(resolved).toMatchObject({ agentId: "application-agent", revision });
++    expect(resolved?.config).toBe(cfg);
 +  });
 +});
 diff --git a/src/gateway/openresponses-application-policy.ts b/src/gateway/openresponses-application-policy.ts
 new file mode 100644
-index 0000000..5a60ca3
+index 0000000..2a06fa5
 --- /dev/null
 +++ b/src/gateway/openresponses-application-policy.ts
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,108 @@
 +import { createHash } from "node:crypto";
 +import { stableStringify } from "@openclaw/normalization-core";
 +import { resolveAgentConfig, resolveAgentEntry } from "../agents/agent-scope-config.js";
-+import { createToolPolicyMatcher } from "../agents/tool-policy-match.js";
 +import type { GatewayOperatorRoleDefinition } from "../config/types.gateway.js";
 +import type { OpenClawConfig } from "../config/types.openclaw.js";
-+import type { OpenClawOpenResponsesNativeCapability } from "../plugins/types.js";
 +import { VERSION } from "../version.js";
 +
 +export type OpenResponsesApplicationPolicyIntegration = {
@@ -524,9 +682,12 @@ index 0000000..5a60ca3
 +  pluginVersion?: string;
 +};
 +
++/** Host-owned immutable effective ceiling consumed by one admitted native run. */
 +export type ResolvedOpenResponsesApplicationPolicy = {
++  agentId: string;
++  config: OpenClawConfig;
 +  role: GatewayOperatorRoleDefinition;
-+  fingerprint: string;
++  revision: string;
 +};
 +
 +function getOwnRole(
@@ -537,131 +698,65 @@ index 0000000..5a60ca3
 +  return definitions && Object.hasOwn(definitions, policyRef) ? definitions[policyRef] : undefined;
 +}
 +
-+function policyFingerprintPayload(
++function resolveDedicatedPolicy(params: {
++  cfg: OpenClawConfig;
++  policyRef: string;
++}): { agentId: string; role: GatewayOperatorRoleDefinition } | undefined {
++  const role = getOwnRole(params.cfg, params.policyRef);
++  if (
++    !role ||
++    role.sessions.others !== "none" ||
++    role.agents === "*" ||
++    role.agents.length !== 1 ||
++    role.scopes.includes("operator.admin")
++  ) {
++    return undefined;
++  }
++  const agentId = role.agents[0]!;
++  return resolveAgentEntry(params.cfg, agentId) && resolveAgentConfig(params.cfg, agentId)
++    ? { agentId, role }
++    : undefined;
++}
++
++function policyRevisionPayload(
 +  cfg: OpenClawConfig,
 +  policyRef: string,
 +  agentId: string,
 +  role: GatewayOperatorRoleDefinition,
-+  nativeCapabilities: readonly OpenClawOpenResponsesNativeCapability[],
 +  integration: OpenResponsesApplicationPolicyIntegration,
 +) {
-+  const agentEntry = resolveAgentEntry(cfg, agentId);
-+  const resolvedAgent = resolveAgentConfig(cfg, agentId);
 +  return {
-+    version: 1,
++    version: 2,
 +    runtimeVersion: VERSION,
 +    integration,
 +    policyRef,
 +    agentId,
 +    role,
-+    nativeCapabilities,
-+    agentEntry: agentEntry ?? null,
-+    resolvedAgent: resolvedAgent ?? null,
++    agentEntry: resolveAgentEntry(cfg, agentId) ?? null,
++    resolvedAgent: resolveAgentConfig(cfg, agentId) ?? null,
 +    agentDefaults: cfg.agents?.defaults ?? null,
 +    tools: cfg.tools ?? null,
 +  };
 +}
 +
-+const CAPABILITY_TO_NATIVE_TOOLS: Record<OpenClawOpenResponsesNativeCapability, readonly string[]> =
-+  {
-+    public_web_search: ["web_search"],
-+    sandbox_code_execution: ["exec", "process"],
-+  };
-+
-+function resolveNativeCapabilityPolicy(
-+  capabilities: readonly OpenClawOpenResponsesNativeCapability[],
-+): { capabilities: OpenClawOpenResponsesNativeCapability[]; tools: string[] } | undefined {
-+  const unique = new Set<OpenClawOpenResponsesNativeCapability>();
-+  for (const capability of capabilities) {
-+    if (!Object.hasOwn(CAPABILITY_TO_NATIVE_TOOLS, capability) || unique.has(capability)) {
-+      return undefined;
-+    }
-+    unique.add(capability);
-+  }
-+  const normalizedCapabilities = [...unique].sort();
-+  return {
-+    capabilities: normalizedCapabilities,
-+    tools: [
-+      ...new Set(normalizedCapabilities.flatMap((item) => CAPABILITY_TO_NATIVE_TOOLS[item])),
-+    ].sort(),
-+  };
-+}
-+
-+function normalizedPolicyEntries(entries: readonly string[] | undefined): string[] {
-+  return [...new Set((entries ?? []).map((entry) => entry.trim()).filter(Boolean))].sort();
-+}
-+
-+function hasExactPolicyEntries(
-+  actual: readonly string[] | undefined,
-+  expected: readonly string[],
-+): boolean {
-+  return normalizedPolicyEntries(actual).join("\0") === [...expected].sort().join("\0");
-+}
-+
-+function policyAllowsEvery(
-+  policy: { allow?: string[]; deny?: string[] } | undefined,
-+  toolNames: readonly string[],
-+): boolean {
-+  const matches = createToolPolicyMatcher(policy);
-+  return toolNames.every((toolName) => matches(toolName));
-+}
-+
++/**
++ * Revisions one closed, single-agent host policy without interpreting a plugin's
++ * consent vocabulary or deployment recipe. The registering plugin decides which
++ * such policies it is willing to offer; core executes the exact resolved snapshot.
++ */
 +export function fingerprintOpenResponsesApplicationPolicy(
 +  cfg: OpenClawConfig,
 +  policyRef: string,
-+  agentId: string,
-+  nativeCapabilities: readonly OpenClawOpenResponsesNativeCapability[],
 +  integration: OpenResponsesApplicationPolicyIntegration,
 +): string | undefined {
-+  const role = getOwnRole(cfg, policyRef);
-+  if (!role || role.sessions.others !== "none" || role.agents === "*") {
-+    return undefined;
-+  }
-+  if (!role.agents.includes(agentId) || role.scopes.includes("operator.admin")) {
-+    return undefined;
-+  }
-+  const agentEntry = resolveAgentEntry(cfg, agentId);
-+  const agent = resolveAgentConfig(cfg, agentId);
-+  const capabilityPolicy = resolveNativeCapabilityPolicy(nativeCapabilities);
-+  const agentTools = agent?.tools;
-+  const noNativeTools = capabilityPolicy?.tools.length === 0;
-+  if (
-+    !agentEntry ||
-+    !agent ||
-+    !capabilityPolicy ||
-+    (!agentEntry.workspace?.trim() && !agentEntry.cwd?.trim()) ||
-+    agent.contextInjection !== "never" ||
-+    !agentTools ||
-+    agentTools.alsoAllow !== undefined ||
-+    agentTools.profile !== undefined ||
-+    agentTools.byProvider !== undefined ||
-+    agentTools.toolsBySender !== undefined ||
-+    cfg.tools?.profile !== undefined ||
-+    cfg.tools?.byProvider !== undefined ||
-+    cfg.tools?.toolsBySender !== undefined ||
-+    (noNativeTools
-+      ? !hasExactPolicyEntries(agentTools.deny, ["*"])
-+      : !hasExactPolicyEntries(agentTools.allow, capabilityPolicy.tools) ||
-+        normalizedPolicyEntries(agentTools.deny).length > 0) ||
-+    !policyAllowsEvery(cfg.tools, capabilityPolicy.tools) ||
-+    !policyAllowsEvery(cfg.tools?.sandbox?.tools, capabilityPolicy.tools) ||
-+    !policyAllowsEvery(agentTools.sandbox?.tools, capabilityPolicy.tools) ||
-+    (capabilityPolicy.capabilities.includes("sandbox_code_execution") &&
-+      role.sandbox !== "required")
-+  ) {
++  const resolved = resolveDedicatedPolicy({ cfg, policyRef });
++  if (!resolved) {
 +    return undefined;
 +  }
 +  return `sha256:${createHash("sha256")
 +    .update(
 +      stableStringify(
-+        policyFingerprintPayload(
-+          cfg,
-+          policyRef,
-+          agentId,
-+          role,
-+          capabilityPolicy.capabilities,
-+          integration,
-+        ),
++        policyRevisionPayload(cfg, policyRef, resolved.agentId, resolved.role, integration),
 +      ),
 +    )
 +    .digest("base64url")}`;
@@ -670,23 +765,21 @@ index 0000000..5a60ca3
 +export function resolveOpenResponsesApplicationPolicy(params: {
 +  cfg: OpenClawConfig;
 +  policyRef: string;
-+  agentId: string;
-+  nativeCapabilities: readonly OpenClawOpenResponsesNativeCapability[];
-+  expectedFingerprint: string;
++  expectedRevision: string;
 +  integration: OpenResponsesApplicationPolicyIntegration;
 +}): ResolvedOpenResponsesApplicationPolicy | undefined {
-+  const role = getOwnRole(params.cfg, params.policyRef);
-+  const fingerprint = fingerprintOpenResponsesApplicationPolicy(
++  const resolved = resolveDedicatedPolicy(params);
++  const revision = fingerprintOpenResponsesApplicationPolicy(
 +    params.cfg,
 +    params.policyRef,
-+    params.agentId,
-+    params.nativeCapabilities,
 +    params.integration,
 +  );
-+  return role && fingerprint === params.expectedFingerprint ? { role, fingerprint } : undefined;
++  return resolved && revision === params.expectedRevision
++    ? { ...resolved, config: params.cfg, revision }
++    : undefined;
 +}
 diff --git a/src/gateway/openresponses-http.ts b/src/gateway/openresponses-http.ts
-index 948ad98..9ad067c 100644
+index 948ad98..e094ece 100644
 --- a/src/gateway/openresponses-http.ts
 +++ b/src/gateway/openresponses-http.ts
 @@ -39,6 +39,7 @@ import {
@@ -709,11 +802,15 @@ index 948ad98..9ad067c 100644
    setSseHeaders,
    watchClientDisconnect,
    writeDone,
-@@ -90,11 +93,14 @@ import {
+@@ -90,11 +93,18 @@ import {
    toolChoiceConstraintPrompt,
    type ToolChoiceConstraint,
  } from "./openai-tool-choice.js";
-+import { authorizeOpenResponsesApplicationRequest } from "./openresponses-application-auth.js";
++import {
++  admitOpenResponsesApplicationRequest,
++  authorizeOpenResponsesApplicationRequest,
++  type AdmittedOpenResponsesApplicationRequest,
++} from "./openresponses-application-auth.js";
  import { wrapUntrustedFileContent } from "./openresponses-file-content.js";
  import { buildAgentPrompt } from "./openresponses-prompt.js";
  import { createAssistantOutputItem, createFunctionCallOutputItem } from "./openresponses-shape.js";
@@ -724,7 +821,7 @@ index 948ad98..9ad067c 100644
  
  type OpenResponsesHttpOptions = {
    auth: ResolvedGatewayAuth;
-@@ -141,6 +147,10 @@ function resolveResponseSessionAuthSubject(params: {
+@@ -141,6 +151,10 @@ function resolveResponseSessionAuthSubject(params: {
    auth: ResolvedGatewayAuth;
    requestAuth: AuthorizedGatewayHttpRequest;
  }): string {
@@ -735,7 +832,7 @@ index 948ad98..9ad067c 100644
    // Proxy-verified identity owns continuation; forwarded bearers are unverified.
    if (params.requestAuth.authMethod === "trusted-proxy") {
      return `trusted-proxy:${params.requestAuth.user}`;
-@@ -311,6 +321,18 @@ function extractClientTools(body: CreateResponseBody): ClientToolDefinition[] {
+@@ -311,6 +325,18 @@ function extractClientTools(body: CreateResponseBody): ClientToolDefinition[] {
    }));
  }
  
@@ -754,23 +851,27 @@ index 948ad98..9ad067c 100644
  function applyToolChoice(params: {
    tools: ClientToolDefinition[];
    toolChoice: CreateResponseBody["tool_choice"];
-@@ -413,6 +435,7 @@ async function runResponsesAgentCommand(params: {
+@@ -413,6 +439,8 @@ async function runResponsesAgentCommand(params: {
    senderIsOwner: boolean;
    deps: CliDeps;
    resolveGatewayContext?: GatewayContextResolver;
 +  sessionCreation?: TrustedSessionCreation;
++  executionPolicyConfig?: import("../config/types.openclaw.js").OpenClawConfig;
    abortSignal?: AbortSignal;
  }) {
    return agentCommandFromGatewayIngress(
-@@ -431,6 +454,7 @@ async function runResponsesAgentCommand(params: {
+@@ -431,6 +459,10 @@ async function runResponsesAgentCommand(params: {
        bestEffortDeliver: false,
        allowModelOverride: params.modelOverride !== undefined,
        abortSignal: params.abortSignal,
 +      ...(params.sessionCreation ? { sessionCreation: params.sessionCreation } : {}),
++      ...(params.executionPolicyConfig
++        ? { executionPolicyConfig: params.executionPolicyConfig }
++        : {}),
        ...(params.resolveGatewayContext
          ? {
              onAdmittedRunContext: (context: AdmittedRunContext) =>
-@@ -449,22 +473,37 @@ export async function handleOpenResponsesHttpRequest(
+@@ -449,34 +481,53 @@ export async function handleOpenResponsesHttpRequest(
    res: ServerResponse,
    opts: OpenResponsesHttpOptions,
  ): Promise<boolean> {
@@ -797,13 +898,16 @@ index 948ad98..9ad067c 100644
 +  if (applicationDecision.status === "handled") {
 +    return true;
 +  }
-+  const application = applicationDecision.status === "authorized" ? applicationDecision : undefined;
-+  const handled = application
++  const applicationCandidate =
++    applicationDecision.status === "authorized" ? applicationDecision : undefined;
++  const handled = applicationCandidate
 +    ? req.method !== "POST"
 +      ? (sendMethodNotAllowed(res), undefined)
 +      : {
 +          body: await readJsonBodyOrError(req, res, maxBodyBytes),
-+          requestAuth: application.requestAuth,
++          requestAuth: {
++            trustDeclaredOperatorScopes: false,
++          } satisfies AuthorizedGatewayHttpRequest,
 +        }
 +    : await handleGatewayPostJsonEndpoint(req, res, {
 +        pathname: "/v1/responses",
@@ -820,12 +924,27 @@ index 948ad98..9ad067c 100644
    if (handled === false) {
      return false;
    }
-@@ -484,9 +523,59 @@ export async function handleOpenResponsesHttpRequest(
+   if (!handled) {
+     return true;
+   }
+-  const modelOverrideAuth = authorizeOpenAiCompatibleHttpModelOverride(req, handled.requestAuth);
++  let requestAuth = handled.requestAuth;
++  const modelOverrideAuth = authorizeOpenAiCompatibleHttpModelOverride(req, requestAuth);
+   if (!modelOverrideAuth.allowed) {
+     sendMissingScopeForbidden(res, modelOverrideAuth.missingScope);
+     return true;
+   }
+-  const senderIsOwner = resolveOpenAiCompatibleHttpSenderIsOwner(req, handled.requestAuth);
++  const senderIsOwner = resolveOpenAiCompatibleHttpSenderIsOwner(req, requestAuth);
+   const payload = parseGatewayJsonRequest(res, handled.body, CreateResponseBodySchema);
+   if (!payload) {
+     return true;
+@@ -484,9 +535,68 @@ export async function handleOpenResponsesHttpRequest(
    const stream = Boolean(payload.stream);
    const model = payload.model;
    const user = payload.user;
 +  if (
-+    application &&
++    applicationCandidate &&
 +    (user !== undefined ||
 +      model.trim() !== "openclaw/default" ||
 +      getHeader(req, "x-openclaw-session-key") !== undefined ||
@@ -839,63 +958,74 @@ index 948ad98..9ad067c 100644
 +    return true;
 +  }
 +  const clientTools = extractClientTools(payload);
-+  if (application) {
-+    if (hasMediaInput(payload)) {
-+      sendJson(res, 403, {
-+        error: { message: "application media inputs are not authorized", type: "forbidden" },
-+      });
-+      return true;
++  let application: AdmittedOpenResponsesApplicationRequest | undefined;
++  if (applicationCandidate) {
++    let allowed = false;
++    try {
++      allowed = await applicationCandidate.captured.runInPluginScope(() =>
++        applicationCandidate.captured.registration.provider.authorize({
++          principal: applicationCandidate.principal,
++          request: {
++            clientTools: (payload.tools ?? []).map((tool) => ({
++              name: tool.name,
++              description: tool.description,
++              inputSchema: tool.parameters,
++              ...(tool.strict !== undefined ? { strict: tool.strict } : {}),
++            })),
++            toolChoice: payload.tool_choice,
++            hasMediaInput: hasMediaInput(payload),
++          },
++        }),
++      );
++    } catch {
++      allowed = false;
 +    }
-+    if (payload.tools?.some((tool) => tool.strict !== undefined || !tool.description?.trim())) {
-+      sendJson(res, 403, {
-+        error: {
-+          message: "application tools must use the exact consented description with strict omitted",
-+          type: "forbidden",
-+        },
-+      });
-+      return true;
-+    }
-+    const allowed = await application.provider.authorize({
-+      principal: application.principal,
-+      request: {
-+        agentId: application.principal.agentId,
-+        clientTools: (payload.tools ?? []).map((tool) => ({
-+          name: tool.name,
-+          description: tool.description!,
-+          inputSchema: tool.parameters,
-+        })),
-+        toolChoice: payload.tool_choice,
-+      },
-+    });
 +    if (!allowed) {
 +      sendJson(res, 403, {
 +        error: { message: "application grant does not authorize this request", type: "forbidden" },
 +      });
 +      return true;
 +    }
++    try {
++      application = await admitOpenResponsesApplicationRequest(applicationCandidate);
++    } catch {
++      sendJson(res, 503, {
++        error: { message: "application principal unavailable", type: "server_error" },
++      });
++      return true;
++    }
++    if (!application) {
++      sendJson(res, 403, {
++        error: { message: "application policy changed or is unavailable", type: "forbidden" },
++      });
++      return true;
++    }
++    requestAuth = application.requestAuth;
 +  }
    let agentId: string;
    try {
 -    agentId = resolveAgentIdForRequest({ req, model });
-+    agentId = application?.principal.agentId ?? resolveAgentIdForRequest({ req, model });
++    agentId = application?.policy.agentId ?? resolveAgentIdForRequest({ req, model });
    } catch (err) {
      if (
        isAgentSelectionRequiredError(err) ||
-@@ -500,9 +589,18 @@ export async function handleOpenResponsesHttpRequest(
+@@ -499,10 +609,19 @@ export async function handleOpenResponsesHttpRequest(
+     throw err;
    }
    const creationAuth = authorizeGatewaySessionCreation({
-     cfg: getRuntimeConfig(),
+-    cfg: getRuntimeConfig(),
 -    ...(senderIsOwner && !handled.requestAuth.authenticatedUserProfile
 -      ? { actor: { kind: "system" as const } }
 -      : { profileId: handled.requestAuth.authenticatedUserProfile?.profileId }),
++    cfg: application?.policy.config ?? getRuntimeConfig(),
 +    client: createSyntheticPluginRuntimeClient({
-+      ...(handled.requestAuth.authenticatedUserProfile
-+        ? { authenticatedUserProfile: handled.requestAuth.authenticatedUserProfile }
++      ...(requestAuth.authenticatedUserProfile
++        ? { authenticatedUserProfile: requestAuth.authenticatedUserProfile }
 +        : {}),
-+      ...(handled.requestAuth.operatorRolePolicy
-+        ? { operatorRolePolicy: handled.requestAuth.operatorRolePolicy }
++      ...(requestAuth.operatorRolePolicy
++        ? { operatorRolePolicy: requestAuth.operatorRolePolicy }
 +        : {}),
-+      ...(senderIsOwner && !handled.requestAuth.authenticatedUserProfile
++      ...(senderIsOwner && !requestAuth.authenticatedUserProfile
 +        ? { operatorRoleActor: { kind: "system" as const } }
 +        : {}),
 +      scopes: [],
@@ -903,7 +1033,24 @@ index 948ad98..9ad067c 100644
      agentId,
    });
    if (creationAuth) {
-@@ -615,7 +713,6 @@ export async function handleOpenResponsesHttpRequest(
+@@ -511,11 +630,11 @@ export async function handleOpenResponsesHttpRequest(
+     });
+     return true;
+   }
+-  const { modelOverride, errorMessage: modelError } = await resolveOpenAiCompatModelOverride({
+-    req,
+-    agentId,
+-    model,
+-  });
++  // Application requests forbid the model override header above, so they do
++  // not cross the stock helper's live-config/catalog boundary after admission.
++  const { modelOverride, errorMessage: modelError } = application
++    ? {}
++    : await resolveOpenAiCompatModelOverride({ req, agentId, model });
+   if (modelError) {
+     sendInvalidRequest(res, modelError);
+     return true;
+@@ -615,7 +734,6 @@ export async function handleOpenResponsesHttpRequest(
      return true;
    }
  
@@ -911,7 +1058,7 @@ index 948ad98..9ad067c 100644
    let toolChoicePrompt: string | undefined;
    let toolChoiceConstraint: ToolChoiceConstraint | undefined;
    let resolvedClientTools = clientTools;
-@@ -634,14 +731,23 @@ export async function handleOpenResponsesHttpRequest(
+@@ -634,14 +752,23 @@ export async function handleOpenResponsesHttpRequest(
    }
    let resolved: ReturnType<typeof resolveGatewayRequestContext>;
    try {
@@ -925,9 +1072,9 @@ index 948ad98..9ad067c 100644
 -    });
 +    resolved = application
 +      ? {
-+          agentId: application.principal.agentId,
++          agentId: application.policy.agentId,
 +          sessionKey: buildAgentMainSessionKey({
-+            agentId: application.principal.agentId,
++            agentId: application.policy.agentId,
 +            mainKey: `openresponses:${randomUUID()}`,
 +          }),
 +          messageChannel: "webchat",
@@ -943,7 +1090,16 @@ index 948ad98..9ad067c 100644
    } catch (err) {
      if (
        isAgentSelectionRequiredError(err) ||
-@@ -666,8 +772,30 @@ export async function handleOpenResponsesHttpRequest(
+@@ -657,7 +784,7 @@ export async function handleOpenResponsesHttpRequest(
+   const responseSessionScope = createResponseSessionScope({
+     req,
+     auth: opts.auth,
+-    requestAuth: handled.requestAuth,
++    requestAuth,
+     agentId: resolved.agentId,
+   });
+   // Resolve session key: reuse previous_response_id only when it matches the
+@@ -666,13 +793,38 @@ export async function handleOpenResponsesHttpRequest(
      payload.previous_response_id,
      responseSessionScope,
    );
@@ -962,9 +1118,11 @@ index 948ad98..9ad067c 100644
 +    ? {
 +        via: "run",
 +        actor: {
-+          type: "human",
-+          source: "profile",
++          type: "system",
++          source: "application",
 +          id: application.requestAuth.authenticatedUserProfile!.profileId,
++          pluginId: application.requestAuth.applicationPrincipal!.pluginId,
++          subject: application.requestAuth.applicationPrincipal!.subject,
 +        },
 +        ...(application.requestAuth.operatorRolePolicy?.sandbox === "required"
 +          ? { sandbox: "required" as const }
@@ -974,19 +1132,28 @@ index 948ad98..9ad067c 100644
    const sessionAuth = authorizeOpenAiCompatibleHttpSession({
      agentId: resolved.agentId,
      sessionKey,
-@@ -746,6 +874,7 @@ export async function handleOpenResponsesHttpRequest(
+-    requestAuth: handled.requestAuth,
++    requestAuth,
+     senderIsOwner,
++    ...(application ? { cfg: application.policy.config } : {}),
+   });
+   if (!sessionAuth.allowed) {
+     sendJson(res, 403, { error: { message: sessionAuth.message, type: "forbidden" } });
+@@ -746,6 +898,8 @@ export async function handleOpenResponsesHttpRequest(
          senderIsOwner,
          deps,
          resolveGatewayContext: opts.resolveGatewayContext,
 +        sessionCreation,
++        executionPolicyConfig: application?.policy.config,
          abortSignal: abortController.signal,
        });
  
-@@ -1176,6 +1305,7 @@ export async function handleOpenResponsesHttpRequest(
+@@ -1176,6 +1330,8 @@ export async function handleOpenResponsesHttpRequest(
          senderIsOwner,
          deps,
          resolveGatewayContext: opts.resolveGatewayContext,
 +        sessionCreation,
++        executionPolicyConfig: application?.policy.config,
          abortSignal: abortController.signal,
        });
  
@@ -1017,7 +1184,7 @@ index fb0b130..23057ad 100644
      return undefined;
    }
 diff --git a/src/gateway/server-http.ts b/src/gateway/server-http.ts
-index 7de9055..3f132b4 100644
+index 7de9055..82f3f81 100644
 --- a/src/gateway/server-http.ts
 +++ b/src/gateway/server-http.ts
 @@ -42,7 +42,10 @@ import {
@@ -1026,20 +1193,67 @@ index 7de9055..3f132b4 100644
  } from "./gateway-http-route-contracts.js";
 -import type { AuthorizedGatewayHttpRequest } from "./http-auth-utils.js";
 +import {
-+  prepareManagedTailscaleOwnerConsentRequest,
++  prepareVerifiedHttpPrincipalRequest,
 +  type AuthorizedGatewayHttpRequest,
 +} from "./http-auth-utils.js";
  import {
    finishFailedGatewayHttpResponse,
    sendGatewayAuthFailure,
-@@ -342,6 +345,10 @@ export function createGatewayHttpServer(opts: {
+@@ -53,6 +56,7 @@ import {
+   prepareGatewayIngressAttribution,
+   type GatewayIngressTransport,
+   type GatewayUnattributableProxyReporter,
++  type TailscaleWhoisLookup,
+ } from "./ingress-attribution.js";
+ import { normalizePluginNodeCapabilityScopedUrl } from "./plugin-node-capability.js";
+ import {
+@@ -183,6 +187,8 @@ export function createGatewayHttpServer(opts: {
+   isTerminalEnabled?: () => boolean;
+   tlsOptions?: TlsOptions;
+   ingressTransport?: GatewayIngressTransport;
++  /** Test/integration seam for listener-owned managed-Tailscale identity lookup. */
++  tailscaleWhois?: TailscaleWhoisLookup;
+   reportUnattributableProxy?: GatewayUnattributableProxyReporter;
+ }): HttpServer {
+   const {
+@@ -301,10 +307,26 @@ export function createGatewayHttpServer(opts: {
+       const configSnapshot = loadGatewayConfig();
+       const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
+       const allowRealIpFallback = configSnapshot.gateway?.allowRealIpFallback === true;
++      const resolvedAuthValue = getResolvedAuth();
++      const routeAuth = {
++        auth: resolvedAuthValue,
++        trustedProxies,
++        allowRealIpFallback,
++        rateLimiter,
++      };
+       const ingressAttribution = prepareGatewayIngressAttribution({
+         req,
+         trustedProxies,
          allowRealIpFallback,
-         rateLimiter,
-       };
-+      prepareManagedTailscaleOwnerConsentRequest(req, {
++        tailscaleWhois: opts.tailscaleWhois,
++      });
++      // Bind the host-resolved listener provenance before any plugin-authenticated
++      // early dispatch. Recomputing without this exact attribution can discard a
++      // verified managed-Serve WhoIs result or trust a different proxy view.
++      prepareVerifiedHttpPrincipalRequest(req, {
 +        ...routeAuth,
 +        cfg: configSnapshot,
-+      });
++        ingressAttribution,
+       });
+       const scopedNodeCapability = normalizePluginNodeCapabilityScopedUrl(req.url ?? "/");
+       if (scopedNodeCapability.malformedScopedPath) {
+@@ -335,13 +357,6 @@ export function createGatewayHttpServer(opts: {
+         return;
+       }
+       const requestClientIp = ingressAttribution.clientIp;
+-      const resolvedAuthValue = getResolvedAuth();
+-      const routeAuth = {
+-        auth: resolvedAuthValue,
+-        trustedProxies,
+-        allowRealIpFallback,
+-        rateLimiter,
+-      };
        const controlUiRouteOptions = {
          basePath: controlUiBasePath,
          config: configSnapshot,
@@ -1092,7 +1306,7 @@ index cfa70d7..bd6133c 100644
        ...(params?.agentToolCaller ? { agentToolCaller: params.agentToolCaller } : {}),
        allowModelOverride: params?.allowModelOverride === true,
 diff --git a/src/gateway/server.plugin-http-role-scopes.test.ts b/src/gateway/server.plugin-http-role-scopes.test.ts
-index d083066..07b90db 100644
+index d083066..1ba9bde 100644
 --- a/src/gateway/server.plugin-http-role-scopes.test.ts
 +++ b/src/gateway/server.plugin-http-role-scopes.test.ts
 @@ -7,8 +7,16 @@ import { WebSocketServer } from "ws";
@@ -1100,7 +1314,7 @@ index d083066..07b90db 100644
  import type { OpenClawConfig } from "../config/types.openclaw.js";
  import { createSubsystemLogger } from "../logging/subsystem.js";
 +import {
-+  authenticateManagedTailscaleOwnerConsent,
++  authenticateVerifiedPluginHttpPrincipal,
 +  getAuthenticatedPluginHttpPrincipal,
 +} from "../plugin-sdk/authenticated-http-principal.js";
  import { getPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
@@ -1113,15 +1327,19 @@ index d083066..07b90db 100644
  import { withOpenClawTestState } from "../test-utils/openclaw-test-state.js";
  import { authorizeOperatorScopesForMethod, CLI_DEFAULT_OPERATOR_SCOPES } from "./method-scopes.js";
  import { invalidateOperatorRolePolicy } from "./operator-role-policy.js";
-@@ -22,6 +30,7 @@ import {
+@@ -22,9 +30,11 @@ import {
    shouldEnforceGatewayAuthForPluginPath,
  } from "./server/plugins-http.js";
  import { createPreauthConnectionBudget } from "./server/preauth-connection-budget.js";
-+import { testTailscaleWhois } from "./test-helpers.js";
++import { installGatewayTestHooks } from "./test-helpers.js";
  import { withTempConfig } from "./test-temp-config.js";
  
  const routePath = "/role-scoped-plugin";
-@@ -68,6 +77,7 @@ function observeRuntimeScope() {
++installGatewayTestHooks({ scope: "suite" });
+ const proxyAddress = "203.0.113.10";
+ const proxyAuth = {
+   mode: "trusted-proxy",
+@@ -68,6 +78,7 @@ function observeRuntimeScope() {
    return {
      scopes,
      profileId: client?.authenticatedUserProfile?.profileId,
@@ -1129,7 +1347,7 @@ index d083066..07b90db 100644
      writeAllowed: authorizeOperatorScopesForMethod("node.invoke", scopes ?? []).allowed,
    };
  }
-@@ -181,6 +191,7 @@ describe.each(["write-default", "trusted-operator"] as const)(
+@@ -181,6 +192,7 @@ describe.each(["write-default", "trusted-operator"] as const)(
                  const expected = {
                    scopes: expectedScopes,
                    profileId: profile.id,
@@ -1137,7 +1355,7 @@ index d083066..07b90db 100644
                    writeAllowed: expectedScopes.some(
                      (scope) => scope === "operator.write" || scope === "operator.admin",
                    ),
-@@ -209,3 +220,100 @@ describe.each(["write-default", "trusted-operator"] as const)(
+@@ -209,3 +221,104 @@ describe.each(["write-default", "trusted-operator"] as const)(
      });
    },
  );
@@ -1169,6 +1387,7 @@ index d083066..07b90db 100644
 +        },
 +      };
 +      const path = "/tailscale-owner-consent";
++      let currentWhoisLogin = ownerLogin;
 +      const registry = createGatewayTestRegistry({
 +        httpRoutes: [
 +          {
@@ -1178,7 +1397,9 @@ index d083066..07b90db 100644
 +            auth: "plugin",
 +            match: "exact",
 +            handler: async (req: IncomingMessage, res: ServerResponse) => {
-+              const principal = await authenticateManagedTailscaleOwnerConsent(req);
++              const principal = await authenticateVerifiedPluginHttpPrincipal(req, {
++                authMethods: ["tailscale"],
++              });
 +              const allowed =
 +                principal?.profileId === owner.id && principal.scopes.includes("operator.admin");
 +              res.statusCode = allowed ? 200 : 403;
@@ -1193,6 +1414,7 @@ index d083066..07b90db 100644
 +        resolvedAuth: auth,
 +        overrides: {
 +          ingressTransport: { kind: "managed-tailscale", mode: "serve" },
++          tailscaleWhois: async () => ({ login: currentWhoisLogin, name: currentWhoisLogin }),
 +          getRuntimeConfig: () => cfg,
 +          handlePluginRequest: createGatewayPluginRequestHandler({ registry, log }),
 +          shouldEnforcePluginGatewayAuth: (pathContext) =>
@@ -1204,7 +1426,7 @@ index d083066..07b90db 100644
 +        },
 +      });
 +      const request = async (login: string, forwarded = true) => {
-+        testTailscaleWhois.value = { login, name: login };
++        currentWhoisLogin = login;
 +        return await sendRequest(server, {
 +          path,
 +          remoteAddress: "127.0.0.1",
@@ -1222,16 +1444,16 @@ index d083066..07b90db 100644
 +      };
 +      try {
 +        const accepted = await request(ownerLogin);
-+        expect(accepted.res.statusCode).toBe(200);
 +        expect(JSON.parse(accepted.getBody())).toEqual({
 +          profileId: owner.id,
-+          scopes: ["operator.read", "operator.write", "operator.admin"],
++          scopes: CLI_DEFAULT_OPERATOR_SCOPES,
++          authMethod: "tailscale",
 +        });
++        expect(accepted.res.statusCode).toBe(200);
 +
 +        expect((await request(guestLogin)).res.statusCode).toBe(403);
 +        expect((await request(ownerLogin, false)).res.statusCode).toBe(403);
 +      } finally {
-+        testTailscaleWhois.value = null;
 +        invalidateOperatorRolePolicy(owner.id);
 +        invalidateOperatorRolePolicy(guest.id);
 +      }
@@ -1292,12 +1514,12 @@ index 0000000..2b7a40b
 +});
 diff --git a/src/plugin-sdk/authenticated-http-principal.ts b/src/plugin-sdk/authenticated-http-principal.ts
 new file mode 100644
-index 0000000..6908800
+index 0000000..413106f
 --- /dev/null
 +++ b/src/plugin-sdk/authenticated-http-principal.ts
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,39 @@
 +import type { IncomingMessage } from "node:http";
-+import { authenticateManagedTailscaleOwnerConsentRequest } from "../gateway/http-auth-utils.js";
++import { authenticateVerifiedHttpPrincipalRequest } from "../gateway/http-auth-utils.js";
 +import { getPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
 +
 +export type AuthenticatedPluginHttpPrincipal = {
@@ -1305,9 +1527,13 @@ index 0000000..6908800
 +  scopes: readonly string[];
 +};
 +
++export type VerifiedPluginHttpPrincipal = AuthenticatedPluginHttpPrincipal & {
++  authMethod: "tailscale";
++};
++
 +/**
 + * Returns only host-verified durable identity from an authenticated plugin HTTP
-+ * route. Callers still enforce their configured owner allowlist and admin scope.
++ * route. Callers still enforce their own authorization and request-integrity policy.
 + */
 +export function getAuthenticatedPluginHttpPrincipal():
 +  | AuthenticatedPluginHttpPrincipal
@@ -1321,39 +1547,33 @@ index 0000000..6908800
 +}
 +
 +/**
-+ * Verifies managed-Tailscale ingress for one plugin-owned consent request.
-+ * Callers still require admin scope, their owner allowlist, Origin, and CSRF.
++ * Authenticates the actual listener-bound request using only an explicitly
++ * accepted host method. Reachability or forwarded identity headers are never
++ * authentication. The v0 method set contains managed Tailscale WhoIs only.
 + */
-+export async function authenticateManagedTailscaleOwnerConsent(
++export async function authenticateVerifiedPluginHttpPrincipal(
 +  req: IncomingMessage,
-+): Promise<AuthenticatedPluginHttpPrincipal | undefined> {
-+  if (!getPluginRuntimeGatewayRequestScope()?.pluginId) {
-+    return undefined;
-+  }
-+  return await authenticateManagedTailscaleOwnerConsentRequest(req);
++  options: { authMethods: readonly ["tailscale"] },
++): Promise<VerifiedPluginHttpPrincipal | undefined> {
++  return await authenticateVerifiedHttpPrincipalRequest(req, options);
 +}
 diff --git a/src/plugin-sdk/openresponses-application-policy.ts b/src/plugin-sdk/openresponses-application-policy.ts
 new file mode 100644
-index 0000000..01f741a
+index 0000000..b5e2ec6
 --- /dev/null
 +++ b/src/plugin-sdk/openresponses-application-policy.ts
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,26 @@
 +import type { OpenClawConfig } from "../config/types.openclaw.js";
 +import { fingerprintOpenResponsesApplicationPolicy as fingerprintPolicy } from "../gateway/openresponses-application-policy.js";
 +import { getPluginRegistrationContext } from "../plugins/runtime.js";
 +import { getPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
-+import type { OpenClawOpenResponsesNativeCapability } from "../plugins/types.js";
 +
 +export type { ResolvedOpenResponsesApplicationPolicy } from "../gateway/openresponses-application-policy.js";
 +
 +/** Fingerprint live native policy under the calling plugin's pinned identity. */
 +export function fingerprintOpenResponsesApplicationPolicy(
 +  cfg: OpenClawConfig,
-+  params: {
-+    policyRef: string;
-+    agentId: string;
-+    nativeCapabilities: readonly OpenClawOpenResponsesNativeCapability[];
-+  },
++  params: { policyRef: string },
 +): string | undefined {
 +  const registration = getPluginRegistrationContext();
 +  const scope = getPluginRuntimeGatewayRequestScope();
@@ -1364,7 +1584,7 @@ index 0000000..01f741a
 +  const registry = registration?.registry ?? scope?.pluginRegistry;
 +  const plugin = registry?.plugins.find((candidate) => candidate.id === pluginId);
 +  const pluginVersion = registration?.pluginVersion ?? plugin?.version;
-+  return fingerprintPolicy(cfg, params.policyRef, params.agentId, params.nativeCapabilities, {
++  return fingerprintPolicy(cfg, params.policyRef, {
 +    pluginId,
 +    ...(pluginVersion ? { pluginVersion } : {}),
 +  });
@@ -1472,32 +1692,27 @@ index e4052b4..ddf01e7 100644
    registerHostedMediaResolver: (resolver: OpenClawPluginHostedMediaResolver) => void;
    /** Register a plugin-owned destination for presenting hosted widget documents. */
 diff --git a/src/plugins/plugin-registration.types.ts b/src/plugins/plugin-registration.types.ts
-index 57c6a2e..abc54fd 100644
+index 57c6a2e..e355733 100644
 --- a/src/plugins/plugin-registration.types.ts
 +++ b/src/plugins/plugin-registration.types.ts
-@@ -68,6 +68,71 @@ export type OpenClawPluginHttpRouteParams = {
+@@ -68,6 +68,67 @@ export type OpenClawPluginHttpRouteParams = {
    replaceExisting?: boolean;
  };
  
 +export type OpenClawOpenResponsesApplicationTool = {
 +  name: string;
-+  description: string;
++  description?: string;
 +  inputSchema: unknown;
++  strict?: boolean;
 +};
 +
-+export type OpenClawOpenResponsesNativeCapability = "public_web_search" | "sandbox_code_execution";
-+
 +export type OpenClawOpenResponsesApplicationPrincipal = {
-+  /** Stable grant identity. Access-token rotation must not change this value. */
++  /** Stable nonhuman subject. Credential rotation must not change this value. */
 +  subject: string;
-+  /** Operator-configured agent selected by the verified grant, never by the request. */
-+  agentId: string;
-+  /** Native capabilities in the owner-approved policy snapshot. */
-+  nativeCapabilities: readonly OpenClawOpenResponsesNativeCapability[];
-+  /** Explicit operator role name. The host never falls back to the default role. */
++  /** Opaque reference to one host-validated dedicated execution policy. */
 +  policyRef: string;
-+  /** Fingerprint captured when the owner approved the grant. */
-+  policyFingerprint: string;
++  /** Host-issued revision captured when the external grant was approved. */
++  policyRevision: string;
 +  /** Provider-private verified grant context, returned only to `authorize`. */
 +  context?: unknown;
 +};
@@ -1511,14 +1726,15 @@ index 57c6a2e..abc54fd 100644
 +    };
 +
 +export type OpenClawOpenResponsesApplicationRequest = {
-+  agentId: string;
 +  clientTools: readonly OpenClawOpenResponsesApplicationTool[];
 +  toolChoice: unknown;
++  /** Described before URL resolution or any other remote fetch. */
++  hasMediaInput: boolean;
 +};
 +
 +/**
-+ * Authenticates application credentials on native `/v1/responses` only.
-+ * The host owns routing, profile resolution, role enforcement, and session creation.
++ * Experimental delegated-principal seam for native `/v1/responses` only.
++ * The host owns routing, effective policy resolution, admission, provenance, and execution.
 + */
 +export type OpenClawOpenResponsesApplicationAuthProvider = {
 +  /**
@@ -1581,7 +1797,7 @@ index 0d67d62..50c76b0 100644
      widgetPresenters: [],
      mcpServerConnectionResolvers: [],
 diff --git a/src/plugins/registry-registrars-network.ts b/src/plugins/registry-registrars-network.ts
-index 5d7f8f3..bcd74b2 100644
+index 5d7f8f3..9bd79bc 100644
 --- a/src/plugins/registry-registrars-network.ts
 +++ b/src/plugins/registry-registrars-network.ts
 @@ -24,6 +24,7 @@ import type {
@@ -1592,7 +1808,7 @@ index 5d7f8f3..bcd74b2 100644
    OpenClawPluginMcpServerConnectionResolver,
    PluginRegistrationMode,
  } from "./types.js";
-@@ -210,6 +211,34 @@ export function createNetworkRegistrars(state: PluginRegistryState) {
+@@ -210,6 +211,36 @@ export function createNetworkRegistrars(state: PluginRegistryState) {
      registry.httpRoutes.push(registration);
    };
  
@@ -1621,13 +1837,15 @@ index 5d7f8f3..bcd74b2 100644
 +      ...(record.version ? { pluginVersion: record.version } : {}),
 +      provider,
 +      source: record.source,
++      registry,
++      record,
 +    };
 +  };
 +
    const registerHostedMediaResolver = (
      record: PluginRecord,
      resolver: OpenClawPluginHostedMediaResolver,
-@@ -373,6 +402,7 @@ export function createNetworkRegistrars(state: PluginRegistryState) {
+@@ -373,6 +404,7 @@ export function createNetworkRegistrars(state: PluginRegistryState) {
      registerGatewayMethod,
      registerSessionCatalog,
      registerHttpRoute,
@@ -1636,7 +1854,7 @@ index 5d7f8f3..bcd74b2 100644
      registerMcpServerConnectionResolver,
      registerChannel,
 diff --git a/src/plugins/registry-types.ts b/src/plugins/registry-types.ts
-index b76f6fc..c383576 100644
+index b76f6fc..10c71cf 100644
 --- a/src/plugins/registry-types.ts
 +++ b/src/plugins/registry-types.ts
 @@ -75,6 +75,8 @@ type OpenClawPluginGatewayRuntimeScopeSurface =
@@ -1648,7 +1866,7 @@ index b76f6fc..c383576 100644
  type OpenClawPluginHttpRouteMatch = import("./types.js").OpenClawPluginHttpRouteMatch;
  type OpenClawPluginHostedMediaResolver = import("./types.js").OpenClawPluginHostedMediaResolver;
  type OpenClawPluginReloadRegistration = import("./types.js").OpenClawPluginReloadRegistration;
-@@ -140,6 +142,13 @@ export type PluginHttpRouteRegistration = {
+@@ -140,6 +142,16 @@ export type PluginHttpRouteRegistration = {
    source?: string;
  };
  
@@ -1657,12 +1875,15 @@ index b76f6fc..c383576 100644
 +  pluginVersion?: string;
 +  provider: OpenClawOpenResponsesApplicationAuthProvider;
 +  source: string;
++  /** Internal ownership facts used for callback scope and lifecycle fencing. */
++  registry: PluginRegistry;
++  record: PluginRecord;
 +};
 +
  type PluginHostedMediaResolverRegistration = {
    pluginId: string;
    pluginName?: string;
-@@ -571,6 +580,7 @@ export type PluginRegistry = {
+@@ -571,6 +583,7 @@ export type PluginRegistry = {
    boardWidgetContentKinds: Map<string, PluginBoardWidgetContentKindRegistration>;
    coreGatewayMethodNames: string[];
    httpRoutes: PluginHttpRouteRegistration[];
@@ -1670,6 +1891,52 @@ index b76f6fc..c383576 100644
    hostedMediaResolvers: PluginHostedMediaResolverRegistration[];
    widgetPresenters: PluginWidgetPresenterRegistration[];
    mcpServerConnectionResolvers: PluginMcpServerConnectionResolverRegistration[];
+diff --git a/src/plugins/registry.diagnostics.test.ts b/src/plugins/registry.diagnostics.test.ts
+index 28e8e5f..c2ce181 100644
+--- a/src/plugins/registry.diagnostics.test.ts
++++ b/src/plugins/registry.diagnostics.test.ts
+@@ -30,6 +30,27 @@ function createDiagnosticFixture() {
+ }
+ 
+ describe("plugin registration diagnostics", () => {
++  it("rolls back a provider registered before plugin registration throws", () => {
++    const { builder, createRecord } = createDiagnosticFixture();
++    const failed = createRecord("failed-auth");
++    const replacement = createRecord("replacement-auth");
++    const provider = {
++      authenticate: () => ({ status: "pass" as const }),
++      authorize: () => false,
++    };
++
++    try {
++      builder.createApi(failed, { config: {} }).registerOpenResponsesApplicationAuth(provider);
++      throw new Error("register failed after auth contribution");
++    } catch {
++      builder.rollbackPluginGlobalSideEffects(failed.id, failed);
++    }
++    expect(builder.registry.openResponsesApplicationAuth).toBeUndefined();
++
++    builder.createApi(replacement, { config: {} }).registerOpenResponsesApplicationAuth(provider);
++    expect(builder.registry.openResponsesApplicationAuth?.pluginId).toBe("replacement-auth");
++  });
++
+   it("preserves ordered severity and call-time provenance across registrars and rollback", () => {
+     const { builder, createRecord } = createDiagnosticFixture();
+     const alpha = createRecord("alpha");
+diff --git a/src/plugins/registry.ts b/src/plugins/registry.ts
+index 07647a0..7684d75 100644
+--- a/src/plugins/registry.ts
++++ b/src/plugins/registry.ts
+@@ -84,6 +84,9 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
+         }
+       }
+     }
++    if (state.registry.openResponsesApplicationAuth?.pluginId === pluginId) {
++      delete state.registry.openResponsesApplicationAuth;
++    }
+     for (const method of gatewayMethods) {
+       delete state.registry.gatewayHandlers[method];
+     }
 diff --git a/src/plugins/runtime-state.ts b/src/plugins/runtime-state.ts
 index eff3282..c0e7c52 100644
 --- a/src/plugins/runtime-state.ts
@@ -1684,18 +1951,32 @@ index eff3282..c0e7c52 100644
    commandRegistryClearRegistries?: Map<PluginRegistry, number>;
  };
 diff --git a/src/plugins/runtime.ts b/src/plugins/runtime.ts
-index 51f3743..61988b2 100644
+index 51f3743..6ef3ca9 100644
 --- a/src/plugins/runtime.ts
 +++ b/src/plugins/runtime.ts
-@@ -17,6 +17,7 @@ import { settlePreparedMessageToolCatalog } from "./prepared-message-tool-catalo
+@@ -15,11 +15,20 @@ import {
+ import { clearPluginMetadataLifecycleCaches } from "./plugin-metadata-lifecycle.js";
+ import { settlePreparedMessageToolCatalog } from "./prepared-message-tool-catalog.js";
  import { createEmptyPluginRegistry } from "./registry-empty.js";
- import { markPluginRegistryActive, markPluginRegistryRetired } from "./registry-lifecycle.js";
+-import { markPluginRegistryActive, markPluginRegistryRetired } from "./registry-lifecycle.js";
++import {
++  capturePluginLifecycleAuthority,
++  markPluginRegistryActive,
++  markPluginRegistryRetired,
++} from "./registry-lifecycle.js";
  import type { PluginRegistry } from "./registry-types.js";
 +import type { PluginOpenResponsesApplicationAuthRegistration } from "./registry-types.js";
  import { getActivePluginChannelRegistrySnapshotFromState } from "./runtime-channel-state.js";
  import { PLUGIN_REGISTRY_STATE, type RegistryState } from "./runtime-state.js";
  import { getPluginRuntimeGatewayRequestScope } from "./runtime/gateway-request-scope.js";
-@@ -47,6 +48,12 @@ const state: RegistryState = (() => {
++import {
++  withPluginRuntimePluginScope,
++  withPluginRuntimeRegistryScope,
++} from "./runtime/gateway-request-scope.js";
+ 
+ const log = createSubsystemLogger("plugins/runtime");
+ 
+@@ -47,6 +56,53 @@ const state: RegistryState = (() => {
    return registryState;
  })();
  
@@ -1705,10 +1986,51 @@ index 51f3743..61988b2 100644
 +  return asPluginRegistry(state.activeRegistry)?.openResponsesApplicationAuth;
 +}
 +
++export type CapturedOpenResponsesApplicationAuthRegistration = {
++  registration: PluginOpenResponsesApplicationAuthRegistration;
++  isCurrent: () => boolean;
++  runInPluginScope: <T>(run: () => T) => T;
++};
++
++/** Capture one exact loaded provider generation for an asynchronous request. */
++export function captureOpenResponsesApplicationAuthRegistration():
++  | CapturedOpenResponsesApplicationAuthRegistration
++  | undefined {
++  const registry = asPluginRegistry(state.activeRegistry);
++  const registration = registry?.openResponsesApplicationAuth;
++  if (!registry || !registration || registration.registry !== registry) {
++    return undefined;
++  }
++  const isCurrent = capturePluginLifecycleAuthority(registry, registration.record, {
++    scopedRuntime: true,
++  });
++  if (!isCurrent || !isCurrent()) {
++    return undefined;
++  }
++  return {
++    registration,
++    isCurrent,
++    runInPluginScope: (run) =>
++      withPluginRuntimeRegistryScope(registry, () =>
++        withPluginRuntimePluginScope(
++          {
++            pluginId: registration.pluginId,
++            pluginSource: registration.source,
++            ...(registration.record.origin ? { pluginOrigin: registration.record.origin } : {}),
++            ...(registration.record.trustedOfficialInstall === true
++              ? { pluginTrustedOfficialInstall: true }
++              : {}),
++          },
++          run,
++        ),
++      ),
++  };
++}
++
  function registryHasPluginHostCleanupWork(registry: PluginRegistry | null): boolean {
    if (!registry) {
      return false;
-@@ -291,9 +298,10 @@ export function withPluginRegistrationContext<T>(
+@@ -291,9 +347,10 @@ export function withPluginRegistrationContext<T>(
    registry: PluginRegistry,
    pluginId: string,
    run: () => T,

@@ -275,9 +275,9 @@ describe("OpenClaw provider OAuth plugin", () => {
       provider.authorize({
         principal: authenticated.principal,
         request: {
-          agentId: "bookhand-agent",
           clientTools: [TOOL],
           toolChoice: "auto",
+          hasMediaInput: false,
         },
       }),
     ).toBe(true);
@@ -285,12 +285,30 @@ describe("OpenClaw provider OAuth plugin", () => {
       provider.authorize({
         principal: authenticated.principal,
         request: {
-          agentId: "bookhand-agent",
           clientTools: [{ ...TOOL, name: "delete_everything" }],
           toolChoice: "auto",
+          hasMediaInput: false,
         },
       }),
     ).toBe(false);
+    const { description: _description, ...toolWithoutDescription } = TOOL;
+    for (const request of [
+      { clientTools: [TOOL], toolChoice: "auto", hasMediaInput: true },
+      {
+        clientTools: [{ ...TOOL, strict: false }],
+        toolChoice: "auto",
+        hasMediaInput: false,
+      },
+      {
+        clientTools: [toolWithoutDescription],
+        toolChoice: "auto",
+        hasMediaInput: false,
+      },
+    ]) {
+      expect(
+        provider.authorize({ principal: authenticated.principal, request }),
+      ).toBe(false);
+    }
 
     const refreshedResponse = await postForm(
       `${baseUrl}/agent-connect/oauth/token`,

@@ -46,10 +46,8 @@ export function createOpenResponsesApplicationAuthProvider(options: {
         status: "authenticated",
         principal: {
           subject: verified.subject,
-          agentId: verified.agentId,
           policyRef: verified.policyRef,
-          policyFingerprint: verified.policyFingerprint,
-          nativeCapabilities: verified.nativeCapabilities,
+          policyRevision: verified.policyFingerprint,
           context: verified,
         },
       };
@@ -59,30 +57,19 @@ export function createOpenResponsesApplicationAuthProvider(options: {
       return (
         verified !== undefined &&
         principal.subject === verified.subject &&
-        principal.agentId === verified.agentId &&
         principal.policyRef === verified.policyRef &&
-        principal.policyFingerprint === verified.policyFingerprint &&
-        arraysEqual(
-          principal.nativeCapabilities,
-          verified.nativeCapabilities,
+        principal.policyRevision === verified.policyFingerprint &&
+        !request.hasMediaInput &&
+        request.clientTools.every(
+          (tool) =>
+            tool.strict === undefined && Boolean(tool.description?.trim()),
         ) &&
-        request.agentId === verified.agentId &&
         options.grantService.recheck(verified, {
           applicationTools: request.clientTools,
         })
       );
     },
   };
-}
-
-function arraysEqual(
-  left: readonly string[],
-  right: readonly string[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
 }
 
 function asVerifiedGrant(value: unknown): VerifiedDelegatedGrant | undefined {
