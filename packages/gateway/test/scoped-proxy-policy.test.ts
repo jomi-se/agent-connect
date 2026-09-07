@@ -22,6 +22,18 @@ describe("static stock OpenClaw policy contract", () => {
       },
     ]);
     expect(() => snapshot.assertUnchanged()).not.toThrow();
+    expect(() =>
+      snapshot.assertRuntimeConfig(
+        config({ gatewayToken: "__OPENCLAW_REDACTED__" }),
+      ),
+    ).not.toThrow();
+    const bound = snapshot.withRuntimeVerifier({
+      appliedConfigHash: "stock-applied-revision",
+      async assertCurrent() {},
+    });
+    expect(bound.offeredPolicies[0]?.fingerprint).not.toBe(
+      snapshot.offeredPolicies[0]?.fingerprint,
+    );
     writePrivate(fixture.policyPath, `${JSON.stringify(policies([]))}\n`);
     expect(() => snapshot.assertUnchanged()).toThrow(/restart and reconsent/);
   });
@@ -61,7 +73,7 @@ describe("static stock OpenClaw policy contract", () => {
         }),
         policies(["sandbox_code_execution"]),
       ),
-    ).toThrow(/no-egress container sandbox/);
+    ).toThrow(/sandbox|docker/);
     expect(() =>
       load(
         config({
@@ -77,6 +89,22 @@ describe("static stock OpenClaw policy contract", () => {
         policies(["sandbox_code_execution"]),
       ),
     ).toThrow(/no-egress container sandbox/);
+  });
+
+  it("rejects fields outside the narrow execution template", () => {
+    const value = config() as Record<string, unknown>;
+    value.models = { providers: {} };
+    expect(() => load(value, policies([]))).toThrow(
+      /root contains unsupported fields: models/,
+    );
+    const agent = (
+      value.agents as { entries: Record<string, Record<string, unknown>> }
+    ).entries.restricted as Record<string, unknown>;
+    delete value.models;
+    agent.subagents = { allowAgents: ["*"] };
+    expect(() => load(value, policies([]))).toThrow(
+      /contains unsupported fields: subagents/,
+    );
   });
 });
 
@@ -108,6 +136,7 @@ function config(
     elevated?: boolean;
     allow?: string[];
     sandbox?: Record<string, unknown>;
+    gatewayToken?: string;
   } = {},
 ) {
   return {
@@ -115,7 +144,10 @@ function config(
       mode: "local",
       bind: "loopback",
       port: 18789,
-      auth: { mode: "token", token: "operator-secret" },
+      auth: {
+        mode: "token",
+        token: changes.gatewayToken ?? "operator-secret",
+      },
       reload: { mode: "off" },
       http: { endpoints: { responses: { enabled: true } } },
     },
@@ -124,12 +156,19 @@ function config(
       elevated: { enabled: changes.elevated ?? false },
     },
     agents: {
-      defaults: { skipBootstrap: true },
+      defaults: {
+        skipBootstrap: true,
+        heartbeat: { every: "0m" },
+        timeoutSeconds: 90,
+        models: {
+          "openai/gpt-5.6-sol": { agentRuntime: { id: "openclaw" } },
+        },
+      },
       entries: {
         restricted: {
           workspace: "/tmp/restricted-agent",
           contextInjection: "never",
-          model: { primary: "fixture/fixture", fallbacks: [] },
+          model: { primary: "openai/gpt-5.6-sol", fallbacks: [] },
           skills: [],
           memory: { search: { enabled: false } },
           tools: changes.allow ? { allow: changes.allow } : { deny: ["*"] },
@@ -140,6 +179,12 @@ function config(
     plugins: {
       slots: { memory: "none" },
       entries: { "memory-core": { enabled: false } },
+    },
+    auth: {
+      profiles: {
+        "openai:default": { provider: "openai", mode: "oauth" },
+      },
+      order: { openai: ["openai:default"] },
     },
   };
 }

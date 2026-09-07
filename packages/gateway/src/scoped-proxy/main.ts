@@ -3,7 +3,7 @@ import { scopedProxyConfigFromEnv } from "./config.js";
 import { createScopedResponsesProxy } from "./server.js";
 
 try {
-  const config = scopedProxyConfigFromEnv();
+  const config = await scopedProxyConfigFromEnv();
   const server = createScopedResponsesProxy(config);
   server.listen(config.port, config.host, () => {
     process.stdout.write(

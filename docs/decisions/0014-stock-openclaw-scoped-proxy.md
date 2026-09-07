@@ -79,12 +79,29 @@ fallback model, exact native tool ceiling and disabled elevation/tool search.
 Code execution additionally requires a per-session, no-egress container sandbox
 with no host binds and no writable host workspace.
 
-The proxy fingerprints the entire OpenClaw config and policy files, rechecks both
-before upstream effects and fails closed after any edit. A supervisor must stop
-both processes, replace config, restart OpenClaw, restart the proxy and obtain
-fresh consent. This is intentionally not described as an atomic hot-reload fence.
-Starting OpenClaw under some other config while reusing the same token/port is
-outside the supported composition; process supervision owns that invariant.
+The supported JSON is an exact narrow template: unknown root, gateway, auth,
+agent-default, dedicated-agent, tool, sandbox and plugin fields are rejected.
+This prevents an execution-affecting option from being silently presented as
+covered by the validator merely because the handful of required fields are safe.
+
+At startup the proxy uses OpenClaw's published Gateway client and the same private
+operator token to call stock `config.get`. It validates the redacted
+`sourceConfig`, requires a valid snapshot and requires the server-issued resolved
+`configRevisionHash` to equal the non-null server-issued `appliedConfigHash`.
+The applied revision is included in policy fingerprints. The projected raw-file
+`hash` has a different domain and remains only a write-conflict revision; it is
+never compared with either resolved revision or a locally calculated digest.
+
+The proxy still hashes its full local config and policy files because
+`config.get` intentionally redacts the literal operator credential. It rechecks
+those local inputs and repeats authenticated `config.get` immediately before
+each Responses admission, health success and owner consent decision. A missing,
+changed or unapplied runtime revision fails closed. This is drift detection, not
+an atomic admission fence: a trusted operator can still reconfigure OpenClaw in
+the interval after the check. Concurrent operator reconfiguration is outside the
+guarantee. The supported operation remains stop both processes, replace config,
+restart OpenClaw, restart the proxy and obtain fresh consent; no supervisor,
+hot-reload protocol or native patch is introduced.
 
 ## Evidence boundary
 
@@ -93,7 +110,11 @@ inference. It verifies a dedicated deny-all agent against owner-origin direct
 `/exec`, elevated and hallucinated native exec attempts, and verifies an
 unavailable Docker sandbox fails before inference. The composition test uses the
 real web SDK, owner login, OAuth, stock native Responses, two application tool
-results, follow-up context, refresh and revoke. It spends no model allowance.
+results, follow-up context, refresh and revoke. That fixture also observes stock
+redaction, distinct raw/resolved revision domains, saved/applied equality and
+rejection after a disposable on-disk edit while reload is off. Unit coverage
+proves the optional/missing applied revision is rejected. It spends no model
+allowance.
 
 These checks do not prove the eventual selected subscription model's judgment,
 credential lifetime, operator supervisor setup, HTTPS ingress or Bookhand UI.

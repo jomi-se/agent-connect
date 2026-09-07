@@ -42,7 +42,7 @@ async function main() {
   }
   const { scopedProxyConfigFromEnv } =
     await import("../packages/gateway/dist/scoped-proxy/config.js");
-  const config = scopedProxyConfigFromEnv();
+  const config = await scopedProxyConfigFromEnv();
   if (action === "check") {
     try {
       const health = await fetch(new URL("/health", config.upstreamBaseUrl), {
@@ -77,7 +77,7 @@ async function main() {
       );
     }
     console.log(
-      "Scoped proxy build, pinned stock package, static config/policies, owner identity, grants and upstream auth passed. This does not run inference or replace the required deterministic compatibility test.",
+      "Scoped proxy build, pinned stock package, closed static policy, authenticated stock config.get runtime revision, owner identity, grants and upstream auth passed. This does not run inference or replace the required deterministic compatibility test.",
     );
     return;
   }

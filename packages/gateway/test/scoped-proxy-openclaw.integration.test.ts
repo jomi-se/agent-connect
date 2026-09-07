@@ -1,4 +1,5 @@
 import { mkdtempSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server } from "node:http";
@@ -31,6 +32,10 @@ import {
   type DelegatedGrantStore,
 } from "../src/delegated-grants.js";
 import { createScopedResponsesProxy } from "../src/scoped-proxy/server.js";
+import {
+  createOpenClawRuntimePolicyVerifier,
+  readStockOpenClawConfig,
+} from "../src/scoped-proxy/runtime-config.js";
 
 const integration =
   process.env.RUN_OPENCLAW_INTEGRATION === "1" ? describe : describe.skip;
@@ -71,6 +76,7 @@ integration("scoped proxy with the published OpenClaw process", () => {
         runtime = await startOpenClawTestRuntime({
           async configure(config, { directory }) {
             config.agents.defaults.skipBootstrap = true;
+            config.gateway.reload = { mode: "off" };
             config.agents.entries = {
               restricted: {
                 workspace: join(directory, "restricted-workspace"),
@@ -127,6 +133,37 @@ integration("scoped proxy with the published OpenClaw process", () => {
           publicEndpoint: ISSUER,
           enrollmentPassphrase: PASSPHRASE,
         });
+        const stockConfig = await readStockOpenClawConfig({
+          upstreamBaseUrl: runtime.baseUrl,
+          upstreamToken: runtime.token,
+        });
+        expect(stockConfig).toMatchObject({
+          valid: true,
+          sourceConfig: {
+            gateway: { auth: { token: "__OPENCLAW_REDACTED__" } },
+          },
+        });
+        expect(stockConfig.hash).toEqual(expect.any(String));
+        expect(stockConfig.configRevisionHash).toEqual(expect.any(String));
+        expect(stockConfig.appliedConfigHash).toBe(
+          stockConfig.configRevisionHash,
+        );
+        expect(stockConfig.hash).not.toBe(stockConfig.configRevisionHash);
+        const runtimeVerifier = await createOpenClawRuntimePolicyVerifier({
+          readConfig: () =>
+            readStockOpenClawConfig({
+              upstreamBaseUrl: runtime?.baseUrl as string,
+              upstreamToken: runtime?.token as string,
+            }),
+          validateSourceConfig(value) {
+            expect(value).toMatchObject({
+              gateway: {
+                auth: { token: "__OPENCLAW_REDACTED__" },
+                reload: { mode: "off" },
+              },
+            });
+          },
+        });
         proxy = createScopedResponsesProxy({
           issuer: ISSUER,
           resource: RESOURCE,
@@ -134,7 +171,10 @@ integration("scoped proxy with the published OpenClaw process", () => {
           upstreamToken: runtime.token,
           grantService: grants,
           ownerAuth,
-          policySnapshot: { assertUnchanged() {} },
+          policySnapshot: {
+            assertUnchanged() {},
+            assertRuntimeCurrent: () => runtimeVerifier.assertCurrent(),
+          },
         });
         const loopback = await listen(proxy);
         const applicationFetch = mappedFetch(loopback, APP);
@@ -260,6 +300,28 @@ integration("scoped proxy with the published OpenClaw process", () => {
         });
         expect(afterRevoke.status).toBe(401);
         expect(inferenceStep).toBe(4);
+
+        const configPath = join(runtime.directory, "openclaw.json");
+        const changedConfig = JSON.parse(await readFile(configPath, "utf8"));
+        changedConfig.agents.defaults.timeoutSeconds = 21;
+        await writeFile(configPath, JSON.stringify(changedConfig, null, 2), {
+          mode: 0o600,
+        });
+        await expect
+          .poll(
+            async () =>
+              (
+                await readStockOpenClawConfig({
+                  upstreamBaseUrl: runtime?.baseUrl as string,
+                  upstreamToken: runtime?.token as string,
+                })
+              ).configRevisionHash,
+            { timeout: 5_000, interval: 100 },
+          )
+          .not.toBe(stockConfig.configRevisionHash);
+        await expect(runtimeVerifier.assertCurrent()).rejects.toThrow(
+          /not the revision applied|changed/,
+        );
       } finally {
         if (proxy) await close(proxy);
         await runtime?.close();

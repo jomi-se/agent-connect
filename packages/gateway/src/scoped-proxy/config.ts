@@ -6,6 +6,10 @@ import compatibility from "../../../../config/openclaw-test-compat.json" with { 
 import { ConnectorAuth } from "../connector-auth.js";
 import { DelegatedGrantService } from "../delegated-grants.js";
 import { loadStaticOpenClawPolicy } from "./policy.js";
+import {
+  createOpenClawRuntimePolicyVerifier,
+  readStockOpenClawConfig,
+} from "./runtime-config.js";
 import type { ScopedResponsesProxyOptions } from "./server.js";
 
 export interface ScopedProxyRuntimeConfig extends ScopedResponsesProxyOptions {
@@ -16,9 +20,9 @@ export interface ScopedProxyRuntimeConfig extends ScopedResponsesProxyOptions {
   readonly openclawBin: string;
 }
 
-export function scopedProxyConfigFromEnv(
+export async function scopedProxyConfigFromEnv(
   env: NodeJS.ProcessEnv = process.env,
-): ScopedProxyRuntimeConfig {
+): Promise<ScopedProxyRuntimeConfig> {
   requireSupportedNode();
   const host = env.AGENT_CONNECT_HOST ?? "127.0.0.1";
   if (!isLoopbackHost(host)) {
@@ -48,7 +52,7 @@ export function scopedProxyConfigFromEnv(
     required(env, "AGENT_CONNECT_DELEGATED_GRANT_STATE_PATH"),
     "AGENT_CONNECT_DELEGATED_GRANT_STATE_PATH",
   );
-  const policySnapshot = loadStaticOpenClawPolicy({
+  const staticPolicySnapshot = loadStaticOpenClawPolicy({
     configPath: absolutePath(
       required(env, "OPENCLAW_CONFIG_PATH"),
       "OPENCLAW_CONFIG_PATH",
@@ -60,6 +64,14 @@ export function scopedProxyConfigFromEnv(
     upstreamToken,
     upstreamBaseUrl,
   });
+  const runtimeVerifier = await createOpenClawRuntimePolicyVerifier({
+    readConfig: () =>
+      readStockOpenClawConfig({ upstreamBaseUrl, upstreamToken }),
+    validateSourceConfig: (value) =>
+      staticPolicySnapshot.assertRuntimeConfig(value),
+  });
+  const policySnapshot =
+    staticPolicySnapshot.withRuntimeVerifier(runtimeVerifier);
   const grantService = new DelegatedGrantService({
     resource,
     statePath: grantStatePath,

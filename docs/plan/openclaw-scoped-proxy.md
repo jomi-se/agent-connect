@@ -174,3 +174,57 @@ PATH=/tmp/agent-connect-openclaw-node/node_modules/.bin:/usr/local/bin:/usr/bin:
 No source gate remains. The real supervised HTTPS/subscription/browser/Bookhand
 composition is intentionally not run or claimed here; it requires separate
 operator coordination and fresh owner consent.
+
+## Runtime revision follow-up — 2026-09-07
+
+The earlier local-file-only fence has been replaced with stock runtime evidence.
+Startup now calls authenticated `config.get` through the published
+`@openclaw/gateway-client`, validates the redacted resolved source, requires
+`configRevisionHash === appliedConfigHash`, and includes the applied revision in
+grant policy fingerprints. Every Responses admission repeats that RPC immediately
+before reservation/upstream POST and fails closed for missing, unapplied or
+changed revisions. Health and consent decisions also check it. The raw projected
+`hash`, resolved revision and local file digest are deliberately not compared.
+
+This remains explicitly non-atomic. It detects accidental drift but cannot stop a
+trusted operator reconfiguration between the admission check and native
+Responses handling. Controlled stop/change/restart/reconsent is the supported
+lifecycle; no supervisor, CAS endpoint, hot reload or OpenClaw patch was added.
+The supported JSON template is now field-closed at execution-affecting levels.
+
+Focused checks completed during implementation:
+
+```sh
+npm run build:scoped-proxy
+# passed
+
+npm test --workspace @agent-connect/gateway -- \
+  scoped-proxy.test.ts scoped-proxy-policy.test.ts \
+  scoped-proxy-runtime-config.test.ts
+# 3 files, 14 tests passed
+
+PATH=/tmp/agent-connect-openclaw-node/node_modules/.bin:/usr/local/bin:/usr/bin:/bin \
+  OPENCLAW_TEST_BIN=/tmp/agent-connect-openclaw-2026-9-1/node_modules/.bin/openclaw \
+  npm run test:integration:openclaw --workspace @agent-connect/gateway
+# 1 real stock composition test passed
+
+npx eslint packages/gateway/src/scoped-proxy \
+  packages/gateway/test/scoped-proxy*.test.ts \
+  scripts/openclaw-scoped-proxy.mjs
+# passed
+
+PATH=/tmp/agent-connect-openclaw-node/node_modules/.bin:/usr/local/bin:/usr/bin:/bin \
+  OPENCLAW_TEST_BIN=/tmp/agent-connect-openclaw-2026-9-1/node_modules/.bin/openclaw \
+  npm run verify:scoped-proxy
+# format/build; 4 focused files, 16 tests; 4 stock fixture tests;
+# 1 stock SDK/OAuth composition; and 1 independent AI SDK composition passed
+
+npm run typecheck --workspace @agent-connect/gateway
+# passed
+```
+
+The first direct stock drift assertion sampled immediately after the disposable
+file write and saw the previous revision. It was corrected to poll the real
+Gateway for up to five seconds, matching its asynchronous file observation; the
+bounded test then observed the changed saved revision and the proxy rejected it.
+No model allowance, live credentials or non-loopback services were used.

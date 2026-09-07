@@ -22,5 +22,9 @@
   },
   "devDependencies": {
     "@types/node": "24.0.14"
+  },
+  "dependencies": {
+    "@openclaw/gateway-client": "2026.9.1",
+    "@openclaw/gateway-protocol": "2026.9.1"
   }
 }
