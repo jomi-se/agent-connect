@@ -185,6 +185,31 @@ export function createScopedResponsesProxy(
     });
     if (!grant) throw new ProxyHttpError(401, "invalid_application_credential");
     options.policySnapshot.assertUnchanged();
+    const controller = new AbortController();
+    const abortOnDisconnect = () => controller.abort();
+    const abortOnResponseClose = () => {
+      if (!response.writableEnded) abortOnDisconnect();
+    };
+    request.once("aborted", abortOnDisconnect);
+    response.once("close", abortOnResponseClose);
+    try {
+      await admitAndDispatch(request, response, origin, grant, controller);
+    } catch (error) {
+      if (disconnected(request, response, controller)) return;
+      throw error;
+    } finally {
+      request.off("aborted", abortOnDisconnect);
+      response.off("close", abortOnResponseClose);
+    }
+  }
+
+  async function admitAndDispatch(
+    request: IncomingMessage,
+    response: ServerResponse,
+    origin: string,
+    grant: VerifiedDelegatedGrant,
+    controller: AbortController,
+  ): Promise<void> {
     const value = await readJson(request, MAX_RESPONSE_REQUEST_BYTES);
     const requestedPrevious = previousResponseId(value);
     const continuation = requestedPrevious
@@ -200,6 +225,9 @@ export function createScopedResponsesProxy(
           }
         : undefined,
     );
+    options.policySnapshot.assertUnchanged();
+    await options.policySnapshot.assertRuntimeCurrent();
+    if (disconnected(request, response, controller)) return;
     if (
       !options.grantService.recheck(grant, {
         applicationTools: grant.applicationTools,
@@ -207,8 +235,7 @@ export function createScopedResponsesProxy(
     ) {
       throw new ProxyHttpError(401, "grant_inactive");
     }
-    options.policySnapshot.assertUnchanged();
-    await options.policySnapshot.assertRuntimeCurrent();
+    if (disconnected(request, response, controller)) return;
 
     let reservation: ConversationReservation;
     if (requestedPrevious) {
@@ -225,16 +252,10 @@ export function createScopedResponsesProxy(
     } else {
       reservation = registry.reserveNew(grant);
     }
-    const controller = new AbortController();
     const timeout = AbortSignal.timeout(
       options.upstreamTimeoutMs ?? 30 * 60 * 1000,
     );
     const signal = AbortSignal.any([controller.signal, timeout]);
-    const abortOnDisconnect = () => controller.abort();
-    request.once("aborted", abortOnDisconnect);
-    response.once("close", () => {
-      if (!response.writableEnded) abortOnDisconnect();
-    });
     let observedId: string | undefined;
     try {
       const upstream = await fetchImplementation(
@@ -733,6 +754,14 @@ function previousResponseId(value: unknown): string | undefined {
   return typeof body?.previous_response_id === "string"
     ? body.previous_response_id
     : undefined;
+}
+
+function disconnected(
+  request: IncomingMessage,
+  response: ServerResponse,
+  controller: AbortController,
+): boolean {
+  return controller.signal.aborted || request.aborted || response.destroyed;
 }
 
 async function readJson(

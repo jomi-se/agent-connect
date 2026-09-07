@@ -93,18 +93,72 @@ describe("static stock OpenClaw policy contract", () => {
 
   it("rejects fields outside the narrow execution template", () => {
     const value = config() as Record<string, unknown>;
-    value.models = { providers: {} };
+    const defaults = (value.agents as { defaults: Record<string, unknown> })
+      .defaults;
+    defaults.subagents = { maxSpawnDepth: 1 };
     expect(() => load(value, policies([]))).toThrow(
-      /root contains unsupported fields: models/,
+      /agents.defaults contains unsupported fields: subagents/,
     );
+    delete defaults.subagents;
     const agent = (
       value.agents as { entries: Record<string, Record<string, unknown>> }
     ).entries.restricted as Record<string, unknown>;
-    delete value.models;
     agent.subagents = { allowAgents: ["*"] };
     expect(() => load(value, policies([]))).toThrow(
       /contains unsupported fields: subagents/,
     );
+  });
+
+  it("allows unrelated personal agents and models without offering them", () => {
+    const value = config();
+    value.models = {
+      providers: {
+        personal: { baseUrl: "https://personal-model.example" },
+      },
+    };
+    value.agents.defaults.models["personal/model"] = {
+      agentRuntime: { id: "another-runtime" },
+      personalOption: true,
+    } as never;
+    value.agents.entries.personal = {
+      workspace: "/tmp/personal-agent",
+      model: { primary: "personal/model" },
+      tools: { allow: ["exec", "browser"] },
+      subagents: { allowAgents: ["*"] },
+    } as never;
+
+    const snapshot = load(value, policies([]));
+    expect(snapshot.offeredPolicies).toMatchObject([{ agentId: "restricted" }]);
+
+    const offeredPersonal = policies([]);
+    const firstPolicy = offeredPersonal.policies[0];
+    if (!firstPolicy) throw new Error("missing policy fixture");
+    firstPolicy.agentId = "personal";
+    expect(() => load(value, offeredPersonal)).toThrow(
+      /agents.entries.personal contains unsupported fields|not closed/,
+    );
+  });
+
+  it("allows distinct closed agents to back distinct offered policies", () => {
+    const value = config();
+    const restricted = value.agents.entries.restricted;
+    if (!restricted) throw new Error("missing restricted agent fixture");
+    value.agents.entries.restrictedTwo = {
+      ...structuredClone(restricted),
+      workspace: "/tmp/restricted-agent-two",
+    };
+    const policyFile = policies([]);
+    policyFile.policies.push({
+      ref: "second-application-policy",
+      label: "Second application policy",
+      agentId: "restrictedTwo",
+      nativeCapabilities: [],
+    });
+
+    expect(load(value, policyFile).offeredPolicies).toMatchObject([
+      { ref: "application-tools-only", agentId: "restricted" },
+      { ref: "second-application-policy", agentId: "restrictedTwo" },
+    ]);
   });
 });
 
@@ -138,7 +192,22 @@ function config(
     sandbox?: Record<string, unknown>;
     gatewayToken?: string;
   } = {},
-) {
+): {
+  gateway: Record<string, unknown>;
+  tools: Record<string, unknown>;
+  agents: {
+    defaults: {
+      skipBootstrap: boolean;
+      heartbeat: { every: string };
+      timeoutSeconds: number;
+      models: Record<string, Record<string, unknown>>;
+    };
+    entries: Record<string, Record<string, unknown>>;
+  };
+  plugins: Record<string, unknown>;
+  auth: Record<string, unknown>;
+  models?: Record<string, unknown>;
+} {
   return {
     gateway: {
       mode: "local",

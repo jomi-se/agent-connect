@@ -79,10 +79,14 @@ fallback model, exact native tool ceiling and disabled elevation/tool search.
 Code execution additionally requires a per-session, no-egress container sandbox
 with no host binds and no writable host workspace.
 
-The supported JSON is an exact narrow template: unknown root, gateway, auth,
-agent-default, dedicated-agent, tool, sandbox and plugin fields are rejected.
-This prevents an execution-affecting option from being silently presented as
-covered by the validator merely because the handful of required fields are safe.
+The validator is field-closed for the gateway, inherited agent defaults, global
+tool/plugin policy, every policy-offered agent and each model selected by an
+offered agent. Conditional/global tool layers and extra fields on an offered
+agent remain unsupported and fail closed. Unoffered personal agents, their model
+entries, provider definitions and authentication profiles may coexist; they are
+operator-owned, are not certified by this policy, and cannot be selected by an
+application. A grant fixes one offered policy and its agent, and the proxy writes
+that agent id into the private upstream request.
 
 At startup the proxy uses OpenClaw's published Gateway client and the same private
 operator token to call stock `config.get`. It validates the redacted
@@ -103,6 +107,12 @@ guarantee. The supported operation remains stop both processes, replace config,
 restart OpenClaw, restart the proxy and obtain fresh consent; no supervisor,
 hot-reload protocol or native patch is introduced.
 
+For an admitted Responses request, disconnect observation begins before body
+reading and runtime verification. After the awaited `config.get`, the proxy
+checks both disconnect state and current grant authority immediately before it
+reserves a conversation or sends the upstream POST. This closes local
+revocation/expiry and disconnect races without claiming cross-process atomicity.
+
 ## Evidence boundary
 
 The stock proof runs the published `2026.9.1` package with deterministic
@@ -110,11 +120,14 @@ inference. It verifies a dedicated deny-all agent against owner-origin direct
 `/exec`, elevated and hallucinated native exec attempts, and verifies an
 unavailable Docker sandbox fails before inference. The composition test uses the
 real web SDK, owner login, OAuth, stock native Responses, two application tool
-results, follow-up context, refresh and revoke. That fixture also observes stock
-redaction, distinct raw/resolved revision domains, saved/applied equality and
-rejection after a disposable on-disk edit while reload is off. Unit coverage
-proves the optional/missing applied revision is rejected. It spends no model
-allowance.
+results, follow-up context, refresh and revoke. It invokes the same production
+policy validator used at launcher startup against stock `config.get`, rather
+than a partial test-only assertion. That fixture also observes stock redaction,
+distinct raw/resolved revision domains, saved/applied equality and rejection
+after a disposable on-disk edit while reload is off. Unit coverage proves the
+optional/missing applied revision is rejected, unrelated personal agents can
+coexist, unsafe offered agents are rejected, and revocation or a disconnect
+during the runtime lookup has no upstream effect. It spends no model allowance.
 
 These checks do not prove the eventual selected subscription model's judgment,
 credential lifetime, operator supervisor setup, HTTPS ingress or Bookhand UI.

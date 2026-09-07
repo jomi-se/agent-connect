@@ -228,3 +228,48 @@ file write and saw the previous revision. It was corrected to poll the real
 Gateway for up to five seconds, matching its asynchronous file observation; the
 bounded test then observed the changed saved revision and the proxy rejected it.
 No model allowance, live credentials or non-loopback services were used.
+
+## Admission and coexistence review follow-up — 2026-09-07
+
+The final local admission fence now observes disconnects before request-body and
+runtime-config waits, then checks disconnect state and rechecks grant authority
+after `config.get` immediately before conversation reservation and upstream
+dispatch. Barrier tests revoke or disconnect while runtime verification is
+paused and prove zero new upstream effects; refused continuation admission leaves
+the existing checkpoint available.
+
+The policy validator now permits unrelated personal agents, model entries,
+provider definitions and authentication profiles. It remains field-closed for
+every policy-offered agent, each offered agent's selected model, and all inherited
+agent/tool/plugin layers. Multiple policies may select distinct closed agents;
+the grant remains the only app-visible routing choice. Unsupported conditional
+tool layers on global or offered-agent policy still fail closed. The real stock
+SDK/OAuth composition now calls the production policy validator against stock
+`config.get`, closing the earlier partial-assertion evidence gap.
+
+Focused closure evidence:
+
+```sh
+npm test --workspace @agent-connect/gateway -- \
+  scoped-proxy.test.ts scoped-proxy-policy.test.ts
+# 2 files, 16 tests passed
+
+PATH=/tmp/agent-connect-openclaw-node/node_modules/.bin:/usr/local/bin:/usr/bin:/bin \
+  OPENCLAW_TEST_BIN=/tmp/agent-connect-openclaw-2026-9-1/node_modules/.bin/openclaw \
+  npm run test:integration:openclaw --workspace @agent-connect/gateway
+# 1 real stock composition test passed
+
+npm run typecheck --workspace @agent-connect/gateway
+npx eslint packages/gateway/src/scoped-proxy/policy.ts \
+  packages/gateway/src/scoped-proxy/server.ts \
+  packages/gateway/test/scoped-proxy.test.ts \
+  packages/gateway/test/scoped-proxy-policy.test.ts \
+  packages/gateway/test/scoped-proxy-openclaw.integration.test.ts
+# passed
+```
+
+No aggregate verification suite was repeated: the focused build, runtime,
+stock-composition and repository gates recorded above already cover the unchanged
+surface. Profile suggestion/application remains unimplemented advisory future
+work, documented in the deployment guide as an explicit operator-approved
+`config.schema.lookup` / `config.get` / `config.patch` flow.

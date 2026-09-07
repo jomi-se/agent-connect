@@ -55,13 +55,17 @@ chmod 600 deploy/openclaw-gateway/.env.scoped-proxy
 
 The example policy offers one app-tools-only agent. Its workspace must be a
 dedicated private empty directory, never the owner's normal OpenClaw workspace.
-The checked JSON shape is intentionally the exact example shape; unknown fields
-at execution-affecting levels are rejected. The validator requires one OAuth
-profile and model/runtime, one dedicated agent, disabled heartbeat, context
-injection, skills, search memory, bootstrap, memory plugins, model fallbacks,
-tool search and elevation. A policy that adds `sandbox_code_execution` must use
-exactly `exec` and `process` with a per-session Docker/Podman sandbox, no network,
-no host binds and read-only or absent host workspace access.
+Every agent named by an offered policy, its selected model entry, and all
+inherited agent/tool/plugin layers are checked against the narrow safe template.
+Unrelated personal agents, model entries, provider definitions and auth profiles
+may coexist, but are not certified or reachable through an app grant. Multiple
+policies may name distinct closed agents. Offered agents require disabled
+heartbeat, context injection, skills, search memory, bootstrap, memory plugins,
+model fallbacks, tool search and elevation. A policy that adds
+`sandbox_code_execution` must use exactly `exec` and `process` with a per-session
+Docker/Podman sandbox, no network, no host binds and read-only or absent host
+workspace access. Conditional/global tool layers and unknown execution fields on
+offered or inherited policy remain unsupported.
 
 The OpenClaw JSON contains the upstream operator token literally so the proxy can
 compare it without resolving shell/config substitutions. The same literal value
@@ -92,6 +96,19 @@ without an inference call:
 node scripts/openclaw-scoped-proxy.mjs check
 node scripts/openclaw-scoped-proxy.mjs serve
 ```
+
+The proxy does not currently install or edit OpenClaw profiles. A future
+operator-only setup assistant can preserve an existing profile without becoming
+an app-facing config API: use authenticated `config.schema.lookup` for the paths
+it proposes, call `config.get`, generate and display a minimal patch, and apply
+only after explicit owner approval with `config.patch` and the fresh raw `hash`
+as `baseHash`. Object-valued named agents should be merged by name. Any array
+replacement must be shown explicitly and use the server's `replacePaths`
+contract; a stale base hash must abort rather than overwrite concurrent edits.
+After an approved write, repeat `config.get`, then follow the controlled
+stop/restart/reconsent lifecycle above. This assistant is advisory future work;
+applications must never receive `config.get`, `config.patch`, or the operator
+credential.
 
 The stock compatibility gates use deterministic inference and no subscription:
 
