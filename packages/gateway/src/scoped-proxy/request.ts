@@ -81,11 +81,8 @@ export function buildBoundedUpstreamRequest(
     "instructions",
     MAX_INSTRUCTIONS_BYTES,
   );
-  if (continuation?.pendingCallIds.length && instructions !== undefined) {
-    throw invalid(
-      "instructions cannot change during function output continuation",
-    );
-  }
+  // AI SDK repeats application instructions on tool-result steps. They are
+  // bounded prompt text, not authority; grant/tool/routing checks still apply.
   const toolChoice = validateToolChoice(
     body.tool_choice,
     new Set(grant.applicationTools.map((tool) => tool.name)),

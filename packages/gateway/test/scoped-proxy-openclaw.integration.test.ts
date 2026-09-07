@@ -280,6 +280,8 @@ integration("scoped proxy with the published OpenClaw process", () => {
         });
         const initial = streamText({
           model: model(),
+          instructions:
+            "Use the supplied application actions to answer the user.",
           prompt: "Run both application actions in order.",
           tools,
           ...createAiSdkOpenResponsesGenerationOptions(),
