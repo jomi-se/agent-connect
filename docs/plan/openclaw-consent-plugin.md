@@ -31,8 +31,9 @@ The shape is exact. In particular, version zero does not accept a client-selecte
 Protected-resource metadata advertises the fixed opaque model alias
 `openclaw/default`; it does not disclose an upstream provider model or agent id.
 
-Owner consent is available only through the host SDK's consent-specific managed
-Tailscale verifier on the plugin-owned authorization route. The helper binds the
+Owner consent is available only through the host SDK's generic verified-request
+principal helper, configured by this plugin to accept only `tailscale`, on the
+plugin-owned authorization route. The helper binds the
 actual request to host listener attribution, WhoIs, rate limiting, a durable
 profile, and the host role ceiling; it fails closed away from managed Serve and
 does not accept shared-secret credentials. The plugin independently requires
@@ -62,7 +63,10 @@ Claimed invalid credentials deny instead of falling through. Valid credentials
 are origin-bound when used by a browser, carry the stable grant subject and closed
 policy identity, and recheck the exact parsed application tools immediately at the
 native authorization seam. OpenClaw core remains responsible for routing,
-session ownership, native policy and sandbox enforcement.
+revision-bound admission, session ownership, native policy and sandbox enforcement.
+Media denial, `strict` and description rules, fixed client-tool comparison,
+capability labels, and the accepted dedicated-agent recipe are plugin policy rather
+than exported core API.
 
 The application-tools-only agent policy must use the host's real deny-all shape,
 `tools.deny: ["*"]`; an empty `tools.allow` is permissive in OpenClaw and is not a

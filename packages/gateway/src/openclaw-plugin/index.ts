@@ -1,10 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { authenticateManagedTailscaleOwnerConsent } from "openclaw/plugin-sdk/authenticated-http-principal";
+import { authenticateVerifiedPluginHttpPrincipal } from "openclaw/plugin-sdk/authenticated-http-principal";
 import { fingerprintOpenResponsesApplicationPolicy } from "openclaw/plugin-sdk/openresponses-application-policy";
 
 import { DelegatedGrantService } from "../delegated-grants.js";
 import { createOpenResponsesApplicationAuthProvider } from "./application-auth.js";
+import { validateAgentConnectOpenResponsesPolicy } from "./application-policy.js";
 import {
   OPENCLAW_PLUGIN_ID,
   toOfferedPolicy,
@@ -31,17 +32,18 @@ export default {
   register(api: HostPluginApi): void {
     const config = parsePluginConfig(api.pluginConfig);
     const offeredPolicies = config.policies.map((policy) => {
+      if (!validateAgentConnectOpenResponsesPolicy(api.config, policy)) {
+        throw new Error(
+          `Agent Connect policy ${policy.ref} does not match the closed recipe`,
+        );
+      }
       const fingerprint = fingerprintOpenResponsesApplicationPolicy(
         api.config,
-        {
-          policyRef: policy.ref,
-          agentId: policy.agentId,
-          nativeCapabilities: policy.nativeCapabilities,
-        },
+        { policyRef: policy.ref },
       );
       if (!fingerprint) {
         throw new Error(
-          `Agent Connect policy ${policy.ref} is unavailable or not closed`,
+          `Agent Connect policy ${policy.ref} is unavailable to native admission`,
         );
       }
       return toOfferedPolicy(policy, fingerprint);
@@ -57,7 +59,9 @@ export default {
       grantService,
       allowedOwnerProfileIds: config.ownerProfileIds,
       ownerVerifier: (request) =>
-        authenticateManagedTailscaleOwnerConsent(request),
+        authenticateVerifiedPluginHttpPrincipal(request, {
+          authMethods: ["tailscale"],
+        }),
     });
     const handler = async (request: unknown, response: unknown) =>
       oauth.handle(request as IncomingMessage, response as ServerResponse);

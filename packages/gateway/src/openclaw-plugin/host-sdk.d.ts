@@ -1,10 +1,15 @@
 declare module "openclaw/plugin-sdk/authenticated-http-principal" {
   import type { IncomingMessage } from "node:http";
 
-  export function authenticateManagedTailscaleOwnerConsent(
+  export function authenticateVerifiedPluginHttpPrincipal(
     request: IncomingMessage,
+    options: { readonly authMethods: readonly ["tailscale"] },
   ): Promise<
-    | { readonly profileId: string; readonly scopes: readonly string[] }
+    | {
+        readonly profileId: string;
+        readonly scopes: readonly string[];
+        readonly authMethod: "tailscale";
+      }
     | undefined
   >;
 
@@ -16,12 +21,6 @@ declare module "openclaw/plugin-sdk/authenticated-http-principal" {
 declare module "openclaw/plugin-sdk/openresponses-application-policy" {
   export function fingerprintOpenResponsesApplicationPolicy(
     config: unknown,
-    policy: {
-      readonly policyRef: string;
-      readonly agentId: string;
-      readonly nativeCapabilities: readonly (
-        "public_web_search" | "sandbox_code_execution"
-      )[];
-    },
+    policy: { readonly policyRef: string },
   ): string | undefined;
 }

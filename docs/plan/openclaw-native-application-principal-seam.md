@@ -1,8 +1,43 @@
 # Native OpenClaw application-principal seam
 
 Date: 2026-09-06.
-Status: accepted seam; upstream patch and isolated verification are in progress.
+Status: proposal-ready pinned patch hardening in progress; no upstream acceptance claim.
 Target: pinned OpenClaw 2026.9.1 only.
+
+## 2026-09-07 architectural-review amendment
+
+The initial version described below coupled Agent Connect's capability recipe to
+OpenClaw core and checked it too early. The hardened contract supersedes those
+details:
+
+- Core sees only a stable nonhuman subject plus an opaque dedicated-policy
+  reference and host-issued revision. It requires that reference to resolve to a
+  non-admin role closed to one real agent, but does not export Agent Connect's
+  capability names, consent-tool triple, strict/media choices, or deployment
+  recipe.
+- Agent Connect validates its exact app-only/web/sandbox recipe from plugin config
+  and rejects media, missing descriptions, `strict`, and tool-snapshot changes in
+  the parsed-request callback before media resolution.
+- Native admission linearizes after that callback and before profile/session/run
+  effects. It checks the exact active plugin generation, resolves the current host
+  policy revision, and captures the exact runtime config. Native preparation uses
+  that captured config instead of reloading a later policy snapshot.
+- Retirement or revision before admission denies. Retirement, credential
+  revocation, or revision after admission does not cancel an active run; it blocks
+  later admissions and continuations.
+- The internal durable profile remains an ownership key, not an operator login.
+  Session creation is stamped as `system` with `source: application`, plugin id,
+  stable grant subject, and the internal profile key. Grant subjects are unique
+  grant-instance identifiers and must never be reused after deletion/reinstall.
+  Retained profiles/sessions are audit tombstones; the plugin retains the
+  consenting-owner association and grant lifecycle.
+- The consent-specific Tailscale SDK name is replaced by a generic verified HTTP
+  principal helper with an explicit accepted-auth-method list. The current method
+  is still listener-proven managed-Tailscale WhoIs. Owner allowlisting,
+  `operator.admin`, Origin, CSRF, and consent remain plugin-owned.
+
+The older capability/fingerprint sections below record the original v0 rationale;
+where they conflict with this amendment, the amendment is authoritative.
 
 ## Decision
 
@@ -27,16 +62,14 @@ verified stable subject by that plugin id and resolves it to a durable native
 profile. A plugin cannot submit a profile id and therefore cannot impersonate
 the owner or another plugin's principal.
 
-The successful authentication result contains a server-selected `agentId`, an
-explicit configured `policyRef`, and the policy fingerprint recorded at consent.
-There is no default-role fallback. A missing role, missing explicit agent,
-`sessions.others` other than `none`, a missing or permissive native tool
-allowlist, or a policy-fingerprint mismatch fails closed. A code-execution
-policy additionally requires `sandbox: required`; application-tools-only and
-web-only policies do not require Docker. The application credential is admitted
-only to this Responses endpoint;
-it does not acquire reusable `operator.write` authority on other HTTP or gateway
-methods.
+The successful authentication result contains only the stable subject, an
+explicit configured `policyRef`, the host-issued revision recorded at consent,
+and optional plugin context. Core derives the agent from the current referenced
+role; the plugin cannot supply it. There is no default-role fallback. A missing
+role, a role not closed to exactly one real agent, `sessions.others` other than
+`none`, `operator.admin`, or a revision mismatch fails closed. The application
+credential is admitted only to this Responses endpoint; it does not acquire
+reusable `operator.write` authority on other HTTP or gateway methods.
 
 ## Native enforcement propagation
 
@@ -60,11 +93,12 @@ else's and is denied.
 
 The request-local role must be consulted by native agent-selection and
 session-sharing policy. Persisted `sandbox: required` remains immutable even if
-the role later changes. The endpoint does not grant a native tool directly. For
-the v0 Agent Connect profile, application tools are normalized as exact
-`{ name, description, inputSchema }` records and any wire `strict` member is
-rejected. This matches the pinned AI SDK adapter rather than synthesizing an
-authority-changing default.
+the role later changes. The endpoint does not grant a native tool directly. The
+parsed-request callback reports each client tool's name, optional description,
+input schema, and optional `strict` field without embedding Agent Connect policy
+in core. The Agent Connect plugin requires its exact approved tool snapshot and
+rejects missing descriptions or any wire `strict` member. This matches the pinned
+AI SDK adapter rather than synthesizing an authority-changing default.
 
 ## Client-controlled fields
 
@@ -86,18 +120,22 @@ does, loses continuity when the token changes. Conversely, keying only by client
 id would let a new grant inherit a revoked grant's conversation. The grant id is
 the stable subject.
 
-## Capabilities and policy fingerprint
+## Host policy revision and Agent Connect recipe
 
 OpenClaw 2026.9.1 operator roles limit scopes, allowed agents, access to others'
 sessions, and required sandboxing. They do not express fine-grained native tool
-grants. Therefore the minimum safe deployment uses an operator-configured,
-dedicated application agent selected by the grant. The v0 host helper accepts
-only policies whose runtime meaning is unambiguous:
+grants. The core helper consequently does only the reusable minimum: it resolves
+a named non-admin role closed to one real agent and fingerprints the effective
+role, agent, defaults, native tool configuration, runtime version, and owning
+plugin identity. Admission re-resolves that revision and carries the exact config
+snapshot through native preparation.
+
+The Agent Connect plugin separately accepts only its deliberately narrow recipe:
 
 - application-tools-only uses an exact agent `tools.deny: ["*"]`; an empty
   `tools.allow` is not a deny-all policy in OpenClaw and is rejected without the
   wildcard deny;
-- a native capability uses the exact agent allowlist mapped by the host
+- a native capability uses the exact agent allowlist mapped by the plugin
   (`web_search` for public web search, or `exec` and `process` for sandbox code),
   while provider-, profile-, sender-, and `alsoAllow` widening is rejected;
 - global and sandbox policy layers must still admit every advertised native
@@ -111,23 +149,23 @@ only policies whose runtime meaning is unambiguous:
 plugin owns consent and durable grants; the native agent, role, session, and
 sandbox machinery owns runtime enforcement.
 
-The consent record stores a fingerprint computed by the same host helper used
-at request time. It conservatively covers the named role definition, selected
-agent configuration, effective agent defaults, and native tool configuration.
-Any relevant configuration change invalidates the old grant and requires fresh
-consent instead of silently broadening it.
+The consent record stores the host revision after the plugin has accepted this
+recipe. Any relevant host configuration change invalidates the old grant and
+requires fresh consent instead of silently broadening it; core never interprets
+the Agent Connect capability vocabulary.
 
 ## Owner authentication is separate
 
 Owner authentication for the consent screen does not use the application-token
-hook. The narrow
-`authenticateManagedTailscaleOwnerConsent(request)` helper in
-`openclaw/plugin-sdk/authenticated-http-principal` accepts the actual host
-`IncomingMessage`. Listener dispatch binds the current auth configuration,
-rate limiter, and config snapshot to that object; the helper then reuses native
-managed-Serve WhoIs verification and durable profile/role resolution. It has no
-ordinary HTTP or shared-secret fallback. The consent route is plugin-authenticated
-so this helper, not generic gateway HTTP auth, owns only that route's admission.
+hook. The generic
+`authenticateVerifiedPluginHttpPrincipal(request, { authMethods: ["tailscale"] })`
+helper in `openclaw/plugin-sdk/authenticated-http-principal` accepts the actual
+host `IncomingMessage`. Listener dispatch binds the current auth configuration,
+rate limiter, config snapshot, and verified ingress provenance to that object;
+the helper then reuses native managed-Serve WhoIs verification and durable
+profile/role resolution. It has no ordinary HTTP or shared-secret fallback. The
+consent route is plugin-authenticated so this helper, not generic gateway HTTP
+auth, owns only that route's admission.
 The plugin must additionally require `operator.admin` and match the profile
 against its configured owner allowlist, plus Origin and CSRF on POST.
 Forwarded identity headers, a Tailscale-looking hostname, or network membership
