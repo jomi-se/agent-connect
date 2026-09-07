@@ -3,7 +3,8 @@
 Date: 2026-09-06.
 Status: thin model/tool/continuation adapters implemented with a temporary
 reviewed downstream dependency patch; deterministic real OpenClaw composition
-passes, while the application-grant authorization boundary remains pending.
+passes. Native application-grant authorization and live Bookhand consent/tool
+execution now work; see the compact handoff for current acceptance evidence.
 
 This is the execution-layer companion to
 [`connect-your-ai-openclaw.md`](connect-your-ai-openclaw.md). It records the
@@ -26,6 +27,23 @@ attached only to the exact configured URL and authenticated requests use
 `redirect: "error"`; URL credentials and fragments are rejected. HTTPS is the
 default, with plain HTTP limited to loopback unless a development-only opt-in is
 set explicitly.
+
+### Persistent credentials are application-owned
+
+`createOpenClawAccessTokenGetter` refreshes on demand within one minute of
+access-token expiry. Provider defaults are one-hour access tokens and a fixed
+30-day grant deadline; rotating refresh tokens do not extend that deadline.
+Refresh does not invoke inference. The getter is single-flight within one
+instance, not across tabs.
+
+Applications that persist a connection must validate its origin, endpoint,
+client identity and approved tool association before reuse. Serialize the full
+read-current/refresh/save transaction across tabs; compare-and-swap alone
+cannot prevent simultaneous use of a rotating refresh token. Keep the lock
+until refresh and persistence finish even if a caller aborts waiting. An
+uncertain refresh must not retry the old token after reload. Coordinate
+disconnect/replacement with the same stored connection identity. Remembering
+the non-secret provider address is independent from retaining credentials.
 
 `createAiSdkApplicationTools` converts an already-selected fixed
 `ApplicationTool[]` snapshot into an AI SDK `ToolSet`. Bookhand can lend its

@@ -255,3 +255,27 @@ local-storage acceptance check.
 For native app-only policy, use explicit `tools.deny: ["*"]`: an empty native
 allowlist is permissive. Managed Tailscale owner authentication uses the actual
 listener-attributed request; ordinary HTTPS owner login remains outside v0.
+
+## September 7: remembered connection follow-up
+
+The owner confirmed the saved lesson survives reload and its source link returns
+to the correct passage. That outstanding phone-local acceptance check is closed.
+The owner now explicitly requests persistent scoped credentials across reloads,
+plus remembered provider address/experience even after credentials are removed.
+This supersedes the memory-only Bookhand choice above; implementation is assigned
+to the existing Bookhand agent, not a new gateway authorization design.
+
+Verified provider defaults: access tokens last one hour; refresh/grant authority
+ends at the original 30-day grant deadline. Refresh rotates both tokens and old
+refresh-token reuse revokes the family. The SDK refreshes on demand within one
+minute of access expiry, not through background model requests.
+
+Persist a validated origin-bound versioned connection and its approved tool
+catalog separately from non-secret preferences. Coordinate the entire
+read-current/refresh/save operation with a cross-tab Web Lock, re-read inside
+the lock, and preserve a durable in-flight marker so a crash cannot replay a
+possibly spent refresh token. Caller cancellation must not release that lock
+while the SDK's uncancelled refresh is still running. Disconnect/replacement
+must invalidate sibling tabs and prevent late results resurrecting old access;
+retain the address for reconnects. Do not persist/replay chat checkpoints as
+part of this request. Expired/revoked grants or changed tools require consent.
