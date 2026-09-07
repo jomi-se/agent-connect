@@ -31,6 +31,11 @@ engine remain in the repository for review/rollback only.
   minutes. Proxy restart, grant expiry/revocation, policy change or an ambiguously
   admitted failure ends that conversation. Nothing is replayed automatically and
   no exactly-once guarantee is made.
+- Responses requests are bounded to 8 MiB of encoded JSON; each tool output may
+  contain up to 4 MiB of UTF-8 text. These are separate limits: JSON escaping,
+  multiple results and the repeated tool catalog count toward the total. Chat
+  text retains its smaller limit. Larger source tools need pagination; results
+  are never silently truncated.
 
 ## Prepare private configuration
 
