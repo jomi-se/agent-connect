@@ -19,12 +19,14 @@ engine remain in the repository for review/rollback only.
   configuration files only: the proxy env and OpenClaw's JSON. Never put it in a
   browser, URL, command argument, frontend environment, shared log or runtime
   card. Upstream subscription/API credentials remain entirely OpenClaw-owned.
-- OpenClaw config reload is off. The proxy hashes the full private config and
-  policy files and rechecks them before upstream effects. To change either, stop
-  both services, replace the files, restart OpenClaw, restart the proxy and obtain
-  fresh app consent. This is a supervised static composition, not an atomic
-  hot-reload fence. Starting OpenClaw with a different config while reusing the
-  same token/port is unsupported.
+- OpenClaw config reload is off. On startup and immediately before each Responses
+  admission, the proxy authenticates to the same stock Gateway and calls
+  `config.get`. It requires the saved resolved revision to equal the running
+  applied revision and the startup pin. It also hashes the full private config
+  and policy files because the stock response redacts credentials. To change
+  either, stop both services, replace the files, restart OpenClaw, restart the
+  proxy and obtain fresh app consent. This detects accidental drift; it is not an
+  atomic fence against a trusted operator changing config concurrently.
 - Continuation mappings are process-local, capped, single-use and expire after 30
   minutes. Proxy restart, grant expiry/revocation, policy change or an ambiguously
   admitted failure ends that conversation. Nothing is replayed automatically and
@@ -53,11 +55,13 @@ chmod 600 deploy/openclaw-gateway/.env.scoped-proxy
 
 The example policy offers one app-tools-only agent. Its workspace must be a
 dedicated private empty directory, never the owner's normal OpenClaw workspace.
-The validator requires context injection, skills, search memory, bootstrap,
-memory plugins, model fallbacks, tool search and elevation to be disabled. A
-policy that adds `sandbox_code_execution` must use exactly `exec` and `process`
-with a per-session Docker/Podman sandbox, no network, no host binds and read-only
-or absent host workspace access.
+The checked JSON shape is intentionally the exact example shape; unknown fields
+at execution-affecting levels are rejected. The validator requires one OAuth
+profile and model/runtime, one dedicated agent, disabled heartbeat, context
+injection, skills, search memory, bootstrap, memory plugins, model fallbacks,
+tool search and elevation. A policy that adds `sandbox_code_execution` must use
+exactly `exec` and `process` with a per-session Docker/Podman sandbox, no network,
+no host binds and read-only or absent host workspace access.
 
 The OpenClaw JSON contains the upstream operator token literally so the proxy can
 compare it without resolving shell/config substitutions. The same literal value
@@ -80,8 +84,9 @@ Start the pinned stock OpenClaw binary under a supervisor with exactly the priva
 `OPENCLAW_CONFIG_PATH`, state/home/cache directories and credential environment
 selected by the operator. This repository deliberately does not orchestrate or
 restart that service. Once it is healthy, the read-only preflight validates the
-package provenance, static config/policy, owner/grant state and authenticated
-loopback health without an inference call:
+package provenance, static config/policy, owner/grant state, authenticated stock
+`config.get` redaction and saved/applied revision equality, and loopback health
+without an inference call:
 
 ```sh
 node scripts/openclaw-scoped-proxy.mjs check

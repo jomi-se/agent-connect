@@ -35,7 +35,7 @@ export interface ScopedResponsesProxyOptions {
   readonly ownerSubject?: string;
   readonly policySnapshot: Pick<
     StaticOpenClawPolicySnapshot,
-    "assertUnchanged"
+    "assertUnchanged" | "assertRuntimeCurrent"
   >;
   readonly fetch?: typeof globalThis.fetch;
   readonly continuationRegistry?: ContinuationRegistry;
@@ -114,6 +114,7 @@ export function createScopedResponsesProxy(
         if (request.method !== "GET" || url.search)
           return methodNotAllowed(response, "GET");
         options.policySnapshot.assertUnchanged();
+        await options.policySnapshot.assertRuntimeCurrent();
         return sendJsonValue(response, 200, { ok: true });
       }
       if (url.pathname === "/agent-connect/owner/login") {
@@ -129,6 +130,8 @@ export function createScopedResponsesProxy(
         ) {
           return showOwnerLogin(response, `${url.pathname}${url.search}`);
         }
+        options.policySnapshot.assertUnchanged();
+        await options.policySnapshot.assertRuntimeCurrent();
         return await oauth.handle(request, response);
       }
       if (
@@ -205,6 +208,7 @@ export function createScopedResponsesProxy(
       throw new ProxyHttpError(401, "grant_inactive");
     }
     options.policySnapshot.assertUnchanged();
+    await options.policySnapshot.assertRuntimeCurrent();
 
     let reservation: ConversationReservation;
     if (requestedPrevious) {

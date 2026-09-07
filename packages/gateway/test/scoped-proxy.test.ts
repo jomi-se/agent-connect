@@ -407,6 +407,29 @@ describe("stock OpenClaw scoped Responses proxy", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("checks the running config revision immediately before upstream admission", async () => {
+    const grants = service();
+    const token = issue(grants, APP).accessToken;
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json({ id: "must_not_run", status: "completed", output: [] }),
+    );
+    const { baseUrl } = await startProxy(
+      grants,
+      fetch,
+      () => {},
+      async () => {
+        throw new Error("runtime drift");
+      },
+    );
+    const response = await post(baseUrl, token, APP, {
+      model: "openclaw/default",
+      input: "must not run",
+      tools: [wireTool()],
+    });
+    expect(response.status).toBe(503);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("drops a partially observed response mapping when the browser disconnects", async () => {
     const grants = service();
     const token = issue(grants, APP).accessToken;
@@ -516,6 +539,7 @@ async function startProxy(
   grants: DelegatedGrantService,
   fetch: typeof globalThis.fetch,
   assertUnchanged: () => void = () => {},
+  assertRuntimeCurrent: () => Promise<void> = async () => {},
 ): Promise<{ baseUrl: string }> {
   const directory = mkdtempSync(join(tmpdir(), "ac-scoped-proxy-test-"));
   const ownerAuth = new ConnectorAuth({
@@ -530,7 +554,7 @@ async function startProxy(
     upstreamToken: UPSTREAM_TOKEN,
     grantService: grants,
     ownerAuth,
-    policySnapshot: { assertUnchanged },
+    policySnapshot: { assertUnchanged, assertRuntimeCurrent },
     fetch,
   });
   servers.push(server);
