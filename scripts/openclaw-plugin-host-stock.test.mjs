@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
@@ -32,6 +33,8 @@ test(
   { timeout: 180_000 },
   async () => {
     let setupOutput;
+    let doctorBeforeSetup;
+    let doctorAfterSetup;
     const runtime = await startOpenClawTestRuntime({
       configure(config, { directory }) {
         config.agents.entries = {
@@ -55,6 +58,15 @@ test(
           ],
           { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
         );
+        const before = spawnSync(
+          binary,
+          ["agent-connect", "doctor", "--origin", publicOrigin],
+          { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
+        );
+        doctorBeforeSetup = {
+          status: before.status,
+          output: JSON.parse(before.stdout),
+        };
         setupOutput = JSON.parse(
           execFileSync(
             binary,
@@ -62,6 +74,16 @@ test(
             { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
           ),
         );
+        const after = spawnSync(binary, ["agent-connect", "doctor"], {
+          cwd: directory,
+          env,
+          encoding: "utf8",
+          timeout: 120_000,
+        });
+        doctorAfterSetup = {
+          status: after.status,
+          output: JSON.parse(after.stdout),
+        };
       },
       onModelRequest(body, model) {
         const transcript = JSON.stringify(body.messages ?? []);
@@ -88,6 +110,29 @@ test(
 
     try {
       assert.equal(setupOutput.applied, true);
+      assert.deepEqual(doctorBeforeSetup, {
+        status: 2,
+        output: {
+          ok: false,
+          status: "setup_required",
+          publicOrigin,
+          issuer,
+          resource,
+          agentId: "agent-connect-app",
+          ownerIdentity: "missing",
+          changes: [
+            "add restricted agent agent-connect-app",
+            "set plugins.entries.agent-connect.config",
+          ],
+          errors: [],
+          warnings: [],
+          trustedOperatorRace:
+            "config is rechecked before dispatch but the following internal HTTP admission is not atomic",
+        },
+      });
+      assert.equal(doctorAfterSetup.status, 0);
+      assert.equal(doctorAfterSetup.output.ok, true);
+      assert.equal(doctorAfterSetup.output.status, "ready");
       assert.match(setupOutput.enrollmentPassphrase, /^AC-ENROLL-/);
       const sourceConfig = JSON.parse(
         await readFile(join(runtime.directory, "openclaw.json"), "utf8"),
@@ -340,6 +385,179 @@ test(
     } finally {
       await runtime.close();
     }
+  },
+);
+
+for (const authCase of [
+  { mode: "none", config: { mode: "none" }, warns: true },
+  {
+    mode: "password",
+    config: {
+      mode: "password",
+      password: {
+        source: "env",
+        provider: "default",
+        id: "OPENCLAW_GATEWAY_PASSWORD",
+      },
+    },
+    env: { OPENCLAW_GATEWAY_PASSWORD: "fixture-password" },
+    warns: false,
+  },
+]) {
+  test(
+    `packed stock plugin uses ${authCase.mode} upstream while retaining app grants`,
+    { timeout: 180_000 },
+    async () => {
+      let setupOutput;
+      const runtime = await startOpenClawTestRuntime({
+        configure(config) {
+          config.gateway.auth = authCase.config;
+        },
+        prepare({ binary, env, directory }) {
+          Object.assign(env, authCase.env ?? {});
+          execFileSync(
+            binary,
+            [
+              "plugins",
+              "install",
+              `npm-pack:${artifact}`,
+              "--force",
+              "--accept-capabilities",
+            ],
+            { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
+          );
+          setupOutput = JSON.parse(
+            execFileSync(
+              binary,
+              ["agent-connect", "setup", "--origin", publicOrigin, "--apply"],
+              { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
+            ),
+          );
+        },
+        onModelRequest(_body, model) {
+          model.text(`Explicit ${authCase.mode} upstream completed.`);
+        },
+      });
+
+      try {
+        assert.equal(setupOutput.applied, true);
+        if (authCase.warns) {
+          assert.match(
+            setupOutput.warnings.join(" "),
+            /native endpoints outside \/agent-connect are not protected/,
+          );
+        } else {
+          assert.deepEqual(setupOutput.warnings, []);
+        }
+        await waitForStatus(runtime.baseUrl, "/agent-connect/healthz", 200);
+
+        const unauthenticatedApp = await fetch(
+          `${runtime.baseUrl}/agent-connect/v1/responses`,
+          {
+            method: "POST",
+            headers: {
+              origin: appOrigin,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "openclaw/default",
+              input: "App auth remains mandatory",
+              tools,
+              stream: true,
+            }),
+          },
+        );
+        assert.equal(unauthenticatedApp.status, 401);
+        assert.equal(runtime.modelRequests.length, 0);
+
+        const credential = await authorize(
+          runtime,
+          setupOutput.enrollmentPassphrase,
+        );
+        const completed = terminal(
+          await appEvents(runtime, credential.accessToken, {
+            model: "openclaw/default",
+            input: `Use the explicit ${authCase.mode} internal path`,
+            tools,
+            stream: true,
+          }),
+        );
+        assert.equal(completed.status, "completed");
+
+        const conversations = await fetch(
+          `${runtime.baseUrl}/agent-connect/v1/conversations`,
+          {
+            headers: {
+              origin: appOrigin,
+              authorization: `Bearer ${credential.accessToken}`,
+            },
+          },
+        );
+        const listed = await conversations.json();
+        const history = await fetch(
+          `${runtime.baseUrl}/agent-connect/v1/conversations/${listed.conversations[0].conversationId}/history`,
+          {
+            headers: {
+              origin: appOrigin,
+              authorization: `Bearer ${credential.accessToken}`,
+            },
+          },
+        );
+        assert.equal(history.status, 200);
+        assert.match(
+          JSON.stringify(await history.json()),
+          new RegExp(`Explicit ${authCase.mode} upstream completed`),
+        );
+      } finally {
+        await runtime.close();
+      }
+    },
+  );
+}
+
+test(
+  "unsupported host setup neither mutates configuration nor mints owner identity",
+  { timeout: 180_000 },
+  async () => {
+    let checked = false;
+    await assert.rejects(
+      startOpenClawTestRuntime({
+        configure(config) {
+          config.gateway.tls = { enabled: true };
+        },
+        async prepare({ binary, env, directory }) {
+          execFileSync(
+            binary,
+            [
+              "plugins",
+              "install",
+              `npm-pack:${artifact}`,
+              "--force",
+              "--accept-capabilities",
+            ],
+            { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
+          );
+          const configPath = join(directory, "openclaw.json");
+          const before = await readFile(configPath, "utf8");
+          const setup = spawnSync(
+            binary,
+            ["agent-connect", "setup", "--origin", publicOrigin, "--apply"],
+            { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
+          );
+          assert.equal(setup.status, 2);
+          assert.match(setup.stdout, /gateway\.tls\.enabled must not be true/);
+          assert.equal(await readFile(configPath, "utf8"), before);
+          assert.equal(
+            existsSync(join(directory, "state", "agent-connect", "owner.json")),
+            false,
+          );
+          checked = true;
+          throw new Error("unsupported setup fixture complete");
+        },
+      }),
+      /unsupported setup fixture complete/,
+    );
+    assert.equal(checked, true);
   },
 );
 

@@ -41,6 +41,21 @@ openclaw agent-connect doctor
 curl https://your-gateway.example/agent-connect/healthz
 ```
 
+`doctor` reports `ready`, `setup_required`, `owner_identity_missing`, or
+`unsupported_host` and exits nonzero unless it is ready. Setup distinguishes
+planned Agent Connect additions from incompatible host settings and makes no
+change or owner identity when the host preflight is unsupported.
+
+Configured OpenClaw token, password, and explicit no-auth modes are supported.
+The plugin asks the active host's public auth resolver for token/password values,
+including configured SecretRefs; it does not log or store them. No-auth mode
+prints a warning because native endpoints outside `/agent-connect` are then not
+protected by application grants. Application access to `/agent-connect` still
+requires its delegated bearer credential. Trusted-proxy and CLI-only auth
+overrides not represented in the active host configuration are unsupported.
+Native listener TLS remains unsupported; terminate public HTTPS outside the
+loopback listener.
+
 Applications discover the provider at
 `https://your-gateway.example/agent-connect`, not at the origin-only standalone
 URL. The web SDK retains origin-only discovery for the rollback baseline while

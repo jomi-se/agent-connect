@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
+import { resolveConfiguredSecretInputString } from "openclaw/plugin-sdk/config-runtime";
+import { resolveGatewayAuth } from "openclaw/plugin-sdk/gateway-runtime";
 
 import { ConnectorAuth } from "../../gateway/src/connector-auth.js";
 import { DelegatedGrantService } from "../../gateway/src/delegated-grants.js";
@@ -15,12 +17,17 @@ import {
   readStockOpenClawRpc,
 } from "../../gateway/src/scoped-proxy/runtime-config.js";
 import {
+  openClawHttpAuthHeaders,
+  type OpenClawUpstreamAuth,
+} from "../../gateway/src/scoped-proxy/upstream-auth.js";
+import {
   applySetupMutation,
   DEFAULT_AGENT_ID,
   inspectSetup,
   parsePluginConfig,
   PLUGIN_ID,
   resolveSupportedRuntime,
+  setupReadiness,
   type StockPluginConfig,
 } from "./config.js";
 import type { StockPluginApi } from "./host-api.js";
@@ -80,7 +87,7 @@ export default {
 
     api.registerService({
       id: "agent-connect-gateway",
-      start(context) {
+      async start(context) {
         startupCode = "initializing";
         try {
           const pluginConfig = parsePluginConfig(api.pluginConfig);
@@ -90,11 +97,14 @@ export default {
               'owner identity is missing; run "openclaw agent-connect setup --apply"',
             );
           }
-          const initial = resolveSupportedRuntime(
-            api.runtime.config.current(),
-            pluginConfig,
-            { stateDir: context.stateDir },
-          );
+          const runtimeConfig = api.runtime.config.current();
+          const resolvedGatewayAuth =
+            await resolveActiveGatewayAuth(runtimeConfig);
+          const gatewayAuthResolver = () => resolvedGatewayAuth;
+          const initial = resolveSupportedRuntime(runtimeConfig, pluginConfig, {
+            stateDir: context.stateDir,
+            resolveGatewayAuth: gatewayAuthResolver,
+          });
           const ownerAuth = new ConnectorAuth({
             statePath: statePaths.owner,
             publicEndpoint: initial.issuer,
@@ -109,7 +119,10 @@ export default {
             const current = resolveSupportedRuntime(
               api.runtime.config.current(),
               pluginConfig,
-              { stateDir: context.stateDir },
+              {
+                stateDir: context.stateDir,
+                resolveGatewayAuth: gatewayAuthResolver,
+              },
             );
             if (current.fingerprint !== initial.fingerprint) {
               throw new Error(
@@ -120,10 +133,11 @@ export default {
           const assertAppliedRuntimeCurrent = async () => {
             const snapshot = await readStockOpenClawConfig({
               upstreamBaseUrl: initial.upstreamBaseUrl,
-              upstreamToken: initial.upstreamToken,
+              upstreamAuth: initial.upstreamAuth,
             });
             assertAppliedSourceConfig(snapshot, pluginConfig, {
               stateDir: context.stateDir,
+              resolveGatewayAuth: gatewayAuthResolver,
             });
             assertRuntimeCurrent();
           };
@@ -131,7 +145,7 @@ export default {
             issuer: initial.issuer,
             resource: initial.resource,
             upstreamBaseUrl: initial.upstreamBaseUrl,
-            upstreamToken: initial.upstreamToken,
+            upstreamAuth: initial.upstreamAuth,
             grantService,
             ownerAuth,
             ownerSubject: OWNER_SUBJECT,
@@ -146,7 +160,7 @@ export default {
               readStockOpenClawRpc(
                 {
                   upstreamBaseUrl: initial.upstreamBaseUrl,
-                  upstreamToken: initial.upstreamToken,
+                  upstreamAuth: initial.upstreamAuth,
                 },
                 "chat.history",
                 { sessionKey, limit: 200 },
@@ -162,7 +176,7 @@ export default {
           service = active;
           active.readiness = waitForNativeResponses(
             initial.upstreamBaseUrl,
-            initial.upstreamToken,
+            initial.upstreamAuth,
             stop.signal,
           )
             .then(assertAppliedRuntimeCurrent)
@@ -242,15 +256,19 @@ async function runDoctor(
 ): Promise<void> {
   const stateDir = api.runtime.state.resolveStateDir();
   const config = requestedConfig(api, options);
-  const inspection = inspectSetup(api.runtime.config.current(), config, {
+  const runtimeConfig = api.runtime.config.current();
+  const resolvedGatewayAuth = await resolveActiveGatewayAuth(runtimeConfig);
+  const inspection = inspectSetup(runtimeConfig, config, {
     stateDir,
+    resolveGatewayAuth: () => resolvedGatewayAuth,
   });
   const ownerReady = existsSync(resolveStatePaths(stateDir).owner);
+  const readiness = setupReadiness(inspection, ownerReady);
   process.stdout.write(
     `${JSON.stringify(
       {
-        ok:
-          inspection.supported && inspection.changes.length === 0 && ownerReady,
+        ok: readiness.ok,
+        status: readiness.status,
         publicOrigin: config.publicOrigin,
         issuer: `${config.publicOrigin}/agent-connect`,
         resource: `${config.publicOrigin}/agent-connect/v1/responses`,
@@ -258,6 +276,7 @@ async function runDoctor(
         ownerIdentity: ownerReady ? "initialized" : "missing",
         changes: inspection.changes,
         errors: inspection.errors,
+        warnings: inspection.warnings,
         trustedOperatorRace:
           "config is rechecked before dispatch but the following internal HTTP admission is not atomic",
       },
@@ -265,7 +284,7 @@ async function runDoctor(
       2,
     )}\n`,
   );
-  if (!inspection.supported) process.exitCode = 2;
+  if (!readiness.ok) process.exitCode = 2;
 }
 
 async function runSetup(
@@ -274,12 +293,26 @@ async function runSetup(
 ): Promise<void> {
   const stateDir = api.runtime.state.resolveStateDir();
   const config = requestedConfig(api, options);
-  const inspection = inspectSetup(api.runtime.config.current(), config, {
+  const runtimeConfig = api.runtime.config.current();
+  const resolvedGatewayAuth = await resolveActiveGatewayAuth(runtimeConfig);
+  const gatewayAuthResolver = () => resolvedGatewayAuth;
+  const inspection = inspectSetup(runtimeConfig, config, {
     stateDir,
+    resolveGatewayAuth: gatewayAuthResolver,
   });
   if (!inspection.supported) {
     process.stdout.write(
-      `${JSON.stringify({ applied: false, errors: inspection.errors }, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          applied: false,
+          status: "unsupported_host",
+          preview: inspection.changes,
+          errors: inspection.errors,
+          warnings: inspection.warnings,
+        },
+        null,
+        2,
+      )}\n`,
     );
     process.exitCode = 2;
     return;
@@ -289,7 +322,12 @@ async function runSetup(
       `${JSON.stringify(
         {
           applied: false,
+          status:
+            inspection.changes.length > 0
+              ? "changes_planned"
+              : "configuration_ready",
           preview: inspection.changes,
+          warnings: inspection.warnings,
           note: "No configuration was changed. Re-run with --apply after review.",
         },
         null,
@@ -305,7 +343,7 @@ async function runSetup(
         "Agent Connect setup requires an explicit reviewed gateway restart",
     },
     mutate(draft) {
-      applySetupMutation(draft, config, stateDir);
+      applySetupMutation(draft, config, stateDir, gatewayAuthResolver);
     },
   });
   const paths = resolveStatePaths(stateDir);
@@ -327,6 +365,7 @@ async function runSetup(
       {
         applied: true,
         changed: inspection.changes,
+        warnings: inspection.warnings,
         enrollmentPassphrase:
           enrollmentPassphrase ??
           "unchanged; use the passphrase shown by the first successful setup",
@@ -355,6 +394,32 @@ function requestedConfig(
   });
 }
 
+async function resolveActiveGatewayAuth(
+  config: Readonly<Record<string, unknown>>,
+): Promise<ReturnType<typeof resolveGatewayAuth>> {
+  const authConfig = record(record(config.gateway)?.auth) ?? null;
+  let resolved: ReturnType<typeof resolveGatewayAuth>;
+  try {
+    resolved = resolveGatewayAuth({ authConfig });
+  } catch {
+    return { mode: "unresolved" };
+  }
+  if (resolved.mode !== "token" && resolved.mode !== "password") {
+    return resolved;
+  }
+  if (resolved[resolved.mode]) return resolved;
+
+  const secret = await resolveConfiguredSecretInputString({
+    config: config as Record<string, unknown>,
+    env: process.env,
+    value: authConfig?.[resolved.mode],
+    path: `gateway.auth.${resolved.mode}`,
+    unresolvedReasonStyle: "generic",
+  }).catch((): { readonly value?: string } => ({}));
+  if (!secret.value) return resolved;
+  return { ...resolved, [resolved.mode]: secret.value };
+}
+
 function resolveStatePaths(stateDir: string) {
   const directory = join(stateDir, "agent-connect");
   return {
@@ -367,7 +432,7 @@ function resolveStatePaths(stateDir: string) {
 
 async function waitForNativeResponses(
   baseUrl: string,
-  token: string,
+  auth: OpenClawUpstreamAuth,
   stopped: AbortSignal,
 ): Promise<void> {
   const deadline = Date.now() + READY_TIMEOUT_MS;
@@ -375,7 +440,7 @@ async function waitForNativeResponses(
     try {
       const response = await fetch(`${baseUrl}/v1/responses`, {
         method: "GET",
-        headers: { authorization: `Bearer ${token}` },
+        headers: openClawHttpAuthHeaders(auth),
         signal: AbortSignal.any([stopped, AbortSignal.timeout(1_000)]),
       });
       const contentType = response.headers.get("content-type") ?? "";
@@ -432,7 +497,10 @@ function assertAppliedSourceConfig(
     readonly appliedConfigHash?: unknown;
   },
   pluginConfig: StockPluginConfig,
-  options: { readonly stateDir: string },
+  options: {
+    readonly stateDir: string;
+    readonly resolveGatewayAuth: () => ReturnType<typeof resolveGatewayAuth>;
+  },
 ): void {
   if (
     snapshot.valid !== true ||
@@ -445,13 +513,6 @@ function assertAppliedSourceConfig(
     );
   }
   const source = record(snapshot.sourceConfig);
-  const gateway = record(source?.gateway);
-  const auth = record(gateway?.auth);
-  if (auth?.mode !== "token" || auth.token !== "__OPENCLAW_REDACTED__") {
-    throw new Error(
-      "source gateway auth must be a literal token; password and SecretRef auth are unsupported",
-    );
-  }
   const inspection = inspectSetup(source, pluginConfig, options);
   if (!inspection.supported || inspection.changes.length > 0) {
     throw new Error(
