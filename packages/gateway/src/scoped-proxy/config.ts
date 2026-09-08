@@ -9,6 +9,7 @@ import { loadStaticOpenClawPolicy } from "./policy.js";
 import {
   createOpenClawRuntimePolicyVerifier,
   readStockOpenClawConfig,
+  readStockOpenClawRpc,
 } from "./runtime-config.js";
 import type { ScopedResponsesProxyOptions } from "./server.js";
 
@@ -92,6 +93,11 @@ export async function scopedProxyConfigFromEnv(
     grantService,
     ownerAuth,
     policySnapshot,
+    readHistory: (sessionKey) =>
+      readStockOpenClawRpc({ upstreamBaseUrl, upstreamToken }, "chat.history", {
+        sessionKey,
+        limit: 200,
+      }),
     ownerStatePath,
     grantStatePath,
     openclawBin,

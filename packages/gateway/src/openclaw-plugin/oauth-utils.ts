@@ -53,7 +53,7 @@ export function requireSameOrigin(
   request: IncomingMessage,
   issuer: string,
 ): void {
-  if (request.headers.origin !== issuer)
+  if (request.headers.origin !== new URL(issuer).origin)
     throw new Error("cross-origin consent");
 }
 
@@ -61,25 +61,38 @@ export function exactGet(request: IncomingMessage, url: URL): boolean {
   return request.method === "GET" && url.search === "";
 }
 
-export function canonicalIssuer(value: string): string {
-  if (!isCanonicalHttpsOrigin(value)) {
-    throw new Error("issuer must be a canonical HTTPS origin");
+export function canonicalIssuer(value: string, expectedPath = ""): string {
+  const url = new URL(value);
+  const canonical = expectedPath ? `${url.origin}${expectedPath}` : url.origin;
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    value !== canonical
+  ) {
+    throw new Error("issuer must be a canonical HTTPS URL");
   }
-  return value;
+  return canonical;
 }
 
-export function canonicalResource(value: string, issuer: string): string {
+export function canonicalResource(
+  value: string,
+  issuer: string,
+  expectedPath = "/v1/responses",
+): string {
   const url = new URL(value);
   if (
     url.protocol !== "https:" ||
-    url.origin !== issuer ||
-    url.pathname !== "/v1/responses" ||
+    url.origin !== new URL(issuer).origin ||
+    url.pathname !== expectedPath ||
     url.search ||
     url.hash ||
     value !== url.href
   ) {
     throw new Error(
-      "resource must be the issuer's canonical /v1/responses URL",
+      "resource must be the canonical Responses URL for this issuer",
     );
   }
   return value;

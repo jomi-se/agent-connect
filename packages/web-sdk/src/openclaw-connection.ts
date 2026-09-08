@@ -1,14 +1,30 @@
 import type { ApplicationTool, JsonObject } from "./types.js";
 
-const AUTHORIZATION_SERVER_METADATA_PATH =
-  "/.well-known/oauth-authorization-server";
-const PROTECTED_RESOURCE_METADATA_PATH =
-  "/.well-known/oauth-protected-resource";
 const AUTHORIZATION_PATH = "/agent-connect/oauth/authorize";
 const TOKEN_PATH = "/agent-connect/oauth/token";
 const REVOCATION_PATH = "/agent-connect/oauth/revoke";
 const PAR_PATH = "/agent-connect/oauth/par";
-const RESOURCE_PATH = "/v1/responses";
+interface ProviderEndpointLayout {
+  readonly issuerPath: "" | "/agent-connect";
+  readonly authorizationServerMetadataPath: string;
+  readonly protectedResourceMetadataPath: string;
+  readonly resourcePath: "/v1/responses" | "/agent-connect/v1/responses";
+}
+
+const STANDALONE_LAYOUT: ProviderEndpointLayout = Object.freeze({
+  issuerPath: "",
+  authorizationServerMetadataPath: "/.well-known/oauth-authorization-server",
+  protectedResourceMetadataPath: "/.well-known/oauth-protected-resource",
+  resourcePath: "/v1/responses",
+});
+const STOCK_PLUGIN_LAYOUT: ProviderEndpointLayout = Object.freeze({
+  issuerPath: "/agent-connect",
+  authorizationServerMetadataPath:
+    "/.well-known/oauth-authorization-server/agent-connect",
+  protectedResourceMetadataPath:
+    "/.well-known/oauth-protected-resource/agent-connect/v1/responses",
+  resourcePath: "/agent-connect/v1/responses",
+});
 const SCOPE = "responses";
 const AUTHORIZATION_DETAIL_TYPE = "agent_connect";
 const DEFAULT_MODEL = "openclaw/default";
@@ -201,20 +217,20 @@ interface TokenResponse {
 export async function discoverOpenClawProvider(
   options: DiscoverOpenClawProviderOptions,
 ): Promise<OpenClawProvider> {
-  const origin = canonicalHttpsOrigin(options.providerUrl);
+  const { origin, issuer, layout } = canonicalProviderUrl(options.providerUrl);
   requireExperience(options.experience);
   const fetchImplementation = getFetch(options.fetch);
   const [authorizationMetadata, resourceMetadata] = await Promise.all([
     fetchJson<AuthorizationServerMetadata>(
       fetchImplementation,
-      `${origin}${AUTHORIZATION_SERVER_METADATA_PATH}`,
+      `${origin}${layout.authorizationServerMetadataPath}`,
       requestInit("GET", undefined, options.signal),
       "discovery_failed",
       "OpenClaw authorization metadata could not be loaded",
     ),
     fetchJson<ProtectedResourceMetadata>(
       fetchImplementation,
-      `${origin}${PROTECTED_RESOURCE_METADATA_PATH}`,
+      `${origin}${layout.protectedResourceMetadataPath}`,
       requestInit("GET", undefined, options.signal),
       "discovery_failed",
       "OpenClaw protected-resource metadata could not be loaded",
@@ -222,12 +238,12 @@ export async function discoverOpenClawProvider(
   ]);
 
   const expected = {
-    issuer: origin,
+    issuer,
     authorizationEndpoint: `${origin}${AUTHORIZATION_PATH}`,
     tokenEndpoint: `${origin}${TOKEN_PATH}`,
     revocationEndpoint: `${origin}${REVOCATION_PATH}`,
     parEndpoint: `${origin}${PAR_PATH}`,
-    resource: `${origin}${RESOURCE_PATH}`,
+    resource: `${origin}${layout.resourcePath}`,
   };
   if (
     authorizationMetadata.issuer !== expected.issuer ||
@@ -263,7 +279,7 @@ export async function discoverOpenClawProvider(
       AUTHORIZATION_DETAIL_TYPE,
     ) ||
     resourceMetadata.resource !== expected.resource ||
-    !includesString(resourceMetadata.authorization_servers, origin) ||
+    !includesString(resourceMetadata.authorization_servers, issuer) ||
     !includesString(resourceMetadata.scopes_supported, SCOPE) ||
     !includesString(resourceMetadata.bearer_methods_supported, "header") ||
     !includesString(
@@ -445,6 +461,7 @@ export async function completeOpenClawAuthorization(
   );
   return connectionFromToken(
     provider.origin,
+    provider.resource,
     clientId,
     transaction.applicationTools,
     transaction.applicationToolsHash,
@@ -488,6 +505,7 @@ export async function refreshOpenClawConnection(
   }
   return connectionFromToken(
     connection.providerOrigin,
+    connection.endpoint,
     connection.clientId,
     connection.applicationTools,
     connection.applicationToolsHash,
@@ -616,6 +634,7 @@ export function createOpenClawAccessTokenGetter(
 
 function connectionFromToken(
   providerOrigin: string,
+  endpoint: string,
   clientId: string,
   applicationTools: readonly OpenClawApplicationTool[],
   applicationToolsHash: string,
@@ -644,7 +663,7 @@ function connectionFromToken(
   return Object.freeze({
     version: 1,
     providerOrigin,
-    endpoint: `${providerOrigin}${RESOURCE_PATH}`,
+    endpoint,
     clientId,
     accessToken,
     refreshToken,
@@ -677,10 +696,10 @@ function validateProvider(provider: OpenClawProvider): OpenClawProvider {
     throw invalidInput("Invalid OpenClaw provider");
   }
   const origin = canonicalHttpsOrigin(provider.origin);
+  const layout = layoutForIssuer(origin, provider.issuer);
   requireExperience(provider.experience);
   if (
-    provider.issuer !== origin ||
-    provider.resource !== `${origin}${RESOURCE_PATH}` ||
+    provider.resource !== `${origin}${layout.resourcePath}` ||
     provider.authorizationEndpoint !== `${origin}${AUTHORIZATION_PATH}` ||
     provider.tokenEndpoint !== `${origin}${TOKEN_PATH}` ||
     provider.revocationEndpoint !== `${origin}${REVOCATION_PATH}` ||
@@ -723,9 +742,9 @@ function validateTransaction(value: unknown): OpenClawAuthorizationTransaction {
   }
   const transaction = record as unknown as OpenClawAuthorizationTransaction;
   const origin = canonicalHttpsOrigin(transaction.providerOrigin);
+  const layout = layoutForIssuer(origin, transaction.issuer);
   if (
-    transaction.issuer !== origin ||
-    transaction.resource !== `${origin}${RESOURCE_PATH}` ||
+    transaction.resource !== `${origin}${layout.resourcePath}` ||
     canonicalRedirectUri(transaction.redirectUri) !== transaction.redirectUri ||
     new URL(transaction.redirectUri).origin !== transaction.clientId ||
     transaction.codeVerifier.length < 43 ||
@@ -744,7 +763,9 @@ function validateConnection(value: OpenClawConnection): OpenClawConnection {
   }
   const origin = canonicalHttpsOrigin(value.providerOrigin);
   if (
-    value.endpoint !== `${origin}${RESOURCE_PATH}` ||
+    ![STANDALONE_LAYOUT, STOCK_PLUGIN_LAYOUT].some(
+      (layout) => value.endpoint === `${origin}${layout.resourcePath}`,
+    ) ||
     canonicalHttpsOrigin(value.clientId) !== value.clientId ||
     value.model !== DEFAULT_MODEL ||
     !isBoundedString(value.accessToken) ||
@@ -987,6 +1008,58 @@ function canonicalHttpsOrigin(value: string): string {
     throw invalidInput("OpenClaw provider must be a canonical HTTPS origin");
   }
   return url.origin;
+}
+
+function canonicalProviderUrl(value: string): {
+  readonly origin: string;
+  readonly issuer: string;
+  readonly layout: ProviderEndpointLayout;
+} {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw invalidInput("OpenClaw provider must be a canonical HTTPS URL");
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw invalidInput("OpenClaw provider must be a canonical HTTPS URL");
+  }
+  const layout =
+    url.pathname === "/"
+      ? STANDALONE_LAYOUT
+      : url.pathname === STOCK_PLUGIN_LAYOUT.issuerPath
+        ? STOCK_PLUGIN_LAYOUT
+        : undefined;
+  if (!layout) {
+    throw invalidInput(
+      "OpenClaw provider must be an HTTPS origin or its /agent-connect issuer",
+    );
+  }
+  const issuer = `${url.origin}${layout.issuerPath}`;
+  if (
+    value !== (layout.issuerPath ? issuer : url.origin) &&
+    !(layout.issuerPath === "" && value === `${url.origin}/`)
+  ) {
+    throw invalidInput("OpenClaw provider URL is not canonical");
+  }
+  return { origin: url.origin, issuer, layout };
+}
+
+function layoutForIssuer(
+  origin: string,
+  issuer: string,
+): ProviderEndpointLayout {
+  if (issuer === origin) return STANDALONE_LAYOUT;
+  if (issuer === `${origin}${STOCK_PLUGIN_LAYOUT.issuerPath}`) {
+    return STOCK_PLUGIN_LAYOUT;
+  }
+  throw invalidInput("Invalid OpenClaw issuer");
 }
 
 function canonicalRedirectUri(value: string): string {

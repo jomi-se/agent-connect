@@ -22,11 +22,13 @@ export interface InferenceFixture {
 }
 
 export interface OpenClawTestRuntime {
+  binary: string;
   baseUrl: string;
   token: string;
   agentId: "main";
   model: "openclaw";
   directory: string;
+  env: NodeJS.ProcessEnv;
   modelRequests: ModelObservation[];
   stockPackage?: {
     version: string;
@@ -57,6 +59,14 @@ export function startOpenClawTestRuntime(options?: {
     config: Record<string, any>,
     state: { directory: string; token: string; port: number },
   ) => void | Promise<void>;
+  prepare?: (state: {
+    binary: string;
+    config: Record<string, any>;
+    directory: string;
+    env: NodeJS.ProcessEnv;
+    port: number;
+    token: string;
+  }) => void | Promise<void>;
   onModelRequest?: (
     body: ModelRequestBody,
     inference: InferenceFixture,

@@ -71,6 +71,48 @@ describe("OpenClaw delegated OAuth connection", () => {
     ).rejects.toMatchObject({ code: "invalid_input" });
   });
 
+  it("discovers the stock-plugin path issuer through standard well-known URLs", async () => {
+    const issuer = `${ORIGIN}/agent-connect`;
+    const resource = `${ORIGIN}/agent-connect/v1/responses`;
+    const requests: string[] = [];
+    const provider = await discoverOpenClawProvider({
+      providerUrl: issuer,
+      experience: "https",
+      fetch: vi.fn(async (input) => {
+        const url = String(input);
+        requests.push(url);
+        return url.includes("oauth-authorization-server")
+          ? Response.json({ ...authorizationMetadata(), issuer })
+          : Response.json({
+              ...resourceMetadata(),
+              resource,
+              authorization_servers: [issuer],
+            });
+      }),
+    });
+
+    expect(requests).toEqual([
+      `${ORIGIN}/.well-known/oauth-authorization-server/agent-connect`,
+      `${ORIGIN}/.well-known/oauth-protected-resource/agent-connect/v1/responses`,
+    ]);
+    expect(provider).toMatchObject({ issuer, resource });
+
+    await expect(
+      discoverOpenClawProvider({
+        providerUrl: issuer,
+        experience: "https",
+        fetch: async (input) =>
+          String(input).includes("oauth-authorization-server")
+            ? Response.json(authorizationMetadata())
+            : Response.json({
+                ...resourceMetadata(),
+                resource,
+                authorization_servers: [issuer],
+              }),
+      }),
+    ).rejects.toMatchObject({ code: "discovery_failed" });
+  });
+
   it("uses PAR, PKCE and RFC 9207 issuer binding without sending local context", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-06T12:00:00.000Z"));

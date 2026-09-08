@@ -39,6 +39,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export async function startOpenClawTestRuntime({
   onModelRequest,
   configure,
+  prepare,
   tailscaleTestBinary,
 } = {}) {
   const binary = preflightOpenClaw();
@@ -53,6 +54,7 @@ export async function startOpenClawTestRuntime({
     OPENCLAW_STATE_DIR: join(directory, "state"),
     OPENCLAW_CONFIG_PATH: join(directory, "openclaw.json"),
     XDG_CACHE_HOME: join(directory, "cache"),
+    NPM_CONFIG_CACHE: join(directory, "npm-cache"),
     TMPDIR: directory,
     OPENCLAW_SKIP_CHANNELS: "1",
     OPENCLAW_SKIP_CRON: "1",
@@ -250,6 +252,9 @@ export async function startOpenClawTestRuntime({
     await writeFile(env.OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2), {
       mode: 0o600,
     });
+    if (prepare) {
+      await prepare({ binary, config, directory, env, port, token });
+    }
     log = openSync(join(directory, "gateway.log"), "a", 0o600);
     child = spawn(binary, ["gateway", "run", "--port", String(port)], {
       env,
@@ -286,11 +291,13 @@ export async function startOpenClawTestRuntime({
         `OpenClaw startup timed out; see ${directory}/gateway.log`,
       );
     return {
+      binary,
       baseUrl,
       token,
       agentId: "main",
       model: "openclaw",
       directory,
+      env,
       modelRequests,
       stockPackage,
       close,

@@ -179,6 +179,16 @@ export class ContinuationRegistry {
     return this.records.size;
   }
 
+  clear(): void {
+    this.records.clear();
+    this.pendingResponseIds.clear();
+    for (const reservation of this.reservations.values()) {
+      reservation.active = false;
+      delete reservation.pendingResponseId;
+    }
+    this.reservations.clear();
+  }
+
   private isActive(reservation: ConversationReservation): boolean {
     return (
       reservation.active &&

@@ -6,6 +6,8 @@ import {
   FIXED_TOOLS_AUTHORIZATION_DETAIL,
   OPENCLAW_MODEL_ALIAS,
   RESPONSES_SCOPE,
+  STANDALONE_ENDPOINT_LAYOUT,
+  type AgentConnectEndpointLayout,
   type AuthenticatedOwnerPrincipal,
   type OpenClawOAuthOptions,
 } from "./contracts.js";
@@ -51,11 +53,17 @@ export class OpenClawOAuthHandler {
   readonly resource: string;
   private readonly options: OpenClawOAuthOptions;
   private readonly now: () => number;
+  private readonly endpoints: AgentConnectEndpointLayout;
   private readonly csrf = new Map<string, CsrfRecord>();
 
   constructor(options: OpenClawOAuthOptions) {
-    this.issuer = canonicalIssuer(options.issuer);
-    this.resource = canonicalResource(options.resource, this.issuer);
+    this.endpoints = options.endpoints ?? STANDALONE_ENDPOINT_LAYOUT;
+    this.issuer = canonicalIssuer(options.issuer, this.endpoints.issuerPath);
+    this.resource = canonicalResource(
+      options.resource,
+      this.issuer,
+      this.endpoints.responsesPath,
+    );
     if (options.grantService.resource !== this.resource) {
       throw new Error("grant service resource does not match plugin resource");
     }
@@ -74,22 +82,22 @@ export class OpenClawOAuthHandler {
       return sendJson(response, 414, { error: "invalid_request" });
     }
     const url = new URL(request.url, this.issuer);
-    if (url.pathname === "/.well-known/oauth-authorization-server") {
+    if (url.pathname === this.endpoints.authorizationServerMetadataPath) {
       return this.authorizationServerMetadata(request, response, url);
     }
-    if (url.pathname === "/.well-known/oauth-protected-resource") {
+    if (url.pathname === this.endpoints.protectedResourceMetadataPath) {
       return this.protectedResourceMetadata(request, response, url);
     }
-    if (url.pathname === "/agent-connect/oauth/par") {
+    if (url.pathname === this.endpoints.parPath) {
       return this.par(request, response, url);
     }
-    if (url.pathname === "/agent-connect/oauth/authorize") {
+    if (url.pathname === this.endpoints.authorizationPath) {
       return this.authorize(request, response, url);
     }
-    if (url.pathname === "/agent-connect/oauth/token") {
+    if (url.pathname === this.endpoints.tokenPath) {
       return this.token(request, response, url);
     }
-    if (url.pathname === "/agent-connect/oauth/revoke") {
+    if (url.pathname === this.endpoints.revocationPath) {
       return this.revoke(request, response, url);
     }
     sendJson(response, 404, { error: "not_found" });
@@ -104,10 +112,19 @@ export class OpenClawOAuthHandler {
     publicCors(request, response);
     sendJson(response, 200, {
       issuer: this.issuer,
-      authorization_endpoint: `${this.issuer}/agent-connect/oauth/authorize`,
-      token_endpoint: `${this.issuer}/agent-connect/oauth/token`,
-      revocation_endpoint: `${this.issuer}/agent-connect/oauth/revoke`,
-      pushed_authorization_request_endpoint: `${this.issuer}/agent-connect/oauth/par`,
+      authorization_endpoint: endpointUrl(
+        this.issuer,
+        this.endpoints.authorizationPath,
+      ),
+      token_endpoint: endpointUrl(this.issuer, this.endpoints.tokenPath),
+      revocation_endpoint: endpointUrl(
+        this.issuer,
+        this.endpoints.revocationPath,
+      ),
+      pushed_authorization_request_endpoint: endpointUrl(
+        this.issuer,
+        this.endpoints.parPath,
+      ),
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code", "refresh_token"],
       token_endpoint_auth_methods_supported: ["none"],
@@ -455,4 +472,8 @@ function ownerDenied(response: ServerResponse): void {
 
 function csrfHash(value: string): Buffer {
   return createHash("sha256").update(value).digest();
+}
+
+function endpointUrl(issuer: string, pathname: string): string {
+  return `${new URL(issuer).origin}${pathname}`;
 }
