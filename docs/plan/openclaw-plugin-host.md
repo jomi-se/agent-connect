@@ -2,7 +2,8 @@
 
 Date: 2026-09-08. Branch: `work/openclaw-plugin-host`, based on `3cc49ec`.
 Status: implemented, reviewed and deployed with subsequent owner authorization;
-owner confirmed prompt and conversation reload. No publication, merge or push.
+owner confirmed prompt and conversation reload. Subsequently merged to main;
+no publication or push.
 Decision: [ADR 0015](../decisions/0015-openclaw-plugin-host.md).
 
 ## Outcome and ownership
