@@ -4,7 +4,9 @@
 
 Agent Connect is an application-to-user-owned-agent bridge. Keep the application-facing API agent- and harness-neutral. Codex, Omnigent, ACP adapters, and transport bridges belong behind internal adapter boundaries.
 
-The supported provider path is the stock OpenClaw scoped proxy (ADR 0014):
+The active installation target is the stock OpenClaw plugin host (ADR 0015),
+tracked in docs/plan/openclaw-plugin-host.md. Users must not operate a separate
+proxy process. Until its gates pass, the verified baseline remains ADR 0014:
 application OAuth and bounded Open Responses in front of a privately operated
 OpenClaw gateway. Keep provider/plugin types out of the application API. Older
 runtime-card, replacement-engine and native-patch artifacts are historical

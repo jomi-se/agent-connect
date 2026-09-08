@@ -21,7 +21,17 @@ This documents direction, not a new release gate or live cutover. Keep existing
 implementation evidence distinct from proposed standard behavior; do not let
 the prototype's private routes/headers dictate the public profile.
 
-## Supported implementation: stock OpenClaw scoped proxy
+## Active target: installable OpenClaw plugin
+
+The owner clarified on 2026-09-08 that users must not operate an additional proxy
+process. [ADR 0015](../decisions/0015-openclaw-plugin-host.md) makes the existing
+scoped mediation a plugin-hosted feature of stock OpenClaw. The
+[implementation plan](openclaw-plugin-host.md) tracks packaging, namespace/SDK,
+safe personal-config coexistence, real-package tests and review. No live cutover
+or push is authorized. The standalone composition below remains the verified
+baseline until the plugin passes its gates.
+
+## Verified baseline: stock OpenClaw scoped proxy
 
 The accepted implementation is the bounded
 authorization proxy in [ADR 0014](../decisions/0014-stock-openclaw-scoped-proxy.md)

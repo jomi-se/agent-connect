@@ -16,7 +16,10 @@ must not require installing an MCP server, copying provider conversation IDs,
 or opening a terminal.
 
 Agent Connect is the application-delegation boundary, not another agent
-platform. The supported reference path uses a
+platform. The accepted installation target is an OpenClaw plugin that hosts
+this boundary without a separately operated executable; see
+[ADR 0015](decisions/0015-openclaw-plugin-host.md). That transition is pending
+implementation and coexistence verification. The verified baseline uses a
 trusted authorization proxy in front of stock OpenClaw's Responses endpoint.
 Agent Connect retains consent, application authority, browser integration and a
 bounded grant-to-conversation map; stock OpenClaw owns execution, native events,
