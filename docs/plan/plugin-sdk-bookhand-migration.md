@@ -77,13 +77,19 @@ leave branch and deployments unchanged until owner-approved rollout.
 ## Ledger
 
 - [x] Auth/checker update `1b8b67a` delivered; real installed token/password/none
-      tests reported passing by Sol. Root inspecting shared validation and auth use.
+      tests reported passing by Sol. Root reviewed shared validation and auth use.
 - [x] SDK helpers implemented and root source review completed; focused and full
       web SDK tests, typecheck, build, formatting, packed-consumer smoke and real
       installed-stock-plugin history composition pass.
-- [x] Candidate SDK artifact delivered for CDX2 install at
+- [x] Final SDK artifact from `e3fa090` delivered for CDX2 install at
       `dist/open-agent-connect-web-0.0.3.tgz`, SHA-256
       `ccd489d55189df32654c3e3bf2dc667ee65545d4d0d453f52eff7cbbfb128480`.
-- [ ] Bookhand removes provider-route/record duplication.
-- [ ] Focused installed-SDK and production CSP evidence reviewed.
-- [ ] Final handoff; no live-cutover claim.
+- [x] Bookhand removes provider-route/record duplication on
+      `work/bookhand-plugin-sdk`; root reviewed persistence, issuer and history
+      changes, including generation checks at request dispatch and result adoption.
+- [x] CDX2 reports 37 connection/history tests, persistence/Tutor regressions,
+      production build, lint, bundle check and 412x915 strict-CSP smoke passing
+      against the final artifact bytes. Root reviewed the evidence and diff.
+- [x] Bookhand finalized provenance and committed `ea3b18e` with a clean
+      worktree. Both implementations remain on their feature branches; no
+      merge, push, publication, live cutover or owner-device OAuth claim.
