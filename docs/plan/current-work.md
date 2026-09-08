@@ -2,6 +2,11 @@
 
 Updated: 2026-09-08
 
+Next implementation: [published packages and fresh Artifex deployment](npm-release-and-artifex-deployment.md).
+Replace the archived-checkout live runtime with npm releases installed by
+Artifex. Fresh credentials/grants; no migration. Jose owns all pushes and
+publication setup. This is the detailed handoff for the next Sol agent.
+
 This is the canonical unfinished-work list. It records current priorities and
 only enough completed context to explain them. Product boundaries live in the
 [mission](../mission.md), capability status lives in the
