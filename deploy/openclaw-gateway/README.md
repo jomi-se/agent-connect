@@ -1,9 +1,68 @@
-# Stock OpenClaw scoped-proxy setup
+# Stock OpenClaw Agent Connect setup
 
-This is the current setup on `work/openclaw-scoped-proxy`. Agent Connect is a
+## Plugin-hosted target
+
+The accepted installation target is now the stock OpenClaw plugin described in
+[ADR 0015](../../docs/decisions/0015-openclaw-plugin-host.md) and the
+[implementation contract](../../docs/architecture/stock-openclaw-plugin.md).
+It runs inside the user's existing OpenClaw gateway; users do not operate the
+standalone proxy below.
+
+Build and pack the reviewed local artifact, then install it through OpenClaw's
+managed npm-pack path. Installation requires explicit host-capability consent:
+
+```sh
+npm run pack:stock-openclaw-plugin
+openclaw plugins install npm-pack:/absolute/repository/dist/agent-connect-openclaw-plugin-0.1.0.tgz --force --accept-capabilities
+```
+
+Preview setup first. This changes nothing and reports conflicts or unsupported
+coexistence:
+
+```sh
+openclaw agent-connect setup --origin https://your-gateway.example
+```
+
+After reviewing the exact additions, apply them:
+
+```sh
+openclaw agent-connect setup --origin https://your-gateway.example --apply
+```
+
+Save the one-time enrollment passphrase shown by the first successful apply in
+the owner's password manager. It is not stored in plaintext and is not printed
+again. Setup adds only the namespaced restricted agent, the plugin's own config,
+and native Responses enablement. It preserves personal agents, channels,
+credentials, models, plugins, hooks, tools and memory; conflicts fail instead of
+being overwritten. Restart the gateway explicitly, then inspect readiness:
+
+```sh
+openclaw agent-connect doctor
+curl https://your-gateway.example/agent-connect/healthz
+```
+
+Applications discover the provider at
+`https://your-gateway.example/agent-connect`, not at the origin-only standalone
+URL. The web SDK retains origin-only discovery for the rollback baseline while
+binding plugin transactions and tokens to the path issuer/resource.
+
+`openclaw plugins disable agent-connect` removes the hosted routes and aborts
+owned work without deleting personal configuration or plugin state. Re-enable
+with explicit capability consent, restart, and run doctor. For a reviewed local
+upgrade, install the new pinned npm-pack with `--force --accept-capabilities`,
+restart, and repeat doctor before accepting new application grants. Uninstall
+does not authorize deletion of the plugin state or the namespaced agent; remove
+them only as a separate reviewed recovery action.
+
+The exact supported configuration matrix and trusted-operator reload limitation
+are documented in the implementation contract above. No live gateway, Tailscale
+route, credential, or subscription runtime is changed by build or verification.
+
+## Standalone verified baseline (rollback only)
+
+The remainder is the baseline setup from `work/openclaw-scoped-proxy`. Agent Connect is a
 small authorization/request-confinement proxy; the pinned published OpenClaw
-process owns Responses execution. No OpenClaw core patch or Agent Connect plugin
-is installed. The parent native-patch experiment and the older replacement
+process owns Responses execution. The parent native-patch experiment and the older replacement
 engine remain in the repository for review/rollback only.
 
 ## Security and lifecycle contract

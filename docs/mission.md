@@ -18,9 +18,10 @@ or opening a terminal.
 Agent Connect is the application-delegation boundary, not another agent
 platform. The accepted installation target is an OpenClaw plugin that hosts
 this boundary without a separately operated executable; see
-[ADR 0015](decisions/0015-openclaw-plugin-host.md). That transition is pending
-implementation and coexistence verification. The verified baseline uses a
-trusted authorization proxy in front of stock OpenClaw's Responses endpoint.
+[ADR 0015](decisions/0015-openclaw-plugin-host.md). The installable plugin and
+credential-free stock-host composition gates are implemented on
+`work/openclaw-plugin-host`; root review and any live cutover remain pending. The
+standalone trusted authorization proxy remains the rollback baseline.
 Agent Connect retains consent, application authority, browser integration and a
 bounded grant-to-conversation map; stock OpenClaw owns execution, native events,
 context, tools and sandboxing. See
@@ -91,18 +92,21 @@ reliability or consent guarantees must be made explicit.
 
 ## Current implementation and acceptance boundary
 
-The stock scoped proxy is implemented on `work/openclaw-scoped-proxy`. It reuses
-delegated OAuth/PAR/PKCE, rotating refresh, revocation and the public AI SDK
-contract. It constrains requests, selects a dedicated agent/private session,
-streams observed native events, binds one current response checkpoint to an
-application grant, and exposes recent grant-owned execution history and completed
-head reopening while that process-local mapping remains live. Parent-branch
-native-patch and replacement-engine artifacts
-remain for review but are outside this path's required build/start/test surface.
+The stock plugin package reuses the scoped proxy's delegated OAuth/PAR/PKCE,
+rotating refresh, revocation and public AI SDK contract inside OpenClaw's managed
+service lifecycle. Its application issuer and Responses resource are namespaced
+under `/agent-connect`; native root Responses remains available to the owner.
+The plugin constrains requests, selects a dedicated restricted agent/private
+session, streams observed native events, binds one current response checkpoint
+to an application grant, and exposes recent grant-owned execution history and
+completed-head reopening while that process-local mapping remains live. The
+standalone scoped proxy, native-patch and replacement-engine artifacts remain
+for rollback/history but are outside the plugin's required runtime surface.
 
-Real published OpenClaw tests using deterministic inference exercise stock
-deny-all/sandbox enforcement and the complete owner-login -> OAuth -> two-tool ->
-refresh -> follow-up -> revoke composition. They are transport and policy
+Real published OpenClaw tests using deterministic inference install the packed
+plugin and exercise stock deny-all enforcement, owner login -> OAuth -> two-tool
+-> refresh -> follow-up/history -> revoke, disable/re-enable cleanup, unsafe
+policy refusal and coexistence with a native owner request. They are transport and policy
 evidence, not proof that the selected subscription-backed runtime usefully
 consumes an actual browser tool result. Final acceptance remains governed by the
 [vertical-slice closeout](plan/stock-openclaw-vertical-closeout.md).

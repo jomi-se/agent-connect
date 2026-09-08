@@ -126,10 +126,11 @@ unauthenticated app calls, and stops its owned work. Root gets source/risks.
    tools. If a required restriction cannot be applied per agent with public APIs,
    report the precise limitation to root; do not silently weaken the grant or
    launch a hidden second OpenClaw service.
-5. Other plugins are host-trusted code, not an isolation boundary. Establish which
-   global hooks/policies can affect offered agents. Support known-safe coexistence
-   with evidence and report unsupported combinations precisely. Do not certify
-   arbitrary loaded plugin behavior from a JSON allowlist alone.
+5. Other plugins and global hooks are owner-installed, host-trusted code, not a
+   hostile application principal or an isolation boundary. Preserve them and do
+   not build a plugin certification/allowlist mechanism. Document that they can
+   affect execution and that static configuration does not prove their behavior;
+   reject only concrete settings that demonstrably defeat the offered profile.
 6. Define relevant runtime-policy fingerprinting and change handling. Unrelated
    personal changes should not invalidate grants unnecessarily. A relevant change
    must prevent further unsafe admission/continuation. Same-process snapshot reads
@@ -184,11 +185,31 @@ Root reviews implementation and test evidence before merge or live rollout.
 
 - [x] Target architecture accepted; branch created from clean main.
 - [x] Stock plugin HTTP/service/native Responses seam probed independently.
-- [ ] M1 packaged plugin hosting and lifecycle.
-- [ ] M2 verified namespace/discovery and SDK compatibility.
-- [ ] M3 safe existing-install coexistence and setup.
-- [ ] M4 real installed-package composition and negative tests.
-- [ ] M5 documentation, root review and owner handoff.
+- [x] M1 packaged plugin hosting and lifecycle. The installable package uses the
+      shared scoped handler and a stock managed service; focused lifecycle and
+      bundle tests pass.
+- [x] M2 verified namespace/discovery and SDK compatibility. The SDK preserves
+      the origin-only standalone layout and binds the plugin issuer/resource,
+      including conversation, history and cancel paths.
+- [x] M3 safe existing-install coexistence and setup. Preview/apply/doctor and
+      representative-config tests preserve unrelated settings and refuse
+      conflicting or unsupported effective offered-agent policy. Per owner
+      decision, installed plugins and hooks are preserved inside the trusted host
+      boundary rather than audited or allowlisted; static configuration does not
+      claim to prove their behavior.
+- [x] M4 real installed-package composition and negative tests. The npm-pack was
+      installed through stock OpenClaw and passed OAuth/SDK, two tool segments,
+      history/follow-up, refresh/revoke, native-root coexistence, unsafe-policy
+      refusal and disable/re-enable stale-head coverage with fake inference.
+- [ ] M5 documentation, root review and owner handoff. Implementation and
+      operator documentation are drafted; root review and handoff remain.
+
+Current checkpoint: the corrected packed real-stock composition gate passes
+under the required Node 24.15 fixture. Failed iterations exposed and fixed the
+consent redirect status, history transport authority, reload-close handling and
+the native personal-agent session selector; the last failure caught an invalid
+fixture-only personal tool allowlist before native inference. None required a
+core patch or second host.
 
 Update this ledger at meaningful checkpoints and before any pause. Record failed
 approaches and exact blockers briefly so another provider can resume without
