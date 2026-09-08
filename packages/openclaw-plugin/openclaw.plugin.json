@@ -1,0 +1,22 @@
+{
+  "id": "agent-connect",
+  "name": "Agent Connect",
+  "description": "Application-scoped delegation hosted by stock OpenClaw",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "publicOrigin": {
+        "type": "string",
+        "description": "Canonical public HTTPS origin of this OpenClaw gateway"
+      },
+      "agentId": {
+        "type": "string",
+        "description": "Restricted OpenClaw agent offered to applications"
+      }
+    }
+  }
+}

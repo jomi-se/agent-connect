@@ -11,6 +11,52 @@ export const FIXED_TOOLS_AUTHORIZATION_DETAIL = "agent_connect";
 export const RESPONSES_SCOPE = "responses";
 export const OPENCLAW_MODEL_ALIAS = "openclaw/default";
 
+export interface AgentConnectEndpointLayout {
+  readonly issuerPath: string;
+  readonly authorizationServerMetadataPath: string;
+  readonly protectedResourceMetadataPath: string;
+  readonly authorizationPath: string;
+  readonly tokenPath: string;
+  readonly revocationPath: string;
+  readonly parPath: string;
+  readonly ownerLoginPath: string;
+  readonly healthPath: string;
+  readonly responsesPath: string;
+  readonly conversationsPath: string;
+}
+
+export const STANDALONE_ENDPOINT_LAYOUT: AgentConnectEndpointLayout =
+  Object.freeze({
+    issuerPath: "",
+    authorizationServerMetadataPath: "/.well-known/oauth-authorization-server",
+    protectedResourceMetadataPath: "/.well-known/oauth-protected-resource",
+    authorizationPath: "/agent-connect/oauth/authorize",
+    tokenPath: "/agent-connect/oauth/token",
+    revocationPath: "/agent-connect/oauth/revoke",
+    parPath: "/agent-connect/oauth/par",
+    ownerLoginPath: "/agent-connect/owner/login",
+    healthPath: "/healthz",
+    responsesPath: "/v1/responses",
+    conversationsPath: "/v1/agent-connect/conversations",
+  });
+
+export const STOCK_PLUGIN_ENDPOINT_LAYOUT: AgentConnectEndpointLayout =
+  Object.freeze({
+    issuerPath: "/agent-connect",
+    authorizationServerMetadataPath:
+      "/.well-known/oauth-authorization-server/agent-connect",
+    protectedResourceMetadataPath:
+      "/.well-known/oauth-protected-resource/agent-connect/v1/responses",
+    authorizationPath: "/agent-connect/oauth/authorize",
+    tokenPath: "/agent-connect/oauth/token",
+    revocationPath: "/agent-connect/oauth/revoke",
+    parPath: "/agent-connect/oauth/par",
+    ownerLoginPath: "/agent-connect/owner/login",
+    healthPath: "/agent-connect/healthz",
+    responsesPath: "/agent-connect/v1/responses",
+    conversationsPath: "/agent-connect/v1/conversations",
+  });
+
 export interface AuthenticatedOwnerPrincipal {
   readonly profileId: string;
   readonly scopes: readonly string[];
@@ -24,10 +70,11 @@ export type OwnerVerifier = (
   | Promise<AuthenticatedOwnerPrincipal | undefined>;
 
 export interface OpenClawOAuthOptions {
-  /** Canonical HTTPS origin hosting these endpoints. */
+  /** Canonical HTTPS issuer URL hosting these endpoints. */
   readonly issuer: string;
-  /** Exact configured native OpenClaw /v1/responses URL. */
+  /** Exact application-facing Responses resource URL. */
   readonly resource: string;
+  readonly endpoints?: AgentConnectEndpointLayout;
   readonly grantService: DelegatedGrantService;
   readonly ownerVerifier: OwnerVerifier;
   readonly allowedOwnerProfileIds: readonly string[];

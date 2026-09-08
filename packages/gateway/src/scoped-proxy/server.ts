@@ -14,13 +14,16 @@ import {
 } from "../delegated-grants.js";
 import { OpenClawOAuthHandler } from "../openclaw-plugin/oauth-handler.js";
 import {
+  STANDALONE_ENDPOINT_LAYOUT,
+  type AgentConnectEndpointLayout,
+} from "../openclaw-plugin/contracts.js";
+import {
   ContinuationRegistry,
   ContinuationRegistryError,
   type ConversationReservation,
 } from "./continuations.js";
 import type { StaticOpenClawPolicySnapshot } from "./policy.js";
 import { describeConversation, projectExecutionHistory } from "./history.js";
-import { readStockOpenClawRpc } from "./runtime-config.js";
 import {
   buildBoundedUpstreamRequest,
   MAX_RESPONSE_REQUEST_BYTES,
@@ -45,6 +48,12 @@ export interface ScopedResponsesProxyOptions {
   readonly maxUpstreamResponseBytes?: number;
   readonly now?: () => number;
   readonly readHistory?: (sessionKey: string) => Promise<unknown>;
+  readonly endpoints?: AgentConnectEndpointLayout;
+}
+
+export interface ScopedResponsesHandler {
+  handle(request: IncomingMessage, response: ServerResponse): Promise<void>;
+  close(): Promise<void>;
 }
 
 const OWNER_COOKIE = "agent_connect_owner";
@@ -72,10 +81,23 @@ interface ObservedResponse {
 export function createScopedResponsesProxy(
   options: ScopedResponsesProxyOptions,
 ) {
-  const issuer = canonicalIssuer(options.issuer);
-  if (options.resource !== `${issuer}/v1/responses`) {
+  const handler = createScopedResponsesHandler(options);
+  const server = createServer((request, response) => {
+    void handler.handle(request, response);
+  });
+  server.once("close", () => void handler.close());
+  return server;
+}
+
+export function createScopedResponsesHandler(
+  options: ScopedResponsesProxyOptions,
+): ScopedResponsesHandler {
+  const endpoints = options.endpoints ?? STANDALONE_ENDPOINT_LAYOUT;
+  const issuer = canonicalIssuer(options.issuer, endpoints.issuerPath);
+  const origin = new URL(issuer).origin;
+  if (options.resource !== `${origin}${endpoints.responsesPath}`) {
     throw new TypeError(
-      "resource must be the issuer's exact /v1/responses URL",
+      "resource must be the endpoint layout's exact Responses URL",
     );
   }
   const upstreamOrigin = requireLoopbackOrigin(options.upstreamBaseUrl);
@@ -85,6 +107,8 @@ export function createScopedResponsesProxy(
   const ownerSubject = options.ownerSubject ?? "local-owner";
   const now = options.now ?? Date.now;
   const ownerLoginSecret = randomBytes(32);
+  let accepting = true;
+  const activeResponses = new Set<ServerResponse>();
   const inflight = new Map<
     string,
     { readonly grantId: string; readonly controller: AbortController }
@@ -102,10 +126,19 @@ export function createScopedResponsesProxy(
         ? { profileId: ownerSubject, scopes: ["operator.admin"] }
         : undefined,
     now,
+    endpoints,
   });
 
-  return createServer(async (request, response) => {
+  const handle = async (
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> => {
+    activeResponses.add(response);
     try {
+      if (!accepting) {
+        sendJson(response, 503, "service_unavailable", "Service is stopping");
+        return;
+      }
       if (!request.url || Buffer.byteLength(request.url) > 8 * 1024) {
         return sendJson(response, 414, "invalid_request", "URL is too large");
       }
@@ -113,17 +146,17 @@ export function createScopedResponsesProxy(
         throw new ProxyHttpError(400, "invalid_request_target");
       }
       const url = new URL(request.url, issuer);
-      if (url.pathname === "/healthz") {
+      if (url.pathname === endpoints.healthPath) {
         if (request.method !== "GET" || url.search)
           return methodNotAllowed(response, "GET");
         options.policySnapshot.assertUnchanged();
         await options.policySnapshot.assertRuntimeCurrent();
         return sendJsonValue(response, 200, { ok: true });
       }
-      if (url.pathname === "/agent-connect/owner/login") {
+      if (url.pathname === endpoints.ownerLoginPath) {
         return await handleOwnerLogin(request, response, url);
       }
-      if (url.pathname === "/agent-connect/oauth/authorize") {
+      if (url.pathname === endpoints.authorizationPath) {
         if (
           request.method === "GET" &&
           !options.ownerAuth.isOwnerSession(
@@ -138,15 +171,15 @@ export function createScopedResponsesProxy(
         return await oauth.handle(request, response);
       }
       if (
-        url.pathname === "/.well-known/oauth-authorization-server" ||
-        url.pathname === "/.well-known/oauth-protected-resource" ||
-        url.pathname === "/agent-connect/oauth/par" ||
-        url.pathname === "/agent-connect/oauth/token" ||
-        url.pathname === "/agent-connect/oauth/revoke"
+        url.pathname === endpoints.authorizationServerMetadataPath ||
+        url.pathname === endpoints.protectedResourceMetadataPath ||
+        url.pathname === endpoints.parPath ||
+        url.pathname === endpoints.tokenPath ||
+        url.pathname === endpoints.revocationPath
       ) {
         return await oauth.handle(request, response);
       }
-      if (url.pathname === "/v1/responses") {
+      if (url.pathname === endpoints.responsesPath) {
         if (request.method === "OPTIONS")
           return responsePreflight(request, response);
         if (request.method !== "POST" || url.search)
@@ -154,7 +187,9 @@ export function createScopedResponsesProxy(
         return await handleResponses(request, response);
       }
       const conversations = url.pathname.match(
-        /^\/v1\/agent-connect\/conversations(?:\/([a-f0-9]{36})\/history)?$/,
+        new RegExp(
+          `^${escapeRegExp(endpoints.conversationsPath)}(?:/([a-f0-9]{36})/history)?$`,
+        ),
       );
       if (conversations) {
         if (request.method === "OPTIONS")
@@ -164,7 +199,9 @@ export function createScopedResponsesProxy(
         return await handleConversations(request, response, conversations[1]);
       }
       const cancel = url.pathname.match(
-        /^\/v1\/agent-connect\/responses\/([A-Za-z0-9_.:-]{1,256})\/cancel$/,
+        new RegExp(
+          `^${escapeRegExp(endpoints.responsesPath)}/([A-Za-z0-9_.:-]{1,256})/cancel$`,
+        ),
       );
       if (cancel) {
         if (request.method === "OPTIONS")
@@ -180,8 +217,10 @@ export function createScopedResponsesProxy(
         return;
       }
       sendError(response, error);
+    } finally {
+      activeResponses.delete(response);
     }
-  });
+  };
 
   async function handleConversations(
     request: IncomingMessage,
@@ -220,12 +259,8 @@ export function createScopedResponsesProxy(
     if (!record) throw new ProxyHttpError(404, "conversation_unavailable");
     let value: unknown;
     try {
-      value = await (options.readHistory
-        ? options.readHistory(record.sessionKey)
-        : readStockOpenClawRpc(options, "chat.history", {
-            sessionKey: record.sessionKey,
-            limit: 200,
-          }));
+      if (!options.readHistory) throw new Error("history reader unavailable");
+      value = await options.readHistory(record.sessionKey);
     } catch {
       throw new ProxyHttpError(502, "history_unavailable");
     }
@@ -534,7 +569,7 @@ export function createScopedResponsesProxy(
     sendHtml(
       response,
       401,
-      `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Owner sign in</title></head><body><main><h1>Owner sign in</h1><p>Enter the gateway enrollment secret to review this request.</p><form method="post" action="/agent-connect/owner/login"><input type="hidden" name="challenge" value="${challenge}"><label>Enrollment secret <input type="password" name="passphrase" autocomplete="current-password" required></label><button type="submit">Continue</button></form></main></body></html>`,
+      `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Owner sign in</title></head><body><main><h1>Owner sign in</h1><p>Enter the gateway enrollment secret to review this request.</p><form method="post" action="${endpoints.ownerLoginPath}"><input type="hidden" name="challenge" value="${challenge}"><label>Enrollment secret <input type="password" name="passphrase" autocomplete="current-password" required></label><button type="submit">Continue</button></form></main></body></html>`,
     );
   }
 
@@ -545,7 +580,7 @@ export function createScopedResponsesProxy(
   ): Promise<void> {
     if (request.method !== "POST" || url.search)
       return methodNotAllowed(response, "POST");
-    if (singleHeader(request, "origin") !== issuer) {
+    if (singleHeader(request, "origin") !== origin) {
       throw new ProxyHttpError(403, "owner_login_origin_mismatch");
     }
     const contentType = singleHeader(request, "content-type")?.split(";", 1)[0];
@@ -589,6 +624,19 @@ export function createScopedResponsesProxy(
       throw error;
     }
   }
+
+  return {
+    handle,
+    async close() {
+      if (!accepting) return;
+      accepting = false;
+      for (const active of inflight.values()) active.controller.abort();
+      inflight.clear();
+      registry.clear();
+      for (const response of activeResponses) response.destroy();
+      activeResponses.clear();
+    },
+  };
 }
 
 function signOwnerLoginChallenge(
@@ -640,6 +688,10 @@ function verifyOwnerLoginChallenge(
   } catch {
     return undefined;
   }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function inspectEvent(
@@ -998,17 +1050,20 @@ function singleFormValue(form: URLSearchParams, name: string): string {
   return values[0];
 }
 
-function canonicalIssuer(value: string): string {
+function canonicalIssuer(value: string, expectedPath: string): string {
   const url = new URL(value);
+  const expected = expectedPath ? `${url.origin}${expectedPath}` : url.origin;
   if (
     url.protocol !== "https:" ||
-    value !== url.origin ||
+    value !== expected ||
     url.username ||
-    url.password
+    url.password ||
+    url.search ||
+    url.hash
   ) {
-    throw new TypeError("issuer must be a canonical HTTPS origin");
+    throw new TypeError("issuer must be the endpoint layout's canonical URL");
   }
-  return value;
+  return expected;
 }
 
 function requireLoopbackOrigin(value: string): string {
