@@ -1,15 +1,29 @@
 {
-  "name": "@agent-connect/openclaw-plugin",
+  "name": "@open-agent-connect/openclaw-plugin",
   "version": "0.1.0",
   "description": "Stock OpenClaw-hosted Agent Connect gateway",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jomi-se/agent-connect.git",
+    "directory": "packages/openclaw-plugin"
+  },
+  "homepage": "https://github.com/jomi-se/agent-connect/tree/main/packages/openclaw-plugin#readme",
   "type": "module",
-  "private": true,
+  "main": "./dist/index.mjs",
+  "exports": "./dist/index.mjs",
   "files": [
     "dist",
+    "LICENSE",
     "openclaw.plugin.json",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=24.15.0 <25"
+  },
   "peerDependencies": {
     "openclaw": "2026.9.1"
   },
@@ -37,6 +51,7 @@
   },
   "scripts": {
     "build": "node ../../scripts/build-stock-openclaw-plugin.mjs",
+    "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   }

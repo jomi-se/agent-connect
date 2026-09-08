@@ -1,6 +1,6 @@
 {
   "name": "@open-agent-connect/web",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Harness-neutral browser SDK for lending application tools to user-owned agents",
   "license": "MIT",
   "repository": {
@@ -15,6 +15,7 @@
   ],
   "files": [
     "dist",
+    "LICENSE",
     "README.md"
   ],
   "publishConfig": {
@@ -27,7 +28,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node ../../scripts/build-web-sdk.mjs",
     "prepack": "npm run build",
     "test": "vitest run test",
     "test:webmcp": "playwright test --config playwright.config.ts",

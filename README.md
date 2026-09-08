@@ -3,12 +3,17 @@
 Bring your AI subscription to any web app.
 
 Build AI features using the user's existing AI subscription instead of requiring
-an API key or a second AI subscription from the application. A
-small trusted authorization proxy privately operates stock OpenClaw's native
-Responses endpoint. OpenClaw owns execution, context, tools, sandboxing and
-subscription credentials. The owner accepted the Bookhand integration as a
-prototype; known search/navigation defects and finer-grained smoke evidence are
-tracked in the [closeout ledger](docs/plan/stock-openclaw-vertical-closeout.md).
+an application API key or a second subscription. Agent Connect installs as a
+plugin in the user's stock OpenClaw gateway. It adds an application-scoped OAuth
+and Open Responses boundary while OpenClaw continues to own execution, context,
+tools, sandboxing, models, and provider credentials. Applications see a
+harness-neutral gateway API; OpenClaw and other provider adapters stay behind it.
+
+The current release targets one user-owned gateway, independent app
+conversations, one active request per conversation, an owner-selected restricted
+agent, and a fixed approved application-tool snapshot. Conversation ownership
+and continuation state are bounded and process-local, so restart ends them and
+uncertain application effects are never replayed automatically.
 
 ## Built with Codex and GPT-5.6
 
@@ -35,38 +40,40 @@ this branch.
 
 The anonymous judge profile is retired; connect to a gateway you own.
 
-## Run the stock OpenClaw scoped proxy
+## Install the OpenClaw plugin
 
-The [gateway guide](deploy/openclaw-gateway/README.md) covers isolated setup,
-the pinned dependency and the private launcher. Use Node 24 LTS >=24.15 and <25.
-OpenClaw must already be configured and running; the launcher does not select
-its harness, manage credentials or restart personal services.
+Use Node 24 LTS >=24.15 and <25 with stock OpenClaw 2026.9.1. Install the plugin
+through OpenClaw's supported package flow and explicitly accept its declared host
+capabilities:
 
 ```sh
-npm install
-npm run build:scoped-proxy
-cp deploy/openclaw-gateway/.env.scoped-proxy.example deploy/openclaw-gateway/.env.scoped-proxy
-chmod 600 deploy/openclaw-gateway/.env.scoped-proxy
-# Edit private literal values; follow the guide for new identity initialization.
-export AGENT_CONNECT_OPENCLAW_ENV_FILE="$PWD/deploy/openclaw-gateway/.env.scoped-proxy"
-node scripts/openclaw-scoped-proxy.mjs check
-node scripts/openclaw-scoped-proxy.mjs serve
+openclaw plugins install @open-agent-connect/openclaw-plugin@0.1.0 --pin --accept-capabilities
+openclaw agent-connect setup --origin https://your-gateway.example
+# Review the preview, then apply explicitly:
+openclaw agent-connect setup --origin https://your-gateway.example --apply
+# Restart the gateway, then:
+openclaw agent-connect doctor
 ```
 
-The proxy mediates private stock OpenClaw Responses. Tailscale Serve may provide
-HTTPS reachability, but owner consent requires the explicit gateway enrollment
-secret and never trusts a forwarding header as identity. The OpenClaw operator
-token stays on the server. Config changes require supervised restart and fresh
-consent; process restart ends in-memory continuations. The proxy also exposes
-grant-scoped recent conversation listing and bounded native execution-history
-reads. Completed heads can be reopened while the same grant and proxy process
-remain live; inputs are deliberately labelled prompt-or-application-output, not
-human-authored chat.
+The first successful apply prints a one-time owner enrollment passphrase. Put it
+directly in the owner's password manager; it is not stored in plaintext or shown
+again. Setup preserves unrelated OpenClaw agents and configuration, refuses
+unsupported conflicts, and creates a dedicated app agent with native tools denied
+by default. It does not copy credentials, grants, conversations, or owner state
+from older Agent Connect deployments.
 
-The published pinned runtime passes deterministic app-tool, continuation,
-native-tool denial and sandbox-failure tests. These tests use fixture inference,
-not subscription credentials, so the selected live subscription/browser flow is
-still a separate acceptance gate.
+Bind OpenClaw to loopback and expose only the reviewed route through owner-managed
+HTTPS ingress such as Tailscale Serve. The OpenClaw operator credential remains
+server-side and is never an application credential. The
+[gateway guide](deploy/openclaw-gateway/README.md) covers setup, doctor states,
+coexistence, ingress, and recovery limitations. The older standalone scoped proxy
+is retained there only as the verified ADR 0014 rollback baseline; users do not
+need a second process for the active ADR 0015 target.
+
+The pinned real OpenClaw host passes deterministic package-install, application
+tool, continuation, native-tool denial, lifecycle, and sandbox-failure tests.
+Fixture inference spends no subscription allowance; a selected live
+subscription/browser smoke remains separate evidence.
 
 On a first connection, the gateway shows the exact
 Origin, callback, scopes, and tools before approval. The resulting grant is
@@ -75,12 +82,17 @@ snapshot.
 
 ## Add Agent Connect to a web app
 
-`@open-agent-connect/web` is a browser-safe TypeScript package published to
+`@open-agent-connect/web` is a browser-safe TypeScript package on
 npm as [`@open-agent-connect/web`](https://www.npmjs.com/package/@open-agent-connect/web).
-It is versioned `0.0.x` while the wire format settles. The
+This checkout prepares `0.0.4`; it remains versioned `0.0.x` while the wire
+format settles. The
 [web application integration guide](docs/guides/web-app-integration.md) shows
 how to install it in another application, authorize a runtime, send a prompt,
 and handle live tool calls.
+
+```sh
+npm install @open-agent-connect/web@0.0.4
+```
 
 The application-facing shape is meant to be agent- and harness-neutral:
 
@@ -134,27 +146,31 @@ continuation checkpoints and revocation.
 ```text
 Web application
   @open-agent-connect/web + application-owned tools
-        │ Open Responses HTTP/SSE (POST /v1/responses)
+        │ Open Responses HTTP/SSE (POST /agent-connect/v1/responses)
         │ sequential calls & previous_response_id continuation
         ▼
 User-owned Agent Connect gateway
   explicit owner login, consent, grants, bounded conversation ownership
-        │ private operator-authenticated Open Responses
+        │ namespaced plugin routes inside the same stock host
         ▼
-OpenClaw → operator-configured runtime/model
+Stock OpenClaw → operator-configured runtime/model
   client function calls return through Agent Connect to the application
 ```
 
-Open Responses HTTP/SSE is the standard public wire between applications and the
-gateway. OpenClaw owns the runtime loop and provider integration. Agent Connect
-retains the untrusted-application authorization boundary, not another agent
-loop. See [ADR 0014](docs/decisions/0014-stock-openclaw-scoped-proxy.md).
+Open Responses HTTP/SSE is the public wire between applications and the gateway;
+the plugin keeps it under the `/agent-connect` namespace. OpenClaw owns the
+runtime loop and provider integration. Agent Connect retains the
+untrusted-application authorization boundary, not another agent loop or proxy
+process. See
+[ADR 0015](docs/decisions/0015-openclaw-plugin-host.md). ADR 0014 remains the
+verified rollback baseline until the plugin-host deployment gates are complete.
 
 ## Supported platforms
 
 - Web SDK: modern HTTPS browsers with Fetch, SSE, Web Crypto, and Web Storage.
 - Development/operator checks: Node.js 24 LTS >=24.15 and <25.
-- Scoped-proxy setup: pinned unpatched OpenClaw 2026.9.1, tested in isolation on this Linux VM.
+- Gateway plugin: pinned stock OpenClaw 2026.9.1 on Node >=24.15 and <25,
+  exercised through disposable real-host package installation on Linux.
 
 Other Linux distributions and architectures may work but have not passed the
 complete replacement acceptance flow. Windows and macOS gateway hosting are not
@@ -162,9 +178,9 @@ currently tested.
 
 ## Security boundary
 
-The scoped client pins the configured HTTPS origin through exact OAuth metadata;
+The client pins the configured HTTPS provider path through exact OAuth metadata;
 it does not independently attest the host or OpenClaw process. A saved enrollment
-secret establishes the owner browser session; tailnet membership or
+passphrase establishes the owner browser session; tailnet membership or
 caller-provided identity headers do not. Gateway-owned consent and PKCE create a
 revocable capability bound to the exact application and tool snapshot. The
 runtime-card signature remains part of the preserved older gateway/Canvas flow.
@@ -189,18 +205,14 @@ server-side backstop.
 
 ```sh
 npm install
-npm run verify:scoped-proxy
+npm run verify
 ```
 
-`npm run verify:scoped-proxy` runs formatting checks, the standalone proxy build,
-focused authority tests and real stock-OpenClaw compatibility/composition. It
-requires the pin in `config/openclaw-test-compat.json` on PATH or at
-`OPENCLAW_TEST_BIN`; install using the guide above. Only inference is
-deterministic: no subscription credentials or model credits are needed.
-A missing or mismatched dependency fails instead of skipping tests.
-
-`npm run verify` remains the repository-wide compatibility gate, including
-preserved historical implementation tests and all package builds.
+`npm run verify` is the repository compatibility gate. It includes the installed
+plugin-host composition against the exact OpenClaw pin in
+`config/openclaw-test-compat.json`; put that binary on `PATH` or set
+`OPENCLAW_TEST_BIN`. A missing or mismatched dependency fails instead of skipping.
+The tests use deterministic inference and no subscription credentials.
 
 For local maintainability diagnostics, run `npm run analyze`. It reports
 complexity, dependency boundaries, unused code, and production duplication
@@ -219,11 +231,16 @@ npm run test:integration:response-crash
 
 # Pack the SDK, install it into a clean external npm project, and import it.
 npm run test:package:web
+
+# Pack and inspect both release candidates without publishing.
+npm run release:prepare
 ```
 
 `npm run verify:full` adds the clean external SDK-package consumer fixture,
-WebMCP checks, and Canvas Playwright browser suites to the
-default verification gate.
+release workflow logic checks, WebMCP checks, and Canvas Playwright browser
+suites. Publishing is restricted to the successful main-branch CI job; local
+commands never publish unless `npm run release:publish` is invoked deliberately
+with npm publication authority.
 
 See the [testing strategy guide](docs/architecture/testing-strategy.md) for how
 Agent Connect separates pure state-machine invariants, deterministic real-dependency
@@ -231,10 +248,11 @@ compatibility tests, and selected subscription-runtime composition smoke tests.
 
 ## Project status
 
-This is a hackathon MVP and is still in hackathon MVP state.
-The current boundary is one user, one private stock OpenClaw, one supervised
-scoped proxy, preconfigured dedicated agents, one fixed tool snapshot per grant
-conversation, and bounded process-local continuation. Use at your own risk ^^.
+This is an early `0.x` system, not a claim of a hardened general-purpose agent
+sandbox. The stock plugin host is the active installation target; the first npm
+release and fresh Artifex deployment remain owner-gated. The prior standalone
+proxy and Canvas runtime-card demo are historical compatibility paths, not setup
+prerequisites. Use at your own risk ^^.
 
 See [the documentation index](docs/README.md), [mission](docs/mission.md), and
 [accepted decisions](docs/decisions/).

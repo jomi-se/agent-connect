@@ -1,6 +1,6 @@
 # Stock OpenClaw plugin host
 
-The reference installation is `@agent-connect/openclaw-plugin`. Stock OpenClaw
+The reference installation is `@open-agent-connect/openclaw-plugin`. Stock OpenClaw
 2026.9.1 loads the package, owns its routes and starts/stops its managed service.
 The service reuses the same scoped request, grant, continuation and native-output
 inspection implementation as the standalone baseline. It forwards bounded

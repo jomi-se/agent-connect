@@ -18,8 +18,11 @@ gateway, SDK example, supported platforms, and verification commands.
 - [Web application integration](guides/web-app-integration.md): package the SDK,
   authorize a gateway, stream a task, handle browser-owned tools, and revoke
   access.
-- [OpenClaw scoped-proxy setup](../deploy/openclaw-gateway/README.md): pinned
-  stock dependency, static policy, explicit owner login and pending live acceptance.
+- [OpenClaw plugin setup](../deploy/openclaw-gateway/README.md): published plugin,
+  explicit capability consent, restricted-agent setup, doctor states, and the
+  standalone rollback baseline.
+- [npm publication gate](guides/npm-publication.md): exact release candidates,
+  gated main-CI publication, first-plugin bootstrap, and owner-only steps.
 - [Firebase deployment](guides/firebase-demo-deployment.md): deploy the static
   Canvas without placing Firebase credentials on the gateway.
 - [Local code-quality analysis](guides/code-quality-analysis.md): ESLint,
@@ -32,9 +35,12 @@ documents an unstable prototype. It is not the default browser/gateway path.
 
 ## Current design direction
 
+- [ADR 0015: Stock OpenClaw plugin host](decisions/0015-openclaw-plugin-host.md)
+  is the active installation target; its
+  [plan and evidence gates](plan/openclaw-plugin-host.md) distinguish the
+  installed-package proof from owner-gated npm publication and deployment.
 - [ADR 0014: Scoped proxy to stock OpenClaw](decisions/0014-stock-openclaw-scoped-proxy.md)
-  is the active implementation; its [plan and evidence gates](plan/openclaw-scoped-proxy.md)
-  distinguish deterministic stock proof from unresolved live composition.
+  remains the verified rollback baseline until ADR 0015's live gates pass.
 - [ADR 0010: Open Responses at the application boundary](decisions/0010-open-responses-gateway-pivot.md)
 - [ADR 0011: Linear multi-turn continuation](decisions/0011-linear-multi-turn-continuation.md)
   is the leading proposed protocol direction and defines its evidence gates.
@@ -53,6 +59,7 @@ historical. AG-UI is no longer an active core-protocol experiment.
 - [ADR 0007: Runtime card and gateway authorization](decisions/0007-runtime-card-and-gateway-authorization.md)
 - [ADR 0008: Control plane and runtime confinement boundary](decisions/0008-control-plane-and-runtime-confinement-boundary.md)
 - [ADR 0014: Scoped proxy to stock OpenClaw](decisions/0014-stock-openclaw-scoped-proxy.md)
+- [ADR 0015: Stock OpenClaw plugin host](decisions/0015-openclaw-plugin-host.md)
 
 ## Proposed decisions
 

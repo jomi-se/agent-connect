@@ -1,6 +1,6 @@
 # Published packages and fresh Artifex deployment
 
-Date: 2026-09-08. Status: implementation plan, not permission to publish.
+Date: 2026-09-08. Status: prepared through the owner publication gate; not permission to publish.
 Owner: next Sol implementation agent; Jose owns all pushes and account approvals.
 
 ## Objective and non-negotiable decisions
@@ -248,9 +248,38 @@ erasing the old state is intentional and may be irreversible.
 
 - [x] Fresh-state approach and package name approved; Jose owns pushes.
 - [x] Current publication, package and Artifex entry points inspected for this plan.
-- [ ] Release metadata/versions and package evidence.
-- [ ] Automatic gated dual publication and npm owner setup checklist.
-- [ ] Artifex fresh-install bootstrap/runbook and smoke evidence.
+- [x] Release metadata/versions and package evidence. Registry check: SDK
+      versions `0.0.1` and `0.0.3` exist; SDK `0.0.4` is absent. The confirmed
+      plugin URL returns public HTTP 404, so `0.1.0` is available. Exact-tarball SDK
+      and plugin external-install smoke tests pass. Two consecutive clean packs
+      produced identical SHA-256 digests: SDK
+      `ec4bd3711f5003fd6db78a43c4e4a28a3b50f29c9a8fa4d0c34499676d0d58b7` and
+      plugin `e991eb5d0146e3d92d33167286c1e4176eb715d3b4e1076a18a709edabfe2fd6`.
+      Release-logic tests pass; real plugin composition remains in the repository
+      verification gate.
+- [x] Automatic gated dual publication and npm owner setup checklist. Main
+      `ci.yml` now publishes only after `checks` on a main push, uses exact inspected
+      tarballs and independent version skip logic, and cannot publish from PR or
+      manual dispatch. The obsolete manual SDK publisher is removed. See
+      `docs/guides/npm-publication.md` for the first-plugin bootstrap and exact OIDC
+      claims. Read-only GitHub API evidence confirms the public `main` repository
+      and an existing `npm-publish` environment with no protection rules. npm trust
+      settings require authenticated npm access and remain an owner verification.
+- [x] Artifex fresh-install bootstrap/runbook and smoke evidence. The adjacent
+      repository has an opt-in binaries-only step, pinned public dependencies,
+      isolated config/state, stable launchers, tmux operations and route-limited
+      owner-reviewed Tailscale instructions. Its shell/profile smoke passes. Before
+      publication the installer fails actionably at the plugin registry check and
+      creates no fallback installation.
 - [ ] Jose pushes / npm publication verified (external gate).
 - [ ] Fresh installation / owner login / Bookhand published SDK and live smoke.
 - [ ] Obsolete runtime deleted; final docs/commits/clean worktrees.
+
+### Owner publication gate reached
+
+No push, tag, GitHub release, npm publication, workflow dispatch, account change,
+provider login, service start, Tailscale mutation, Bookhand change, or old-runtime
+deletion was performed. Jose's next action is to review the local commits and
+follow `docs/guides/npm-publication.md`. Phase 4 must not begin until the exact
+npm versions/integrities are verified and Jose separately authorizes the live
+Artifex installation.

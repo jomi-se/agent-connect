@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   checks:
-    name: PR checks
+    name: Required checks
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -53,3 +53,40 @@ jobs:
         run: |
           npm run lint
           npm run analyze:dependencies
+
+  publish:
+    name: Publish unpublished npm versions
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the exact verified revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.15.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install the pinned trusted-publishing npm CLI
+        run: npm install --global npm@11.19.1
+
+      - run: npm ci
+
+      - name: Pack and inspect the explicit release candidates
+        run: npm run release:prepare
+
+      - name: Smoke-test the exact prepared tarballs
+        run: npm run release:smoke
+
+      - name: Publish only missing versions from those tarballs
+        run: npm run release:publish
