@@ -23,6 +23,11 @@ the prototype's private routes/headers dictate the public profile.
 
 ## Active target: installable OpenClaw plugin
 
+Immediate follow-up: [SDK/Bookhand plugin migration](plugin-sdk-bookhand-migration.md)
+removes app-owned endpoint/history/credential-shape duplication after the plugin
+and native token/password/no-auth support were implemented. Live cutover remains
+separate.
+
 The owner clarified on 2026-09-08 that users must not operate an additional proxy
 process. [ADR 0015](../decisions/0015-openclaw-plugin-host.md) makes the existing
 scoped mediation a plugin-hosted feature of stock OpenClaw. The
