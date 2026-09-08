@@ -140,6 +140,33 @@ const installedPackage = JSON.parse(
     "utf8",
   ),
 );
+const installedRoot = join(
+  consumerDir,
+  "node_modules",
+  "@open-agent-connect",
+  "web",
+);
+const installedIndex = readFileSync(
+  join(installedRoot, "dist", "index.js"),
+  "utf8",
+);
+const installedAiSdk = readFileSync(
+  join(installedRoot, "dist", "ai-sdk.js"),
+  "utf8",
+);
+const installedBootstrap = readFileSync(
+  join(installedRoot, "dist", "zod-jitless.js"),
+  "utf8",
+);
+if (
+  !Array.isArray(installedPackage.sideEffects) ||
+  !installedPackage.sideEffects.includes("./dist/zod-jitless.js") ||
+  !installedIndex.startsWith('import "./zod-jitless.js";') ||
+  !installedAiSdk.startsWith('import "./zod-jitless.js";') ||
+  !installedBootstrap.includes("jitless: true")
+) {
+  throw new Error("Packed SDK omitted its CSP-safe Zod bootstrap");
+}
 process.stdout.write(
   `${JSON.stringify({
     ok: true,

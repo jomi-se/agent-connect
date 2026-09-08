@@ -1,3 +1,5 @@
+import "./zod-jitless.js";
+
 import * as openResponses from "@ai-sdk/open-responses";
 import {
   jsonSchema,

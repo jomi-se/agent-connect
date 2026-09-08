@@ -1,3 +1,5 @@
+import "./zod-jitless.js";
+
 export { createBrowserAcpStream } from "./transport.js";
 export {
   createAiSdkApplicationTools,
