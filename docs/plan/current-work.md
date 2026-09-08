@@ -36,7 +36,10 @@ safe personal-config coexistence, real-package tests and review. The installable
 package, dual-layout SDK, safe setup and real packed-stock composition gates pass
 with deterministic inference. Root review and owner-approved live switch are
 complete; the standalone proxy is stopped and retained only for rollback.
-Changes remain on feature branches: no merge, push or publication performed.
+Both repositories were subsequently fast-forwarded to `main` at the owner's
+request; completed integration branches and redundant worktree registrations
+were removed. Private runtime data and uncommitted artifacts were archived,
+not deleted. No push or publication performed.
 The owner smoke proves prompt/reload, not a new exhaustive live tool-flow test.
 
 Setup preserves personal agents, channels, credentials, tools, memory, installed

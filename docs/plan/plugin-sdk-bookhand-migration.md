@@ -91,8 +91,8 @@ leave branch and deployments unchanged until owner-approved rollout.
       production build, lint, bundle check and 412x915 strict-CSP smoke passing
       against the final artifact bytes. Root reviewed the evidence and diff.
 - [x] Bookhand finalized provenance and committed `ea3b18e` with a clean
-      worktree. Both implementations remain on their feature branches; no
-      merge, push or publication.
+      worktree. Both implementations were subsequently fast-forwarded to main
+      at the owner's request. No push or publication.
 
 ## Subsequent owner-approved live switch
 
