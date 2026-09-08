@@ -42,19 +42,31 @@ export async function readStockOpenClawConfig(options: {
   readonly upstreamToken: string;
   readonly timeoutMs?: number;
 }): Promise<StockOpenClawConfigGet> {
+  return readStockOpenClawRpc(options, "config.get", {});
+}
+
+export async function readStockOpenClawRpc<T>(
+  options: {
+    readonly upstreamBaseUrl: string;
+    readonly upstreamToken: string;
+    readonly timeoutMs?: number;
+  },
+  method: "config.get" | "chat.history",
+  params: Record<string, unknown>,
+): Promise<T> {
   const url = new URL(options.upstreamBaseUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   const timeoutMs = options.timeoutMs ?? 10_000;
-  return await new Promise<StockOpenClawConfigGet>((resolve, reject) => {
+  return await new Promise<T>((resolve, reject) => {
     let settled = false;
     let client: GatewayClient | undefined;
-    const finish = (error?: Error, value?: StockOpenClawConfigGet) => {
+    const finish = (error?: Error, value?: T) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       client?.stop();
       if (error) reject(error);
-      else resolve(value as StockOpenClawConfigGet);
+      else resolve(value as T);
     };
     const timer = setTimeout(
       () => finish(new Error("OpenClaw config.get timed out")),
@@ -81,12 +93,10 @@ export async function readStockOpenClawConfig(options: {
             finish(new Error("OpenClaw gateway client was not initialized"));
             return;
           }
-          void activeClient
-            .request<StockOpenClawConfigGet>("config.get", {}, { timeoutMs })
-            .then(
-              (value) => finish(undefined, value),
-              (error: unknown) => finish(asPrivateError(error)),
-            );
+          void activeClient.request<T>(method, params, { timeoutMs }).then(
+            (value) => finish(undefined, value),
+            (error: unknown) => finish(asPrivateError(error)),
+          );
         },
         onConnectError: (error) => finish(asPrivateError(error)),
         onClose: () =>

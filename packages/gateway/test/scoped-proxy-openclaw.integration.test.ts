@@ -298,11 +298,43 @@ integration("scoped proxy with the published OpenClaw process", () => {
           connection,
           fetch: applicationFetch,
         });
+        const recent = await applicationFetch(
+          `${ISSUER}/v1/agent-connect/conversations`,
+          { headers: { authorization: `Bearer ${connection.accessToken}` } },
+        );
+        expect(recent.status).toBe(200);
+        const { conversations } = await recent.json();
+        expect(conversations).toHaveLength(1);
+        expect(conversations[0].canContinue).toBe(true);
+        const historyResponse = await applicationFetch(
+          `${ISSUER}/v1/agent-connect/conversations/${conversations[0].conversationId}/history`,
+          { headers: { authorization: `Bearer ${connection.accessToken}` } },
+        );
+        expect(historyResponse.status).toBe(200);
+        const history = await historyResponse.json();
+        expect(history.projection).toBe("execution-history");
+        expect(history.entries).toContainEqual({
+          kind: "assistant",
+          text: "Both application actions completed.",
+        });
+        expect(
+          history.entries.some(
+            (entry: { kind: string; text: string }) =>
+              entry.kind === "input" && entry.text.includes("first-result-42"),
+          ),
+        ).toBe(true);
+        expect(JSON.stringify(history)).not.toContain("sessionKey");
+        expect(JSON.stringify(history)).not.toContain(
+          "Use the supplied application actions",
+        );
+        expect(history.previousResponseId).toBe(checkpoint);
         const followup = streamText({
           model: model(),
           prompt: "FOLLOWUP: confirm both earlier results.",
           tools,
-          ...createAiSdkOpenResponsesGenerationOptions(checkpoint),
+          ...createAiSdkOpenResponsesGenerationOptions(
+            history.previousResponseId,
+          ),
         });
         await followup.consumeStream();
         expect(await followup.text).toBe(
