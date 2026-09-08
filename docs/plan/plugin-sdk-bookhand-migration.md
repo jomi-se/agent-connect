@@ -92,4 +92,16 @@ leave branch and deployments unchanged until owner-approved rollout.
       against the final artifact bytes. Root reviewed the evidence and diff.
 - [x] Bookhand finalized provenance and committed `ea3b18e` with a clean
       worktree. Both implementations remain on their feature branches; no
-      merge, push, publication, live cutover or owner-device OAuth claim.
+      merge, push or publication.
+
+## Subsequent owner-approved live switch
+
+On 2026-09-08 the reviewed plugin was installed into the existing stock OpenClaw
+profile and the standalone proxy stopped. Subscription credentials were not
+copied or rotated. HTTPS discovery/health passed and both scoped and native
+Responses rejected unauthenticated requests. Bookhand served the exact reviewed
+build with strict CSP. The owner then confirmed a successful prompt and
+conversation reload. This is owner-reported live evidence, separate from the
+deterministic tool/authorization suite; no uncertain app effects were replayed.
+Private addresses, rollback configuration and enrollment details stay outside
+tracked documentation.
