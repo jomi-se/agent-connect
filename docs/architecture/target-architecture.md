@@ -89,7 +89,11 @@ are replaced by small public failures.
 
 OpenClaw owns execution, conversation history, compaction, native tool behavior,
 sandbox setup and all subscription/provider credentials. The proxy uses only its
-public native `POST /v1/responses`; no OpenClaw core patch or plugin is installed.
+public native `POST /v1/responses` plus operator-read `chat.history`; no OpenClaw
+core patch or plugin is installed. The proxy projects only bounded user/assistant
+text for a still-live grant-owned head. Because native user messages include both
+prompts and application outputs, this is execution history, not a human-chat
+transcript.
 
 One private stock config pins local mode, loopback port, exact operator token,
 Responses enablement and reload-off. Each offered policy names a dedicated agent
@@ -110,8 +114,9 @@ OpenClaw under another config with the same token/port is unsupported.
 Deterministic tests use the integrity-pinned published OpenClaw package and replace
 only inference. They cover operator-origin native-tool denial, fail-closed sandbox
 startup, real SDK/OAuth owner consent, two application calls/results, contextual
-follow-up, refresh/revoke and authority attacks. They do not prove the selected
-subscription model, HTTPS ingress, supervisor configuration or Bookhand UI.
+follow-up, refresh/revoke, grant-scoped history/reopen and authority attacks. They
+do not prove the current Bookhand reload presentation and contextual follow-up;
+that remains an owner-run live gate.
 
 The earlier native extension, custom Responses engine and durable response ledger
 remain historical experiments. They are not linked or built by

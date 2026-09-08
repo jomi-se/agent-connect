@@ -10,7 +10,8 @@ engine remain in the repository for review/rollback only.
 
 - Both processes listen on loopback. An operator-managed HTTPS ingress may expose
   only discovery, delegated OAuth/owner-login, `POST /v1/responses`, the scoped
-  cancel extension and optional health. There is no catch-all upstream proxy.
+  cancel extension, `GET /v1/agent-connect/conversations`, its scoped `history`
+  child route and optional health. There is no catch-all upstream proxy.
 - Private/tailnet reachability is not owner identity. Consent uses the one-time
   gateway enrollment secret to create an HttpOnly owner session. Forwarding and
   `Tailscale-User-Login` headers are ignored for owner authentication and rejected
@@ -31,6 +32,10 @@ engine remain in the repository for review/rollback only.
   minutes. Proxy restart, grant expiry/revocation, policy change or an ambiguously
   admitted failure ends that conversation. Nothing is replayed automatically and
   no exactly-once guarantee is made.
+- Conversation reads expose only the current grant's live registry entries and a
+  bounded user/assistant text projection from stock `chat.history`. Native inputs
+  are prompt-or-application-output, never a reliable **You** role. Reads do not
+  extend expiry or execute/replay a tool.
 - Responses requests have a fixed 20 MiB encoded-JSON cap, matching the pinned
   OpenClaw default. Tool outputs have no smaller independent size cap; JSON
   escaping, multiple results and the tool catalog count toward the total. Chat

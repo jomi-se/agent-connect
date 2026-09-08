@@ -18,15 +18,18 @@ browser-to-Codex composition, and debugged the deployed mobile flow.
 The primary `/feedback` build thread is
 `019f5c47-a462-73d0-a329-39013786bae4`.
 
-## Try the Canvas application
+## Legacy Canvas example
 
 Open [agent-connect-demo.web.app](https://agent-connect-demo.web.app/) and
 connect it to a gateway you operate using that gateway's public runtime card.
 
 The demo includes three example apps: a project-board app with bulk editing,
 in-place document review in a document editor, and product research in a
-shopping app. It uses the Agent Connect browser SDK and gateway. The published
-demo and existing personal installation are not changed by this branch.
+shopping app. It uses the Agent Connect browser SDK and the preserved runtime-card
+gateway flow. It is useful historical product evidence, but it does not prove the
+stock scoped proxy's OAuth + AI SDK path. Bookhand is the selected application
+for that path's final owner acceptance. The published demo is not changed by
+this branch.
 
 The anonymous judge profile is retired; connect to a gateway you own.
 
@@ -52,7 +55,11 @@ The proxy mediates private stock OpenClaw Responses. Tailscale Serve may provide
 HTTPS reachability, but owner consent requires the explicit gateway enrollment
 secret and never trusts a forwarding header as identity. The OpenClaw operator
 token stays on the server. Config changes require supervised restart and fresh
-consent; process restart ends in-memory continuations.
+consent; process restart ends in-memory continuations. The proxy also exposes
+grant-scoped recent conversation listing and bounded native execution-history
+reads. Completed heads can be reopened while the same grant and proxy process
+remain live; inputs are deliberately labelled prompt-or-application-output, not
+human-authored chat.
 
 The published pinned runtime passes deterministic app-tool, continuation,
 native-tool denial and sandbox-failure tests. These tests use fixture inference,

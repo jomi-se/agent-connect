@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-07
+Updated: 2026-09-08
 
 This is the canonical unfinished-work list. It records current priorities and
 only enough completed context to explain them. Product boundaries live in the
@@ -25,7 +25,9 @@ the prototype's private routes/headers dictate the public profile.
 
 On `work/openclaw-scoped-proxy`, the accepted implementation is the bounded
 authorization proxy in [ADR 0014](../decisions/0014-stock-openclaw-scoped-proxy.md)
-and its [execution plan](openclaw-scoped-proxy.md). It keeps the existing public
+and its [execution plan](openclaw-scoped-proxy.md). The final proof, packaging
+and owner acceptance gates are tracked in the
+[vertical-slice closeout](stock-openclaw-vertical-closeout.md). It keeps the existing public
 OAuth and AI SDK contract while privately operating the integrity-pinned stock
 OpenClaw Responses endpoint. The app cannot select native agent/model/session,
 headers, scopes, media fetches or unknown request features.
@@ -36,12 +38,47 @@ OAuth, two application-tool results, refresh, source conversation follow-up and
 revocation composition. Static OpenClaw/policy files are fingerprinted and any
 change fails closed until supervised restart and fresh consent. No deployment,
 personal configuration, subscription call, Tailscale change or Bookhand change
-has been made. The next external milestone is the separately authorized real
-subscription/browser/Bookhand acceptance smoke after final branch review.
+is implied by deterministic verification. A private scoped proxy and earlier
+subscription/browser tool flow have been exercised separately; those older runs
+do not accept the current history build. The next external milestone is the
+owner-run Bookhand same-book reload/history/follow-up smoke in the
+[vertical-slice closeout](stock-openclaw-vertical-closeout.md).
 
 The parent native application-principal patch and earlier replacement engine are
 retained as experiment/rollback artifacts. They are not mandatory dependencies
 of the scoped proxy and must not be mistaken for stock compatibility evidence.
+
+## Closeout: recent app-owned conversations
+
+Implementation update: subsequently authorized on 2026-09-08 and implemented for
+still-live in-memory grant records only. The [API and projection contract](../architecture/scoped-conversation-history.md)
+defines listing, native execution-history retrieval and completed-head reopening.
+Focused proxy/projection tests and the deterministic real stock OpenClaw
+integration pass, including history-based continuation without tool replay.
+The durable/restart requirements remain future work. The scoped proxy retains
+ownership only in its in-memory 30-minute registry; persisted authorization alone
+does not restore a conversation. History is deliberately an execution timeline:
+native user entries can be either prompts or application outputs and must never
+be presented as **You**. Interrupted application actions are not replayed.
+
+Deferred durable-history work remains explicit:
+
+- persist app/grant-to-conversation ownership across proxy restart without
+  exposing private OpenClaw session keys;
+- verify supported native reopening after the Responses cache expires instead of
+  assuming the ownership mapping alone is sufficient;
+- define reauthorization and policy-change rules before any new grant may adopt
+  an earlier conversation; and
+- recover interrupted turns only with a protocol that cannot silently replay a
+  possibly completed application action.
+
+Bookhand now has a bounded same-book/same-connection head association, exact
+descriptor/history matching, duplicate-tab exclusion and explicit New
+conversation behavior. Its focused tests and served production build pass; this
+is deterministic application evidence, not the final owner/model smoke. The
+remaining gate is fresh consent followed by one new completed turn, automatic
+reload restore, contextual follow-up without replay, then explicit New
+conversation and reload remaining blank.
 
 ## Superseded implementation candidate: native OpenClaw delegation
 
