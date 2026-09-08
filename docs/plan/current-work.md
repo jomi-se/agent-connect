@@ -28,8 +28,17 @@ process. [ADR 0015](../decisions/0015-openclaw-plugin-host.md) makes the existin
 scoped mediation a plugin-hosted feature of stock OpenClaw. The
 [implementation plan](openclaw-plugin-host.md) tracks packaging, namespace/SDK,
 safe personal-config coexistence, real-package tests and review. No live cutover
-or push is authorized. The standalone composition below remains the verified
-baseline until the plugin passes its gates.
+or push is authorized. The installable package, dual-layout SDK, safe setup and
+real packed-stock composition gates now pass with deterministic inference. Root
+review and owner-approved live cutover remain; the standalone composition below
+is retained only as the rollback baseline.
+
+Setup preserves personal agents, channels, credentials, tools, memory, installed
+plugins and hooks. Owner-installed host extensions remain inside the trusted
+user-owned OpenClaw boundary: Agent Connect neither audits nor sandboxes the host
+from itself. The enforced boundary is the hostile calling application through
+Origin/PKCE grants, fixed application tools, server-owned routing, private
+sessions and the exact restricted offered-agent recipe.
 
 ## Verified baseline: stock OpenClaw scoped proxy
 

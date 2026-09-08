@@ -11,6 +11,13 @@ The package provides:
 - JSON Schema validation before browser tool execution;
 - Correlated tool results returned to the same agent turn.
 
+For the stock OpenClaw plugin, pass the path-bound provider URL
+`https://<gateway-host>/agent-connect` to `discoverOpenClawProvider`. The SDK
+uses RFC well-known discovery for that issuer and returns the namespaced
+`/agent-connect/v1/responses` resource. Origin-only provider URLs remain
+supported for the standalone rollback deployment; metadata and token bindings
+from the two layouts cannot be mixed.
+
 Communication with the gateway uses the standard Open Responses protocol profile. Harness orchestrators like Omnigent remain internal backends behind the user's Agent Connect gateway and are never exposed directly to the browser.
 
 ```ts
