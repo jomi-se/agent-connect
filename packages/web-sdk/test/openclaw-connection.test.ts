@@ -262,7 +262,8 @@ describe("OpenClaw delegated OAuth connection", () => {
       Response.json(tokenResponse("access-two", "refresh-two")),
     );
     const saveConnection = vi.fn(
-      (value: OpenClawConnection, _expected: OpenClawConnection) => {
+      (value: OpenClawConnection, expected: OpenClawConnection) => {
+        expect(expected).toBe(stored);
         stored = value;
         return true;
       },

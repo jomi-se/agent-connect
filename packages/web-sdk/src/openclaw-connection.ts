@@ -1,4 +1,5 @@
 import type { ApplicationTool, JsonObject } from "./types.js";
+import { createToolValidator } from "./tool-schema.js";
 
 const AUTHORIZATION_PATH = "/agent-connect/oauth/authorize";
 const TOKEN_PATH = "/agent-connect/oauth/token";
@@ -29,6 +30,7 @@ const SCOPE = "responses";
 const AUTHORIZATION_DETAIL_TYPE = "agent_connect";
 const DEFAULT_MODEL = "openclaw/default";
 const MAX_JSON_BYTES = 64 * 1024;
+const MAX_SAVED_CONNECTION_BYTES = 256 * 1024;
 const MAX_STRING_LENGTH = 8 * 1024;
 const MAX_EXPIRY_SECONDS = 10 * 365 * 24 * 60 * 60;
 const DEFAULT_REFRESH_BEFORE_MS = 60_000;
@@ -37,6 +39,7 @@ export type OpenClawConnectionExperience = "tailscale" | "https";
 
 export type OpenClawConnectionErrorCode =
   | "invalid_input"
+  | "invalid_response"
   | "transport_error"
   | "discovery_failed"
   | "authorization_denied"
@@ -56,9 +59,16 @@ export class OpenClawConnectionError extends Error {
   constructor(
     code: OpenClawConnectionErrorCode,
     message: string,
-    options: { readonly status?: number; readonly oauthError?: string } = {},
+    options: {
+      readonly status?: number;
+      readonly oauthError?: string;
+      readonly cause?: unknown;
+    } = {},
   ) {
-    super(message);
+    super(
+      message,
+      options.cause === undefined ? undefined : { cause: options.cause },
+    );
     this.name = "OpenClawConnectionError";
     this.code = code;
     this.status = options.status;
@@ -142,6 +152,11 @@ export interface OpenClawConnection {
   /** Exact application-tool snapshot approved with this connection. */
   readonly applicationTools: readonly OpenClawApplicationTool[];
   readonly applicationToolsHash: string;
+}
+
+export interface ParseOpenClawConnectionOptions {
+  readonly clientId: string;
+  readonly now?: number;
 }
 
 export interface OpenClawApplicationTool {
@@ -553,6 +568,79 @@ export function parseOpenClawAuthorizationTransaction(
 }
 
 /**
+ * Parse and validate a caller-stored delegated connection. This checks the
+ * exact record shape, supported endpoint layout and approved tool hash without
+ * contacting the gateway. An expired access token remains restorable while its
+ * refresh authority is current.
+ */
+export async function parseOpenClawConnection(
+  serialized: string,
+  options: ParseOpenClawConnectionOptions,
+): Promise<OpenClawConnection> {
+  if (
+    !options ||
+    typeof options !== "object" ||
+    typeof options.clientId !== "string" ||
+    typeof serialized !== "string" ||
+    new TextEncoder().encode(serialized).byteLength > MAX_SAVED_CONNECTION_BYTES
+  ) {
+    throw invalidInput("Invalid saved OpenClaw connection");
+  }
+  const now = options.now ?? Date.now();
+  if (!Number.isFinite(now)) {
+    throw invalidInput("OpenClaw connection validation time is invalid");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    throw invalidInput("Invalid saved OpenClaw connection");
+  }
+  const connection = validateSavedConnection(parsed, options.clientId);
+  if (Date.parse(connection.refreshTokenExpiresAt) <= now) {
+    throw new OpenClawConnectionError(
+      "connection_expired",
+      "Saved OpenClaw authorization expired; authorize it again",
+    );
+  }
+  if (
+    (await sha256Base64Url(canonicalJson(connection.applicationTools))) !==
+    connection.applicationToolsHash
+  ) {
+    throw invalidInput(
+      "Saved OpenClaw application tools did not match approval",
+    );
+  }
+  return connection;
+}
+
+export function serializeOpenClawConnection(
+  connection: OpenClawConnection,
+): string {
+  const serialized = JSON.stringify(validateConnection(connection));
+  if (
+    new TextEncoder().encode(serialized).byteLength > MAX_SAVED_CONNECTION_BYTES
+  ) {
+    throw invalidInput("Saved OpenClaw connection is too large");
+  }
+  return serialized;
+}
+
+export function getOpenClawConnectionProviderUrl(
+  connection: OpenClawConnection,
+): string {
+  const validated = validateConnection(connection);
+  const origin = validated.providerOrigin;
+  return validated.endpoint === `${origin}${STOCK_PLUGIN_LAYOUT.resourcePath}`
+    ? `${origin}${STOCK_PLUGIN_LAYOUT.issuerPath}`
+    : origin;
+}
+
+export function normalizeOpenClawProviderUrl(value: string): string {
+  return canonicalProviderUrl(value).issuer;
+}
+
+/**
  * Create a single-flight, proactive-refresh bearer getter for
  * createAiSdkOpenResponsesModel. A failed or ambiguously completed refresh is
  * never replayed: the application must authorize again, retaining any draft.
@@ -778,6 +866,66 @@ function validateConnection(value: OpenClawConnection): OpenClawConnection {
     throw invalidInput("Invalid OpenClaw connection");
   }
   return value;
+}
+
+function validateSavedConnection(
+  value: unknown,
+  expectedClientId: string,
+): OpenClawConnection {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw invalidInput("Invalid saved OpenClaw connection");
+  }
+  const record = value as Record<string, unknown>;
+  const keys = [
+    "version",
+    "providerOrigin",
+    "endpoint",
+    "clientId",
+    "accessToken",
+    "refreshToken",
+    "expiresAt",
+    "refreshTokenExpiresAt",
+    "model",
+    "applicationTools",
+    "applicationToolsHash",
+  ];
+  if (
+    record.version !== 1 ||
+    Object.keys(record).length !== keys.length ||
+    Object.keys(record).some((key) => !keys.includes(key)) ||
+    typeof record.providerOrigin !== "string" ||
+    typeof record.endpoint !== "string" ||
+    typeof record.clientId !== "string"
+  ) {
+    throw invalidInput("Invalid saved OpenClaw connection");
+  }
+  const connection = validateConnection(
+    record as unknown as OpenClawConnection,
+  );
+  if (connection.clientId !== canonicalHttpsOrigin(expectedClientId)) {
+    throw invalidInput(
+      "Saved OpenClaw connection belongs to another application",
+    );
+  }
+  const applicationTools = cloneApplicationTools(connection.applicationTools);
+  try {
+    for (const tool of applicationTools) createToolValidator(tool.inputSchema);
+  } catch {
+    throw invalidInput("Invalid saved OpenClaw application tool schema");
+  }
+  return deepFreeze({
+    version: 1,
+    providerOrigin: connection.providerOrigin,
+    endpoint: connection.endpoint,
+    clientId: connection.clientId,
+    accessToken: connection.accessToken,
+    refreshToken: connection.refreshToken,
+    expiresAt: connection.expiresAt,
+    refreshTokenExpiresAt: connection.refreshTokenExpiresAt,
+    model: DEFAULT_MODEL,
+    applicationTools,
+    applicationToolsHash: connection.applicationToolsHash,
+  });
 }
 
 function validateCallback(
