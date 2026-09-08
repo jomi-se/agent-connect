@@ -57,9 +57,10 @@ writeFileSync(
 );
 writeFileSync(
   join(consumerDir, "check.mjs"),
-  `import { defineTool, parseRuntimeCard, createWebMcpToolSnapshot, AgentSession, createAgentChat, exportAgentChatMarkdown } from "@open-agent-connect/web";
+  `import { defineTool, parseRuntimeCard, createWebMcpToolSnapshot, AgentSession, createAgentChat, exportAgentChatMarkdown, createOpenClawConversationClient, getOpenClawConnectionProviderUrl, normalizeOpenClawProviderUrl, parseOpenClawConnection, serializeOpenClawConnection } from "@open-agent-connect/web";
 
 if (typeof createWebMcpToolSnapshot !== "function") throw new Error("Missing WebMCP export");
+if (normalizeOpenClawProviderUrl("https://gateway.example/agent-connect") !== "https://gateway.example/agent-connect") throw new Error("Missing plugin provider layout");
 try {
   await createWebMcpToolSnapshot();
   throw new Error("Node should not have native WebMCP");
@@ -116,6 +117,36 @@ if (requests[1].continuationToken !== "opaque-checkpoint" ||
 }
 unsubscribe();
 await chat.dispose();
+const applicationTools = [];
+const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("[]"));
+let binary = "";
+for (const byte of new Uint8Array(digest)) binary += String.fromCharCode(byte);
+const applicationToolsHash = btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+const saved = {
+  version: 1,
+  providerOrigin: "https://gateway.example",
+  endpoint: "https://gateway.example/agent-connect/v1/responses",
+  clientId: "https://app.example",
+  accessToken: "access",
+  refreshToken: "refresh",
+  expiresAt: "2099-01-01T00:00:00.000Z",
+  refreshTokenExpiresAt: "2099-02-01T00:00:00.000Z",
+  model: "openclaw/default",
+  applicationTools,
+  applicationToolsHash,
+};
+const restored = await parseOpenClawConnection(JSON.stringify(saved), { clientId: saved.clientId, now: 0 });
+if (getOpenClawConnectionProviderUrl(restored) !== "https://gateway.example/agent-connect" || JSON.parse(serializeOpenClawConnection(restored)).endpoint !== saved.endpoint) throw new Error("Packed saved connection helpers failed");
+const historyRequests = [];
+const conversations = createOpenClawConversationClient({
+  connection: restored,
+  getAccessToken: async () => "rotated-access",
+  fetch: async (input, init) => {
+    historyRequests.push({ url: String(input), authorization: new Headers(init.headers).get("authorization") });
+    return Response.json({ conversations: [] });
+  },
+});
+if ((await conversations.list()).length !== 0 || historyRequests[0].url !== "https://gateway.example/agent-connect/v1/conversations" || historyRequests[0].authorization !== "Bearer rotated-access") throw new Error("Packed conversation client failed");
 process.stdout.write("external-consumer-ok\\n");
 `,
 );

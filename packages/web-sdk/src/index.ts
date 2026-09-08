@@ -20,8 +20,12 @@ export {
   createOpenClawAccessTokenGetter,
   discoverOpenClawProvider,
   parseOpenClawAuthorizationTransaction,
+  parseOpenClawConnection,
   refreshOpenClawConnection,
   revokeOpenClawConnection,
+  getOpenClawConnectionProviderUrl,
+  normalizeOpenClawProviderUrl,
+  serializeOpenClawConnection,
   serializeOpenClawAuthorizationTransaction,
 } from "./openclaw-connection.js";
 export type {
@@ -36,9 +40,23 @@ export type {
   OpenClawConnectionErrorCode,
   OpenClawConnectionExperience,
   OpenClawProvider,
+  ParseOpenClawConnectionOptions,
   RefreshOpenClawConnectionOptions,
   RevokeOpenClawConnectionOptions,
 } from "./openclaw-connection.js";
+export {
+  OpenClawConversationUnavailableError,
+  createOpenClawConversationClient,
+} from "./openclaw-conversations.js";
+export type {
+  CreateOpenClawConversationClientOptions,
+  OpenClawConversationClient,
+  OpenClawConversationDescriptor,
+  OpenClawConversationRequestOptions,
+  OpenClawConversationUnavailableCode,
+  OpenClawExecutionHistory,
+  OpenClawExecutionHistoryEntry,
+} from "./openclaw-conversations.js";
 export { AgentConnectError, AgentSession } from "./agent-session.js";
 export { connectAgent } from "./agent-connection.js";
 export { createAgentChat, exportAgentChatMarkdown } from "./agent-chat.js";

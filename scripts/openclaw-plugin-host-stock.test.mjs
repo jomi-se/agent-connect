@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   beginOpenClawAuthorization,
   completeOpenClawAuthorization,
+  createOpenClawConversationClient,
   discoverOpenClawProvider,
   refreshOpenClawConnection,
   revokeOpenClawConnection,
@@ -259,29 +260,15 @@ test(
           stream: true,
         }),
       );
-      const conversations = await fetch(
-        `${runtime.baseUrl}/agent-connect/v1/conversations`,
-        {
-          headers: {
-            origin: appOrigin,
-            authorization: `Bearer ${refreshed.accessToken}`,
-          },
-        },
-      );
-      assert.equal(conversations.status, 200);
-      const listed = await conversations.json();
-      assert.equal(listed.conversations.length, 1);
-      const history = await fetch(
-        `${runtime.baseUrl}/agent-connect/v1/conversations/${listed.conversations[0].conversationId}/history`,
-        {
-          headers: {
-            origin: appOrigin,
-            authorization: `Bearer ${refreshed.accessToken}`,
-          },
-        },
-      );
-      assert.equal(history.status, 200);
-      assert.match(JSON.stringify(await history.json()), /Follow-up/);
+      const conversations = createOpenClawConversationClient({
+        connection: refreshed,
+        getAccessToken: async () => refreshed.accessToken,
+        fetch: appSdkFetch(runtime),
+      });
+      const listed = await conversations.list();
+      assert.equal(listed.length, 1);
+      const history = await conversations.history(listed[0].conversationId);
+      assert.match(JSON.stringify(history), /Follow-up/);
 
       const hangingResponse = await appPost(runtime, refreshed.accessToken, {
         model: "openclaw/default",
@@ -484,28 +471,15 @@ for (const authCase of [
         );
         assert.equal(completed.status, "completed");
 
-        const conversations = await fetch(
-          `${runtime.baseUrl}/agent-connect/v1/conversations`,
-          {
-            headers: {
-              origin: appOrigin,
-              authorization: `Bearer ${credential.accessToken}`,
-            },
-          },
-        );
-        const listed = await conversations.json();
-        const history = await fetch(
-          `${runtime.baseUrl}/agent-connect/v1/conversations/${listed.conversations[0].conversationId}/history`,
-          {
-            headers: {
-              origin: appOrigin,
-              authorization: `Bearer ${credential.accessToken}`,
-            },
-          },
-        );
-        assert.equal(history.status, 200);
+        const conversations = createOpenClawConversationClient({
+          connection: credential,
+          getAccessToken: async () => credential.accessToken,
+          fetch: appSdkFetch(runtime),
+        });
+        const listed = await conversations.list();
+        const history = await conversations.history(listed[0].conversationId);
         assert.match(
-          JSON.stringify(await history.json()),
+          JSON.stringify(history),
           new RegExp(`Explicit ${authCase.mode} upstream completed`),
         );
       } finally {
@@ -636,6 +610,15 @@ function sdkFetch(runtime) {
     const url = new URL(String(input));
     assert.equal(url.origin, publicOrigin);
     return fetch(`${runtime.baseUrl}${url.pathname}${url.search}`, init);
+  };
+}
+
+function appSdkFetch(runtime) {
+  const bridgeFetch = sdkFetch(runtime);
+  return (input, init) => {
+    const headers = new Headers(init?.headers);
+    headers.set("origin", appOrigin);
+    return bridgeFetch(input, { ...init, headers });
   };
 }
 

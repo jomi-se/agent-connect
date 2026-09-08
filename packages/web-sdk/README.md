@@ -18,6 +18,58 @@ uses RFC well-known discovery for that issuer and returns the namespaced
 supported for the standalone rollback deployment; metadata and token bindings
 from the two layouts cannot be mixed.
 
+## Saved connections and scoped history
+
+Applications may store the delegated `OpenClawConnection` inside their own
+versioned, origin-local envelope. Restore the inner record through the SDK so
+the provider layout, application identity, CSP-safe tool schemas and approved
+tool hash are checked consistently:
+
+```ts
+import {
+  createOpenClawConversationClient,
+  getOpenClawConnectionProviderUrl,
+  parseOpenClawConnection,
+  serializeOpenClawConnection,
+} from "@open-agent-connect/web";
+
+const connection = await parseOpenClawConnection(savedConnectionJson, {
+  clientId: location.origin,
+});
+const conversations = createOpenClawConversationClient({
+  connection,
+  // Resolve on every request; the application still owns refresh locking/CAS.
+  getAccessToken,
+});
+const recent = await conversations.list({ signal });
+const history = await conversations.history(recent[0].conversationId, {
+  signal,
+});
+
+localStorage.setItem(
+  "my-app.connection",
+  serializeOpenClawConnection(connection),
+);
+showProviderAddress(getOpenClawConnectionProviderUrl(connection));
+```
+
+Parsing is local and immutable; it performs no discovery, refresh or storage.
+An expired access token is accepted while the refresh authority remains live,
+so the caller's existing refresh path can rotate it. The SDK does not extend an
+application's consent lifetime or prove that a stored grant has not been
+revoked. Keep any stricter app-owned absolute expiry and lifecycle checks.
+
+`normalizeOpenClawProviderUrl` accepts only the standalone origin and stock
+plugin `/agent-connect` issuer forms. On an OAuth callback, rediscover using the
+saved transaction's verified `issuer`, not its origin-only `providerOrigin`.
+
+Conversation history is a bounded execution projection, not a faithful human
+chat transcript. The client derives the scoped history URLs from the validated
+connection, requests a fresh bearer through `getAccessToken`, never retries, and
+never stores credentials. A strict native missing/expired or changed outcome is
+reported as `OpenClawConversationUnavailableError`; authentication, transport,
+abort and invalid-response failures remain distinct.
+
 Communication with the gateway uses the standard Open Responses protocol profile. Harness orchestrators like Omnigent remain internal backends behind the user's Agent Connect gateway and are never exposed directly to the browser.
 
 ```ts

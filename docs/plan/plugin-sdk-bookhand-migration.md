@@ -31,7 +31,7 @@ provider framework or change Responses generation behavior in this slice.
 - Add `createOpenClawConversationClient({connection,getAccessToken,fetch?})` with
   `list({signal?})` and `history(conversationId,{signal?})`. Return typed readonly
   descriptors/execution-history, using current gateway wire semantics (timestamps
-  in seconds, explicit input/assistant entries, bounded/truncated projection).
+  in epoch milliseconds, explicit input/assistant entries, bounded/truncated projection).
   Internal endpoint selection comes from validated connection, never caller URL.
   Validate opaque IDs and parse bounded JSON in the SDK. Use credentials:omit,
   redirect:error, cache:no-store. Preserve abort/error cause; no automatic replay.
@@ -78,8 +78,12 @@ leave branch and deployments unchanged until owner-approved rollout.
 
 - [x] Auth/checker update `1b8b67a` delivered; real installed token/password/none
       tests reported passing by Sol. Root inspecting shared validation and auth use.
-- [ ] SDK helpers implemented and reviewed.
-- [ ] Verified SDK artifact delivered to CDX2.
+- [x] SDK helpers implemented and root source review completed; focused and full
+      web SDK tests, typecheck, build, formatting, packed-consumer smoke and real
+      installed-stock-plugin history composition pass.
+- [x] Candidate SDK artifact delivered for CDX2 install at
+      `dist/open-agent-connect-web-0.0.3.tgz`, SHA-256
+      `ccd489d55189df32654c3e3bf2dc667ee65545d4d0d453f52eff7cbbfb128480`.
 - [ ] Bookhand removes provider-route/record duplication.
 - [ ] Focused installed-SDK and production CSP evidence reviewed.
 - [ ] Final handoff; no live-cutover claim.
