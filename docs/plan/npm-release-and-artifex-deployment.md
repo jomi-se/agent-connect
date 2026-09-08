@@ -279,6 +279,8 @@ erasing the old state is intentional and may be irreversible.
 ### Owner publication gate reached
 
 Preparation commits: Agent Connect `2bb6003`; Artifex `e36f4b2`.
+Owner-requested corrections: initial plugin version `0.0.1` in Agent Connect
+`3b922b2`; default Artifex bootstrap installation and matching pin in `2f852f3`.
 
 Final local evidence: `npm run verify`, `npm run analyze`, the Canvas Playwright
 suite, release-logic tests, exact-tarball SDK/plugin smokes, dynamic plugin
