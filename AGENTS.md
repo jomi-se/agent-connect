@@ -4,12 +4,11 @@
 
 Agent Connect is an application-to-user-owned-agent bridge. Keep the application-facing API agent- and harness-neutral. Codex, Omnigent, ACP adapters, and transport bridges belong behind internal adapter boundaries.
 
-The public task/tool API is provider-neutral. On the OpenClaw replacement branch,
-use OpenClaw's public Responses API behind the application authorization boundary
-(ADR 0012). Remove duplicated runtime/event translation rather than preserve a
-second permanent backend. Native harness compatibility must be demonstrated,
-not inferred from independent features in documentation. Keep provider/plugin
-types out of the default application API.
+The supported provider path is the stock OpenClaw scoped proxy (ADR 0014):
+application OAuth and bounded Open Responses in front of a privately operated
+OpenClaw gateway. Keep provider/plugin types out of the application API. Older
+runtime-card, replacement-engine and native-patch artifacts are historical
+compatibility/experiment paths, not prerequisites for the scoped proxy.
 
 ## Terminology
 
@@ -21,12 +20,13 @@ until a dedicated migration, including `ConnectorAuth`, `connectorPublicKey`,
 
 ## Current scope
 
-The working main checkout uses Omnigent and remains the live personal installation.
-Replacement work is isolated on work/openclaw-gateway; see
-docs/plan/openclaw-replacement.md. Keep one active task per application session,
-independent parallel application sessions, a fixed approved tool snapshot and one
-operator-selected downstream agent. Browser APIs use opaque Agent Connect sessions,
-never private OpenClaw session keys. Do not change the personal runtime during tests.
+Keep independent app conversations, one active request per conversation, a fixed
+approved tool snapshot and an operator-selected restricted agent profile. Browser
+APIs never accept private OpenClaw session keys or operator credentials. Recent
+conversation ownership is process-local and expires; execution history is not a
+faithful human-chat transcript. See docs/architecture/scoped-conversation-history.md
+and docs/plan/current-work.md. Do not change personal services or credentials
+during tests, and never replay uncertain application effects automatically.
 
 Do not add generalized multi-agent orchestration, arbitrary MCP features, Android automation, or a second proprietary session protocol without recording a decision under `docs/decisions/`.
 
@@ -44,7 +44,9 @@ npm run verify
 npm run analyze
 ```
 
-`npm run verify` includes real-OpenClaw compatibility and process-crash tests.
+`npm run verify` includes deterministic real-stock-OpenClaw compatibility tests.
+The historical replacement-engine process-crash suite is a separate command;
+it is not evidence of restart recovery for the process-local scoped proxy.
 Use Node 24 LTS >=24.15 and <25 and the pin in `config/openclaw-test-compat.json`
 on `PATH` or at `OPENCLAW_TEST_BIN`. See `deploy/openclaw-gateway/README.md`.
 This is intentional: provider

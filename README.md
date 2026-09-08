@@ -3,10 +3,12 @@
 Bring your AI subscription to any web app.
 
 Build AI features using the user's existing AI subscription instead of requiring
-an API key or a second AI subscription from the application. On this branch a
+an API key or a second AI subscription from the application. A
 small trusted authorization proxy privately operates stock OpenClaw's native
 Responses endpoint. OpenClaw owns execution, context, tools, sandboxing and
-subscription credentials; live browser acceptance remains open.
+subscription credentials. The owner accepted the Bookhand integration as a
+prototype; known search/navigation defects and finer-grained smoke evidence are
+tracked in the [closeout ledger](docs/plan/stock-openclaw-vertical-closeout.md).
 
 ## Built with Codex and GPT-5.6
 

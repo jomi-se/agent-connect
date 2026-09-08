@@ -2,12 +2,13 @@
 
 Updated: 2026-09-08
 
-This inventory describes the scoped proxy on `work/openclaw-scoped-proxy`.
+This inventory describes the supported stock OpenClaw scoped proxy.
 [ADR 0014](decisions/0014-stock-openclaw-scoped-proxy.md) is authoritative.
 The parent native-patch and earlier replacement engines remain preserved
 experiments, not prerequisites or evidence for this path. A private scoped-proxy
-deployment and earlier live composition evidence exist, but the current
-same-book reload/history acceptance is not yet complete.
+deployment and live composition evidence exist. The owner accepted the prototype
+for main with known search/navigation defects; the [closeout ledger](plan/stock-openclaw-vertical-closeout.md)
+retains the unconfirmed fine-grained phone checks rather than claiming all passed.
 
 ## Application and SDK
 

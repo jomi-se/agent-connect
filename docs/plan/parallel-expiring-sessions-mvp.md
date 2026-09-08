@@ -1,6 +1,9 @@
 # Parallel expiring application sessions MVP
 
-Status: implemented, validated, and committed on 2026-08-31
+Status: historical Omnigent-era implementation, validated on 2026-08-31.
+Superseded for the supported stock scoped proxy by [ADR 0014](../decisions/0014-stock-openclaw-scoped-proxy.md).
+The durable retirement/runner teardown and session-console claims below are not
+the current proxy's process-local conversation contract.
 
 ## User-visible goal
 

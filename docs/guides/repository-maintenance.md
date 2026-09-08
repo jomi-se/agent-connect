@@ -39,13 +39,15 @@ commit-preserving fast-forward merging. Squash and merge-commit methods are disa
 The CI runner is disposable Ubuntu 24.04 x64 with read-only repository access,
 no operator credentials and no self-hosted runner. It runs:
 
-- format, typecheck, unit tests, ACP policy, build;
-- real pinned Omnigent with a deterministic ACP fixture (no model usage);
-- process-crash recovery and installed npm-package consumer;
+- format, typecheck, unit tests and build;
+- real pinned stock OpenClaw with deterministic inference (no model usage);
+- installed npm-package consumer and AI SDK/provider composition;
 - native WebMCP using the explicit Chrome-for-Testing pin, and Canvas;
 - lint and dependency-boundary checks.
 
-Native API or provider installation failures fail the check, not skip it. Python
+The legacy replacement-engine crash suite is a separate command, not a current
+scoped-proxy restart-recovery guarantee. Native API or provider installation
+failures fail the check, not skip it. Python
 transitive dependencies remain ranged; compatibility pins are not a complete
 reproducible build lock. Lint's existing advisory warnings remain advisory.
 

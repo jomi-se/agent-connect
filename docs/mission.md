@@ -16,7 +16,7 @@ must not require installing an MCP server, copying provider conversation IDs,
 or opening a terminal.
 
 Agent Connect is the application-delegation boundary, not another agent
-platform. On `work/openclaw-scoped-proxy`, the implemented reference path uses a
+platform. The supported reference path uses a
 trusted authorization proxy in front of stock OpenClaw's Responses endpoint.
 Agent Connect retains consent, application authority, browser integration and a
 bounded grant-to-conversation map; stock OpenClaw owns execution, native events,
@@ -104,10 +104,11 @@ evidence, not proof that the selected subscription-backed runtime usefully
 consumes an actual browser tool result. Final acceptance remains governed by the
 [vertical-slice closeout](plan/stock-openclaw-vertical-closeout.md).
 
-José selected the built-in OpenClaw subscription loop. The selected runtime and
-an earlier browser/tool composition have been exercised, but the current
-Bookhand same-book reload/history/follow-up smoke remains open. Those earlier
-runs do not satisfy the new restore gate.
+José selected the built-in OpenClaw subscription loop and accepted the Bookhand
+connection/conversation-follow-up prototype for main on 2026-09-08. Known search,
+navigation and timeout-reporting defects remain open. Detailed phone checklist
+items not independently reported are not marked passed; the closeout ledger
+distinguishes this owner acceptance from full reliability certification.
 Published OpenClaw 2026.9.1's built-in loop supports the tested client-tool
 round trip; the separately packaged native Codex adapter drops client tools.
 Do not call built-in-loop evidence native Codex evidence. The built-in loop

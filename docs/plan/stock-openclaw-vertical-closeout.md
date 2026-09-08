@@ -35,8 +35,10 @@ deferred.
    ingress/authentication.
 5. Hand off the owner-run phone smoke and record each result in the acceptance
    ledger below. Only owner evidence can close the live model/UI gates.
-6. Commit the clean scoped changes. Do not push, merge, publish, retire Omnigent,
-   rewrite history, or alter Bookhand in this worktree.
+6. Commit the clean scoped changes. The owner's later decision below authorizes
+   a local fast-forward merge after the main CI checks and documentation review.
+   Coordinate Bookhand with its owning agent. Do not push, publish, retire live
+   services or rewrite shared history as part of this local merge.
 
 ## Review and verification ledger
 
@@ -76,6 +78,30 @@ so create a new conversation after restart.
 
 ## Owner acceptance ledger
 
+### Owner decision: accepted prototype for main, 2026-09-08
+
+José reported that the connection/conversation-follow-up flow works and explicitly
+authorized cleanup and local merge to main, accepting remaining rough edges.
+This is product acceptance of the bounded vertical slice, not a claim that every
+individual phone check below was separately observed. Unconfirmed checks remain
+recorded for follow-up rather than being silently marked passed. No push,
+publication, live service retirement or shared-history rewrite is implied.
+
+Known open defects from this same live session:
+
+- Bookhand search indexing stopped with an unstable anchor in Section 2 of the
+  deliberately difficult EPUB. The generic tool message incorrectly implied
+  indexing was still preparing.
+- Navigation repeatedly supplied mutually exclusive fields despite improved
+  descriptions. The installed OpenClaw outbound conversion removes the schema's
+  top-level `oneOf`; descriptions alone have not demonstrated a fix.
+- That run hit the configured 90-second timeout, while Bookhand displayed an
+  unhelpful unknown-error diagnosis. No failed navigation was replayed.
+
+These remain Bookhand/provider follow-ups, not evidence that search, navigation,
+or error reporting passed. The user accepted proceeding with the integration
+despite them.
+
 | Gate                   | Required evidence                                                      | Status        |
 | ---------------------- | ---------------------------------------------------------------------- | ------------- |
 | Fresh consent          | Current origin and revised tool descriptions were shown and accepted   | Pending owner |
@@ -86,8 +112,9 @@ so create a new conversation after restart.
 | Minimal browser action | One useful read-only requested action was observed; no replay occurred | Pending owner |
 
 Passing automated tests, health checks, or a historical live chat do not satisfy
-these owner-observed gates. Omnigent retirement and branch merge remain separate
-decisions after the ledger is complete and final review accepts the evidence.
+these owner-observed gates. The owner decision above authorizes the local merge
+despite incomplete fine-grained smoke evidence. Live Omnigent retirement and
+external publication remain separate actions.
 
 ## Progress
 

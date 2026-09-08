@@ -21,9 +21,9 @@ This documents direction, not a new release gate or live cutover. Keep existing
 implementation evidence distinct from proposed standard behavior; do not let
 the prototype's private routes/headers dictate the public profile.
 
-## Active implementation: stock OpenClaw scoped proxy
+## Supported implementation: stock OpenClaw scoped proxy
 
-On `work/openclaw-scoped-proxy`, the accepted implementation is the bounded
+The accepted implementation is the bounded
 authorization proxy in [ADR 0014](../decisions/0014-stock-openclaw-scoped-proxy.md)
 and its [execution plan](openclaw-scoped-proxy.md). The final proof, packaging
 and owner acceptance gates are tracked in the
@@ -39,10 +39,10 @@ revocation composition. Static OpenClaw/policy files are fingerprinted and any
 change fails closed until supervised restart and fresh consent. No deployment,
 personal configuration, subscription call, Tailscale change or Bookhand change
 is implied by deterministic verification. A private scoped proxy and earlier
-subscription/browser tool flow have been exercised separately; those older runs
-do not accept the current history build. The next external milestone is the
-owner-run Bookhand same-book reload/history/follow-up smoke in the
-[vertical-slice closeout](stock-openclaw-vertical-closeout.md).
+subscription/browser tool flow have been exercised separately. Owner acceptance
+and the unconfirmed detailed phone checks are distinguished in the
+[vertical-slice closeout](stock-openclaw-vertical-closeout.md); historical runs do
+not by themselves prove the current history behavior.
 
 The parent native application-principal patch and earlier replacement engine are
 retained as experiment/rollback artifacts. They are not mandatory dependencies
@@ -75,10 +75,23 @@ Deferred durable-history work remains explicit:
 Bookhand now has a bounded same-book/same-connection head association, exact
 descriptor/history matching, duplicate-tab exclusion and explicit New
 conversation behavior. Its focused tests and served production build pass; this
-is deterministic application evidence, not the final owner/model smoke. The
-remaining gate is fresh consent followed by one new completed turn, automatic
-reload restore, contextual follow-up without replay, then explicit New
-conversation and reload remaining blank.
+is deterministic application evidence. On 2026-09-08 José confirmed that the
+connection/conversation-follow-up flow works and authorized clean local merge
+to main despite known rough edges. The [closeout ledger](stock-openclaw-vertical-closeout.md)
+records this acceptance without claiming every phone checklist item passed.
+
+### Open live Bookhand/provider defects
+
+- Search indexing failed on an unstable Section 2 anchor in the difficult EPUB;
+  distinguish failed/not-started/progress states in tool and Tutor feedback.
+- An unavailable search should be explained to the user, not trigger an
+  unsolicited source-scanning/repair attempt for a simple search request.
+- Navigation still emits mutually exclusive fields despite explicit prose;
+  investigate the provider schema transformation, which removes `oneOf`.
+- Surface the confirmed runtime timeout instead of an unknown-error message.
+
+These are follow-up defects, not reasons to repeat the architectural migration
+or assertions that the affected tools now work. No action replay is permitted.
 
 ## Superseded implementation candidate: native OpenClaw delegation
 
