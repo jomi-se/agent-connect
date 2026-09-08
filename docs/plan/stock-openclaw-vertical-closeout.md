@@ -131,5 +131,13 @@ external publication remain separate actions.
   loopback health returned `200`, protected-resource metadata returned `200`,
   and the unauthenticated conversations route returned `401`, not `404`. No model
   request, credential change, OpenClaw restart or ingress change was performed.
-- Owner acceptance ledger remains pending. Merge, push, publish and Omnigent
-  retirement remain separate decisions.
+- 2026-09-08: owner accepted the prototype and authorized local mainline merge;
+  individual phone checks above remain unconfirmed. Push, publication and live
+  service retirement remain separate decisions.
+- Mainline verification passed the root verification stages (including pinned
+  stock OpenClaw), packaged SDK consumer, all 14 WebMCP cases, Canvas browser
+  tests, lint and dependency boundaries. The initial full run exposed a Zod
+  dynamic-code probe under strict CSP; the corrected SDK uses its public
+  `jitless` configuration before dependency initialization. Focused SDK tests,
+  typecheck, package consumption and the complete WebMCP suite passed afterward.
+  Local verification used ARM Chromium at the pinned version, not hosted x86 CI.
