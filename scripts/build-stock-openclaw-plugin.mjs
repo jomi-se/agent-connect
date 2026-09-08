@@ -25,4 +25,5 @@ await build({
   ],
 });
 
-process.stdout.write(`Built ${resolve(outputDirectory, "index.mjs")}\n`);
+// Keep stdout machine-readable when npm invokes this build from `npm pack --json`.
+process.stderr.write(`Built ${resolve(outputDirectory, "index.mjs")}\n`);

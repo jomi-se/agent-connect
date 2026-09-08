@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 
 import {
@@ -15,10 +15,18 @@ import {
 } from "../packages/web-sdk/dist/index.js";
 import { startOpenClawTestRuntime } from "./openclaw-test-runtime.mjs";
 
-const artifact = new URL(
-  "../dist/agent-connect-openclaw-plugin-0.1.0.tgz",
-  import.meta.url,
-).pathname;
+const pluginPackage = JSON.parse(
+  await readFile(
+    new URL("../packages/openclaw-plugin/package.json", import.meta.url),
+    "utf8",
+  ),
+);
+const defaultArtifactName = `${pluginPackage.name
+  .replace(/^@/, "")
+  .replace("/", "-")}-${pluginPackage.version}.tgz`;
+const artifact = process.env.AGENT_CONNECT_PLUGIN_TARBALL
+  ? resolve(process.env.AGENT_CONNECT_PLUGIN_TARBALL)
+  : new URL(`../dist/${defaultArtifactName}`, import.meta.url).pathname;
 const publicOrigin = "https://gateway.example";
 const issuer = `${publicOrigin}/agent-connect`;
 const resource = `${issuer}/v1/responses`;

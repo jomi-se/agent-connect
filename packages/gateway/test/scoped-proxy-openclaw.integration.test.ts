@@ -35,6 +35,7 @@ import { createScopedResponsesProxy } from "../src/scoped-proxy/server.js";
 import {
   createOpenClawRuntimePolicyVerifier,
   readStockOpenClawConfig,
+  readStockOpenClawRpc,
 } from "../src/scoped-proxy/runtime-config.js";
 import { loadStaticOpenClawPolicy } from "../src/scoped-proxy/policy.js";
 
@@ -198,6 +199,15 @@ integration("scoped proxy with the published OpenClaw process", () => {
           grantService: grants,
           ownerAuth,
           policySnapshot: boundPolicy,
+          readHistory: (sessionKey) =>
+            readStockOpenClawRpc(
+              {
+                upstreamBaseUrl: runtime?.baseUrl as string,
+                upstreamToken: runtime?.token as string,
+              },
+              "chat.history",
+              { sessionKey, limit: 200 },
+            ),
         });
         const loopback = await listen(proxy);
         const applicationFetch = mappedFetch(loopback, APP);

@@ -16,31 +16,35 @@ const smokeRoot = join(repoRoot, ".agent-connect", "web-sdk-package-smoke");
 const packagesDir = join(smokeRoot, "packages");
 const consumerDir = join(smokeRoot, "consumer");
 const cacheDir = join(smokeRoot, "npm-cache");
+const preparedTarball = process.argv[2] ? resolve(process.argv[2]) : undefined;
 
 rmSync(smokeRoot, { recursive: true, force: true });
 mkdirSync(packagesDir, { recursive: true });
 mkdirSync(consumerDir, { recursive: true });
 
 requireBrowserSafeSources();
-run("npm", ["run", "build", "--workspace", "@open-agent-connect/web"]);
-const packed = run(
-  "npm",
-  [
-    "pack",
-    "--json",
-    "--workspace",
-    "@open-agent-connect/web",
-    "--pack-destination",
-    packagesDir,
-  ],
-  true,
-);
-const packResult = JSON.parse(packed);
-const filename = packResult[0]?.filename;
-if (typeof filename !== "string") {
-  throw new Error("npm pack did not report an SDK tarball");
+let tarball = preparedTarball;
+if (!tarball) {
+  run("npm", ["run", "build", "--workspace", "@open-agent-connect/web"]);
+  const packed = run(
+    "npm",
+    [
+      "pack",
+      "--json",
+      "--workspace",
+      "@open-agent-connect/web",
+      "--pack-destination",
+      packagesDir,
+    ],
+    true,
+  );
+  const packResult = JSON.parse(packed);
+  const filename = packResult[0]?.filename;
+  if (typeof filename !== "string") {
+    throw new Error("npm pack did not report an SDK tarball");
+  }
+  tarball = join(packagesDir, filename);
 }
-const tarball = join(packagesDir, filename);
 
 writeFileSync(
   join(consumerDir, "package.json"),

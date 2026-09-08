@@ -8,13 +8,17 @@ The accepted installation target is now the stock OpenClaw plugin described in
 It runs inside the user's existing OpenClaw gateway; users do not operate the
 standalone proxy below.
 
-Build and pack the reviewed local artifact, then install it through OpenClaw's
-managed npm-pack path. Installation requires explicit host-capability consent:
+Install the reviewed published package through OpenClaw's managed plugin path.
+Installation requires explicit host-capability consent:
 
 ```sh
-npm run pack:stock-openclaw-plugin
-openclaw plugins install npm-pack:/absolute/repository/dist/agent-connect-openclaw-plugin-0.1.0.tgz --force --accept-capabilities
+openclaw plugins install @open-agent-connect/openclaw-plugin@0.1.0 --pin --accept-capabilities
 ```
+
+Contributors can still use `npm run pack:stock-openclaw-plugin` and the
+`npm-pack:/absolute/path.tgz` form for isolated compatibility tests. Operational
+installs must use the published package and must not depend on a repository
+checkout, `npm link`, or a local tarball.
 
 Preview setup first. This changes nothing and reports conflicts or unsupported
 coexistence:
