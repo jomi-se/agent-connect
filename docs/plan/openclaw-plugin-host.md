@@ -1,7 +1,8 @@
 # OpenClaw plugin-host implementation
 
 Date: 2026-09-08. Branch: `work/openclaw-plugin-host`, based on `3cc49ec`.
-Status: implementation authorized; live cutover, publication and push excluded.
+Status: implemented, reviewed and deployed with subsequent owner authorization;
+owner confirmed prompt and conversation reload. No publication, merge or push.
 Decision: [ADR 0015](../decisions/0015-openclaw-plugin-host.md).
 
 ## Outcome and ownership
@@ -202,8 +203,9 @@ Root reviews implementation and test evidence before merge or live rollout.
       history/follow-up, refresh/revoke, native-root coexistence, unsafe-policy
       refusal, token/password/no-auth host modes and disable/re-enable stale-head
       coverage with fake inference.
-- [ ] M5 documentation, root review and owner handoff. Implementation and
-      operator documentation are drafted; root review and handoff remain.
+- [x] M5 documentation, root review and owner handoff. SDK/Bookhand migration
+      and reviewed live deployment completed; owner confirmed prompt/reload.
+      See plugin-sdk-bookhand-migration.md for evidence boundaries.
 
 Current checkpoint: the corrected packed real-stock composition gate passes
 under the required Node 24.15 fixture. Failed iterations exposed and fixed the

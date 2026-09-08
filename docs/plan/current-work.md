@@ -23,20 +23,21 @@ the prototype's private routes/headers dictate the public profile.
 
 ## Active target: installable OpenClaw plugin
 
-Immediate follow-up: [SDK/Bookhand plugin migration](plugin-sdk-bookhand-migration.md)
-removes app-owned endpoint/history/credential-shape duplication after the plugin
-and native token/password/no-auth support were implemented. Live cutover remains
-separate.
+[SDK/Bookhand plugin migration](plugin-sdk-bookhand-migration.md) is complete:
+SDK `e3fa090` and Bookhand `ea3b18e` remove app-owned endpoint/history/credential-
+shape duplication. On 2026-09-08 the owner authorized the live plugin switch and
+then confirmed a successful prompt and conversation reload in Bookhand.
 
 The owner clarified on 2026-09-08 that users must not operate an additional proxy
 process. [ADR 0015](../decisions/0015-openclaw-plugin-host.md) makes the existing
 scoped mediation a plugin-hosted feature of stock OpenClaw. The
 [implementation plan](openclaw-plugin-host.md) tracks packaging, namespace/SDK,
-safe personal-config coexistence, real-package tests and review. No live cutover
-or push is authorized. The installable package, dual-layout SDK, safe setup and
-real packed-stock composition gates now pass with deterministic inference. Root
-review and owner-approved live cutover remain; the standalone composition below
-is retained only as the rollback baseline.
+safe personal-config coexistence, real-package tests and review. The installable
+package, dual-layout SDK, safe setup and real packed-stock composition gates pass
+with deterministic inference. Root review and owner-approved live switch are
+complete; the standalone proxy is stopped and retained only for rollback.
+Changes remain on feature branches: no merge, push or publication performed.
+The owner smoke proves prompt/reload, not a new exhaustive live tool-flow test.
 
 Setup preserves personal agents, channels, credentials, tools, memory, installed
 plugins and hooks. Owner-installed host extensions remain inside the trusted
