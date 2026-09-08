@@ -5,10 +5,13 @@ Implementation direction superseded on 2026-09-06 by the
 retains prior implementation and validation evidence; its separate mediation
 layer is no longer a requirement for the next implementation.
 
-Status: shared implementation committed and checked; José selected OpenClaw's
-built-in subscription loop. Live Bookhand acceptance pending. Work only on work/openclaw-gateway in
-/home/dev/agent-connect-openclaw. Personal /home/dev/agent-connect stays on
-main; no live cutover or push authorized by this plan.
+Status: historical implementation evidence from `work/openclaw-gateway`. The
+supported stock path is now `work/openclaw-scoped-proxy`, with its remaining
+proof and owner acceptance tracked in the
+[vertical-slice closeout](stock-openclaw-vertical-closeout.md). The native patch
+and custom replacement engine described below are preserved experiments, not
+default build/deployment instructions. No push, merge or retirement is
+authorized by this historical plan.
 
 ## Objective and evidence
 

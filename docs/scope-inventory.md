@@ -1,12 +1,13 @@
 # Scope and capability inventory
 
-Updated: 2026-09-07
+Updated: 2026-09-08
 
 This inventory describes the scoped proxy on `work/openclaw-scoped-proxy`.
 [ADR 0014](decisions/0014-stock-openclaw-scoped-proxy.md) is authoritative.
 The parent native-patch and earlier replacement engines remain preserved
-experiments, not prerequisites or evidence for this path. No live deployment or
-subscription/browser acceptance is claimed.
+experiments, not prerequisites or evidence for this path. A private scoped-proxy
+deployment and earlier live composition evidence exist, but the current
+same-book reload/history acceptance is not yet complete.
 
 ## Application and SDK
 
@@ -19,8 +20,10 @@ subscription/browser acceptance is claimed.
 | Execute tools in the application            | Implemented                 | OpenClaw emits native function calls; the existing SDK executes them and returns correlated output     |
 | Refresh without losing a conversation       | Implemented                 | Access-token rotation preserves the grant authorization version                                        |
 | Continue after proxy restart or ambiguity   | Explicitly unavailable      | Process-local mapping is lost and possibly admitted work is never replayed                             |
+| Read recent execution history               | Implemented, process-local  | Same active grant only; bounded stock history projection; inputs do not claim human authorship         |
+| Reopen a completed recent head              | Implemented, process-local  | Explicit returned checkpoint; no automatic adoption or replay; lost on proxy restart                   |
 | Generic exactly-once effects                | Explicit non-goal           | Applications own idempotency and deduplication                                                         |
-| Media, arbitrary history or background jobs | Rejected                    | Version-zero request profile is text-only and bounded                                                  |
+| Media, arbitrary history or background jobs | Rejected                    | Version-zero request profile is text-only; history is a bounded recent execution view                  |
 
 ## Scoped proxy and OpenClaw
 
@@ -54,10 +57,11 @@ only inference. It proves:
   config drift, unapproved streamed functions, expiry, restart and disconnect
   fail at the stated boundaries.
 
-The eventual selected subscription model, real HTTPS ingress, supervisor setup,
-browser UI and Bookhand behavior remain coordinated live acceptance work. No
-model allowance, personal credential, Tailscale change, deployment or Bookhand
-mutation is part of deterministic verification.
+The deterministic suite does not prove subscription inference, real HTTPS
+ingress, supervisor setup or Bookhand behavior. Earlier live deployment and
+browser evidence are separate. The current Bookhand restore/follow-up/New
+conversation sequence remains coordinated owner acceptance; deterministic
+verification never spends model allowance or mutates Bookhand.
 
 ## Security and reliability invariants
 

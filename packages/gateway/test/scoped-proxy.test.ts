@@ -251,7 +251,7 @@ describe("stock OpenClaw scoped Responses proxy", () => {
       clientId: APP,
       resource: RESOURCE,
     });
-    for (const [size, expectedStatus] of [[20 * 1024 * 1024, 413]]) {
+    for (const [size, expectedStatus] of [[20 * 1024 * 1024, 413]] as const) {
       const oversized = await post(baseUrl, refreshed.accessToken, APP, {
         model: "openclaw/default",
         previous_response_id: "resp_1",

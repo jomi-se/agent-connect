@@ -37,7 +37,9 @@ An application can:
 4. send a prompt and consume streamed text and application function calls;
 5. execute application operations locally and return correlated results;
 6. follow up using the latest explicit response checkpoint;
-7. stop local delivery, inspect recoverable state, or revoke its grant.
+7. list recent process-local completed heads, inspect a bounded execution
+   history, and reopen an eligible head; and
+8. stop local delivery or revoke its grant.
 
 Stable call IDs and persistence before publication support application-owned
 idempotency. They do not guarantee exactly-once external side effects. An
@@ -63,6 +65,10 @@ reliability or consent guarantees must be made explicit.
 - Keep a bounded current-checkpoint map independent of OpenClaw's response cache.
   It is intentionally process-local: restart/expiry interrupts continuation,
   and an admitted failure is never automatically replayed.
+- Allow the active grant to list its recent terminal heads and read a bounded
+  projection of stock `chat.history`. Native user entries may be learner prompts
+  or application outputs, so expose them only as inputs, never as **You** or a
+  faithful human-chat transcript.
 - Keep transport ingress, owner authentication, gateway identity, application
   grants and session authority separate. Tailscale Serve may supply private HTTPS
   reachability, but owner consent requires the explicit enrollment-secret-backed
@@ -85,8 +91,10 @@ reliability or consent guarantees must be made explicit.
 The stock scoped proxy is implemented on `work/openclaw-scoped-proxy`. It reuses
 delegated OAuth/PAR/PKCE, rotating refresh, revocation and the public AI SDK
 contract. It constrains requests, selects a dedicated agent/private session,
-streams observed native events, and binds one current response checkpoint to an
-application grant. Parent-branch native-patch and replacement-engine artifacts
+streams observed native events, binds one current response checkpoint to an
+application grant, and exposes recent grant-owned execution history and completed
+head reopening while that process-local mapping remains live. Parent-branch
+native-patch and replacement-engine artifacts
 remain for review but are outside this path's required build/start/test surface.
 
 Real published OpenClaw tests using deterministic inference exercise stock
@@ -94,10 +102,12 @@ deny-all/sandbox enforcement and the complete owner-login -> OAuth -> two-tool -
 refresh -> follow-up -> revoke composition. They are transport and policy
 evidence, not proof that the selected subscription-backed runtime usefully
 consumes an actual browser tool result. Final acceptance remains governed by the
-[scoped proxy plan](plan/openclaw-scoped-proxy.md).
+[vertical-slice closeout](plan/stock-openclaw-vertical-closeout.md).
 
-José selected the built-in OpenClaw subscription loop. The final live
-subscription/browser gate remains open.
+José selected the built-in OpenClaw subscription loop. The selected runtime and
+an earlier browser/tool composition have been exercised, but the current
+Bookhand same-book reload/history/follow-up smoke remains open. Those earlier
+runs do not satisfy the new restore gate.
 Published OpenClaw 2026.9.1's built-in loop supports the tested client-tool
 round trip; the separately packaged native Codex adapter drops client tools.
 Do not call built-in-loop evidence native Codex evidence. The built-in loop
@@ -111,9 +121,11 @@ generation stopping and already-started effects remain separate runtime-specific
 claims. The scoped proxy does not offer restart recovery, usage accounting or an
 owner session console; it reports interruptions without replay.
 
-No live cutover is implied by these source changes. The historical private
-Tailscale Serve + Omnigent + Codex browser demonstration remains baseline
-evidence, not replacement acceptance. [ADR 0010](decisions/0010-open-responses-gateway-pivot.md)
+The private installation has previously run the scoped proxy, but source updates
+are not deployed merely by landing on this branch. The final history build still
+requires a reviewed proxy-only restart and fresh owner consent. The historical
+Tailscale Serve + Omnigent + Codex browser demonstration remains baseline evidence,
+not replacement acceptance. [ADR 0010](decisions/0010-open-responses-gateway-pivot.md)
 records the earlier bundled-runtime strategy; ADR 0014 supersedes its custom
 engine/ledger prescription while retaining the public Open Responses boundary.
 App-instance sender binding and recovery/key rotation remain future hardening.
