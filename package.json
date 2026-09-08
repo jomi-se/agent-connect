@@ -39,7 +39,7 @@
     "pretypecheck": "npm run build --workspace @open-agent-connect/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "verify": "npm run format:check && npm run typecheck && npm test && npm run build && npm run test:integration:openclaw",
-    "verify:scoped-proxy": "npm run format:check && npm run build:scoped-proxy && npm test --workspace @agent-connect/gateway -- scoped-proxy.test.ts scoped-proxy-policy.test.ts scoped-proxy-runtime-config.test.ts scoped-proxy-continuations.test.ts && npm run test:integration:openclaw",
+    "verify:scoped-proxy": "npm run format:check && npm run build:scoped-proxy && npm test --workspace @agent-connect/gateway -- scoped-proxy.test.ts scoped-proxy-policy.test.ts scoped-proxy-runtime-config.test.ts scoped-proxy-continuations.test.ts scoped-proxy-history.test.ts && npm run test:integration:openclaw",
     "verify:full": "npm run verify && npm run test:package:web && npm run test:webmcp && npm run test:e2e --workspace @agent-connect/firebase-canvas"
   },
   "devDependencies": {

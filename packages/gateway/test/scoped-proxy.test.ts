@@ -46,6 +46,83 @@ class MemoryStore implements DelegatedGrantStore {
 }
 
 describe("stock OpenClaw scoped Responses proxy", () => {
+  it("lists only live grant-owned heads and fences history after an upstream wait", async () => {
+    const grants = service();
+    const credential = issue(grants, APP);
+    const sibling = issue(grants, APP);
+    const grant = grants.verify(credential.accessToken, {
+      resource: RESOURCE,
+      origin: APP,
+    })!;
+    const registry = new ContinuationRegistry();
+    const reservation = registry.reserveNew(grant);
+    registry.reserveResponseId(reservation, "resp_history");
+    registry.complete(reservation, "resp_history", []);
+    let mutate = () => {};
+    const readHistory = vi.fn(async () => {
+      mutate();
+      return {
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "secret" },
+              { type: "text", text: "answer" },
+            ],
+            __openclaw: { sessionKey: "secret" },
+          },
+        ],
+      };
+    });
+    const { baseUrl } = await startProxy(
+      grants,
+      vi.fn(),
+      undefined,
+      undefined,
+      registry,
+      readHistory,
+    );
+    const get = (path: string, token = credential.accessToken) =>
+      globalThis.fetch(`${baseUrl}/v1/agent-connect/conversations${path}`, {
+        headers: { origin: APP, authorization: `Bearer ${token}` },
+      });
+    const listed = await (await get("")).json();
+    expect(listed.conversations).toEqual([
+      {
+        conversationId: reservation.conversationId,
+        expiresAt: expect.any(Number),
+        canContinue: true,
+        previousResponseId: "resp_history",
+      },
+    ]);
+    expect(await (await get("", sibling.accessToken)).json()).toEqual({
+      conversations: [],
+    });
+    expect(
+      (await get(`/${reservation.conversationId}/history`, sibling.accessToken))
+        .status,
+    ).toBe(404);
+    expect(readHistory).not.toHaveBeenCalled();
+    const history = await (
+      await get(`/${reservation.conversationId}/history`)
+    ).json();
+    expect(history.entries).toEqual([{ kind: "assistant", text: "answer" }]);
+    expect(JSON.stringify(history)).not.toContain("secret");
+    mutate = () => {
+      registry.consume("resp_history", grant);
+    };
+    expect((await get(`/${reservation.conversationId}/history`)).status).toBe(
+      409,
+    );
+    const next = registry.reserveNew(grant);
+    registry.reserveResponseId(next, "resp_next");
+    registry.complete(next, "resp_next", []);
+    mutate = () => {
+      grants.revoke(grant.grantId);
+    };
+    expect((await get(`/${next.conversationId}/history`)).status).toBe(401);
+  });
+
   it("requires explicit owner login and ignores a claimed Tailscale identity", async () => {
     const grants = service();
     const fetch = vi.fn<typeof globalThis.fetch>();
@@ -670,6 +747,7 @@ async function startProxy(
   assertUnchanged: () => void = () => {},
   assertRuntimeCurrent: () => Promise<void> = async () => {},
   continuationRegistry?: ContinuationRegistry,
+  readHistory?: (sessionKey: string) => Promise<unknown>,
 ): Promise<{ baseUrl: string }> {
   const directory = mkdtempSync(join(tmpdir(), "ac-scoped-proxy-test-"));
   const ownerAuth = new ConnectorAuth({
@@ -686,6 +764,7 @@ async function startProxy(
     ownerAuth,
     policySnapshot: { assertUnchanged, assertRuntimeCurrent },
     ...(continuationRegistry ? { continuationRegistry } : {}),
+    ...(readHistory ? { readHistory } : {}),
     fetch,
   });
   servers.push(server);

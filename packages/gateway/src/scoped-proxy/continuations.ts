@@ -56,6 +56,13 @@ export class ContinuationRegistry {
     return record && matchesGrant(record, grant) ? record : undefined;
   }
 
+  list(grant: VerifiedDelegatedGrant): readonly ContinuationRecord[] {
+    this.prune();
+    return [...this.records.values()]
+      .filter((record) => matchesGrant(record, grant))
+      .sort((a, b) => b.expiresAt - a.expiresAt);
+  }
+
   reserveNew(grant: VerifiedDelegatedGrant): ConversationReservation {
     this.prune();
     const total = this.records.size + this.reservations.size;

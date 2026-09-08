@@ -19,6 +19,8 @@ import {
   type ConversationReservation,
 } from "./continuations.js";
 import type { StaticOpenClawPolicySnapshot } from "./policy.js";
+import { describeConversation, projectExecutionHistory } from "./history.js";
+import { readStockOpenClawRpc } from "./runtime-config.js";
 import {
   buildBoundedUpstreamRequest,
   MAX_RESPONSE_REQUEST_BYTES,
@@ -42,6 +44,7 @@ export interface ScopedResponsesProxyOptions {
   readonly upstreamTimeoutMs?: number;
   readonly maxUpstreamResponseBytes?: number;
   readonly now?: () => number;
+  readonly readHistory?: (sessionKey: string) => Promise<unknown>;
 }
 
 const OWNER_COOKIE = "agent_connect_owner";
@@ -150,6 +153,16 @@ export function createScopedResponsesProxy(
           return methodNotAllowed(response, "POST, OPTIONS");
         return await handleResponses(request, response);
       }
+      const conversations = url.pathname.match(
+        /^\/v1\/agent-connect\/conversations(?:\/([a-f0-9]{36})\/history)?$/,
+      );
+      if (conversations) {
+        if (request.method === "OPTIONS")
+          return responsePreflight(request, response, "GET");
+        if (request.method !== "GET" || url.search)
+          return methodNotAllowed(response, "GET, OPTIONS");
+        return await handleConversations(request, response, conversations[1]);
+      }
       const cancel = url.pathname.match(
         /^\/v1\/agent-connect\/responses\/([A-Za-z0-9_.:-]{1,256})\/cancel$/,
       );
@@ -169,6 +182,68 @@ export function createScopedResponsesProxy(
       sendError(response, error);
     }
   });
+
+  async function handleConversations(
+    request: IncomingMessage,
+    response: ServerResponse,
+    conversationId?: string,
+  ): Promise<void> {
+    rejectDangerousHeaders(request);
+    const origin = requireBrowserOrigin(request);
+    setCors(response, origin);
+    const grant = options.grantService.verify(requireBearer(request), {
+      resource: options.resource,
+      origin,
+    });
+    if (!grant) throw new ProxyHttpError(401, "invalid_application_credential");
+    const recheck = () => {
+      options.policySnapshot.assertUnchanged();
+      if (
+        !options.grantService.recheck(grant, {
+          applicationTools: grant.applicationTools,
+        })
+      )
+        throw new ProxyHttpError(401, "grant_inactive");
+    };
+    recheck();
+    await options.policySnapshot.assertRuntimeCurrent();
+    recheck();
+    const records = registry.list(grant);
+    if (!conversationId) {
+      return sendJsonValue(response, 200, {
+        conversations: records.map(describeConversation),
+      });
+    }
+    const record = records.find(
+      (item) => item.conversationId === conversationId,
+    );
+    if (!record) throw new ProxyHttpError(404, "conversation_unavailable");
+    let value: unknown;
+    try {
+      value = await (options.readHistory
+        ? options.readHistory(record.sessionKey)
+        : readStockOpenClawRpc(options, "chat.history", {
+            sessionKey: record.sessionKey,
+            limit: 200,
+          }));
+    } catch {
+      throw new ProxyHttpError(502, "history_unavailable");
+    }
+    await options.policySnapshot.assertRuntimeCurrent();
+    recheck();
+    if (registry.peek(record.responseId, grant) !== record)
+      throw new ProxyHttpError(409, "conversation_changed");
+    let projected;
+    try {
+      projected = projectExecutionHistory(value);
+    } catch {
+      throw new ProxyHttpError(502, "history_unavailable");
+    }
+    sendJsonValue(response, 200, {
+      ...describeConversation(record),
+      ...projected,
+    });
+  }
 
   async function handleResponses(
     request: IncomingMessage,
@@ -826,6 +901,7 @@ async function readWebResponse(
 function responsePreflight(
   request: IncomingMessage,
   response: ServerResponse,
+  allowedMethod = "POST",
 ): void {
   const origin = singleHeader(request, "origin");
   const method = singleHeader(request, "access-control-request-method");
@@ -838,7 +914,7 @@ function responsePreflight(
   if (
     !origin ||
     !isCanonicalHttpsOrigin(origin) ||
-    method !== "POST" ||
+    method !== allowedMethod ||
     headers.some(
       (header) => !["authorization", "content-type", "accept"].includes(header),
     )
@@ -847,7 +923,7 @@ function responsePreflight(
   }
   setCors(response, origin);
   response.writeHead(204, {
-    "access-control-allow-methods": "POST",
+    "access-control-allow-methods": allowedMethod,
     "access-control-allow-headers": "authorization, content-type, accept",
     "access-control-max-age": "600",
   });
