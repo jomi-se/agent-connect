@@ -86,7 +86,7 @@ The obsolete live tree is `.agent-connect/openclaw-host`; current launcher is
 ## Phase 1 — Release-ready packages
 
 1. Verify npm versions/ownership read-only; distinguish a genuine missing version
-   from network/auth/registry failure. Propose SDK `0.0.4` and plugin `0.1.0` if
+   from network/auth/registry failure. Propose SDK `0.0.4` and plugin `0.0.1` if
    those versions are unpublished; otherwise choose the next appropriate version.
 2. Rename plugin package to the confirmed scope, remove `private:true`, add public
    publishConfig, license/repository directory/homepage and appropriate Node engine.
@@ -250,11 +250,12 @@ erasing the old state is intentional and may be irreversible.
 - [x] Current publication, package and Artifex entry points inspected for this plan.
 - [x] Release metadata/versions and package evidence. Registry check: SDK
       versions `0.0.1` and `0.0.3` exist; SDK `0.0.4` is absent. The confirmed
-      plugin URL returns public HTTP 404, so `0.1.0` is available. Exact-tarball SDK
+      plugin URL returns public HTTP 404, so `0.0.1` is available. Exact-tarball SDK
       and plugin external-install smoke tests pass. Two consecutive clean packs
       produced identical SHA-256 digests: SDK
       `ec4bd3711f5003fd6db78a43c4e4a28a3b50f29c9a8fa4d0c34499676d0d58b7` and
-      plugin `e991eb5d0146e3d92d33167286c1e4176eb715d3b4e1076a18a709edabfe2fd6`.
+      plugin `6d1299865dbaa12f82c03f6ce80fa0196c6f39a51f2c0c1d4ff13525707e10cf`.
+      The owner-selected initial public plugin version is `0.0.1`.
       Release-logic tests pass; real plugin composition remains in the repository
       verification gate.
 - [x] Automatic gated dual publication and npm owner setup checklist. Main
@@ -266,11 +267,11 @@ erasing the old state is intentional and may be irreversible.
       and an existing `npm-publish` environment with no protection rules. npm trust
       settings require authenticated npm access and remain an owner verification.
 - [x] Artifex fresh-install bootstrap/runbook and smoke evidence. The adjacent
-      repository has an opt-in binaries-only step, pinned public dependencies,
-      isolated config/state, stable launchers, tmux operations and route-limited
-      owner-reviewed Tailscale instructions. Its shell/profile smoke passes. Before
-      publication the installer fails actionably at the plugin registry check and
-      creates no fallback installation.
+      repository includes a default binaries-only bootstrap step, pinned public
+      dependencies, isolated config/state, stable launchers, tmux operations and
+      route-limited owner-reviewed Tailscale instructions. Its shell/profile smoke
+      passes. Before publication the installer fails actionably at the plugin
+      registry check and creates no fallback installation.
 - [ ] Jose pushes / npm publication verified (external gate).
 - [ ] Fresh installation / owner login / Bookhand published SDK and live smoke.
 - [ ] Obsolete runtime deleted; final docs/commits/clean worktrees.
