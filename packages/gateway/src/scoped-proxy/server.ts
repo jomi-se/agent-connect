@@ -1053,7 +1053,7 @@ function sendError(response: ServerResponse, error: unknown): void {
 
 function publicMessage(code: string): string {
   if (code === "request_too_large") {
-    return "The request exceeds the 8 MiB limit. Return a smaller or paginated tool result.";
+    return "The request exceeds the 20 MiB limit. Return a smaller or paginated tool result.";
   }
   if (code === "upstream_interrupted") {
     return "The private upstream outcome is uncertain; the request was not replayed.";

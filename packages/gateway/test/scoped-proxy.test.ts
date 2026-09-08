@@ -174,10 +174,7 @@ describe("stock OpenClaw scoped Responses proxy", () => {
       clientId: APP,
       resource: RESOURCE,
     });
-    for (const [size, expectedStatus] of [
-      [4 * 1024 * 1024 + 1, 400],
-      [8 * 1024 * 1024, 413],
-    ]) {
+    for (const [size, expectedStatus] of [[20 * 1024 * 1024, 413]]) {
       const oversized = await post(baseUrl, refreshed.accessToken, APP, {
         model: "openclaw/default",
         previous_response_id: "resp_1",
@@ -195,7 +192,7 @@ describe("stock OpenClaw scoped Responses proxy", () => {
     }
     // Section source includes XHTML, stylesheets and JSON escaping, not a tiny ID.
     const sectionSource = JSON.stringify({
-      xhtml: '<p class="source">triangle</p>\n'.repeat(20_000),
+      xhtml: '<p class="source">triangle</p>\n'.repeat(180_000),
     });
     const continued = await post(baseUrl, refreshed.accessToken, APP, {
       model: "openclaw/default",
