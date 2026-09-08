@@ -40,9 +40,8 @@ jobs:
 
       - run: npm ci
 
-      # The real-Omnigent suite in `npm run verify` needs the pinned provider
-      # binary, which no hosted runner has. Everything that does not need it
-      # still gates the publish.
+      # Full PR CI installs pinned OpenClaw and browser tools. Publishing runs
+      # the credential-free package gates below without installing that runtime.
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm test

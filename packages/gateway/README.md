@@ -1,15 +1,34 @@
 # Agent Connect gateway
 
-The gateway is the narrow application-delegation boundary in front of an
-operator-configured OpenClaw service. It exposes gateway-owned authorization,
-opaque application sessions (`POST /v1/app-sessions`), the bounded Open
-Responses endpoint (`POST /v1/responses`) and namespaced response controls.
-It is not a general OpenClaw reverse proxy or a harness supervisor.
+The supported gateway is the scoped authorization proxy in front of stock
+OpenClaw, defined in [ADR 0014](../../docs/decisions/0014-stock-openclaw-scoped-proxy.md).
+It exposes OAuth/PAR/PKCE consent, bounded `POST /v1/responses`, revocation and
+grant-scoped recent execution history. It constructs private upstream requests;
+it is not an unrestricted reverse proxy or a harness supervisor.
 
-The replacement uses OpenClaw's built-in subscription loop on a separate branch. Final
-subscription/browser validation and live cutover remain gated by
-[ADR 0012](../../docs/decisions/0012-openclaw-policy-gateway.md) and the
-[replacement contract](../../docs/plan/openclaw-replacement.md).
+Use the [stock scoped-proxy setup](../../deploy/openclaw-gateway/README.md).
+Build with `npm run build:scoped-proxy` from the root, then use
+`scripts/openclaw-scoped-proxy.mjs`. The older `agent-connect-gateway` binary and
+`npm start` path below target the retained replacement engine, not this setup.
+
+Owner identity and authorization grants persist. Conversation ownership and
+latest checkpoints are process-local, expire after 30 minutes, and are lost on
+proxy restart. A grant can list/read its recent execution history and continue
+an eligible completed head; it cannot adopt another grant's conversation. No
+interrupted action is replayed automatically. See the
+[history contract](../../docs/architecture/scoped-conversation-history.md).
+
+The owner accepted the Bookhand connection/follow-up prototype with known
+limitations; [acceptance evidence and open defects](../../docs/plan/stock-openclaw-vertical-closeout.md)
+are recorded separately from automated compatibility tests.
+
+## Historical replacement-engine reference — not current setup
+
+Everything below documents the superseded runtime-card/custom-engine path.
+Its app-session routes, durable ledger, Tailscale-owner settings and recovery
+claims do not apply to the scoped proxy. Do not use these commands to deploy the
+current implementation. Retained code and historical evidence remain available
+for review; they are not required by the scoped build or stock integration suite.
 
 ## Operator setup
 

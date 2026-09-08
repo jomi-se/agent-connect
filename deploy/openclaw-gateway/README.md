@@ -135,10 +135,10 @@ AI SDK use against `openclaw/default`.
 ## Retained replacement/native experiment material
 
 The remainder of this document describes the parent replacement/native
-experiment and selected subscription bootstrap. It is retained as evidence and
-may still inform the separately authorized live smoke. Its launcher, response
-ledger, plugin build and patched-source steps are **not** prerequisites for the
-stock scoped proxy above.
+experiment and selected subscription bootstrap. It is retained as historical
+evidence only. **Do not run these commands to install the current gateway.** Its
+launcher, response ledger, plugin build and patched-source steps target a
+superseded implementation; use only the scoped-proxy recipe above.
 
 ---
 
