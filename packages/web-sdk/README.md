@@ -160,6 +160,12 @@ AgentSession nor WebMCP discovery requires `unsafe-eval`. Invalid definitions
 fail during setup, and invalid arguments are rejected before calling a handler.
 Validation does not coerce input, apply defaults, or strip extra properties.
 
+Importing the package configures the shared Zod v4 runtime with `jitless: true`
+before AI SDK schemas load. Zod otherwise probes dynamic function construction
+even when that probe is caught, which violates a restrictive `script-src` policy.
+The package therefore favors CSP-safe imports over Zod schema-JIT performance;
+this setting also affects other Zod v4 users in the same page.
+
 The supported boundary is self-contained draft-7 schemas (or no `$schema`),
 including local references and the existing `nullable` extension. Formats remain
 annotations, matching earlier SDK behavior; this is not complete Ajv parity.

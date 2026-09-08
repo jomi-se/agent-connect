@@ -10,7 +10,9 @@
   },
   "homepage": "https://github.com/jomi-se/agent-connect/tree/main/packages/web-sdk#readme",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/zod-jitless.js"
+  ],
   "files": [
     "dist",
     "README.md"
@@ -36,7 +38,7 @@
     "@ai-sdk/open-responses": "2.0.39",
     "@cfworker/json-schema": "4.1.1",
     "ai": "7.0.93",
-    "zod": "4.1.11"
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "typescript": "6.0.2",

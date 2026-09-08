@@ -47,6 +47,7 @@ export default tseslint.config(
       "**/coverage/**",
       "**/node_modules/**",
       ".agents/**",
+      ".agent-connect/**",
       ".claude/**",
       ".codex/**",
       ".gemini/**",
