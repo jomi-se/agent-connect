@@ -12,7 +12,7 @@ Install the reviewed published package through OpenClaw's managed plugin path.
 Installation requires explicit host-capability consent:
 
 ```sh
-openclaw plugins install @open-agent-connect/openclaw-plugin@0.1.0 --pin --accept-capabilities
+openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.1 --pin --accept-capabilities
 ```
 
 Contributors can still use `npm run pack:stock-openclaw-plugin` and the

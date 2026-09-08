@@ -3,7 +3,7 @@
 Agent Connect has two explicit public release candidates:
 
 - `@open-agent-connect/web@0.0.4`
-- `@open-agent-connect/openclaw-plugin@0.1.0`
+- `@open-agent-connect/openclaw-plugin@0.0.1`
 
 `npm run release:prepare` builds, packs, inspects, and records SHA-256 digests in
 `dist/npm-release/manifest.json`. `npm run release:smoke` installs and exercises
@@ -50,7 +50,7 @@ GitHub environment, pushes, and handles interactive 2FA or approval.
    npm ci
    npm run release:prepare
    npm run release:smoke
-   npm publish dist/npm-release/open-agent-connect-openclaw-plugin-0.1.0.tgz --access public
+   npm publish dist/npm-release/open-agent-connect-openclaw-plugin-0.0.1.tgz --access public
    ```
 
    Compare the printed/recorded digest before publishing. This one-time bootstrap

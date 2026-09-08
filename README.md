@@ -47,7 +47,7 @@ through OpenClaw's supported package flow and explicitly accept its declared hos
 capabilities:
 
 ```sh
-openclaw plugins install @open-agent-connect/openclaw-plugin@0.1.0 --pin --accept-capabilities
+openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.1 --pin --accept-capabilities
 openclaw agent-connect setup --origin https://your-gateway.example
 # Review the preview, then apply explicitly:
 openclaw agent-connect setup --origin https://your-gateway.example --apply
