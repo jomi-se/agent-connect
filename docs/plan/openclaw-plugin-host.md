@@ -200,7 +200,8 @@ Root reviews implementation and test evidence before merge or live rollout.
 - [x] M4 real installed-package composition and negative tests. The npm-pack was
       installed through stock OpenClaw and passed OAuth/SDK, two tool segments,
       history/follow-up, refresh/revoke, native-root coexistence, unsafe-policy
-      refusal and disable/re-enable stale-head coverage with fake inference.
+      refusal, token/password/no-auth host modes and disable/re-enable stale-head
+      coverage with fake inference.
 - [ ] M5 documentation, root review and owner handoff. Implementation and
       operator documentation are drafted; root review and handoff remain.
 
@@ -210,6 +211,15 @@ consent redirect status, history transport authority, reload-close handling and
 the native personal-agent session selector; the last failure caught an invalid
 fixture-only personal tool allowlist before native inference. None required a
 core patch or second host.
+
+Review follow-up: setup preview/apply, doctor and service startup now share the
+same host-auth/TLS/port checker. Doctor is nonzero for planned setup, missing
+owner identity or unsupported host configuration; unsupported apply returns
+before mutation or identity creation. Token, environment-backed password and
+explicit no-auth upstream paths pass through the packed stock host;
+no-auth keeps application grants mandatory while warning that native endpoints
+are outside that protection. No model/runtime fingerprint change is included in
+this bounded checker follow-up.
 
 Update this ledger at meaningful checkpoints and before any pause. Record failed
 approaches and exact blockers briefly so another provider can resume without

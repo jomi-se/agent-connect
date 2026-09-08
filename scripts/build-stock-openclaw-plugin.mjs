@@ -18,7 +18,11 @@ await build({
   target: "node24",
   sourcemap: true,
   legalComments: "none",
-  external: ["@openclaw/gateway-client", "@openclaw/gateway-protocol/*"],
+  external: [
+    "@openclaw/gateway-client",
+    "@openclaw/gateway-protocol/*",
+    "openclaw/plugin-sdk/*",
+  ],
 });
 
 process.stdout.write(`Built ${resolve(outputDirectory, "index.mjs")}\n`);

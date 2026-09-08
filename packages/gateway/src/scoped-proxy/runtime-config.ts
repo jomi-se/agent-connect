@@ -1,6 +1,11 @@
 import { GatewayClient } from "@openclaw/gateway-client";
 import { PROTOCOL_VERSION } from "@openclaw/gateway-protocol/version";
 
+import {
+  resolveOpenClawUpstreamAuth,
+  type OpenClawUpstreamAuth,
+} from "./upstream-auth.js";
+
 export interface StockOpenClawConfigGet {
   readonly valid?: unknown;
   readonly sourceConfig?: unknown;
@@ -39,7 +44,8 @@ export async function createOpenClawRuntimePolicyVerifier(options: {
 
 export async function readStockOpenClawConfig(options: {
   readonly upstreamBaseUrl: string;
-  readonly upstreamToken: string;
+  readonly upstreamAuth?: OpenClawUpstreamAuth;
+  readonly upstreamToken?: string;
   readonly timeoutMs?: number;
 }): Promise<StockOpenClawConfigGet> {
   return readStockOpenClawRpc(options, "config.get", {});
@@ -48,7 +54,8 @@ export async function readStockOpenClawConfig(options: {
 export async function readStockOpenClawRpc<T>(
   options: {
     readonly upstreamBaseUrl: string;
-    readonly upstreamToken: string;
+    readonly upstreamAuth?: OpenClawUpstreamAuth;
+    readonly upstreamToken?: string;
     readonly timeoutMs?: number;
   },
   method: "config.get" | "chat.history",
@@ -56,6 +63,7 @@ export async function readStockOpenClawRpc<T>(
 ): Promise<T> {
   const url = new URL(options.upstreamBaseUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  const upstreamAuth = resolveOpenClawUpstreamAuth(options);
   const timeoutMs = options.timeoutMs ?? 10_000;
   return await new Promise<T>((resolve, reject) => {
     let settled = false;
@@ -75,7 +83,11 @@ export async function readStockOpenClawRpc<T>(
     try {
       client = new GatewayClient({
         url: url.href,
-        token: options.upstreamToken,
+        ...(upstreamAuth.mode === "token"
+          ? { token: upstreamAuth.credential }
+          : upstreamAuth.mode === "password"
+            ? { password: upstreamAuth.credential }
+            : {}),
         role: "operator",
         scopes: ["operator.read"],
         clientVersion: "agent-connect-scoped-proxy",
@@ -135,5 +147,5 @@ function requireAppliedRevision(snapshot: StockOpenClawConfigGet): string {
 }
 
 function asPrivateError(_error: unknown): Error {
-  return new Error("Authenticated OpenClaw config.get failed");
+  return new Error("OpenClaw gateway RPC failed");
 }

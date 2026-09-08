@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
 import type { OfferedDelegatedPolicy } from "../../gateway/src/delegated-grants.js";
+import type { OpenClawUpstreamAuth } from "../../gateway/src/scoped-proxy/upstream-auth.js";
 
 export const PLUGIN_ID = "agent-connect";
 export const DEFAULT_AGENT_ID = "agent-connect-app";
@@ -18,7 +19,7 @@ export interface SupportedRuntime {
   readonly resource: string;
   readonly agentId: string;
   readonly upstreamBaseUrl: string;
-  readonly upstreamToken: string;
+  readonly upstreamAuth: OpenClawUpstreamAuth;
   readonly fingerprint: string;
   readonly policy: OfferedDelegatedPolicy;
 }
@@ -27,7 +28,37 @@ export interface SetupInspection {
   readonly supported: boolean;
   readonly changes: readonly string[];
   readonly errors: readonly string[];
+  readonly warnings: readonly string[];
   readonly config: StockPluginConfig;
+}
+
+export interface SetupReadiness {
+  readonly ok: boolean;
+  readonly status:
+    "ready" | "unsupported_host" | "setup_required" | "owner_identity_missing";
+}
+
+export interface ResolvedGatewayAuthView {
+  readonly mode: unknown;
+  readonly token?: string;
+  readonly password?: string;
+}
+
+export type GatewayAuthResolver = (options: {
+  readonly authConfig?: Record<string, unknown> | null;
+  readonly env?: NodeJS.ProcessEnv;
+}) => ResolvedGatewayAuthView;
+
+interface ConfigInspectionOptions {
+  readonly stateDir: string;
+  readonly resolveGatewayAuth: GatewayAuthResolver;
+}
+
+interface HostRuntimeSettingsInspection {
+  readonly errors: readonly string[];
+  readonly warnings: readonly string[];
+  readonly auth?: OpenClawUpstreamAuth;
+  readonly port?: number;
 }
 
 export function parsePluginConfig(value: unknown): StockPluginConfig {
@@ -43,14 +74,16 @@ export function parsePluginConfig(value: unknown): StockPluginConfig {
 export function inspectSetup(
   value: unknown,
   requested: StockPluginConfig,
-  options: {
-    readonly stateDir: string;
-  },
+  options: ConfigInspectionOptions,
 ): SetupInspection {
   const config = record(value) ?? {};
   const changes: string[] = [];
   const errors: string[] = [];
+  const warnings: string[] = [];
   const gateway = record(config.gateway) ?? {};
+  const host = inspectHostRuntimeSettings(config, options.resolveGatewayAuth);
+  errors.push(...host.errors);
+  warnings.push(...host.warnings);
   const http = record(gateway.http) ?? {};
   const endpoints = record(http.endpoints) ?? {};
   const responses = record(endpoints.responses) ?? {};
@@ -79,16 +112,37 @@ export function inspectSetup(
     supported: errors.length === 0,
     changes,
     errors,
+    warnings,
     config: requested,
   };
+}
+
+export function setupReadiness(
+  inspection: SetupInspection,
+  ownerIdentityReady: boolean,
+): SetupReadiness {
+  if (!inspection.supported) {
+    return { ok: false, status: "unsupported_host" };
+  }
+  if (inspection.changes.length > 0) {
+    return { ok: false, status: "setup_required" };
+  }
+  if (!ownerIdentityReady) {
+    return { ok: false, status: "owner_identity_missing" };
+  }
+  return { ok: true, status: "ready" };
 }
 
 export function applySetupMutation(
   draft: Record<string, unknown>,
   requested: StockPluginConfig,
   stateDir: string,
+  resolveGatewayAuth: GatewayAuthResolver,
 ): void {
-  const inspection = inspectSetup(draft, requested, { stateDir });
+  const inspection = inspectSetup(draft, requested, {
+    stateDir,
+    resolveGatewayAuth,
+  });
   if (!inspection.supported) throw new Error(inspection.errors.join("; "));
 
   const gateway = ensureRecord(draft, "gateway");
@@ -111,9 +165,7 @@ export function applySetupMutation(
 export function resolveSupportedRuntime(
   value: unknown,
   pluginConfig: StockPluginConfig,
-  options: {
-    readonly stateDir: string;
-  },
+  options: ConfigInspectionOptions,
 ): SupportedRuntime {
   const config = record(value);
   if (!config) throw new Error("OpenClaw runtime config is unavailable");
@@ -126,24 +178,7 @@ export function resolveSupportedRuntime(
       ].join("; "),
     );
   }
-  const gateway = record(config.gateway) as Record<string, unknown>;
-  const auth = record(gateway.auth);
-  if (auth?.mode !== "token" || typeof auth.token !== "string" || !auth.token) {
-    throw new Error(
-      "Agent Connect supports only a resolved literal gateway token; password and SecretRef auth are unsupported",
-    );
-  }
-  if (record(gateway.tls)?.enabled === true) {
-    throw new Error("native gateway TLS on the local listener is unsupported");
-  }
-  const port = gateway.port;
-  if (
-    !Number.isSafeInteger(port) ||
-    Number(port) < 1 ||
-    Number(port) > 65_535
-  ) {
-    throw new Error("gateway.port must be an explicit TCP port");
-  }
+  const host = requireHostRuntimeSettings(config, options.resolveGatewayAuth);
   const issuer = `${pluginConfig.publicOrigin}/agent-connect`;
   const resource = `${issuer}/v1/responses`;
   const relevant = relevantPolicyConfig(config, pluginConfig.agentId);
@@ -155,8 +190,8 @@ export function resolveSupportedRuntime(
     issuer,
     resource,
     agentId: pluginConfig.agentId,
-    upstreamBaseUrl: `http://127.0.0.1:${port}`,
-    upstreamToken: auth.token,
+    upstreamBaseUrl: `http://127.0.0.1:${host.port}`,
+    upstreamAuth: host.auth,
     fingerprint,
     policy: {
       ref: POLICY_REF,
@@ -168,6 +203,107 @@ export function resolveSupportedRuntime(
       nativeCapabilities: [],
     },
   };
+}
+
+function inspectHostRuntimeSettings(
+  config: Record<string, unknown>,
+  resolveGatewayAuth: GatewayAuthResolver,
+): HostRuntimeSettingsInspection {
+  const gateway = record(config.gateway) ?? {};
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  let upstreamAuth: OpenClawUpstreamAuth | undefined;
+  let port: number | undefined;
+
+  let resolvedAuth: ResolvedGatewayAuthView | undefined;
+  try {
+    resolvedAuth = resolveGatewayAuth({
+      authConfig: record(gateway.auth) ?? null,
+    });
+  } catch {
+    errors.push(
+      "gateway authentication could not be resolved from the active host configuration",
+    );
+  }
+  const configuredMode = record(gateway.auth)?.mode;
+  if (
+    typeof configuredMode === "string" &&
+    resolvedAuth &&
+    configuredMode !== resolvedAuth.mode
+  ) {
+    errors.push(
+      "resolved gateway authentication mode differs from gateway.auth.mode; CLI-only auth overrides are unsupported",
+    );
+    resolvedAuth = undefined;
+  }
+  if (resolvedAuth?.mode === "none") {
+    upstreamAuth = { mode: "none" };
+    warnings.push(
+      "native OpenClaw auth is disabled; native endpoints outside /agent-connect are not protected by Agent Connect application grants",
+    );
+  } else if (
+    resolvedAuth?.mode === "token" ||
+    resolvedAuth?.mode === "password"
+  ) {
+    const credential =
+      resolvedAuth.mode === "token"
+        ? resolvedAuth.token
+        : resolvedAuth.password;
+    if (typeof credential !== "string" || credential.trim().length === 0) {
+      errors.push(
+        `gateway.auth.${resolvedAuth.mode} is configured but its credential is unavailable to the active host runtime`,
+      );
+    } else {
+      upstreamAuth = { mode: resolvedAuth.mode, credential };
+    }
+  } else if (resolvedAuth) {
+    errors.push(
+      `gateway authentication mode ${String(resolvedAuth.mode)} is unsupported; use token, password, or none without a CLI-only override`,
+    );
+  }
+
+  if (record(gateway.tls)?.enabled === true) {
+    errors.push(
+      "gateway.tls.enabled must not be true; terminate public HTTPS outside the loopback listener",
+    );
+  }
+
+  if (
+    !Number.isSafeInteger(gateway.port) ||
+    Number(gateway.port) < 1 ||
+    Number(gateway.port) > 65_535
+  ) {
+    errors.push(
+      "gateway.port must be an explicit integer from 1 through 65535",
+    );
+  } else {
+    port = Number(gateway.port);
+  }
+
+  return {
+    errors,
+    warnings,
+    ...(port === undefined ? {} : { port }),
+    ...(upstreamAuth === undefined ? {} : { auth: upstreamAuth }),
+  };
+}
+
+function requireHostRuntimeSettings(
+  config: Record<string, unknown>,
+  resolveGatewayAuth: GatewayAuthResolver,
+): {
+  readonly port: number;
+  readonly auth: OpenClawUpstreamAuth;
+} {
+  const inspected = inspectHostRuntimeSettings(config, resolveGatewayAuth);
+  if (
+    inspected.errors.length > 0 ||
+    inspected.port === undefined ||
+    inspected.auth === undefined
+  ) {
+    throw new Error(inspected.errors.join("; "));
+  }
+  return { port: inspected.port, auth: inspected.auth };
 }
 
 export function restrictedAgentConfig(

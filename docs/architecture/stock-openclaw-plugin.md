@@ -56,8 +56,11 @@ The initial verified profile is intentionally narrow:
 | Configuration                                                           | Status                                                   |
 | ----------------------------------------------------------------------- | -------------------------------------------------------- |
 | Published OpenClaw `2026.9.1`; Node `>=24.15 <25`                       | Supported pin                                            |
-| Resolved literal `gateway.auth.mode: token`                             | Supported                                                |
-| Password, SecretRef, no-auth, or trusted-proxy gateway authority        | Unsupported                                              |
+| Resolved `gateway.auth.mode: token`                                     | Supported                                                |
+| Resolved `gateway.auth.mode: password`                                  | Supported                                                |
+| Configured token/password SecretRef resolved by the active host         | Supported; environment-backed password is package-tested |
+| `gateway.auth.mode: none`                                               | Supported with an explicit native-endpoint warning       |
+| Trusted-proxy or CLI-only auth override not present in host config      | Unsupported                                              |
 | Native TLS on the loopback listener                                     | Unsupported; terminate public HTTPS outside the listener |
 | One plugin-managed app-only agent                                       | Supported                                                |
 | Native public search or code execution in an offered profile            | Not offered in this slice                                |
@@ -77,3 +80,14 @@ security boundary enforced here is the hostile calling application: its grant,
 tool snapshot, routing and session authority remain bounded. Setup rejects
 concrete offered-agent settings that defeat that profile, but it neither audits
 nor allowlists trusted host extensions.
+
+The plugin obtains the active token/password through OpenClaw's published
+gateway-auth resolver and never prints or persists the resolved credential.
+Internal HTTP uses the exact resolved token or password as the pinned host's
+Bearer credential; internal RPC uses the corresponding public client option.
+For explicit `none`, both transports omit credentials rather than retrying or
+falling back. This changes no application-facing rule: `/agent-connect` still
+requires an Origin-bound delegated bearer grant. With native `none`, other
+OpenClaw endpoints are deliberately outside that grant boundary and remain
+unauthenticated by owner choice. CLI-only auth overrides are not represented by
+the active configuration snapshot and are not claimed as supported.

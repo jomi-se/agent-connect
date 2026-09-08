@@ -29,12 +29,19 @@ import {
   MAX_RESPONSE_REQUEST_BYTES,
   ScopedProxyRequestError,
 } from "./request.js";
+import {
+  openClawHttpAuthHeaders,
+  resolveOpenClawUpstreamAuth,
+  type OpenClawUpstreamAuth,
+} from "./upstream-auth.js";
 
 export interface ScopedResponsesProxyOptions {
   readonly issuer: string;
   readonly resource: string;
   readonly upstreamBaseUrl: string;
-  readonly upstreamToken: string;
+  readonly upstreamAuth?: OpenClawUpstreamAuth;
+  /** Standalone compatibility; new embedded callers should pass upstreamAuth. */
+  readonly upstreamToken?: string;
   readonly grantService: DelegatedGrantService;
   readonly ownerAuth: ConnectorAuth;
   readonly ownerSubject?: string;
@@ -101,6 +108,7 @@ export function createScopedResponsesHandler(
     );
   }
   const upstreamOrigin = requireLoopbackOrigin(options.upstreamBaseUrl);
+  const upstreamAuth = resolveOpenClawUpstreamAuth(options);
   const fetchImplementation =
     options.fetch ?? globalThis.fetch.bind(globalThis);
   const registry = options.continuationRegistry ?? new ContinuationRegistry();
@@ -375,7 +383,7 @@ export function createScopedResponsesHandler(
           redirect: "error",
           headers: {
             accept: bounded.stream ? "text/event-stream" : "application/json",
-            authorization: `Bearer ${options.upstreamToken}`,
+            ...openClawHttpAuthHeaders(upstreamAuth),
             "content-type": "application/json",
             "x-openclaw-agent-id": grant.agentId,
             "x-openclaw-session-key": reservation.sessionKey,
