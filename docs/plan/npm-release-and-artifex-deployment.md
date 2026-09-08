@@ -277,6 +277,16 @@ erasing the old state is intentional and may be irreversible.
 
 ### Owner publication gate reached
 
+Preparation commits: Agent Connect `2bb6003`; Artifex `e36f4b2`.
+
+Final local evidence: `npm run verify`, `npm run analyze`, the Canvas Playwright
+suite, release-logic tests, exact-tarball SDK/plugin smokes, dynamic plugin
+artifact resolution, formatting and diff checks all pass under the pinned Node
+24.15/OpenClaw 2026.9.1 tools. Artifex shell/profile smoke passes. The WebMCP
+pinned native-Chrome gate was not rerun on this ARM64 VM because its installer
+deliberately requires Linux x64; `verify:full` remains mandatory in main CI
+before the publish job can run.
+
 No push, tag, GitHub release, npm publication, workflow dispatch, account change,
 provider login, service start, Tailscale mutation, Bookhand change, or old-runtime
 deletion was performed. Jose's next action is to review the local commits and
