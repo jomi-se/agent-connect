@@ -6,11 +6,13 @@ import type { OpenClawUpstreamAuth } from "./runtime/upstream-auth.js";
 
 export const PLUGIN_ID = "agent-connect";
 export const DEFAULT_AGENT_ID = "agent-connect-app";
+export const DEFAULT_LISTEN_PORT = 18_790;
 export const POLICY_REF = "application-tools-only";
 
 export interface StockPluginConfig {
   readonly publicOrigin: string;
   readonly agentId: string;
+  readonly listenPort: number;
   readonly model?: string;
 }
 
@@ -19,6 +21,7 @@ export interface SupportedRuntime {
   readonly issuer: string;
   readonly resource: string;
   readonly agentId: string;
+  readonly listenPort: number;
   readonly upstreamBaseUrl: string;
   readonly upstreamAuth: OpenClawUpstreamAuth;
   readonly fingerprint: string;
@@ -65,10 +68,15 @@ interface HostRuntimeSettingsInspection {
 export function parsePluginConfig(value: unknown): StockPluginConfig {
   const input = record(value);
   if (!input) throw new Error("Agent Connect setup has not been applied");
-  exactKeys(input, ["publicOrigin", "agentId", "model"], "plugin config");
+  exactKeys(
+    input,
+    ["publicOrigin", "agentId", "listenPort", "model"],
+    "plugin config",
+  );
   return {
     publicOrigin: canonicalHttpsOrigin(input.publicOrigin),
     agentId: identifier(input.agentId, "agentId"),
+    listenPort: port(input.listenPort ?? DEFAULT_LISTEN_PORT, "listenPort"),
     ...(input.model === undefined
       ? {}
       : { model: modelIdentifier(input.model) }),
@@ -88,6 +96,11 @@ export function inspectSetup(
   const host = inspectHostRuntimeSettings(config, options.resolveGatewayAuth);
   errors.push(...host.errors);
   warnings.push(...host.warnings);
+  if (host.port === requested.listenPort) {
+    errors.push(
+      "listenPort must differ from gateway.port so application routes cannot share the native OpenClaw listener",
+    );
+  }
   const http = record(gateway.http) ?? {};
   const endpoints = record(http.endpoints) ?? {};
   const responses = record(endpoints.responses) ?? {};
@@ -201,6 +214,7 @@ export function resolveSupportedRuntime(
     issuer,
     resource,
     agentId: pluginConfig.agentId,
+    listenPort: pluginConfig.listenPort,
     upstreamBaseUrl: `http://127.0.0.1:${host.port}`,
     upstreamAuth: host.auth,
     fingerprint,
@@ -250,7 +264,7 @@ function inspectHostRuntimeSettings(
   if (resolvedAuth?.mode === "none") {
     upstreamAuth = { mode: "none" };
     warnings.push(
-      "native OpenClaw auth is disabled; native endpoints outside /agent-connect are not protected by Agent Connect application grants",
+      "native OpenClaw authentication is disabled; exposing its native port would bypass Agent Connect grants and expose the authless native Responses endpoint",
     );
   } else if (
     resolvedAuth?.mode === "token" ||
@@ -398,6 +412,17 @@ function identifier(value: unknown, label: string): string {
     throw new Error(`${label} must match ^[a-z][a-z0-9-]{0,62}$`);
   }
   return value;
+}
+
+function port(value: unknown, label: string): number {
+  if (
+    !Number.isSafeInteger(value) ||
+    Number(value) < 1 ||
+    Number(value) > 65_535
+  ) {
+    throw new Error(`${label} must be an integer from 1 through 65535`);
+  }
+  return Number(value);
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

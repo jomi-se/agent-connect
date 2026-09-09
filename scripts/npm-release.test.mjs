@@ -15,8 +15,8 @@ const sdk = {
 };
 const plugin = {
   name: "@open-agent-connect/openclaw-plugin",
-  version: "0.0.1",
-  filename: "open-agent-connect-openclaw-plugin-0.0.1.tgz",
+  version: "0.0.2",
+  filename: "open-agent-connect-openclaw-plugin-0.0.2.tgz",
   sha256: "plugin-digest",
 };
 
@@ -79,7 +79,7 @@ test("partial rerun skips the published package and publishes the other tarball"
   assert.equal(calls.filter(([command]) => command === "publish").length, 1);
   assert.match(
     calls.at(-1)[1],
-    /open-agent-connect-openclaw-plugin-0\.0\.1\.tgz$/,
+    /open-agent-connect-openclaw-plugin-0\.0\.2\.tgz$/,
   );
   assert.match(messages.join("\n"), /SKIP.*PUBLISHED/s);
 });

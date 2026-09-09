@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   applySetupMutation,
+  DEFAULT_LISTEN_PORT,
   inspectSetup,
+  parsePluginConfig,
   resolveSupportedRuntime,
   restrictedAgentConfig,
   setupReadiness,
@@ -13,6 +15,7 @@ const stateDir = "/tmp/agent-connect-plugin-test";
 const requested = {
   publicOrigin: "https://gateway.example",
   agentId: "agent-connect-app",
+  listenPort: DEFAULT_LISTEN_PORT,
 };
 const resolveGatewayAuth: GatewayAuthResolver = ({ authConfig }) => {
   const mode = authConfig?.mode ?? "token";
@@ -120,6 +123,7 @@ describe("stock OpenClaw plugin configuration", () => {
     ).toMatchObject({
       upstreamBaseUrl: "http://127.0.0.1:18789",
       upstreamAuth: { mode: "token", credential: "operator-secret" },
+      listenPort: DEFAULT_LISTEN_PORT,
     });
     expect(
       setupReadiness(inspectSetup(config, requested, inspectionOptions), false),
@@ -259,13 +263,41 @@ describe("stock OpenClaw plugin configuration", () => {
       errors: [],
     });
     expect(inspection.warnings.join(" ")).toContain(
-      "native endpoints outside /agent-connect are not protected",
+      "exposing its native port would bypass Agent Connect grants",
     );
     expect(
       resolveSupportedRuntime(config, requested, inspectionOptions),
     ).toMatchObject({
       upstreamAuth: { mode: "none" },
     });
+  });
+
+  it("defaults and validates the dedicated listener port", () => {
+    expect(
+      parsePluginConfig({
+        publicOrigin: requested.publicOrigin,
+        agentId: requested.agentId,
+      }).listenPort,
+    ).toBe(DEFAULT_LISTEN_PORT);
+    expect(() => parsePluginConfig({ ...requested, listenPort: 0 })).toThrow(
+      "listenPort must be an integer from 1 through 65535",
+    );
+    expect(() =>
+      parsePluginConfig({ ...requested, listenPort: "18790" }),
+    ).toThrow("listenPort must be an integer from 1 through 65535");
+  });
+
+  it("rejects sharing the native OpenClaw listener", () => {
+    const config = representativeConfig();
+    const inspection = inspectSetup(
+      config,
+      { ...requested, listenPort: 18_789 },
+      inspectionOptions,
+    );
+    expect(inspection.supported).toBe(false);
+    expect(inspection.errors).toContain(
+      "listenPort must differ from gateway.port so application routes cannot share the native OpenClaw listener",
+    );
   });
 
   it("pins an optional model on the restricted agent without changing defaults", () => {

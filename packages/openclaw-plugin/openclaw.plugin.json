@@ -17,6 +17,13 @@
         "type": "string",
         "description": "Restricted OpenClaw agent offered to applications"
       },
+      "listenPort": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535,
+        "default": 18790,
+        "description": "IPv4 loopback port dedicated to Agent Connect application traffic"
+      },
       "model": {
         "type": "string",
         "description": "Optional server-owned provider/model for the restricted agent"

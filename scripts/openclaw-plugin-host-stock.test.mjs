@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
@@ -56,7 +57,7 @@ test(
         config.channels = {};
         config.memory = { search: { enabled: true } };
       },
-      prepare({ binary, env, directory }) {
+      prepare({ binary, env, directory, pluginPort }) {
         execFileSync(
           binary,
           [
@@ -79,7 +80,14 @@ test(
         };
         const before = spawnSync(
           binary,
-          ["agent-connect", "doctor", "--origin", publicOrigin],
+          [
+            "agent-connect",
+            "doctor",
+            "--origin",
+            publicOrigin,
+            "--listen-port",
+            String(pluginPort),
+          ],
           { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
         );
         doctorBeforeSetup = {
@@ -89,7 +97,15 @@ test(
         setupOutput = JSON.parse(
           execFileSync(
             binary,
-            ["agent-connect", "setup", "--origin", publicOrigin, "--apply"],
+            [
+              "agent-connect",
+              "setup",
+              "--origin",
+              publicOrigin,
+              "--listen-port",
+              String(pluginPort),
+              "--apply",
+            ],
             { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
           ),
         );
@@ -146,6 +162,11 @@ test(
           issuer,
           resource,
           agentId: "agent-connect-app",
+          listenPort: runtime.pluginPort,
+          localForwardTarget: runtime.pluginBaseUrl,
+          listener: "not_checked",
+          nativeUpstream: "not_checked",
+          publicIngress: "not_checked",
           ownerIdentity: "missing",
           changes: [
             "add restricted agent agent-connect-app",
@@ -157,9 +178,10 @@ test(
             "config is rechecked before dispatch but the following internal HTTP admission is not atomic",
         },
       });
-      assert.equal(doctorAfterSetup.status, 0);
-      assert.equal(doctorAfterSetup.output.ok, true);
-      assert.equal(doctorAfterSetup.output.status, "ready");
+      assert.equal(doctorAfterSetup.status, 2);
+      assert.equal(doctorAfterSetup.output.ok, false);
+      assert.equal(doctorAfterSetup.output.status, "listener_unavailable");
+      assert.equal(doctorAfterSetup.output.listener, "unavailable");
       assert.match(setupOutput.enrollmentPassphrase, /^AC-ENROLL-/);
       const sourceConfig = JSON.parse(
         await readFile(join(runtime.directory, "openclaw.json"), "utf8"),
@@ -172,9 +194,45 @@ test(
         "*",
       );
 
-      await waitForStatus(runtime.baseUrl, "/agent-connect/healthz", 200);
+      await waitForStatus(runtime.pluginBaseUrl, "/agent-connect/healthz", 200);
+      const liveDoctor = spawnSync(
+        runtime.binary,
+        ["agent-connect", "doctor"],
+        {
+          cwd: runtime.directory,
+          env: runtime.env,
+          encoding: "utf8",
+          timeout: 30_000,
+        },
+      );
+      assert.equal(liveDoctor.status, 0, liveDoctor.stderr);
+      assert.deepEqual(
+        {
+          status: JSON.parse(liveDoctor.stdout).status,
+          listener: JSON.parse(liveDoctor.stdout).listener,
+          nativeUpstream: JSON.parse(liveDoctor.stdout).nativeUpstream,
+        },
+        { status: "ready", listener: "available", nativeUpstream: "ready" },
+      );
+      for (const path of [
+        "/",
+        "/terminal",
+        "/v1/responses",
+        "/agent-connectivity",
+        "/agent-connect%2Fhealthz",
+        "/.well-known/oauth-authorization-server/unknown",
+      ]) {
+        assert.equal(
+          (await fetch(`${runtime.pluginBaseUrl}${path}`)).status,
+          404,
+        );
+      }
+      const nativeRoute = await fetch(
+        `${runtime.baseUrl}/.well-known/oauth-authorization-server/agent-connect`,
+      );
+      assert.doesNotMatch(await nativeRoute.text(), /gateway\.example/);
       const metadata = await waitForJson(
-        runtime.baseUrl,
+        runtime.pluginBaseUrl,
         "/.well-known/oauth-authorization-server/agent-connect",
       );
       assert.equal(metadata.issuer, issuer);
@@ -183,7 +241,7 @@ test(
         `${publicOrigin}/agent-connect/oauth/token`,
       );
       const protectedMetadata = await waitForJson(
-        runtime.baseUrl,
+        runtime.pluginBaseUrl,
         "/.well-known/oauth-protected-resource/agent-connect/v1/responses",
       );
       assert.equal(protectedMetadata.resource, resource);
@@ -313,6 +371,7 @@ test(
       });
       await waitFor(() => runtime.modelRequests[4]?.closed === true);
       await hangingBody;
+      await waitForConnectionRefused(runtime.pluginBaseUrl);
       execFileSync(
         runtime.binary,
         ["plugins", "enable", "agent-connect", "--accept-capabilities"],
@@ -323,7 +382,7 @@ test(
           timeout: 30_000,
         },
       );
-      await waitForStatus(runtime.baseUrl, "/agent-connect/healthz", 200);
+      await waitForStatus(runtime.pluginBaseUrl, "/agent-connect/healthz", 200);
       const stale = await appPost(runtime, refreshed.accessToken, {
         model: "openclaw/default",
         previous_response_id: followUp.id,
@@ -350,7 +409,7 @@ test(
           timeout: 30_000,
         },
       );
-      await waitForStatus(runtime.baseUrl, "/agent-connect/healthz", 503);
+      await waitForStatus(runtime.pluginBaseUrl, "/agent-connect/healthz", 503);
       assert.equal(runtime.modelRequests.length, 5);
 
       execFileSync(
@@ -369,7 +428,7 @@ test(
           timeout: 30_000,
         },
       );
-      await waitForStatus(runtime.baseUrl, "/agent-connect/healthz", 200);
+      await waitForStatus(runtime.pluginBaseUrl, "/agent-connect/healthz", 200);
 
       const native = await runtime.request(
         {
@@ -429,7 +488,7 @@ for (const authCase of [
     async () => {
       let setupOutput;
       const runtime = await startOpenClawTestRuntime({
-        configure(config, { directory }) {
+        configure(config, { directory, pluginPort }) {
           config.gateway.auth = authCase.config;
           if (authCase.preconfigured) {
             config.agents.defaults.model = { primary: "fixture/fixture" };
@@ -470,6 +529,7 @@ for (const authCase of [
                   config: {
                     publicOrigin,
                     agentId: authCase.agentId,
+                    listenPort: pluginPort,
                     model: "fixture/fixture",
                   },
                 },
@@ -477,7 +537,7 @@ for (const authCase of [
             };
           }
         },
-        prepare({ binary, env, directory }) {
+        async prepare({ binary, env, directory, pluginPort }) {
           Object.assign(env, authCase.env ?? {});
           execFileSync(
             binary,
@@ -493,7 +553,15 @@ for (const authCase of [
           setupOutput = JSON.parse(
             execFileSync(
               binary,
-              ["agent-connect", "setup", "--origin", publicOrigin, "--apply"],
+              [
+                "agent-connect",
+                "setup",
+                "--origin",
+                publicOrigin,
+                "--listen-port",
+                String(pluginPort),
+                "--apply",
+              ],
               { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
             ),
           );
@@ -523,15 +591,23 @@ for (const authCase of [
         if (authCase.warns) {
           assert.match(
             setupOutput.warnings.join(" "),
-            /native endpoints outside \/agent-connect are not protected/,
+            /exposing its native port would bypass Agent Connect grants/,
+          );
+          assert.match(
+            await readFile(join(runtime.directory, "gateway.log"), "utf8"),
+            /clients could bypass Agent Connect grants and call the authless native Responses endpoint/,
           );
         } else {
           assert.deepEqual(setupOutput.warnings, []);
         }
-        await waitForStatus(runtime.baseUrl, "/agent-connect/healthz", 200);
+        await waitForStatus(
+          runtime.pluginBaseUrl,
+          "/agent-connect/healthz",
+          200,
+        );
 
         const unauthenticatedApp = await fetch(
-          `${runtime.baseUrl}/agent-connect/v1/responses`,
+          `${runtime.pluginBaseUrl}/agent-connect/v1/responses`,
           {
             method: "POST",
             headers: {
@@ -582,6 +658,71 @@ for (const authCase of [
 }
 
 test(
+  "occupied plugin port fails closed without disturbing native OpenClaw",
+  { timeout: 180_000 },
+  async () => {
+    const occupant = createServer((_request, response) => {
+      response.writeHead(418, { "content-type": "text/plain" });
+      response.end("original listener");
+    });
+    let runtime;
+    try {
+      runtime = await startOpenClawTestRuntime({
+        async prepare({ binary, env, directory, pluginPort }) {
+          execFileSync(
+            binary,
+            [
+              "plugins",
+              "install",
+              `npm-pack:${artifact}`,
+              "--force",
+              "--accept-capabilities",
+            ],
+            { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
+          );
+          execFileSync(
+            binary,
+            [
+              "agent-connect",
+              "setup",
+              "--origin",
+              publicOrigin,
+              "--listen-port",
+              String(pluginPort),
+              "--apply",
+            ],
+            { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
+          );
+          await new Promise((resolve, reject) => {
+            occupant.once("error", reject);
+            occupant.listen(pluginPort, "127.0.0.1", resolve);
+          });
+        },
+        onModelRequest(_body, model) {
+          model.text("Native listener remained usable.");
+        },
+      });
+
+      const occupied = await fetch(`${runtime.pluginBaseUrl}/agent-connect`);
+      assert.equal(occupied.status, 418);
+      assert.equal(await occupied.text(), "original listener");
+      const native = await runtime.request({ input: "Native still works" });
+      assert.equal(native.status, 200);
+      assert.match(await native.text(), /Native listener remained usable/);
+      assert.match(
+        await readFile(join(runtime.directory, "gateway.log"), "utf8"),
+        new RegExp(`listen port ${runtime.pluginPort} is already in use`),
+      );
+    } finally {
+      await runtime?.close();
+      if (occupant.listening) {
+        await new Promise((resolve) => occupant.close(resolve));
+      }
+    }
+  },
+);
+
+test(
   "unsupported host setup neither mutates configuration nor mints owner identity",
   { timeout: 180_000 },
   async () => {
@@ -591,7 +732,7 @@ test(
         configure(config) {
           config.gateway.tls = { enabled: true };
         },
-        async prepare({ binary, env, directory }) {
+        async prepare({ binary, env, directory, pluginPort }) {
           execFileSync(
             binary,
             [
@@ -607,7 +748,15 @@ test(
           const before = await readFile(configPath, "utf8");
           const setup = spawnSync(
             binary,
-            ["agent-connect", "setup", "--origin", publicOrigin, "--apply"],
+            [
+              "agent-connect",
+              "setup",
+              "--origin",
+              publicOrigin,
+              "--listen-port",
+              String(pluginPort),
+              "--apply",
+            ],
             { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
           );
           assert.equal(setup.status, 2);
@@ -647,30 +796,33 @@ async function authorize(runtime, enrollmentPassphrase) {
   });
   const requestUri = started.transaction.requestUri;
   const authorizePath = `${new URL(started.authorizationUrl).pathname}${new URL(started.authorizationUrl).search}`;
-  const login = await fetch(`${runtime.baseUrl}${authorizePath}`);
+  const login = await fetch(`${runtime.pluginBaseUrl}${authorizePath}`);
   assert.equal(login.status, 401);
   const challengeToken = hidden(await login.text(), "challenge");
-  const owner = await fetch(`${runtime.baseUrl}/agent-connect/owner/login`, {
-    method: "POST",
-    redirect: "manual",
-    headers: {
-      origin: publicOrigin,
-      "content-type": "application/x-www-form-urlencoded",
+  const owner = await fetch(
+    `${runtime.pluginBaseUrl}/agent-connect/owner/login`,
+    {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        origin: publicOrigin,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        challenge: challengeToken,
+        passphrase: enrollmentPassphrase,
+      }),
     },
-    body: new URLSearchParams({
-      challenge: challengeToken,
-      passphrase: enrollmentPassphrase,
-    }),
-  });
+  );
   assert.equal(owner.status, 303);
   const cookie = owner.headers.get("set-cookie").split(";", 1)[0];
-  const consent = await fetch(`${runtime.baseUrl}${authorizePath}`, {
+  const consent = await fetch(`${runtime.pluginBaseUrl}${authorizePath}`, {
     headers: { cookie },
   });
   assert.equal(consent.status, 200);
   const consentHtml = await consent.text();
   const decided = await fetch(
-    `${runtime.baseUrl}/agent-connect/oauth/authorize`,
+    `${runtime.pluginBaseUrl}/agent-connect/oauth/authorize`,
     {
       method: "POST",
       redirect: "manual",
@@ -701,7 +853,7 @@ function sdkFetch(runtime) {
   return (input, init) => {
     const url = new URL(String(input));
     assert.equal(url.origin, publicOrigin);
-    return fetch(`${runtime.baseUrl}${url.pathname}${url.search}`, init);
+    return fetch(`${runtime.pluginBaseUrl}${url.pathname}${url.search}`, init);
   };
 }
 
@@ -715,7 +867,7 @@ function appSdkFetch(runtime) {
 }
 
 async function appPost(runtime, token, body, extraHeaders = {}) {
-  return fetch(`${runtime.baseUrl}/agent-connect/v1/responses`, {
+  return fetch(`${runtime.pluginBaseUrl}/agent-connect/v1/responses`, {
     method: "POST",
     headers: {
       origin: appOrigin,
@@ -803,6 +955,20 @@ async function waitForStatus(baseUrl, path, expected) {
       return (await fetch(`${baseUrl}${path}`)).status === expected;
     } catch {
       return false;
+    }
+  });
+}
+
+async function waitForConnectionRefused(baseUrl) {
+  await waitFor(async () => {
+    try {
+      const response = await fetch(`${baseUrl}/agent-connect/healthz`, {
+        signal: AbortSignal.timeout(500),
+      });
+      await response.body?.cancel();
+      return false;
+    } catch {
+      return true;
     }
   });
 }
