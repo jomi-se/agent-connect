@@ -281,6 +281,11 @@ erasing the old state is intentional and may be irreversible.
 Preparation commits: Agent Connect `2bb6003`; Artifex `e36f4b2`.
 Owner-requested corrections: initial plugin version `0.0.1` in Agent Connect
 `3b922b2`; default Artifex bootstrap installation and matching pin in `2f852f3`.
+After the first main push, CI exposed an overly specific stock-package provenance
+assertion: the integrity-checked installer intentionally gives npm a local copy of
+the canonical tarball, so npm records a `file:` resolution. The gate now accepts
+that deterministic filename or the canonical URL while still requiring the exact
+version and pinned integrity.
 
 Final local evidence: `npm run verify`, `npm run analyze`, the Canvas Playwright
 suite, release-logic tests, exact-tarball SDK/plugin smokes, dynamic plugin
