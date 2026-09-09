@@ -184,7 +184,34 @@ inspect host -> resolve missing choices -> show one proposed change summary
 - No new `agent-connect start/stop` executable or parallel lifecycle service.
   `agent-connect doctor` remains useful for plugin-specific troubleshooting.
 
-## 5. Artifex becomes a thin installation integration
+## 5. Artifex owns reproducible configuration, not a second runtime
+
+Owner clarification: Artifex must keep the **actual persistent, non-secret VM
+configuration in its repository**, like its Codex configuration and skills.
+A template copied once to an unmanaged home directory is not sufficient.
+“Thin” describes process/lifecycle integration, not configuration ownership.
+
+- Track the real model/runtime selection, agent profiles, plugin enablement and
+  settings, listener configuration and other reproducible operator choices under
+  an Artifex-owned config directory. Changes must remain visible as ordinary Git
+  diffs; don't regenerate over manual edits on every bootstrap or silently commit.
+- Connect that source to OpenClaw's native-compatible profile using supported
+  config includes or a verified symlink arrangement. Keep native service identity
+  in the expected profile location; don't reintroduce isolated path overrides just
+  to put config in Git. Verify which arrangement upstream actually supports.
+- Test OpenClaw/plugin configuration writes, not merely reads: atomic replacement
+  may break a symlink, and include mutation has specific upstream restrictions.
+  Setup must update the intended repo-owned source without creating a divergent
+  live copy. If public APIs cannot preserve this, report the concrete conflict
+  before implementing a second configuration synchronizer.
+- Secrets are deliberately different: provider tokens, native auth secrets,
+  owner enrollment material, app grants and conversation/session databases stay
+  in private runtime state outside tracked config. Use supported secret references
+  or a private local overlay; never let onboarding write raw credentials into a
+  tracked config file, its Git history, or repo-side backup/journal files.
+- Document the exact source path, native entry point, private state location and
+  mutation behavior. A fresh install recreates configuration from Artifex and
+  requests login/enrollment; it does not recover old credentials from the repo.
 
 1. Keep pinned published npm installs and standard bootstrap checks. Don't import
    plugin source, bundle unpublished artifacts or invoke live onboarding during
@@ -207,6 +234,10 @@ inspect host -> resolve missing choices -> show one proposed change summary
 6. Update setup help, README, AGENTS, launchers and runbook together. Fresh setup
    should have one native onboarding entry and one plugin setup entry, not the
    current fifteen-line implementation recipe.
+7. Cover repo-owned configuration persistence explicitly: restart and bootstrap
+   rerun retain settings, a supported setup change appears in the source Git diff,
+   native service commands still work, and secret-bearing data never enters the
+   tracked source or automatic backups beside it.
 
 ## 6. Focused proof and release gates
 
