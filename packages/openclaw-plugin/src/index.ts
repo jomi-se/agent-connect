@@ -33,6 +33,7 @@ import {
   type StockPluginConfig,
 } from "./config.js";
 import type { StockPluginApi } from "./host-api.js";
+import { assertRuntimeCurrentUnlessAborted } from "./readiness.js";
 
 const OWNER_STATE_FILE = "owner.json";
 const GRANT_STATE_FILE = "delegated-grants.json";
@@ -181,7 +182,12 @@ export default {
             initial.upstreamAuth,
             stop.signal,
           )
-            .then(assertAppliedRuntimeCurrent)
+            .then(() =>
+              assertRuntimeCurrentUnlessAborted(
+                stop.signal,
+                assertAppliedRuntimeCurrent,
+              ),
+            )
             .then(
               () => {
                 if (service === active && !stop.signal.aborted) {
@@ -230,14 +236,14 @@ function registerCli(api: StockPluginApi): void {
         .command("doctor")
         .description("Inspect compatibility without changing configuration")
         .option("--origin <url>", "public HTTPS gateway origin")
-        .option("--agent-id <id>", "restricted agent id", DEFAULT_AGENT_ID)
+        .option("--agent-id <id>", "restricted agent id")
         .option("--model <provider/model>", "restricted agent model")
         .action(async (options) => runDoctor(api, options));
       root
         .command("setup")
         .description("Guide setup on a terminal, or preview/apply explicitly")
         .option("--origin <url>", "public HTTPS gateway origin")
-        .option("--agent-id <id>", "restricted agent id", DEFAULT_AGENT_ID)
+        .option("--agent-id <id>", "restricted agent id")
         .option("--model <provider/model>", "restricted agent model")
         .option("--apply", "persist the reviewed setup")
         .option("--json", "print machine-readable output")
