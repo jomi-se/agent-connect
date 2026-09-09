@@ -155,7 +155,7 @@ test(
       );
 
       await waitForStatus(runtime.baseUrl, "/agent-connect/healthz", 200);
-      const metadata = await getJson(
+      const metadata = await waitForJson(
         runtime.baseUrl,
         "/.well-known/oauth-authorization-server/agent-connect",
       );
@@ -164,7 +164,7 @@ test(
         metadata.token_endpoint,
         `${publicOrigin}/agent-connect/oauth/token`,
       );
-      const protectedMetadata = await getJson(
+      const protectedMetadata = await waitForJson(
         runtime.baseUrl,
         "/.well-known/oauth-protected-resource/agent-connect/v1/responses",
       );
@@ -691,10 +691,22 @@ function hidden(html, name) {
   return match[1];
 }
 
-async function getJson(baseUrl, path) {
-  const response = await fetch(`${baseUrl}${path}`);
-  await assertStatus(response, 200);
-  return response.json();
+async function waitForJson(baseUrl, path) {
+  let value;
+  await waitFor(async () => {
+    try {
+      const response = await fetch(`${baseUrl}${path}`);
+      if (response.status !== 200) {
+        await response.body?.cancel();
+        return false;
+      }
+      value = await response.json();
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  return value;
 }
 
 async function assertStatus(response, expected) {

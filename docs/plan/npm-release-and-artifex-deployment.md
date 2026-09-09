@@ -286,6 +286,11 @@ assertion: the integrity-checked installer intentionally gives npm a local copy 
 the canonical tarball, so npm records a `file:` resolution. The gate now accepts
 that deterministic filename or the canonical URL while still requiring the exact
 version and pinned integrity.
+The following main run exposed a separate startup race in the installed-plugin
+composition gate: health became ready immediately before a brief service
+reinitialization, so the first OAuth metadata request received transient
+`503 initializing`. Initial metadata discovery now waits through that explicit
+startup state; steady-state status and response assertions remain strict.
 
 Final local evidence: `npm run verify`, `npm run analyze`, the Canvas Playwright
 suite, release-logic tests, exact-tarball SDK/plugin smokes, dynamic plugin
