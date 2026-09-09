@@ -6,10 +6,11 @@ and product-research writes. When
 the runtime calls those tools, the loaded page mutates immediately. The tools
 are defined by the page and are not installed into the user's runtime in
 advance. This app uses the preserved runtime-card gateway flow; it is not the
-current stock OpenClaw plugin-host integration. Deterministic client-tool
-compatibility is separate from live subscription acceptance. Operator setup for
-the current plugin is documented in
-[`deploy/openclaw-gateway`](../../deploy/openclaw-gateway/README.md).
+current stock OpenClaw plugin-host integration. The current plugin does not
+emit runtime cards, so its setup guide cannot be used to operate this demo.
+The migration is tracked in [current work](../../docs/plan/current-work.md).
+Deterministic client-tool compatibility is separate from live subscription
+acceptance.
 
 The Build Week surface is also a self-explaining product demo. Real connection,
 task, tool-call, result, and completion events append to a live activity feed;
@@ -23,7 +24,7 @@ application, not at the monorepo root.
 
 The app needs:
 
-- the public runtime card printed when the gateway identity is first created;
+- a public runtime card from an already configured legacy gateway;
 - a browser that can reach the gateway's Tailscale Serve HTTPS URL.
 
 The app verifies the card's gateway key before sending its tool schema, then

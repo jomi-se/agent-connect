@@ -1,10 +1,19 @@
 # `@open-agent-connect/web`
 
-Browser SDK to implement AI features leveraging a user owned AI agent behind an Agent Connect Gateway
+Browser SDK for adding AI features backed by a user-owned agent. The current
+published provider path is the stock OpenClaw plugin; the application talks to
+the gateway through the bounded Open Responses contract and keeps its own tool
+implementations.
+
+Install the published package in the web application:
+
+```sh
+npm install @open-agent-connect/web@0.0.4
+```
 
 The package provides:
 
-- Signed runtime-card verification;
+- Signed runtime-card verification (retained for the historical Canvas flow);
 - Gateway authorization and token management;
 - Open Responses (`/v1/responses`) HTTP/SSE communication with multi-turn response continuation (`previous_response_id`);
 - Provider-neutral `AgentSession` and task event streaming;
@@ -15,8 +24,10 @@ For the stock OpenClaw plugin, pass the path-bound provider URL
 `https://<gateway-host>/agent-connect` to `discoverOpenClawProvider`. The SDK
 uses RFC well-known discovery for that issuer and returns the namespaced
 `/agent-connect/v1/responses` resource. Origin-only provider URLs remain
-supported for the standalone rollback deployment; metadata and token bindings
-from the two layouts cannot be mixed.
+retained for legacy runtime-card consumers; they are not the supported plugin
+installation path. Metadata and token bindings from the two layouts cannot be
+mixed. For a complete current setup and authorization example, see the
+[web application integration guide](../../docs/guides/web-app-integration.md).
 
 ## Saved connections and scoped history
 
@@ -70,7 +81,17 @@ never stores credentials. A strict native missing/expired or changed outcome is
 reported as `OpenClawConversationUnavailableError`; authentication, transport,
 abort and invalid-response failures remain distinct.
 
-Communication with the gateway uses the standard Open Responses protocol profile. Harness orchestrators like Omnigent remain internal backends behind the user's Agent Connect gateway and are never exposed directly to the browser.
+Communication with the gateway uses the standard Open Responses protocol profile.
+Harness orchestrators like Omnigent remain internal backends behind the user's
+Agent Connect gateway and are never exposed directly to the browser.
+
+## Legacy runtime-card compatibility
+
+The runtime-card functions below remain exported for the preserved Firebase
+Canvas demo and older consumers. They target the older standalone gateway
+layout, not the published stock OpenClaw plugin. New applications should use
+`discoverOpenClawProvider`, `beginOpenClawAuthorization`, and the namespaced
+provider URL described above.
 
 ```ts
 import {
@@ -237,7 +258,10 @@ because the interpreter's numeric tolerance can accept invalid multiples. Use
 ## Native WebMCP tools (experimental)
 
 An application that already registers tools with `document.modelContext` can
-reuse those tools through Agent Connect:
+reuse those tools through Agent Connect. The example below demonstrates the
+**legacy AgentSession/runtime-card path**, not the current plugin connection.
+For the current AI SDK integration, pass the snapshot's tools to
+`createAiSdkApplicationTools()` and use the OpenClaw authorization flow above.
 
 ```ts
 import {

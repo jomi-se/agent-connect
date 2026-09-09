@@ -1,3 +1,6 @@
+Status: historical Build Week project-description draft; retained as authored
+submission material, not current installation or product-status guidance.
+
 ## Inspiration
 
 Between having a full-time job and being the father of two young kids, personal coding projects had pretty much vanished from existence. The advent of AI and so-called vibe coding has made them a reality again for me. I don't think I've ever made so many cool little personal projects as I have recently.

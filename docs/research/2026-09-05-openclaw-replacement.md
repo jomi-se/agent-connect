@@ -1,8 +1,8 @@
 # OpenClaw replacement investigation
 
-Status: active investigation, not completed migration. User authorized an
-OpenClaw-based Agent Connect that minimizes custom gateway code while preserving
-easy subscription-backed application access through Open Responses and the SDK.
+Status: historical investigation, superseded by accepted ADR 0015 and the
+published stock OpenClaw plugin. The probes and conclusions below remain dated
+evidence; this note is not a current migration, setup, or acceptance plan.
 
 ## Verified baseline
 

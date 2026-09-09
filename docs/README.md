@@ -52,7 +52,7 @@ not erased, but they do not define today's installation or application routes.
 
 ## Deferred direction and dated evidence
 
-The [north star](../vision.md) is accepted product direction, not a finished
+The [north star](vision.md) is accepted product direction, not a finished
 standard or implementation promise. The [narrow protocol profile](architecture/narrow-protocol-profile.md)
 is an unstable ACP/MCP-over-ACP prototype, not the default browser/gateway path.
 Future deployment, native-client identity, tunnel, and multi-turn documents are

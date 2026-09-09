@@ -35,6 +35,10 @@ recovery path for removed executable implementations.
 - [Shared Codex auth](../plan/shared-codex-auth.md), [repository maintenance](../plan/repository-maintenance.md),
   [delegated grants](../plan/delegated-grants.md), and [grant-route security](../plan/grant-route-security-retrospective.md):
   completed supporting notes, not current operator plans.
+- [Build Week submission](../plan/openai-build-week-submission.md) and its
+  [project-description draft](../plan/build-week-project-description.md):
+  historical event material retained for provenance, not current setup or
+  product-status guidance.
 
 ## Superseded proposals and experiments
 

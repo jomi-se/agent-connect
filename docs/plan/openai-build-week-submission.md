@@ -1,5 +1,9 @@
 # OpenAI Build Week submission guide
 
+Status: historical Build Week submission material. The event and its judging
+workflow are over; this file is retained for provenance and is not current
+installation, deployment, or product-status guidance.
+
 This document is the execution guide for presenting Agent Connect to OpenAI
 Build Week. It does not replace the [current backlog](current-work.md), the
 [mission](../mission.md), or the

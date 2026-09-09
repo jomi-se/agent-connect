@@ -28,16 +28,21 @@ does not need to exist on the gateway host.
 
 ## Connect a runtime
 
-The hosted app is independent of the runtime profile. Paste a runtime card from
-a real gateway created with the
-[gateway guide](../../deploy/openclaw-gateway/README.md). The app verifies
-the gateway key, redirects to gateway-owned authorization, and stores the
-resulting app grant only in the tab's `sessionStorage`.
+The hosted app is independent of the runtime profile. This preserved demo
+expects a runtime card from an already configured legacy gateway. The current
+[stock OpenClaw plugin](../../deploy/openclaw-gateway/README.md) uses a
+path-bound provider URL instead and does not emit runtime cards, so do not use
+that guide to operate this Canvas. Migration of the Canvas is tracked in
+[current work](../plan/current-work.md).
 
-For the real Tailscale Serve profile, publish only the loopback gateway and
-make the configured public endpoint match the selected HTTPS Serve port
-exactly. Follow the current gateway guide rather than copying ports from
-historical spike notes.
+With the legacy runtime available, paste its runtime card. The app verifies the
+gateway key, redirects to gateway-owned authorization, and stores the resulting
+app grant only in the tab's `sessionStorage`.
+
+For a legacy Tailscale Serve profile, expose only that legacy loopback gateway
+and make its configured public endpoint match the selected HTTPS Serve port.
+The current plugin listener is not a drop-in replacement for that runtime-card
+endpoint. Do not forward native OpenClaw's listener to make this demo connect.
 
 ## Credential boundary
 
