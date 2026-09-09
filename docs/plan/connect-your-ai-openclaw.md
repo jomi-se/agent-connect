@@ -1,7 +1,7 @@
 # Connect your AI: OpenClaw-first implementation plan
 
-Date: 2026-09-06.
-Status: implementation in progress; native app authorization and live acceptance remain pending.
+Date: 2026-09-06. Status: archived historical sequencing plan; the published
+stock OpenClaw plugin path supersedes this in-progress proposal.
 
 ## Active execution ledger
 

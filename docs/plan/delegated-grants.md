@@ -2,8 +2,8 @@
 
 Date: 2026-09-06.
 
-Status: bounded core implemented; HTTP endpoints, owner login/consent UI and
-OpenClaw integration are separate work.
+Status: archived supporting authorization-core ledger; HTTP endpoints, owner
+login/consent UI, and OpenClaw integration now live in the published plugin.
 
 This module is the durable authorization core for a public browser client that
 connects to one operator-configured Responses resource. It deliberately does

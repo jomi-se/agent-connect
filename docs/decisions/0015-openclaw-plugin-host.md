@@ -17,8 +17,9 @@ This supersedes the archived ADR 0014 separate-process installation prescription
 not its app-delegation boundary. Reuse its grant/PKCE/refresh/revocation, approved tool
 snapshot, restricted request construction, response inspection, and bounded
 conversation ownership code. The forwarding remains an internal plugin
-implementation detail. The standalone executable and tests were removed after
-the plugin became the sole installation target; git history retains them.
+implementation detail. Legacy standalone executable/source and compatibility
+tests remain in the checkout for the pending Canvas migration and cleanup; they
+are not the supported installation or deployment path.
 
 Use a plugin-owned listener and namespace rather than intercepting native
 `/v1/responses`. The default application port is `127.0.0.1:18790`, must differ

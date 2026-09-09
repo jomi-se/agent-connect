@@ -22,8 +22,9 @@ this boundary without a separately operated executable; see
 credential-free stock-host composition gates are implemented. Agent Connect
 retains consent, application authority, browser integration and a bounded
 grant-to-conversation map; stock OpenClaw owns execution, native events, context,
-tools and sandboxing. The superseded standalone implementation is available
-through git history, not the current build or deployment surface.
+tools and sandboxing. Legacy standalone gateway source remains in the checkout
+for the pending Canvas migration and historical compatibility checks; it is not
+the supported installation or deployment path.
 
 ## Product promise
 
@@ -53,7 +54,7 @@ The following describes the plugin-hosted implementation. Any changed reliabilit
 or consent guarantees must be made explicit.
 
 - Keep the bounded Open Responses profile as the sole application wire:
-  `POST /v1/responses`, with the SDK coordinating function outputs and linear
+  served by the stock plugin at `POST /agent-connect/v1/responses`, with the SDK coordinating function outputs and linear
   follow-up through `previous_response_id`.
 - Delegate inference, model history, compaction, runtime credentials and
   process behavior to OpenClaw. Do not retain a parallel Omnigent backend,
@@ -97,28 +98,33 @@ The plugin constrains requests, selects a dedicated restricted agent/private
 session, streams observed native events, binds one current response checkpoint
 to an application grant, and exposes recent grant-owned execution history and
 completed-head reopening while that process-local mapping remains live. The
-standalone proxy source and tests were removed after ADR 0015 became the sole
-installation target; git history preserves the earlier implementation.
+ADR 0014 standalone scoped proxy was removed. The older replacement gateway
+and its compatibility checks remain for shared modules and legacy consumers
+until separate cleanup; they are not the current deployment path.
 
 Real published OpenClaw tests using deterministic inference install the packed
 plugin and exercise stock deny-all enforcement, owner login -> OAuth -> two-tool
 -> refresh -> follow-up/history -> revoke, disable/re-enable cleanup, unsafe
 policy refusal and coexistence with a native owner request. They are transport and policy
 evidence, not proof that the selected subscription-backed runtime usefully
-consumes an actual browser tool result. Final acceptance remains governed by the
-[archived vertical-slice closeout](archive/plans/stock-openclaw-vertical-closeout.md).
+consumes an actual browser tool result. The [archived vertical-slice
+closeout](archive/plans/stock-openclaw-vertical-closeout.md) preserves the
+earlier owner-acceptance ledger and is not current setup or acceptance
+instructions.
 
-the owner selected the built-in OpenClaw subscription loop and accepted the Bookhand
-connection/conversation-follow-up prototype for main on 2026-09-08. Known search,
-navigation and timeout-reporting defects remain open. Detailed phone checklist
-items not independently reported are not marked passed; the closeout ledger
-distinguishes this owner acceptance from full reliability certification.
+the owner selected the built-in OpenClaw subscription loop and, on 2026-09-09,
+reported the complete Bookhand vertical slice working through it. Known search,
+navigation and timeout-reporting defects remain open. This is owner-reported
+live success, not an independently replayed certification of every browser,
+provider, timeout, or edge-case behavior; detailed phone checklist items not
+independently reported are not marked passed.
 Published OpenClaw 2026.9.1's built-in loop supports the tested client-tool
 round trip; the separately packaged native Codex adapter drops client tools.
 Do not call built-in-loop evidence native Codex evidence. The built-in loop
 projects returned tool output as user text following a synthetic delegated
-result, rather than restoring native tool-role continuation. The actual
-selected runtime must prove useful consumption of that result. See the
+result, rather than restoring native tool-role continuation. the owner's report is
+the current owner evidence for the selected runtime; it does not certify this
+projection or every edge case independently. See the
 [dated investigation](research/2026-09-05-openclaw-replacement.md).
 
 Cancellation aborts the active upstream request and prevents continuation, but

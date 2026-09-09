@@ -2,7 +2,7 @@
 
 Date: 2026-07-14
 
-Status: pending exploration; not on the current critical path.
+Status: archived optional exploration; not on the current product path.
 
 ## Goal
 

@@ -1,10 +1,10 @@
 # Connect your AI: AI SDK execution seam
 
-Date: 2026-09-06.
-Status: thin model/tool/continuation adapters implemented with a temporary
-reviewed downstream dependency patch; deterministic real OpenClaw composition
-passes. Native application-grant authorization and live Bookhand consent/tool
-execution now work; see the compact handoff for current acceptance evidence.
+Date: 2026-09-06. Status: archived implementation companion; thin
+model/tool/continuation adapters implemented with a temporary reviewed
+downstream dependency patch; deterministic real OpenClaw composition passes.
+Native application-grant authorization and live Bookhand consent/tool execution
+now work; see the compact handoff for current acceptance evidence.
 
 This is the execution-layer companion to
 [`connect-your-ai-openclaw.md`](connect-your-ai-openclaw.md). It records the

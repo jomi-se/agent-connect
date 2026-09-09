@@ -1,6 +1,7 @@
 # Multi-turn task continuation
 
-Status: implemented; pending manual real-Codex release gate. Written 2026-08-30.
+Status: archived implementation ledger; owner-reported subscription-runtime
+continuation is recorded in [current work](current-work.md). Written 2026-08-30.
 
 ## Outcome
 

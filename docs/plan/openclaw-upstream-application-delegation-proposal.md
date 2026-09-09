@@ -1,6 +1,7 @@
 # Proposal: plugin-issued principals for native OpenClaw Responses
 
-Date: 2026-09-07. Target evidence: pinned OpenClaw 2026.9.1 only.
+Date: 2026-09-07. Status: archived superseded proposal; target evidence was
+pinned OpenClaw 2026.9.1 only.
 
 ## Problem
 

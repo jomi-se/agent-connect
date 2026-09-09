@@ -1,9 +1,8 @@
 # OpenClaw plugin-host implementation
 
-Date: 2026-09-08. Branch: `work/openclaw-plugin-host`, based on `3cc49ec`.
-Status: implemented, reviewed and deployed with subsequent owner authorization;
-owner confirmed prompt and conversation reload. Subsequently merged to main;
-no publication or push.
+Date: 2026-09-08. Status: archived implementation plan; reviewed, merged,
+published, and followed by owner-authorized deployment. the owner's later complete
+Bookhand result is owner-reported evidence, not an exhaustive independent test.
 Decision: [ADR 0015](../decisions/0015-openclaw-plugin-host.md).
 
 ## Outcome and ownership
@@ -212,10 +211,10 @@ Root reviews implementation and test evidence before merge or live rollout.
 - [x] M5 documentation, root review and owner handoff. SDK/Bookhand migration
       and reviewed live deployment completed; owner confirmed prompt/reload.
       See plugin-sdk-bookhand-migration.md for evidence boundaries.
-- [x] Post-acceptance cutover removed the ADR 0014 standalone executable,
-      deployment configuration and duplicate integration suite. The live
-      mediation implementation now resides in `packages/openclaw-plugin/src/runtime`;
-      ADR 0014 and its closeout plans are archived, with git history as rollback.
+- [x] Post-acceptance cutover made ADR 0015's plugin the supported installation
+      path and kept ADR 0014's rationale/legacy compatibility material clearly
+      separated. Legacy gateway source remains in the checkout for the pending
+      Canvas migration; it is not the supported deployment path.
 
 Current checkpoint: the corrected packed real-stock composition gate passes
 under the required Node 24.15 fixture. Failed iterations exposed and fixed the

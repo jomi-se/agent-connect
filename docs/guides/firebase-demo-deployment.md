@@ -1,4 +1,9 @@
-# Deploy the Firebase Canvas
+# Deploy the historical Firebase Canvas
+
+Status: maintained for the published Build Week/runtime-card demo. This guide
+does not install or configure the current stock OpenClaw plugin; use the
+[stock OpenClaw setup guide](../../deploy/openclaw-gateway/README.md) for that
+path.
 
 The Canvas is a static Firebase Hosting application. Its deployment credential
 does not need to exist on the gateway host.

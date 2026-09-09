@@ -1,6 +1,7 @@
 # Containerized gateway deployment
 
-Status: pending architecture and deployment spike
+Status: archived future packaging exploration; not a supported deployment or
+current implementation commitment.
 
 ## Opportunity
 

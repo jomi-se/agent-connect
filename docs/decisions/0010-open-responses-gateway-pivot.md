@@ -1,6 +1,7 @@
 # 0010: Use Open Responses at the application boundary
 
-- Status: accepted; implemented, post-switch composition confirmed by user
+- Status: accepted historical application-wire decision; implemented in the
+  current plugin path, with post-switch composition confirmed by the owner
 - Date: 2026-08-26
 - Revised: 2026-09-04
 

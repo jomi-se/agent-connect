@@ -1,9 +1,9 @@
-# npm publication gate
+# npm publication and release verification
 
 Agent Connect prepares two exact package tarballs together:
 
 - `@open-agent-connect/web@0.0.4` (already published; CI skips it)
-- `@open-agent-connect/openclaw-plugin@0.0.2` (current candidate)
+- `@open-agent-connect/openclaw-plugin@0.0.2` (published)
 
 `npm run release:prepare` builds, packs, inspects, and records SHA-256 digests in
 `dist/npm-release/manifest.json`. `npm run release:smoke` installs and exercises
@@ -36,9 +36,9 @@ GitHub environment, pushes, and handles interactive 2FA or approval.
    - workflow filename: `ci.yml` (filename only)
    - environment: `npm-publish`
    - allowed action: direct `npm publish`
-3. The packages now exist publicly: the registry returned SDK `0.0.4` and plugin
-   `0.0.1` on 2026-09-09. The earlier first-plugin manual bootstrap is complete
-   and must not be repeated for `0.0.2`.
+3. The packages now exist publicly: SDK `0.0.4` and plugin `0.0.2` were published
+   by the successful main-CI release. The earlier first-plugin manual bootstrap
+   is complete and must not be repeated for `0.0.2`.
 4. Inspect the current bindings before changing them. A binding to the retired
    `publish-web-sdk.yml` workflow does not authorize `ci.yml`; do not guess or
    revoke an unknown binding. With npm CLI 11.19.1 or newer, the equivalent
@@ -51,10 +51,10 @@ GitHub environment, pushes, and handles interactive 2FA or approval.
    `npm trust list @open-agent-connect/openclaw-plugin` can confirm the binding.
    Trust configuration requires interactive authentication/2FA.
 
-5. Push the reviewed commits. Successful main CI must skip the already-published
-   SDK `0.0.4` and publish only the absent plugin `0.0.2`; a later rerun must skip
-   both. Verify npm version, integrity and provenance before authorizing the
-   operator infrastructure config/pin/ingress commit and live phase.
+5. For a future release, push the reviewed version-bump commits. Main CI must
+   skip already-published versions and publish only an absent package from its
+   inspected tarball; a rerun must skip both current versions. Verify npm
+   version, integrity and provenance before changing an operational pin.
 
 This checklist follows npm's current
 [trusted publishing](https://docs.npmjs.com/trusted-publishers/) and

@@ -1,6 +1,7 @@
 # OpenClaw application-principal patch proposal hardening
 
-Status: implementation and pinned validation complete; awaiting review.
+Status: archived superseded patched-host experiment; pinned validation is dated
+evidence only and is not a current-upstream compatibility claim.
 
 ## Scope
 

@@ -1,7 +1,8 @@
 # Plugin SDK and Bookhand migration
 
-2026-09-08. Active on `work/openclaw-plugin-host`, following `1b8b67a`.
-Owner authorized implementation, not live cutover or push.
+2026-09-08. Status: archived; SDK ownership migration completed. the owner's later
+live Bookhand result is recorded as owner-reported evidence in
+[current work](current-work.md), not as an exhaustive independent test.
 
 ## Boundary
 

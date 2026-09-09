@@ -5,9 +5,10 @@ snapshot spanning a shared live-state read plus project-board, document-review,
 and product-research writes. When
 the runtime calls those tools, the loaded page mutates immediately. The tools
 are defined by the page and are not installed into the user's runtime in
-advance. The replacement gateway mediates OpenClaw Responses; deterministic
-client-tool compatibility is verified separately from live subscription acceptance.
-Operator setup is documented in
+advance. This app uses the preserved runtime-card gateway flow; it is not the
+current stock OpenClaw plugin-host integration. Deterministic client-tool
+compatibility is separate from live subscription acceptance. Operator setup for
+the current plugin is documented in
 [`deploy/openclaw-gateway`](../../deploy/openclaw-gateway/README.md).
 
 The Build Week surface is also a self-explaining product demo. Real connection,

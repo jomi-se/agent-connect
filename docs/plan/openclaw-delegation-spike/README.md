@@ -25,7 +25,8 @@ state only; do not touch agc, agc-openclaw, Bookhand, Serve, or personal auth. N
 external writes/posts/pushes. Runtime planning tools are unavailable here; local
 contracts, bounded agents, and executable evidence carry the investigation.
 
-Status: two sequential independent contract-review passes passed. Implementer
+Status: archived feasibility evidence; two sequential independent
+contract-review passes passed. Implementer
 lane owns only docs/research/support/delegation-plugin and its probe. The existing
 test runtime gained an optional configure hook for isolated auth/plugin setup.
 Source scrutiny and an independent API run passed pairing/runtime; its first

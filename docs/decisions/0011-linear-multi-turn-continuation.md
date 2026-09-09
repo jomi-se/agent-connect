@@ -1,6 +1,7 @@
 # 0011: Model completed-task continuation as a linear response history
 
-- Status: proposed; implementation complete, pending manual real-Codex release gate
+- Status: accepted bounded continuation decision; implementation complete, with
+  owner-reported subscription-runtime evidence and no exhaustive edge-case gate
 - Date: 2026-08-31
 
 ## Context

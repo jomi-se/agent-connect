@@ -1,6 +1,7 @@
 # CSP-safe SDK validation
 
-Status: SDK fix verified locally; Bookhand application integration remains separate.
+Status: archived SDK validation ledger; the fix is part of the published SDK and
+Bookhand integration is tracked as owner-reported evidence elsewhere.
 No push/publication authorized.
 
 Bookhand reproduced AgentSession construction failing under a real Chromium

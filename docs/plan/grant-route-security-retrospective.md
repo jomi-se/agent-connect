@@ -4,7 +4,8 @@
 > 2026-08-28 with the retired judge deployment. The route-separation lessons
 > remain relevant to the private gateway.
 
-Status: minimum fix implemented and covered on 2026-07-17
+Status: archived security retrospective; minimum fix implemented and covered on
+2026-07-17.
 
 ## Why this note exists
 

@@ -6,11 +6,12 @@ Agent Connect is an application-to-user-owned-agent bridge. Keep the application
 
 The sole installation target is the stock OpenClaw plugin host (ADR 0015),
 tracked in docs/plan/openclaw-plugin-host.md. Users must not operate a separate
-proxy process. The superseded ADR 0014 implementation is available through git
-history, not the current build, test, or deployment surface. Keep provider/plugin
-types out of the application API. Older runtime-card, replacement-engine and
-native-patch artifacts are historical compatibility/experiment paths, not
-prerequisites for the plugin.
+proxy process. The ADR 0014 standalone scoped proxy was removed; its source is
+available in git history. The older replacement gateway remains in the checkout
+for shared modules and legacy consumers pending cleanup, not as the supported
+installation. Keep provider/plugin types out of the application API.
+Older runtime-card, replacement-engine and native-patch artifacts are historical
+compatibility/experiment paths, not prerequisites for the plugin.
 
 ## Terminology
 

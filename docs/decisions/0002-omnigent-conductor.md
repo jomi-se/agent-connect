@@ -1,6 +1,7 @@
 # ADR 0002: Evaluate Omnigent as the conductor
 
-Status: accepted for the first provider
+Status: historical provider-selection record; superseded as the supported
+installation direction by ADR 0015
 
 Date: 2026-07-13
 

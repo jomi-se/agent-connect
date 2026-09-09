@@ -1,112 +1,61 @@
 # Documentation
 
-Start with the root [README](../README.md) for the product, Canvas app, real
-gateway, SDK example, supported platforms, and verification commands.
+Start with the root [README](../README.md) for the product overview, current
+installation, SDK example, supported platforms, and verification commands.
 
 ## Current sources of truth
 
 - [Mission](mission.md): product promise, current strategy, acceptance boundary,
-  and non-goals.
-- [Scope inventory](scope-inventory.md): implemented, deferred, and explicitly
-  unsupported capabilities plus their validation surfaces.
+  and explicit non-goals.
+- [Scope inventory](scope-inventory.md): implemented, deferred, and unsupported
+  capabilities plus their evidence boundary.
+- [Stock OpenClaw architecture](architecture/stock-openclaw-plugin.md): listener
+  layout, trust boundaries, lifecycle, and supported host policy.
 - [Target architecture](architecture/target-architecture.md): component and
-  trust boundaries, current provider path, and future adapter seams.
-- [Testing strategy](architecture/testing-strategy.md): rule for provider truth,
-  three evidence layers, and verification commands.
-- [Current work](plan/current-work.md): canonical unfinished work and bounded
-  experiments.
-- [Web application integration](guides/web-app-integration.md): package the SDK,
-  authorize a gateway, stream a task, handle browser-owned tools, and revoke
-  access.
-- [OpenClaw plugin setup](../deploy/openclaw-gateway/README.md): published plugin,
-  explicit capability consent, restricted-agent setup, and doctor states.
-- [npm publication gate](guides/npm-publication.md): exact release candidates,
-  gated main-CI publication, first-plugin bootstrap, and owner-only steps.
-- [Firebase deployment](guides/firebase-demo-deployment.md): deploy the static
-  Canvas without placing Firebase credentials on the gateway.
+  trust boundaries and future adapter seams.
+- [Testing strategy](architecture/testing-strategy.md): provider truth and the
+  three evidence layers.
+- [Current work](plan/current-work.md): the small set of genuine unfinished work
+  and explicit non-gates.
+- [Stock OpenClaw setup](../deploy/openclaw-gateway/README.md): install the
+  published plugin, configure the dedicated listener, run doctor, and forward
+  public HTTPS safely.
+- [Web application integration](guides/web-app-integration.md): install the
+  published SDK, authorize a gateway, stream a task, handle browser-owned tools,
+  and revoke access.
+- [npm publication and release verification](guides/npm-publication.md):
+  pack/release checks and the owner-controlled future publication procedure.
+- [Firebase deployment](guides/firebase-demo-deployment.md): deploy the
+  historical static Canvas demo without putting Firebase credentials on a
+  gateway.
 - [Local code-quality analysis](guides/code-quality-analysis.md): ESLint,
-  dependency-cruiser, Knip, and jscpd commands, scope, and baseline policy.
-- [Build Week submission](plan/openai-build-week-submission.md): historical
-  presentation, judge instructions checklist, video outline, and deadline.
+  dependency-cruiser, Knip, and jscpd commands and baseline policy.
 
-The [experimental ACP/MCP-over-ACP profile](architecture/narrow-protocol-profile.md)
-documents an unstable prototype. It is not the default browser/gateway path.
+The [archive index](archive/README.md) lists completed and superseded execution
+plans, dated evidence ledgers, and design material. Archived documents remain
+useful provenance, but their commands and gates are not current instructions.
 
-## Current design direction
+## Accepted decisions
 
 - [ADR 0015: Stock OpenClaw plugin host](decisions/0015-openclaw-plugin-host.md)
-  is the active installation target; its
-  [plan and evidence gates](plan/openclaw-plugin-host.md) distinguish the
-  installed-package proof from owner-gated npm publication and deployment.
-- [ADR 0010: Open Responses at the application boundary](decisions/0010-open-responses-gateway-pivot.md)
-- [ADR 0011: Linear multi-turn continuation](decisions/0011-linear-multi-turn-continuation.md)
-  is the leading proposed protocol direction and defines its evidence gates.
-- [Containerized gateway deployment](plan/containerized-gateway-deployment.md)
-  remains supporting packaging research, not a required architecture.
+  is the active installation decision.
+- [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md),
+  [ADR 0007: Runtime-card and gateway authorization](decisions/0007-runtime-card-and-gateway-authorization.md),
+  and [ADR 0008: Control-plane and runtime confinement boundary](decisions/0008-control-plane-and-runtime-confinement-boundary.md)
+  remain rationale for security and trust boundaries where they do not conflict
+  with ADR 0015.
 
-The older [AG-UI compatibility spike](plan/ag-ui-compatibility-spike.md) is
-historical. AG-UI is no longer an active core-protocol experiment.
+ADR 0001, 0002, 0004, 0006, and 0009–0013 are retained as superseded or
+historical decision records; [ADR 0014](archive/decisions/0014-stock-openclaw-scoped-proxy.md)
+is archived with the standalone proxy decision it replaced. Their history is
+not erased, but they do not define today's installation or application routes.
 
-## Current accepted decisions
+## Deferred direction and dated evidence
 
-- [ADR 0002: Omnigent as the first provider](decisions/0002-omnigent-conductor.md)
-  is historical provider selection, superseded on the replacement branch by ADR 0012.
-- [ADR 0003: Tailnet HTTPS gateway](decisions/0003-tailnet-https-gateway.md)
-- [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md)
-- [ADR 0007: Runtime card and gateway authorization](decisions/0007-runtime-card-and-gateway-authorization.md)
-- [ADR 0008: Control plane and runtime confinement boundary](decisions/0008-control-plane-and-runtime-confinement-boundary.md)
-- [ADR 0015: Stock OpenClaw plugin host](decisions/0015-openclaw-plugin-host.md)
-
-## Proposed decisions
-
-- [ADR 0009: Separate ingress, owner authentication, and application authorization](decisions/0009-separate-ingress-owner-authentication-and-application-authorization.md)
-- [ADR 0010: Open Responses at the application boundary](decisions/0010-open-responses-gateway-pivot.md)
-
-## Future work
-
-- [Reuse existing gateway components](ideas/reuse-existing-gateway-components.md):
-  source rationale now realized inside the active plugin.
-- [Multi-turn task continuation](plan/multi-turn-task-continuation.md): explicit
-  completed-task follow-up on one durable provider conversation. Implemented;
-  replacement acceptance still requires the selected subscription-runtime browser gate.
-- [Hassle-free tunnel ingress](future/hassle-free-tunnel-ingress.md): reaching a
-  self-hosted gateway at a stable HTTPS origin without root or a second admin
-  console. Surveys zrok, cloudflared, ngrok, and Funnel; depends on ADR 0009.
-- [Deployment tiers and confinement](future/deployment-tiers-and-confinement.md):
-  what CLI, desktop, and managed-cloud deployments each require of the sandbox.
-  Records why tier 2 is the hardest confinement problem and why posture belongs
-  to the grant rather than the tier; the product question it turns on is open.
-- [Application identity for native clients](future/native-client-identity.md):
-  what replaces the browser origin when the application is an Android or desktop
-  binary. Proposes `browser_origin`, `native_published`, and `native_paired`
-  profiles over one internal grant; recommends device-code pairing as the
-  general answer.
-
-## Superseded and historical decisions
-
-- [ADR 0001: ACP-first application boundary](decisions/0001-acp-first-application-boundary.md)
-- [ADR 0004: Pairing and session broker](decisions/0004-pairing-and-session-broker.md)
-- [ADR 0006: Explore AG-UI application boundary](decisions/0006-explore-ag-ui-application-boundary.md)
-- [ADR 0012: OpenClaw policy gateway](decisions/0012-openclaw-policy-gateway.md)
-- [ADR 0013: Native provider delegation](decisions/0013-native-provider-delegation-and-ai-sdk.md)
-- [ADR 0014: Standalone scoped proxy](archive/decisions/0014-stock-openclaw-scoped-proxy.md)
-
-## Evidence and research
-
-- [Original product/runtime handoff](../USER_OWNED_AGENT_RUNTIME_HACKATHON_HANDOFF.md)
-- [Omnigent/Codex nonce experiment](experiments/omnigent-codex-nonce.md)
-- [Grant-route security retrospective](plan/grant-route-security-retrospective.md)
-- [Landscape snapshot, 2026-07-13](research/2026-07-13-landscape.md)
-- [Mutual runtime identity, 2026-07-14](research/2026-07-14-mutual-runtime-identity.md)
-- [AG-UI fit, 2026-07-14](research/2026-07-14-ag-ui-fit.md)
-- [Malicious-application threat model, 2026-07-14](research/2026-07-14-malicious-application-runtime-threat-model.md)
-- [Omnigent sandbox spike, 2026-07-14](research/2026-07-14-omnigent-vm-sandbox-spike.md)
-- [Build Week requirements snapshot, 2026-07-14](research/2026-07-14-openai-build-week-refresh.md)
-- [Live protocol animation research, 2026-07-18](research/2026-07-18-live-protocol-animation.md)
-- [Claude Code Remote Control internals, 2026-07-24](research/2026-07-24-claude-code-remote-control-internals.md)
-- [Open Responses and WebMCP handoff, 2026-08-27](research/2026-08-27-open-responses-webmcp-handoff.md)
-- [Ousterhout review of the Open Responses pivot, 2026-08-26](reviews/2026-08-26-ousterhout-open-responses-design-review.md)
-
-Research and handoff documents preserve dated evidence. Their recommendations
-may be superseded by the mission, accepted decisions, architecture, or current
-work.
+The [north star](../vision.md) is accepted product direction, not a finished
+standard or implementation promise. The [narrow protocol profile](architecture/narrow-protocol-profile.md)
+is an unstable ACP/MCP-over-ACP prototype, not the default browser/gateway path.
+Future deployment, native-client identity, tunnel, and multi-turn documents are
+design exploration only. Dated research, reviews, experiments, and the
+historical Canvas/Build Week material remain under their existing directories;
+use the archive index and each document's date/status for provenance.

@@ -3,9 +3,9 @@
 Updated: 2026-09-09
 
 This inventory describes the supported stock OpenClaw plugin selected by
-[ADR 0015](decisions/0015-openclaw-plugin-host.md). The superseded standalone
-proxy is archived in git history and is not built, tested, or deployed from
-`main`.
+[ADR 0015](decisions/0015-openclaw-plugin-host.md). Legacy standalone gateway
+source and compatibility checks remain in the checkout for the pending Canvas
+migration, but are not the supported installation or deployment path.
 
 ## Application and SDK
 
@@ -39,5 +39,7 @@ proxy is archived in git history and is not built, tested, or deployed from
 
 The deterministic suite does not prove subscription inference, real HTTPS
 ingress, arbitrary third-party plugin coexistence, or every Bookhand behavior.
-Those remain separate owner-reviewed evidence. Upstream effects after admission
-may be ambiguous; no automatic retry or generic exactly-once claim is made.
+Those remain separate owner-reviewed evidence. the owner's 2026-09-09 report that the
+complete Bookhand vertical slice works is live owner evidence, not an exhaustive
+independent edge-case certificate. Upstream effects after admission may be
+ambiguous; no automatic retry or generic exactly-once claim is made.

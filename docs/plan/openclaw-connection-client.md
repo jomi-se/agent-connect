@@ -1,7 +1,8 @@
 # OpenClaw browser connection client
 
 Date: 2026-09-06.
-Status: implemented SDK contract; native composition and live acceptance remain pending.
+Status: archived SDK contract ledger; native composition and owner acceptance
+are recorded in the current stock-plugin sources.
 
 ## Public shape
 

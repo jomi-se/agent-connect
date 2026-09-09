@@ -1,7 +1,7 @@
 # Native OpenClaw application-principal seam
 
 Date: 2026-09-06.
-Status: proposal-ready pinned patch hardening in progress; no upstream acceptance claim.
+Status: archived superseded pinned-patch proposal; no upstream acceptance claim.
 Target: pinned OpenClaw 2026.9.1 only.
 
 ## 2026-09-07 architectural-review amendment

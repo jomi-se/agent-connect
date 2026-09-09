@@ -1,6 +1,7 @@
 # Low-noise dependency maintenance and PR gates
 
-Status: setup and dependency follow-up complete, 2026-09-05.
+Status: archived repository-maintenance record; setup and dependency follow-up
+completed 2026-09-05.
 Setup PR #17 merged after hosted CI run 33951196619 passed all gates.
 Active rulesets: main-pr-gates 22323851, main-history 22323852.
 Rebase-only repository settings and security updates enabled and read back.

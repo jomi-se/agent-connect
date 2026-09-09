@@ -15,27 +15,17 @@ agent, and a fixed approved application-tool snapshot. Conversation ownership
 and continuation state are bounded and process-local, so restart ends them and
 uncertain application effects are never replayed automatically.
 
-## Built with Codex and GPT-5.6
-
-Agent Connect was designed and implemented through Codex using GPT-5.6 Sol Medium for the most part. Codex
-researched Omnigent and ACP, shaped the provider-neutral boundary, implemented
-the SDK, gateway, authorization flow, test layers, Canvas demo, and real
-browser-to-Codex composition, and debugged the deployed mobile flow.
-
-The primary `/feedback` build thread is
-`019f5c47-a462-73d0-a329-39013786bae4`.
-
-## Legacy Canvas example
+## Historical Canvas example
 
 Open [agent-connect-demo.web.app](https://agent-connect-demo.web.app/) and
 connect it to a gateway you operate using that gateway's public runtime card.
 
 The demo includes three example apps: a project-board app with bulk editing,
 in-place document review in a document editor, and product research in a
-shopping app. It uses the Agent Connect browser SDK and the historical runtime-card
-gateway flow. It is useful product evidence, but it does not prove the current
-plugin-hosted OAuth + AI SDK path. Bookhand is the selected application for that
-path's owner acceptance. The published demo is unchanged.
+shopping app. It uses the preserved runtime-card gateway flow. It is useful
+historical product evidence, but it is not the current stock-plugin setup or
+OAuth path. The published demo is unchanged; connect it only to a gateway you
+operate.
 
 The anonymous judge profile is retired; connect to a gateway you own.
 
@@ -76,8 +66,9 @@ loopback port, never the native OpenClaw port. Native UI, RPC, terminal and
 `/v1/responses` routes do not exist on the plugin listener. The OpenClaw
 operator credential remains server-side and is never an application credential. The
 [gateway guide](deploy/openclaw-gateway/README.md) covers setup, doctor states,
-coexistence, ingress, and recovery limitations. The superseded standalone proxy
-is available through git history, not the current build or deployment surface.
+coexistence, ingress, and recovery limitations. Legacy standalone gateway
+source remains in this checkout for the pending Canvas migration and historical
+compatibility checks; it is not the supported installation or deployment path.
 
 The pinned real OpenClaw host passes deterministic package-install, application
 tool, continuation, native-tool denial, lifecycle, and sandbox-failure tests.
@@ -93,8 +84,7 @@ snapshot.
 
 `@open-agent-connect/web` is a browser-safe TypeScript package on
 npm as [`@open-agent-connect/web`](https://www.npmjs.com/package/@open-agent-connect/web).
-This checkout prepares `0.0.4`; it remains versioned `0.0.x` while the wire
-format settles. The
+The published SDK remains versioned `0.0.x` while the wire format settles. The
 [web application integration guide](docs/guides/web-app-integration.md) shows
 how to install it in another application, authorize a runtime, send a prompt,
 and handle live tool calls.
@@ -181,7 +171,7 @@ process. See
   exercised through disposable real-host package installation on Linux.
 
 Other Linux distributions and architectures may work but have not passed the
-complete replacement acceptance flow. Windows and macOS gateway hosting are not
+complete plugin-host acceptance flow. Windows and macOS gateway hosting are not
 currently tested.
 
 ## Security boundary
@@ -234,7 +224,7 @@ Additional real-boundary checks:
 # Run the isolated real-OpenClaw compatibility suite directly.
 npm run test:integration:openclaw
 
-# Run preserved historical replacement-engine process-death evidence.
+# Run preserved historical standalone-engine process-death evidence.
 npm run test:integration:response-crash
 
 # Pack the SDK, install it into a clean external npm project, and import it.
@@ -257,10 +247,11 @@ compatibility tests, and selected subscription-runtime composition smoke tests.
 ## Project status
 
 This is an early `0.x` system, not a claim of a hardened general-purpose agent
-sandbox. The stock plugin host is the sole installation target; the first npm
-release and fresh operator infrastructure deployment remain owner-gated. The prior Canvas
-runtime-card demo is historical product evidence, not a setup prerequisite. Use
-at your own risk ^^.
+sandbox. The stock plugin host is the sole installation target. SDK `0.0.4` and
+plugin `0.0.2` are published; The reference deployment has a matching pinned installation path.
+the owner has reported the complete Bookhand vertical slice working, but that report
+does not certify every runtime edge case. The prior Canvas runtime-card demo is
+historical product evidence, not a setup prerequisite. Use at your own risk ^^.
 
 See [the documentation index](docs/README.md), [mission](docs/mission.md), and
 [accepted decisions](docs/decisions/).

@@ -2,8 +2,10 @@
 
 Date: 2026-09-07. Status: archived after supersession by ADR 0015.
 
-Archived 2026-09-09. The standalone implementation and tests were removed from
-`main`; git history preserves the executable source. This document is historical
+Archived 2026-09-09. This ADR's standalone scoped-proxy deployment and duplicate
+suite were removed from `main`; git history preserves them. This is distinct
+from the older gateway package, which still contains shared modules and legacy
+implementation pending separate cleanup. This document is historical
 evidence, not a supported deployment or rollback instruction.
 
 This supersedes ADR 0013's native-patch implementation prescription. The native

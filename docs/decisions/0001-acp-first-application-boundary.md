@@ -1,7 +1,7 @@
 # ADR 0001: Use ACP as the application boundary
 
-Status: superseded as the application-facing direction by proposed ADR 0010;
-ACP remains an optional harness-facing adapter
+Status: superseded as the application-facing direction by ADR 0010 and the
+current plugin boundary; ACP remains an optional harness-facing adapter
 
 Date: 2026-07-13
 

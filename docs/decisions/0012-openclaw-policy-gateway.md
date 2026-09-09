@@ -6,9 +6,9 @@ the 2026-09-06 native-patch direction; current
 proxy to stock OpenClaw. Retain this document as earlier rationale, not a
 requirement to preserve its custom Responses engine or durable ledger.
 
-Status: accepted, 2026-09-05. the owner selected the built-in OpenClaw loop using his
-AI subscription. Release/cutover remains gated on the
-[implementation contract](../plan/openclaw-replacement.md).
+Status: historical and superseded by ADR 0015, 2026-09-09. the owner selected the
+built-in OpenClaw loop using his AI subscription; retain this as rationale, not
+as current release or cutover instructions.
 
 Reconsideration, later 2026-09-05: the owner requested investigating direct OpenClaw
 application delegation instead of assuming a separate gateway survives. The
