@@ -5,18 +5,13 @@
   "type": "module",
   "bin": {
     "agent-connect-gateway": "dist/main.js",
-    "agent-connect-gateway-init": "dist/initialize-main.js",
-    "agent-connect-scoped-proxy": "dist/scoped-proxy/main.js",
-    "agent-connect-scoped-proxy-init": "dist/scoped-proxy/initialize-main.js"
+    "agent-connect-gateway-init": "dist/initialize-main.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "build:scoped-proxy": "tsc -p tsconfig.scoped-proxy.json",
     "start": "node dist/main.js",
-    "start:scoped-proxy": "node dist/scoped-proxy/main.js",
     "test": "vitest run",
     "test:integration:response-crash": "npm run build && RUN_OPENCLAW_INTEGRATION=1 vitest run responses-process-crash.integration.test.ts",
-    "test:integration:openclaw": "npm run build:scoped-proxy && RUN_OPENCLAW_INTEGRATION=1 vitest run scoped-proxy-openclaw.integration.test.ts",
     "test:integration:openclaw:legacy": "npm run build && RUN_OPENCLAW_INTEGRATION=1 vitest run openclaw-mediation.integration.test.ts responses-route.integration.test.ts responses-process-crash.integration.test.ts",
     "typecheck": "tsc --noEmit"
   },

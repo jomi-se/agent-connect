@@ -1,6 +1,6 @@
 # Bounded scoped conversation history
 
-The stock scoped proxy exposes recent conversations for the **current grant**:
+The stock OpenClaw plugin exposes recent conversations for the **current grant**:
 
 - `GET /v1/agent-connect/conversations` returns `{ conversations }`.
 - `GET /v1/agent-connect/conversations/:conversationId/history` returns the
@@ -23,7 +23,7 @@ wait; changed or consumed heads fail with `conversation_changed`. Refresh of the
 same grant works; another grant, even for the same app, gains no ownership.
 Restart recovery, durable ownership, pagination and interrupted-tool recovery
 are not implemented. A browser can list after reload only while its original
-grant and the proxy's in-memory registry are still live.
+grant and the plugin's in-memory registry are still live.
 
 ## Execution history, not an ordinary chat
 
@@ -53,7 +53,7 @@ The provider's future cache expiry and restart semantics are not recovery
 guarantees. A failed continuation requires an explicit new conversation, not
 automatic replay.
 
-Verification: the deterministic real stock OpenClaw integration reads the native
+Verification: the packed-plugin real stock OpenClaw integration reads the native
 history after two application-tool results, excludes supplied instructions,
 refreshes the same grant and continues using the returned response head without
 replaying either application action. In-process tests cover explicit projection,

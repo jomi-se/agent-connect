@@ -46,7 +46,7 @@ no operator credentials and no self-hosted runner. It runs:
 - lint and dependency-boundary checks.
 
 The legacy replacement-engine crash suite is a separate command, not a current
-scoped-proxy restart-recovery guarantee. Native API or provider installation
+plugin restart-recovery guarantee. Native API or provider installation
 failures fail the check, not skip it. Python
 transitive dependencies remain ranged; compatibility pins are not a complete
 reproducible build lock. Lint's existing advisory warnings remain advisory.

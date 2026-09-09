@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import type { VerifiedDelegatedGrant } from "../delegated-grants.js";
+import type { VerifiedDelegatedGrant } from "../../../gateway/src/delegated-grants.js";
 
 export interface ContinuationRecord {
   readonly responseId: string;

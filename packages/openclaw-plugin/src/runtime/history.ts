@@ -1,3 +1,4 @@
+/** Process-local execution-history projection for the hosted plugin. */
 import type { ContinuationRecord } from "./continuations.js";
 
 export function describeConversation(record: ContinuationRecord) {
