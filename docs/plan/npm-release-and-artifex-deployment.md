@@ -291,6 +291,10 @@ composition gate: health became ready immediately before a brief service
 reinitialization, so the first OAuth metadata request received transient
 `503 initializing`. Initial metadata discovery now waits through that explicit
 startup state; steady-state status and response assertions remain strict.
+That rerun then found the legacy scoped-proxy verifier had independently encoded
+the same canonical-URL-only assumption. The compatibility pin now owns the local
+archive filename used by the integrity-checking installer, and both provenance
+gates accept exactly the canonical URL or that verified local resolution.
 
 Final local evidence: `npm run verify`, `npm run analyze`, the Canvas Playwright
 suite, release-logic tests, exact-tarball SDK/plugin smokes, dynamic plugin

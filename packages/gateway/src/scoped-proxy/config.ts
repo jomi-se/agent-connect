@@ -139,7 +139,9 @@ export function verifyPublishedOpenClaw(
       typeof packageJson.exports === "object" &&
       "./plugin-sdk/openresponses-application-policy" in packageJson.exports) ||
     locked?.version !== compatibility.version ||
-    locked.resolved !== compatibility.tarball ||
+    ![compatibility.tarball, `file:${compatibility.localTarball}`].includes(
+      locked.resolved ?? "",
+    ) ||
     locked.integrity !== compatibility.integrity ||
     !new RegExp(`\\b${compatibility.version.replaceAll(".", "\\.")}\\b`).test(
       version,

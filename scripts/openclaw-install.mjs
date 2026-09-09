@@ -30,7 +30,7 @@ if (integrity !== compatibility.integrity)
   );
 // Keep the verified archive beside npm's lockfile so its file dependency remains reusable.
 await mkdir(prefix);
-const tarball = `${prefix}/openclaw-${compatibility.version}.tgz`;
+const tarball = `${prefix}/${compatibility.localTarball}`;
 await writeFile(tarball, archive);
 const result = spawnSync(
   "npm",

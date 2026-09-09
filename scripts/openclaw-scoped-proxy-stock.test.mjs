@@ -85,10 +85,9 @@ test("published stock OpenClaw applies a dedicated deny-all policy to operator R
 
     assert.equal(runtime.stockPackage.version, compatibility.version);
     assert.ok(
-      [
-        compatibility.tarball,
-        `file:openclaw-${compatibility.version}.tgz`,
-      ].includes(runtime.stockPackage.resolved),
+      [compatibility.tarball, `file:${compatibility.localTarball}`].includes(
+        runtime.stockPackage.resolved,
+      ),
       `Unexpected OpenClaw package resolution: ${runtime.stockPackage.resolved}`,
     );
     assert.equal(runtime.stockPackage.integrity, compatibility.integrity);
