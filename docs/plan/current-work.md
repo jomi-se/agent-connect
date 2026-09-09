@@ -50,6 +50,39 @@ from itself. The enforced boundary is the hostile calling application through
 Origin/PKCE grants, fixed application tools, server-owned routing, private
 sessions and the exact restricted offered-agent recipe.
 
+## Future cleanup and visible-demo migration
+
+Complete these after the publication and fresh-install gate. Git history is the
+rollback mechanism; superseded executable implementations do not remain in the
+active build merely as backups.
+
+- [ ] **Migrate Canvas to the stock-plugin flow; do not delete the visible
+      demo.** Replace its runtime-card/replacement-gateway connection with the
+      published `@open-agent-connect/web` discovery, owner login, OAuth/PKCE,
+      bounded Responses, application-tool result, continuation/history and
+      revoke flow. Update its UI, deployment guide and Playwright coverage so a
+      visitor can see how the complete current product is intended to work.
+- [ ] **Retire the legacy runtime-card SDK surface after Canvas migrates.**
+      Re-resolve external consumers, then remove obsolete runtime-card,
+      authorization, connection/session/chat and old Responses-provider exports
+      and their compatibility tests. Do not break Canvas first and do not remove
+      provider-neutral primitives still used by the plugin client.
+- [ ] **Delete the historical replacement gateway engine.** Remove its binaries,
+      initializer, durable Responses engine, retained-run/restart-recovery code,
+      crash and legacy integration suites, custom `openclaw-gateway.mjs`
+      launcher, and package/build wiring. First retain or relocate the shared
+      connector-auth, delegated-grant, OAuth, HTTP-contract and tool-snapshot
+      modules consumed by the stock plugin.
+- [ ] **Delete the native-patch experiment.** Remove the OpenClaw application-
+      principal patch, patched-host plugin entry, native-patch build command,
+      composition probes, and obsolete patched-package provenance inspection.
+      Keep the unrelated AI SDK patch while it remains required.
+- [ ] **Archive the corresponding historical documentation and contracts.**
+      Move native-patch/replacement plans and old `VAL-RESP` evidence out of the
+      active plan/index surface, repair links, and ensure current README,
+      architecture, package scripts and dependency-analysis entrypoints describe
+      only the stock plugin plus the migrated visible demo.
+
 ## Closeout: recent app-owned conversations
 
 Implementation update: subsequently authorized on 2026-09-08 and implemented for
