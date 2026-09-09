@@ -2,7 +2,7 @@ import { GatewayClient } from "@openclaw/gateway-client";
 import { PROTOCOL_VERSION } from "@openclaw/gateway-protocol/version";
 
 import {
-  resolveOpenClawUpstreamAuth,
+  requireOpenClawUpstreamAuth,
   type OpenClawUpstreamAuth,
 } from "./upstream-auth.js";
 
@@ -44,8 +44,7 @@ export async function createOpenClawRuntimePolicyVerifier(options: {
 
 export async function readStockOpenClawConfig(options: {
   readonly upstreamBaseUrl: string;
-  readonly upstreamAuth?: OpenClawUpstreamAuth;
-  readonly upstreamToken?: string;
+  readonly upstreamAuth: OpenClawUpstreamAuth;
   readonly timeoutMs?: number;
 }): Promise<StockOpenClawConfigGet> {
   return readStockOpenClawRpc(options, "config.get", {});
@@ -54,8 +53,7 @@ export async function readStockOpenClawConfig(options: {
 export async function readStockOpenClawRpc<T>(
   options: {
     readonly upstreamBaseUrl: string;
-    readonly upstreamAuth?: OpenClawUpstreamAuth;
-    readonly upstreamToken?: string;
+    readonly upstreamAuth: OpenClawUpstreamAuth;
     readonly timeoutMs?: number;
   },
   method: "config.get" | "chat.history",
@@ -63,7 +61,7 @@ export async function readStockOpenClawRpc<T>(
 ): Promise<T> {
   const url = new URL(options.upstreamBaseUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const upstreamAuth = resolveOpenClawUpstreamAuth(options);
+  const upstreamAuth = requireOpenClawUpstreamAuth(options.upstreamAuth);
   const timeoutMs = options.timeoutMs ?? 10_000;
   return await new Promise<T>((resolve, reject) => {
     let settled = false;
@@ -90,7 +88,7 @@ export async function readStockOpenClawRpc<T>(
             : {}),
         role: "operator",
         scopes: ["operator.read"],
-        clientVersion: "agent-connect-scoped-proxy",
+        clientVersion: "agent-connect-openclaw-plugin",
         minProtocol: PROTOCOL_VERSION,
         maxProtocol: PROTOCOL_VERSION,
         requestTimeoutMs: timeoutMs,

@@ -19,13 +19,11 @@ Agent Connect is the application-delegation boundary, not another agent
 platform. The accepted installation target is an OpenClaw plugin that hosts
 this boundary without a separately operated executable; see
 [ADR 0015](decisions/0015-openclaw-plugin-host.md). The installable plugin and
-credential-free stock-host composition gates are implemented on
-`work/openclaw-plugin-host`; root review and any live cutover remain pending. The
-standalone trusted authorization proxy remains the rollback baseline.
-Agent Connect retains consent, application authority, browser integration and a
-bounded grant-to-conversation map; stock OpenClaw owns execution, native events,
-context, tools and sandboxing. See
-[ADR 0014](decisions/0014-stock-openclaw-scoped-proxy.md).
+credential-free stock-host composition gates are implemented. Agent Connect
+retains consent, application authority, browser integration and a bounded
+grant-to-conversation map; stock OpenClaw owns execution, native events, context,
+tools and sandboxing. The superseded standalone implementation is available
+through git history, not the current build or deployment surface.
 
 ## Product promise
 
@@ -51,9 +49,8 @@ ambiguous output submission is never automatically replayed.
 
 ## Current strategy
 
-The following describes the scoped-proxy child-branch implementation. The
-native-patch experiment remains preserved but is no longer mandatory. Any changed
-reliability or consent guarantees must be made explicit.
+The following describes the plugin-hosted implementation. Any changed reliability
+or consent guarantees must be made explicit.
 
 - Keep the bounded Open Responses profile as the sole application wire:
   `POST /v1/responses`, with the SDK coordinating function outputs and linear
@@ -92,7 +89,7 @@ reliability or consent guarantees must be made explicit.
 
 ## Current implementation and acceptance boundary
 
-The stock plugin package reuses the scoped proxy's delegated OAuth/PAR/PKCE,
+The stock plugin package provides delegated OAuth/PAR/PKCE,
 rotating refresh, revocation and public AI SDK contract inside OpenClaw's managed
 service lifecycle. Its application issuer and Responses resource are namespaced
 under `/agent-connect`; native root Responses remains available to the owner.
@@ -100,8 +97,8 @@ The plugin constrains requests, selects a dedicated restricted agent/private
 session, streams observed native events, binds one current response checkpoint
 to an application grant, and exposes recent grant-owned execution history and
 completed-head reopening while that process-local mapping remains live. The
-standalone scoped proxy, native-patch and replacement-engine artifacts remain
-for rollback/history but are outside the plugin's required runtime surface.
+standalone proxy source and tests were removed after ADR 0015 became the sole
+installation target; git history preserves the earlier implementation.
 
 Real published OpenClaw tests using deterministic inference install the packed
 plugin and exercise stock deny-all enforcement, owner login -> OAuth -> two-tool
@@ -109,7 +106,7 @@ plugin and exercise stock deny-all enforcement, owner login -> OAuth -> two-tool
 policy refusal and coexistence with a native owner request. They are transport and policy
 evidence, not proof that the selected subscription-backed runtime usefully
 consumes an actual browser tool result. Final acceptance remains governed by the
-[vertical-slice closeout](plan/stock-openclaw-vertical-closeout.md).
+[archived vertical-slice closeout](archive/plans/stock-openclaw-vertical-closeout.md).
 
 José selected the built-in OpenClaw subscription loop and accepted the Bookhand
 connection/conversation-follow-up prototype for main on 2026-09-08. Known search,
@@ -126,17 +123,12 @@ selected runtime must prove useful consumption of that result. See the
 
 Cancellation aborts the active upstream request and prevents continuation, but
 generation stopping and already-started effects remain separate runtime-specific
-claims. The scoped proxy does not offer restart recovery, usage accounting or an
-owner session console; it reports interruptions without replay.
-
-The private installation has previously run the scoped proxy, but source updates
-are not deployed merely by landing on this branch. The final history build still
-requires a reviewed proxy-only restart and fresh owner consent. The historical
-Tailscale Serve + Omnigent + Codex browser demonstration remains baseline evidence,
-not replacement acceptance. [ADR 0010](decisions/0010-open-responses-gateway-pivot.md)
-records the earlier bundled-runtime strategy; ADR 0014 supersedes its custom
-engine/ledger prescription while retaining the public Open Responses boundary.
-App-instance sender binding and recovery/key rotation remain future hardening.
+claims. The plugin does not offer restart recovery, usage accounting or an owner
+session console; it reports interruptions without replay. The historical
+Tailscale Serve + Omnigent + Codex browser demonstration remains earlier evidence,
+not current plugin acceptance. [ADR 0010](decisions/0010-open-responses-gateway-pivot.md)
+records the earlier bundled-runtime strategy. App-instance sender binding and
+recovery/key rotation remain future hardening.
 
 ## Explicit non-goals
 

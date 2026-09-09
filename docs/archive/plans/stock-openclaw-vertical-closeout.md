@@ -1,4 +1,4 @@
-# Stock OpenClaw vertical-slice closeout
+# Archived plan: stock OpenClaw vertical-slice closeout
 
 Date: 2026-09-08. Branch: `work/openclaw-scoped-proxy`.
 

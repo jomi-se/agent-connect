@@ -6,12 +6,12 @@ retains prior implementation and validation evidence; its separate mediation
 layer is no longer a requirement for the next implementation.
 
 Status: historical implementation evidence from `work/openclaw-gateway`. The
-supported stock path is now `work/openclaw-scoped-proxy`, with its remaining
-proof and owner acceptance tracked in the
-[vertical-slice closeout](stock-openclaw-vertical-closeout.md). The native patch
+supported stock path is now the OpenClaw plugin, with earlier standalone proof
+and owner acceptance retained in the
+[archived vertical-slice closeout](../archive/plans/stock-openclaw-vertical-closeout.md). The native patch
 and custom replacement engine described below are preserved experiments, not
-default build/deployment instructions. No push, merge or retirement is
-authorized by this historical plan.
+default build/deployment instructions. Superseded executable code is recoverable
+from git history rather than retained in the active tree.
 
 ## Objective and evidence
 

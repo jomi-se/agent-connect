@@ -22,8 +22,10 @@ to root, do not edit Bookhand or instruct a live cutover independently.
 
 ## Settled constraints
 
-- Reuse the existing scoped proxy engine; do not fork its security logic into a
-  second implementation or revive the historical patched plugin entry point.
+- Reuse the proven mediation logic while implementing the plugin; keep one
+  security-sensitive implementation and do not revive the historical patched
+  plugin entry point. Once the plugin became the sole supported target, move
+  that implementation under the plugin and remove the standalone wrapper.
 - Native OpenClaw performs execution, policy enforcement and Responses event
   production. Forwarding is internal to the plugin using host-held authority.
 - Fixed approved tool declarations on every segment; private routing fields and
@@ -38,11 +40,12 @@ to root, do not edit Bookhand or instruct a live cutover independently.
 
 ## Source map and existing evidence
 
-- `packages/gateway/src/scoped-proxy/server.ts`: `createScopedResponsesProxy`
-  owns the HTTP server as well as handlers; extract the handler/lifecycle seam.
-- `scoped-proxy/{request,continuations,history}.ts`: proven mediation; keep it.
-- `scoped-proxy/{config,policy,runtime-config}.ts`: deployment-specific config,
-  whole-file/applied-revision checks and private RPC client.
+- `packages/openclaw-plugin/src/runtime/handler.ts`: plugin-owned HTTP handler
+  and lifecycle seam; there is no standalone server wrapper.
+- `packages/openclaw-plugin/src/runtime/{request,continuations,history}.ts`:
+  bounded mediation and process-local conversation ownership.
+- `packages/openclaw-plugin/src/runtime/{runtime-config,upstream-auth}.ts`:
+  private native RPC configuration and host-owned authentication.
 - `packages/gateway/src/{delegated-grants,connector-auth}.ts` and
   `openclaw-plugin/{oauth-handler,oauth-utils,consent-html}.ts`: reusable auth.
 - `openclaw-plugin/index.ts` imports patch-only host exports. It is historical,
@@ -51,8 +54,8 @@ to root, do not edit Bookhand or instruct a live cutover independently.
 - `packages/web-sdk/src/openclaw-connection.ts` validates a root-origin issuer
   and hardcoded root resource; namespaced discovery needs an explicit update.
 - `scripts/openclaw-test-runtime.mjs` supplies isolated real pinned OpenClaw,
-  disposable state and fake inference. Existing scoped integration tests provide
-  the OAuth/tool/history scenarios to reuse, not duplicate wholesale.
+  disposable state and fake inference. The packed plugin-host test owns the
+  OAuth/tool/history composition scenarios.
 - `config/openclaw-test-compat.json` is the compatibility pin. Use installed stock
   package declarations/docs as the oracle, not latest online APIs blindly.
 
@@ -66,9 +69,10 @@ check preceded plugin availability; wait for plugin readiness, not only health.
 
 ## M1: Extract and package the actual plugin
 
-1. Extract reusable request handling and shutdown from the server wrapper while
-   retaining the standalone wrapper as baseline. Keep one implementation of
-   security-sensitive routing, grants and continuation inspection.
+1. Extract reusable request handling and shutdown from the server wrapper. Keep
+   one implementation of security-sensitive routing, grants and continuation
+   inspection; after plugin acceptance, make it plugin-owned and remove the
+   standalone wrapper and its duplicate integration suite.
 2. Add a distinct stock-plugin package/entry with `openclaw.plugin.json`, compiled
    ESM entry, explicit startup activation, config schema, runtime dependencies
    and tested host-version compatibility. Prefer focused host SDK imports/types.
@@ -100,8 +104,8 @@ unauthenticated app calls, and stops its owned work. Root gets source/risks.
    the short endpoint table; a namespace change is not permission to relax URL
    validation or follow arbitrary metadata redirects.
 3. SDK supports the verified plugin layout with HTTPS/same-origin/path binding;
-   keep existing standalone layout working unless an explicit migration decision
-   replaces it. Bind pending authorization, token audience and callback identity
+   retain origin-only compatibility in the browser SDK. Bind pending
+   authorization, token audience and callback identity
    to the actual issuer/resource; reject mixed old/new discovery and tokens.
 4. Preserve generic AI SDK provider construction and existing connection,
    refresh, revocation and conversation APIs. No OpenClaw types in browser APIs.
@@ -174,7 +178,8 @@ this milestone is not satisfied by the synthetic minimal config alone.
 
 Update supported setup and earliest sources of truth when implementation is
 verified: AGENTS, mission, current-work, SDK/provider docs and deploy guidance.
-Do not claim a live migration or delete historical evidence/working launchers.
+Do not claim a live migration without evidence. Archive superseded design prose;
+git history is the recovery mechanism for removed standalone launchers.
 Ship installation, setup preview/apply, doctor, upgrade/disable behavior, known
 incompatibilities and recovery limits. No personal hostnames or secret paths.
 
@@ -207,6 +212,10 @@ Root reviews implementation and test evidence before merge or live rollout.
 - [x] M5 documentation, root review and owner handoff. SDK/Bookhand migration
       and reviewed live deployment completed; owner confirmed prompt/reload.
       See plugin-sdk-bookhand-migration.md for evidence boundaries.
+- [x] Post-acceptance cutover removed the ADR 0014 standalone executable,
+      deployment configuration and duplicate integration suite. The live
+      mediation implementation now resides in `packages/openclaw-plugin/src/runtime`;
+      ADR 0014 and its closeout plans are archived, with git history as rollback.
 
 Current checkpoint: the corrected packed real-stock composition gate passes
 under the required Node 24.15 fixture. Failed iterations exposed and fixed the

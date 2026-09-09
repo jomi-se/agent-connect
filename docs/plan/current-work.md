@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-08
+Updated: 2026-09-09
 
 Next implementation: [published packages and fresh Artifex deployment](npm-release-and-artifex-deployment.md).
 Replace the archived-checkout live runtime with npm releases installed by
@@ -34,18 +34,14 @@ shape duplication. On 2026-09-08 the owner authorized the live plugin switch and
 then confirmed a successful prompt and conversation reload in Bookhand.
 
 The owner clarified on 2026-09-08 that users must not operate an additional proxy
-process. [ADR 0015](../decisions/0015-openclaw-plugin-host.md) makes the existing
-scoped mediation a plugin-hosted feature of stock OpenClaw. The
+process. [ADR 0015](../decisions/0015-openclaw-plugin-host.md) makes the bounded
+mediation a plugin-hosted feature of stock OpenClaw. The
 [implementation plan](openclaw-plugin-host.md) tracks packaging, namespace/SDK,
 safe personal-config coexistence, real-package tests and review. The installable
-package, dual-layout SDK, safe setup and real packed-stock composition gates pass
-with deterministic inference. Root review and owner-approved live switch are
-complete; the standalone proxy is stopped and retained only for rollback.
-Both repositories were subsequently fast-forwarded to `main` at the owner's
-request; completed integration branches and redundant worktree registrations
-were removed. Private runtime data and uncommitted artifacts were archived,
-not deleted. No push or publication performed.
-The owner smoke proves prompt/reload, not a new exhaustive live tool-flow test.
+package, SDK, safe setup and real packed-stock composition gates pass with
+deterministic inference. The superseded standalone proxy implementation and its
+tests were removed from `main` on 2026-09-09; git history preserves them. The
+owner smoke proves prompt/reload, not a new exhaustive live tool-flow test.
 
 Setup preserves personal agents, channels, credentials, tools, memory, installed
 plugins and hooks. Owner-installed host extensions remain inside the trusted
@@ -54,49 +50,22 @@ from itself. The enforced boundary is the hostile calling application through
 Origin/PKCE grants, fixed application tools, server-owned routing, private
 sessions and the exact restricted offered-agent recipe.
 
-## Verified baseline: stock OpenClaw scoped proxy
-
-The accepted implementation is the bounded
-authorization proxy in [ADR 0014](../decisions/0014-stock-openclaw-scoped-proxy.md)
-and its [execution plan](openclaw-scoped-proxy.md). The final proof, packaging
-and owner acceptance gates are tracked in the
-[vertical-slice closeout](stock-openclaw-vertical-closeout.md). It keeps the existing public
-OAuth and AI SDK contract while privately operating the integrity-pinned stock
-OpenClaw Responses endpoint. The app cannot select native agent/model/session,
-headers, scopes, media fetches or unknown request features.
-
-Credential-free stock tests now prove the dedicated deny-all/native-command
-ceiling, unavailable-sandbox failure before inference, and the full owner-login,
-OAuth, two application-tool results, refresh, source conversation follow-up and
-revocation composition. Static OpenClaw/policy files are fingerprinted and any
-change fails closed until supervised restart and fresh consent. No deployment,
-personal configuration, subscription call, Tailscale change or Bookhand change
-is implied by deterministic verification. A private scoped proxy and earlier
-subscription/browser tool flow have been exercised separately. Owner acceptance
-and the unconfirmed detailed phone checks are distinguished in the
-[vertical-slice closeout](stock-openclaw-vertical-closeout.md); historical runs do
-not by themselves prove the current history behavior.
-
-The parent native application-principal patch and earlier replacement engine are
-retained as experiment/rollback artifacts. They are not mandatory dependencies
-of the scoped proxy and must not be mistaken for stock compatibility evidence.
-
 ## Closeout: recent app-owned conversations
 
 Implementation update: subsequently authorized on 2026-09-08 and implemented for
 still-live in-memory grant records only. The [API and projection contract](../architecture/scoped-conversation-history.md)
 defines listing, native execution-history retrieval and completed-head reopening.
-Focused proxy/projection tests and the deterministic real stock OpenClaw
-integration pass, including history-based continuation without tool replay.
-The durable/restart requirements remain future work. The scoped proxy retains
-ownership only in its in-memory 30-minute registry; persisted authorization alone
+Focused plugin/projection tests and deterministic real stock OpenClaw composition
+pass, including history-based continuation without tool replay. The durable/restart
+requirements remain future work. The plugin retains ownership only in its
+in-memory 30-minute registry; persisted authorization alone
 does not restore a conversation. History is deliberately an execution timeline:
 native user entries can be either prompts or application outputs and must never
 be presented as **You**. Interrupted application actions are not replayed.
 
 Deferred durable-history work remains explicit:
 
-- persist app/grant-to-conversation ownership across proxy restart without
+- persist app/grant-to-conversation ownership across plugin-host restart without
   exposing private OpenClaw session keys;
 - verify supported native reopening after the Responses cache expires instead of
   assuming the ownership mapping alone is sufficient;
@@ -110,8 +79,8 @@ descriptor/history matching, duplicate-tab exclusion and explicit New
 conversation behavior. Its focused tests and served production build pass; this
 is deterministic application evidence. On 2026-09-08 José confirmed that the
 connection/conversation-follow-up flow works and authorized clean local merge
-to main despite known rough edges. The [closeout ledger](stock-openclaw-vertical-closeout.md)
-records this acceptance without claiming every phone checklist item passed.
+to main despite known rough edges. The archived closeout record preserves that
+acceptance without claiming every phone checklist item passed.
 
 ### Open live Bookhand/provider defects
 

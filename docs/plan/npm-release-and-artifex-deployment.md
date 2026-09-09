@@ -283,18 +283,19 @@ Owner-requested corrections: initial plugin version `0.0.1` in Agent Connect
 `3b922b2`; default Artifex bootstrap installation and matching pin in `2f852f3`.
 After the first main push, CI exposed an overly specific stock-package provenance
 assertion: the integrity-checked installer intentionally gives npm a local copy of
-the canonical tarball, so npm records a `file:` resolution. The gate now accepts
-that deterministic filename or the canonical URL while still requiring the exact
-version and pinned integrity.
-The following main run exposed a separate startup race in the installed-plugin
-composition gate: health became ready immediately before a brief service
-reinitialization, so the first OAuth metadata request received transient
-`503 initializing`. Initial metadata discovery now waits through that explicit
-startup state; steady-state status and response assertions remain strict.
-That rerun then found the legacy scoped-proxy verifier had independently encoded
-the same canonical-URL-only assumption. The compatibility pin now owns the local
-archive filename used by the integrity-checking installer, and both provenance
-gates accept exactly the canonical URL or that verified local resolution.
+the canonical tarball, so npm records a `file:` resolution. The installer now
+accepts that deterministic filename or the canonical URL while still requiring
+the exact version and pinned integrity. The following main run exposed a startup
+race in the installed-plugin composition gate: health became ready immediately
+before a brief service reinitialization, so initial metadata discovery now waits
+through the explicit `503 initializing` state while steady-state assertions
+remain strict.
+
+That run also exposed ADR 0014's standalone proxy and duplicate real-stock suite
+still participating in the default build and CI. At the owner's direction, the
+standalone source, executable, deployment configuration and tests were removed;
+the live mediation code moved under the plugin package, and ADR 0014 plus its
+closeout plans were archived. Git history is the rollback mechanism.
 
 Final local evidence: `npm run verify`, `npm run analyze`, the Canvas Playwright
 suite, release-logic tests, exact-tarball SDK/plugin smokes, dynamic plugin
@@ -304,9 +305,14 @@ pinned native-Chrome gate was not rerun on this ARM64 VM because its installer
 deliberately requires Linux x64; `verify:full` remains mandatory in main CI
 before the publish job can run.
 
+Post-cutover evidence on 2026-09-09: the relocated plugin runtime passes
+workspace typechecking, unit tests, builds, `npm run analyze`, the packed
+real-stock plugin-host suite, and the complete default `npm run verify` gate
+against the integrity-pinned OpenClaw 2026.9.1 installation.
+
 No push, tag, GitHub release, npm publication, workflow dispatch, account change,
-provider login, service start, Tailscale mutation, Bookhand change, or old-runtime
-deletion was performed. Jose's next action is to review the local commits and
+provider login, service start, Tailscale mutation, or Bookhand change was
+performed. Jose's next action is to review the local commits and
 follow `docs/guides/npm-publication.md`. Phase 4 must not begin until the exact
 npm versions/integrities are verified and Jose separately authorizes the live
 Artifex installation.

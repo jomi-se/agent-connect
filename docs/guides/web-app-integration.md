@@ -1,6 +1,7 @@
 # Integrate Agent Connect into a web application
 
-This guide connects an HTTPS web application to the stock OpenClaw scoped proxy.
+This guide connects an HTTPS web application to the Agent Connect plugin hosted
+by stock OpenClaw.
 The app declares functions implemented in its own JavaScript, redirects the user
 to owner-controlled consent, then uses AI SDK over a bounded Open Responses wire.
 No OpenClaw credential, agent ID or session key enters the browser.
@@ -54,15 +55,15 @@ const applicationTools = [
 ```
 
 The tool name, description and schema are the permission request. The owner sees
-that exact snapshot, and the proxy requires the client to submit it unchanged on
+that exact snapshot, and the plugin requires the client to submit it unchanged on
 every segment. Changing it requires new consent. The app owns side effects and
 should deduplicate consequential operations with the stable tool-call ID.
 
 ## Discover and authorize
 
-The user supplies the public HTTPS origin of a scoped proxy they operate. The app
-validates its OAuth metadata, creates a PAR/S256 PKCE transaction, saves it before
-navigation, and redirects to the proxy:
+The user supplies the public HTTPS Agent Connect provider URL. The app validates
+its OAuth metadata, creates a PAR/S256 PKCE transaction, saves it before navigation,
+and redirects to the plugin-hosted gateway:
 
 ```ts
 async function startAuthorization(providerUrl: string) {
@@ -84,7 +85,7 @@ async function startAuthorization(providerUrl: string) {
 }
 ```
 
-The proxy first asks the owner for their saved Agent Connect enrollment secret,
+The gateway first asks the owner for their saved Agent Connect enrollment secret,
 then displays the app Origin, callback, scopes, tools and selected static policy.
 This owner login is separate from application OAuth. Tailnet membership and
 forwarded identity headers are not owner proof.
@@ -180,15 +181,15 @@ async function runPrompt(prompt: string) {
 ```
 
 The generation options set `maxRetries: 0`. Tool output and later prompts name
-the explicit prior response checkpoint; the proxy maps that ID to this exact
+the explicit prior response checkpoint; the plugin maps that ID to this exact
 grant and private conversation. Never retry an ambiguously admitted failure.
-A failed/disconnected attempt, proxy restart, 30-minute mapping expiry,
+A failed/disconnected attempt, gateway restart, 30-minute mapping expiry,
 revocation or policy change ends continuity. Start a new conversation rather
 than guessing an OpenClaw session or replaying a possible mutation.
 
 Ordinary application handler failures should be returned as tool results so the
-model can respond; transport interruption is reserved for failures at the proxy
-or upstream boundary.
+model can respond; transport interruption is reserved for failures at the plugin
+or native runtime boundary.
 
 ## Revoke
 
@@ -207,9 +208,9 @@ that an already admitted upstream effect was undone.
 
 ## Deployment requirements
 
-The owner must follow the [scoped-proxy guide](../../deploy/openclaw-gateway/README.md):
-published pinned stock OpenClaw and the proxy on loopback, explicit HTTPS ingress,
-private operator credential, reload disabled, a dedicated closed agent and one
-supervisor controlling config/restart/reconsent. The current scope is one owner,
-preconfigured policies and bounded process-local conversations. Selected
-subscription/browser behavior remains a separate live acceptance gate.
+The owner must follow the [plugin setup guide](../../deploy/openclaw-gateway/README.md):
+published pinned stock OpenClaw and plugin, explicit capability consent, loopback
+hosting, reviewed HTTPS ingress, and a dedicated restricted application agent.
+The current scope is one owner, one configured application policy, and bounded
+process-local conversations. Selected subscription/browser behavior remains a
+separate live acceptance gate.

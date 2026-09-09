@@ -1,7 +1,10 @@
-# ADR 0014: Scoped authorization proxy to stock OpenClaw
+# Archived ADR 0014: Scoped authorization proxy to stock OpenClaw
 
-Date: 2026-09-07. Status: accepted on `work/openclaw-scoped-proxy`; live
-subscription/browser acceptance remains separate.
+Date: 2026-09-07. Status: archived after supersession by ADR 0015.
+
+Archived 2026-09-09. The standalone implementation and tests were removed from
+`main`; git history preserves the executable source. This document is historical
+evidence, not a supported deployment or rollback instruction.
 
 This supersedes ADR 0013's native-patch implementation prescription. The native
 experiment remains preserved on its parent branch and in this branch's patch and

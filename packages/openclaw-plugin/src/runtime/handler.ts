@@ -1,64 +1,57 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
 import { once } from "node:events";
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { ConnectorAuth, ConnectorAuthError } from "../connector-auth.js";
+import {
+  ConnectorAuth,
+  ConnectorAuthError,
+} from "../../../gateway/src/connector-auth.js";
 import {
   DelegatedGrantError,
   type DelegatedGrantService,
   type VerifiedDelegatedGrant,
-} from "../delegated-grants.js";
-import { OpenClawOAuthHandler } from "../openclaw-plugin/oauth-handler.js";
-import {
-  STANDALONE_ENDPOINT_LAYOUT,
-  type AgentConnectEndpointLayout,
-} from "../openclaw-plugin/contracts.js";
+} from "../../../gateway/src/delegated-grants.js";
+import { OpenClawOAuthHandler } from "../../../gateway/src/openclaw-plugin/oauth-handler.js";
+import type { AgentConnectEndpointLayout } from "../../../gateway/src/openclaw-plugin/contracts.js";
 import {
   ContinuationRegistry,
   ContinuationRegistryError,
   type ConversationReservation,
 } from "./continuations.js";
-import type { StaticOpenClawPolicySnapshot } from "./policy.js";
 import { describeConversation, projectExecutionHistory } from "./history.js";
 import {
   buildBoundedUpstreamRequest,
   MAX_RESPONSE_REQUEST_BYTES,
-  ScopedProxyRequestError,
+  AgentConnectRequestError,
 } from "./request.js";
 import {
   openClawHttpAuthHeaders,
-  resolveOpenClawUpstreamAuth,
+  requireOpenClawUpstreamAuth,
   type OpenClawUpstreamAuth,
 } from "./upstream-auth.js";
 
-export interface ScopedResponsesProxyOptions {
+export interface AgentConnectHandlerOptions {
   readonly issuer: string;
   readonly resource: string;
   readonly upstreamBaseUrl: string;
-  readonly upstreamAuth?: OpenClawUpstreamAuth;
-  /** Standalone compatibility; new embedded callers should pass upstreamAuth. */
-  readonly upstreamToken?: string;
+  readonly upstreamAuth: OpenClawUpstreamAuth;
   readonly grantService: DelegatedGrantService;
   readonly ownerAuth: ConnectorAuth;
   readonly ownerSubject?: string;
-  readonly policySnapshot: Pick<
-    StaticOpenClawPolicySnapshot,
-    "assertUnchanged" | "assertRuntimeCurrent"
-  >;
+  readonly policySnapshot: {
+    assertUnchanged(): void;
+    assertRuntimeCurrent(): Promise<void>;
+  };
   readonly fetch?: typeof globalThis.fetch;
   readonly continuationRegistry?: ContinuationRegistry;
   readonly upstreamTimeoutMs?: number;
   readonly maxUpstreamResponseBytes?: number;
   readonly now?: () => number;
   readonly readHistory?: (sessionKey: string) => Promise<unknown>;
-  readonly endpoints?: AgentConnectEndpointLayout;
+  readonly endpoints: AgentConnectEndpointLayout;
 }
 
-export interface ScopedResponsesHandler {
+export interface AgentConnectHandler {
   handle(request: IncomingMessage, response: ServerResponse): Promise<void>;
   close(): Promise<void>;
 }
@@ -85,21 +78,10 @@ interface ObservedResponse {
   terminal?: "completed" | "failed" | "incomplete";
 }
 
-export function createScopedResponsesProxy(
-  options: ScopedResponsesProxyOptions,
-) {
-  const handler = createScopedResponsesHandler(options);
-  const server = createServer((request, response) => {
-    void handler.handle(request, response);
-  });
-  server.once("close", () => void handler.close());
-  return server;
-}
-
-export function createScopedResponsesHandler(
-  options: ScopedResponsesProxyOptions,
-): ScopedResponsesHandler {
-  const endpoints = options.endpoints ?? STANDALONE_ENDPOINT_LAYOUT;
+export function createAgentConnectHandler(
+  options: AgentConnectHandlerOptions,
+): AgentConnectHandler {
+  const endpoints = options.endpoints;
   const issuer = canonicalIssuer(options.issuer, endpoints.issuerPath);
   const origin = new URL(issuer).origin;
   if (options.resource !== `${origin}${endpoints.responsesPath}`) {
@@ -108,7 +90,7 @@ export function createScopedResponsesHandler(
     );
   }
   const upstreamOrigin = requireLoopbackOrigin(options.upstreamBaseUrl);
-  const upstreamAuth = resolveOpenClawUpstreamAuth(options);
+  const upstreamAuth = requireOpenClawUpstreamAuth(options.upstreamAuth);
   const fetchImplementation =
     options.fetch ?? globalThis.fetch.bind(globalThis);
   const registry = options.continuationRegistry ?? new ContinuationRegistry();
@@ -362,7 +344,7 @@ export function createScopedResponsesHandler(
         grant,
       ) as ConversationReservation;
       if (!reservation) {
-        throw new ScopedProxyRequestError(
+        throw new AgentConnectRequestError(
           "unknown_previous_response_id",
           "The previous response is unavailable for this grant",
         );
@@ -907,7 +889,7 @@ async function readJson(
   try {
     return JSON.parse(bytes.toString("utf8"));
   } catch {
-    throw new ScopedProxyRequestError(
+    throw new AgentConnectRequestError(
       "invalid_request",
       "Body must be valid JSON",
     );
@@ -993,7 +975,7 @@ function responsePreflight(
 function rejectDangerousHeaders(request: IncomingMessage): void {
   for (const name of DANGEROUS_REQUEST_HEADERS) {
     if (request.headers[name] !== undefined) {
-      throw new ScopedProxyRequestError(
+      throw new AgentConnectRequestError(
         "invalid_request",
         `Caller-controlled routing header is forbidden: ${name}`,
       );
@@ -1004,7 +986,7 @@ function rejectDangerousHeaders(request: IncomingMessage): void {
 function requireJsonContentType(request: IncomingMessage): void {
   const type = singleHeader(request, "content-type")?.split(";", 1)[0]?.trim();
   if (type !== "application/json") {
-    throw new ScopedProxyRequestError(
+    throw new AgentConnectRequestError(
       "invalid_request",
       "Content-Type must be application/json",
     );
@@ -1174,7 +1156,7 @@ function sendJsonValue(
 function sendError(response: ServerResponse, error: unknown): void {
   if (error instanceof ProxyHttpError) {
     sendJson(response, error.status, error.code, publicMessage(error.code));
-  } else if (error instanceof ScopedProxyRequestError) {
+  } else if (error instanceof AgentConnectRequestError) {
     sendJson(response, 400, error.code, error.message);
   } else if (error instanceof ContinuationRegistryError) {
     sendJson(response, 429, error.code, publicMessage(error.code));

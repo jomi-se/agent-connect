@@ -32,11 +32,10 @@ connect it to a gateway you operate using that gateway's public runtime card.
 
 The demo includes three example apps: a project-board app with bulk editing,
 in-place document review in a document editor, and product research in a
-shopping app. It uses the Agent Connect browser SDK and the preserved runtime-card
-gateway flow. It is useful historical product evidence, but it does not prove the
-stock scoped proxy's OAuth + AI SDK path. Bookhand is the selected application
-for that path's final owner acceptance. The published demo is not changed by
-this branch.
+shopping app. It uses the Agent Connect browser SDK and the historical runtime-card
+gateway flow. It is useful product evidence, but it does not prove the current
+plugin-hosted OAuth + AI SDK path. Bookhand is the selected application for that
+path's owner acceptance. The published demo is unchanged.
 
 The anonymous judge profile is retired; connect to a gateway you own.
 
@@ -66,9 +65,8 @@ Bind OpenClaw to loopback and expose only the reviewed route through owner-manag
 HTTPS ingress such as Tailscale Serve. The OpenClaw operator credential remains
 server-side and is never an application credential. The
 [gateway guide](deploy/openclaw-gateway/README.md) covers setup, doctor states,
-coexistence, ingress, and recovery limitations. The older standalone scoped proxy
-is retained there only as the verified ADR 0014 rollback baseline; users do not
-need a second process for the active ADR 0015 target.
+coexistence, ingress, and recovery limitations. The superseded standalone proxy
+is available through git history, not the current build or deployment surface.
 
 The pinned real OpenClaw host passes deterministic package-install, application
 tool, continuation, native-tool denial, lifecycle, and sandbox-failure tests.
@@ -162,8 +160,7 @@ the plugin keeps it under the `/agent-connect` namespace. OpenClaw owns the
 runtime loop and provider integration. Agent Connect retains the
 untrusted-application authorization boundary, not another agent loop or proxy
 process. See
-[ADR 0015](docs/decisions/0015-openclaw-plugin-host.md). ADR 0014 remains the
-verified rollback baseline until the plugin-host deployment gates are complete.
+[ADR 0015](docs/decisions/0015-openclaw-plugin-host.md).
 
 ## Supported platforms
 
@@ -226,7 +223,7 @@ Additional real-boundary checks:
 # Run the isolated real-OpenClaw compatibility suite directly.
 npm run test:integration:openclaw
 
-# Run preserved legacy process-death evidence (not a scoped-proxy prerequisite).
+# Run preserved historical replacement-engine process-death evidence.
 npm run test:integration:response-crash
 
 # Pack the SDK, install it into a clean external npm project, and import it.
@@ -249,10 +246,10 @@ compatibility tests, and selected subscription-runtime composition smoke tests.
 ## Project status
 
 This is an early `0.x` system, not a claim of a hardened general-purpose agent
-sandbox. The stock plugin host is the active installation target; the first npm
-release and fresh Artifex deployment remain owner-gated. The prior standalone
-proxy and Canvas runtime-card demo are historical compatibility paths, not setup
-prerequisites. Use at your own risk ^^.
+sandbox. The stock plugin host is the sole installation target; the first npm
+release and fresh Artifex deployment remain owner-gated. The prior Canvas
+runtime-card demo is historical product evidence, not a setup prerequisite. Use
+at your own risk ^^.
 
 See [the documentation index](docs/README.md), [mission](docs/mission.md), and
 [accepted decisions](docs/decisions/).

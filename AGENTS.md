@@ -4,13 +4,13 @@
 
 Agent Connect is an application-to-user-owned-agent bridge. Keep the application-facing API agent- and harness-neutral. Codex, Omnigent, ACP adapters, and transport bridges belong behind internal adapter boundaries.
 
-The active installation target is the stock OpenClaw plugin host (ADR 0015),
+The sole installation target is the stock OpenClaw plugin host (ADR 0015),
 tracked in docs/plan/openclaw-plugin-host.md. Users must not operate a separate
-proxy process. Until its gates pass, the verified baseline remains ADR 0014:
-application OAuth and bounded Open Responses in front of a privately operated
-OpenClaw gateway. Keep provider/plugin types out of the application API. Older
-runtime-card, replacement-engine and native-patch artifacts are historical
-compatibility/experiment paths, not prerequisites for the scoped proxy.
+proxy process. The superseded ADR 0014 implementation is available through git
+history, not the current build, test, or deployment surface. Keep provider/plugin
+types out of the application API. Older runtime-card, replacement-engine and
+native-patch artifacts are historical compatibility/experiment paths, not
+prerequisites for the plugin.
 
 ## Terminology
 
@@ -48,7 +48,7 @@ npm run analyze
 
 `npm run verify` includes deterministic real-stock-OpenClaw compatibility tests.
 The historical replacement-engine process-crash suite is a separate command;
-it is not evidence of restart recovery for the process-local scoped proxy.
+it is not evidence of restart recovery for the process-local plugin state.
 Use Node 24 LTS >=24.15 and <25 and the pin in `config/openclaw-test-compat.json`
 on `PATH` or at `OPENCLAW_TEST_BIN`. See `deploy/openclaw-gateway/README.md`.
 This is intentional: provider

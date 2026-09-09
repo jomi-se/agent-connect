@@ -1,4 +1,4 @@
-# Scoped proxy to stock OpenClaw: implementation plan
+# Archived plan: scoped proxy to stock OpenClaw
 
 Date: 2026-09-07. Branch: `work/openclaw-scoped-proxy`.
 Parent checkpoint: `037e30c` on `work/openclaw-gateway` preserves the native

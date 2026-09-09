@@ -1,6 +1,6 @@
 # ADR 0015: OpenClaw owns Agent Connect installation and lifecycle
 
-Date: 2026-09-08. Status: accepted target; implementation pending.
+Date: 2026-09-08. Status: accepted and implemented.
 
 ## Decision
 
@@ -11,12 +11,12 @@ The plugin internally constructs authenticated requests to stock OpenClaw's
 native Responses endpoint. No core patch, replacement agent loop, second
 OpenClaw installation, or external proxy supervisor is required.
 
-This supersedes ADR 0014's separate-process installation prescription, not its
-app-delegation boundary. Reuse its grant/PKCE/refresh/revocation, approved tool
+This supersedes the archived ADR 0014 separate-process installation prescription,
+not its app-delegation boundary. Reuse its grant/PKCE/refresh/revocation, approved tool
 snapshot, restricted request construction, response inspection, and bounded
-conversation ownership code. The forwarding remains a proxy implementation
-detail inside the plugin. The standalone composition remains the verified
-baseline until plugin verification and an independently authorized live cutover.
+conversation ownership code. The forwarding remains an internal plugin
+implementation detail. The standalone executable and tests were removed after
+the plugin became the sole installation target; git history retains them.
 
 Use a plugin-owned namespace rather than intercepting native `/v1/responses`.
 The SDK discovers a verified scoped endpoint; no OpenClaw operator credential

@@ -99,6 +99,6 @@ as revoked or expired because the wire does not prove which happened.
 The focused SDK tests use an owned OAuth contract fixture. They prove request
 shape, validation, PKCE transaction behavior, token rotation, single-flight and
 the disconnect/refresh race; they are not evidence that a real OpenClaw runtime
-or owner-login experience works. Stock scoped-proxy compatibility is covered by
-the pinned OpenClaw integration suite. Owner-reported Bookhand evidence and its
-remaining limitations are tracked in the [closeout ledger](stock-openclaw-vertical-closeout.md).
+or owner-login experience works. Stock plugin compatibility is covered by the
+pinned OpenClaw plugin-host suite. Owner-reported Bookhand evidence and its
+remaining limitations are retained in the [archived closeout ledger](../archive/plans/stock-openclaw-vertical-closeout.md).

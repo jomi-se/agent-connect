@@ -2,7 +2,7 @@
 
 Implementation prescription superseded after two experiments: ADR 0013 records
 the 2026-09-06 native-patch direction; current
-[ADR 0014](0014-stock-openclaw-scoped-proxy.md) selects a smaller authorization
+[archived ADR 0014](../archive/decisions/0014-stock-openclaw-scoped-proxy.md) selected a smaller authorization
 proxy to stock OpenClaw. Retain this document as earlier rationale, not a
 requirement to preserve its custom Responses engine or durable ledger.
 

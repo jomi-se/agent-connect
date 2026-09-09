@@ -1,7 +1,7 @@
 import type {
   ApprovedApplicationTool,
   VerifiedDelegatedGrant,
-} from "../delegated-grants.js";
+} from "../../../gateway/src/delegated-grants.js";
 
 // Full source-reading tools return documents, not just short chat messages.
 // The total wire cap includes JSON escaping, instructions and the tool catalog.
@@ -34,7 +34,7 @@ export interface BoundedResponseRequest {
   readonly upstreamBody: Readonly<Record<string, unknown>>;
 }
 
-export class ScopedProxyRequestError extends Error {
+export class AgentConnectRequestError extends Error {
   constructor(
     readonly code: string,
     message: string,
@@ -64,13 +64,13 @@ export function buildBoundedUpstreamRequest(
     "previous_response_id",
   );
   if ((previous === undefined) !== (continuation === undefined)) {
-    throw new ScopedProxyRequestError(
+    throw new AgentConnectRequestError(
       "unknown_previous_response_id",
       "The previous response is unavailable for this grant",
     );
   }
   if (continuation && previous !== continuation.responseId) {
-    throw new ScopedProxyRequestError(
+    throw new AgentConnectRequestError(
       "unknown_previous_response_id",
       "The previous response is unavailable for this grant",
     );
@@ -238,7 +238,7 @@ function validateAndBuildTools(
     };
   });
   if (canonicalJson(normalized) !== canonicalJson(approved)) {
-    throw new ScopedProxyRequestError(
+    throw new AgentConnectRequestError(
       "tool_snapshot_mismatch",
       "The requested tools do not match owner consent",
     );
@@ -370,6 +370,6 @@ function record(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function invalid(message: string): ScopedProxyRequestError {
-  return new ScopedProxyRequestError("invalid_request", message);
+function invalid(message: string): AgentConnectRequestError {
+  return new AgentConnectRequestError("invalid_request", message);
 }

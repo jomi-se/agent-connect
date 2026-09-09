@@ -9,17 +9,17 @@ import { ConnectorAuth } from "../../gateway/src/connector-auth.js";
 import { DelegatedGrantService } from "../../gateway/src/delegated-grants.js";
 import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "../../gateway/src/openclaw-plugin/contracts.js";
 import {
-  createScopedResponsesHandler,
-  type ScopedResponsesHandler,
-} from "../../gateway/src/scoped-proxy/server.js";
+  createAgentConnectHandler,
+  type AgentConnectHandler,
+} from "./runtime/handler.js";
 import {
   readStockOpenClawConfig,
   readStockOpenClawRpc,
-} from "../../gateway/src/scoped-proxy/runtime-config.js";
+} from "./runtime/runtime-config.js";
 import {
   openClawHttpAuthHeaders,
   type OpenClawUpstreamAuth,
-} from "../../gateway/src/scoped-proxy/upstream-auth.js";
+} from "./runtime/upstream-auth.js";
 import {
   applySetupMutation,
   DEFAULT_AGENT_ID,
@@ -38,7 +38,7 @@ const OWNER_SUBJECT = "local-owner";
 const READY_TIMEOUT_MS = 15_000;
 
 interface ActiveService {
-  handler: ScopedResponsesHandler;
+  handler: AgentConnectHandler;
   ready: boolean;
   readiness: Promise<void>;
   stop: AbortController;
@@ -141,7 +141,7 @@ export default {
             });
             assertRuntimeCurrent();
           };
-          const handler = createScopedResponsesHandler({
+          const handler = createAgentConnectHandler({
             issuer: initial.issuer,
             resource: initial.resource,
             upstreamBaseUrl: initial.upstreamBaseUrl,

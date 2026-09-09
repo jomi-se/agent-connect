@@ -2,7 +2,7 @@
 
 Date: 2026-09-06.
 Status: superseded on 2026-09-07 by
-[ADR 0014](0014-stock-openclaw-scoped-proxy.md). Retained as the native-patch
+[archived ADR 0014](../archive/decisions/0014-stock-openclaw-scoped-proxy.md). Retained as the native-patch
 experiment record; it is not the mandatory execution path on the child branch.
 
 Architectural hardening, 2026-09-07: native admission is the authority
