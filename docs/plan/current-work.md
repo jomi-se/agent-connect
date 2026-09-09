@@ -2,6 +2,12 @@
 
 Updated: 2026-09-09
 
+New owner-requested architecture change:
+[dedicated plugin listener](dedicated-plugin-listener.md). Keep one OpenClaw
+process, but expose application access through a plugin-owned loopback port,
+not routes mounted on the native listener. Plan only; current shared-listener
+implementation and deployment are not changed yet.
+
 Next gate: owner publication and fresh Artifex acceptance. The
 [release/deployment ledger](npm-release-and-artifex-deployment.md) and
 [guided-setup ledger](openclaw-owned-guided-setup.md) contain the exact handoff.
