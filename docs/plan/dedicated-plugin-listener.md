@@ -1,7 +1,7 @@
 # Dedicated listener for the OpenClaw proxy plugin
 
-Date: 2026-09-09. Status: owner-requested implementation plan; no code or live
-configuration changed by this document.
+Date: 2026-09-09. Status: implemented through the owner publication gate; no
+package publication, live service, credential, or ingress change performed.
 
 ## Decision and outcome
 
@@ -204,12 +204,42 @@ Keep ledger updated and state what is synthetic, installed-host, or owner-live
 evidence. An inability to bind/manage a service through the public host lifecycle
 is an escalation point, not permission to introduce another daemon or core patch.
 
+Implementation record, 2026-09-09:
+
+- The plugin now owns a bounded `127.0.0.1` listener, removes native route
+  registration, validates `listenPort`, reports live listener/native readiness,
+  and logs the explicit no-auth native-port bypass warning.
+- The pinned OpenClaw 2026.9.1 public service lifecycle, loopback callback server,
+  and gateway shutdown code were inspected for startup failure ownership, bind
+  behavior and bounded socket cleanup. CI/deployment retain that exact evidence
+  pin, while the published plugin admits OpenClaw 2026.9.1 or newer without a
+  speculative compatibility matrix or upper bound.
+- Unit evidence covers route boundaries, encoded paths, async errors,
+  upgrade/CONNECT rejection, occupied-port refusal and same-port reuse. The
+  installed-stock fixture proves two same-process listeners, full deterministic
+  OAuth/tool/history composition through the plugin port, absence from the native
+  listener, open-stream disable/re-enable and an occupied plugin port that leaves
+  native OpenClaw usable. No subscription inference was used.
+- Artifex's tracked config, route schema and runbooks were inspected. Their atomic
+  `listenPort: 18790`, whole-port TLS forwarding, smoke and plugin-pin update is
+  intentionally deferred until `0.0.2` exists on npm, as required by this plan;
+  changing those files earlier would leave a fresh bootstrap pinned to `0.0.1`
+  with an unsupported config and dead ingress target.
+- Read-only npm registry evidence on 2026-09-09 shows plugin `0.0.1` and SDK
+  `0.0.4` are published; plugin `0.0.2` is the only new release candidate. The
+  obsolete first-package manual bootstrap instructions were removed.
+- Final local checks pass: plugin typecheck/unit/build, release logic,
+  installed-tarball smoke, formatting, and the five-case installed stock-host
+  suite. The prepared plugin tarball SHA-256 is
+  `8940924761b40ad25dcf6af38038df68e1d166d12db9bdccc8feb9c7c59a02cf`.
+
 Ledger:
 
 - [x] Dedicated-listener product direction accepted; current source inspected.
-- [ ] Same-process service/listener seam proved on pinned stock host.
-- [ ] Native mounting removed; dedicated server/config/lifecycle implemented.
-- [ ] Existing composition and negative/lifecycle checks pass.
-- [ ] Artifex configuration and architecture/runbooks updated.
+- [x] Same-process service/listener seam proved on pinned stock host.
+- [x] Native mounting removed; dedicated server/config/lifecycle implemented.
+- [x] Existing composition and negative/lifecycle checks pass.
+- [ ] Artifex configuration, runbooks and exact plugin pin updated atomically
+      after `@open-agent-connect/openclaw-plugin@0.0.2` is published.
 - [ ] Owner publication, fresh deployment and public isolation proof.
 - [ ] Owner Bookhand flow confirmation and final clean handoff.

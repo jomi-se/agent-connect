@@ -41,19 +41,22 @@ The anonymous judge profile is retired; connect to a gateway you own.
 
 ## Install the OpenClaw plugin
 
-Use Node 24 LTS >=24.15 and <25 with stock OpenClaw 2026.9.1. Install the plugin
-through OpenClaw's supported package flow and explicitly accept its declared host
+Use Node 24 LTS >=24.15 and <25 with OpenClaw 2026.9.1 or newer. CI and the
+reference deployment pin 2026.9.1 as their reproducible known-good version; the
+plugin does not impose an upper OpenClaw version bound. Install it through
+OpenClaw's supported package flow and explicitly accept its declared host
 capabilities:
 
 ```sh
-openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.1 --pin --accept-capabilities
+openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.2 --pin --accept-capabilities
 openclaw agent-connect setup
 # Restart the gateway, then:
 openclaw agent-connect doctor
 ```
 
-On a terminal, no-argument `setup` asks for the public HTTPS origin and optional
-restricted-agent model, shows one bounded summary, and applies only after
+On a terminal, no-argument `setup` asks for the public HTTPS origin, dedicated
+loopback application port (default `18790`), and optional restricted-agent model,
+shows one bounded summary, and applies only after
 confirmation. Existing automation keeps the old preview/apply contract:
 
 ```sh
@@ -68,9 +71,10 @@ unsupported conflicts, and creates a dedicated app agent with native tools denie
 by default. It does not copy credentials, grants, conversations, or owner state
 from older Agent Connect deployments.
 
-Bind OpenClaw to loopback and expose only the reviewed route through owner-managed
-HTTPS ingress such as Tailscale Serve. The OpenClaw operator credential remains
-server-side and is never an application credential. The
+Bind OpenClaw to loopback and forward public HTTPS to the plugin's dedicated
+loopback port, never the native OpenClaw port. Native UI, RPC, terminal and
+`/v1/responses` routes do not exist on the plugin listener. The OpenClaw
+operator credential remains server-side and is never an application credential. The
 [gateway guide](deploy/openclaw-gateway/README.md) covers setup, doctor states,
 coexistence, ingress, and recovery limitations. The superseded standalone proxy
 is available through git history, not the current build or deployment surface.

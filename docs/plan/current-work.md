@@ -2,11 +2,12 @@
 
 Updated: 2026-09-09
 
-New owner-requested architecture change:
-[dedicated plugin listener](dedicated-plugin-listener.md). Keep one OpenClaw
-process, but expose application access through a plugin-owned loopback port,
-not routes mounted on the native listener. Plan only; current shared-listener
-implementation and deployment are not changed yet.
+The [dedicated plugin listener](dedicated-plugin-listener.md) is implemented
+through its publication gate. One OpenClaw process owns both the native listener
+and the plugin's bounded application-only loopback listener; Agent Connect no
+longer mounts routes on the native port. The `0.0.2` package candidate and local
+evidence are ready. Artifex's config, ingress declaration and exact plugin pin
+must change atomically after publication; no live deployment was changed.
 
 Next gate: owner publication and fresh Artifex acceptance. The
 [release/deployment ledger](npm-release-and-artifex-deployment.md) and

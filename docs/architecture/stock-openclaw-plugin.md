@@ -1,9 +1,11 @@
 # Stock OpenClaw plugin host
 
 The reference installation is `@open-agent-connect/openclaw-plugin`. Stock OpenClaw
-2026.9.1 loads the package, owns its routes and starts/stops its managed service.
-The service reuses the same scoped request, grant, continuation and native-output
-inspection implementation as the standalone baseline. It forwards bounded
+loads the package and starts/stops its managed service. That service owns a
+dedicated HTTP listener on IPv4 loopback (default `127.0.0.1:18790`) while native
+OpenClaw keeps its own listener (commonly `127.0.0.1:18789`). The service uses
+the plugin-owned scoped request, grant, continuation and native-output inspection
+implementation. It forwards bounded
 requests internally to the same gateway's native `/v1/responses` endpoint with
 host-held authority. It is not an agent loop or a second gateway.
 
@@ -25,10 +27,13 @@ URL `https://gateway.example/agent-connect`.
 | Cancel active response         | `/agent-connect/v1/responses/{id}/cancel`                          |
 | Plugin readiness               | `/agent-connect/healthz`                                           |
 
+The plugin listener serves only these metadata paths and the exact
+`/agent-connect` path boundary. `/`, `/terminal`, native `/v1/responses`, RPC,
+unknown discovery, CONNECT and WebSocket upgrades are absent rather than proxied.
 The path-based discovery locations follow RFC 8414 and RFC 9728 by inserting
 the well-known suffix between the host and issuer/resource path. Native
-`/v1/responses`, `/health`, the dashboard, and other plugin routes remain owned
-by OpenClaw. The application credential is valid only for the namespaced
+`/v1/responses`, `/health`, the dashboard and other host routes remain only on
+OpenClaw's listener. The application credential is valid only for the namespaced
 resource and fails at native Responses.
 
 ## State and lifecycle
@@ -49,13 +54,15 @@ This is still not an atomic fence against a trusted operator changing runtime
 configuration between the final snapshot check and the internal HTTP request.
 Supported reconfiguration is controlled disable/change/restart/reconsent.
 
-## Supported coexistence matrix
+## Verified baseline and runtime policy
 
-The initial verified profile is intentionally narrow:
+CI and Artifex pin an exact known-good deployment for reproducible evidence.
+The published plugin permits OpenClaw 2026.9.1 or newer; there is deliberately
+no speculative compatibility matrix or upper version bound.
 
 | Configuration                                                           | Status                                                   |
 | ----------------------------------------------------------------------- | -------------------------------------------------------- |
-| Published OpenClaw `2026.9.1`; Node `>=24.15 <25`                       | Supported pin                                            |
+| Tested/deployed OpenClaw `2026.9.1`; Node `>=24.15 <25`                 | Exact evidence pin                                       |
 | Resolved `gateway.auth.mode: token`                                     | Supported                                                |
 | Resolved `gateway.auth.mode: password`                                  | Supported                                                |
 | Configured token/password SecretRef resolved by the active host         | Supported; environment-backed password is package-tested |
@@ -88,6 +95,8 @@ Bearer credential; internal RPC uses the corresponding public client option.
 For explicit `none`, both transports omit credentials rather than retrying or
 falling back. This changes no application-facing rule: `/agent-connect` still
 requires an Origin-bound delegated bearer grant. With native `none`, other
-OpenClaw endpoints are deliberately outside that grant boundary and remain
-unauthenticated by owner choice. CLI-only auth overrides are not represented by
-the active configuration snapshot and are not claimed as supported.
+OpenClaw endpoints are deliberately outside that grant boundary. Exposing the
+native port bypasses Agent Connect and may expose the authless native Responses
+endpoint. Setup and startup warn in good faith, but the operator's native
+security configuration remains out of scope. CLI-only auth overrides are not
+represented by the active configuration snapshot and are not claimed as supported.
