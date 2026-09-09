@@ -191,6 +191,18 @@ configuration in its repository**, like its Codex configuration and skills.
 A template copied once to an unmanaged home directory is not sufficient.
 “Thin” describes process/lifecycle integration, not configuration ownership.
 
+Artifex fresh-machine acceptance criterion: all persistable decisions are already
+in the repository. Bootstrap installs and links them; the only remaining actions
+are machine/account-specific finalization that cannot safely be committed, such
+as native login, initial private secret/enrollment generation and privileged
+service/network approval. Do not require the owner to reselect the model, runtime,
+agent policy, plugin settings or deployment layout on each fresh VM. Detect or
+parameterize machine-specific addresses once and persist the appropriate local
+value rather than turn them into repeated configuration homework. A ready
+configuration skips the corresponding generic plugin-wizard questions; the full
+wizard is for other OpenClaw users or deliberate configuration changes, not a
+mandatory second bootstrap for Artifex.
+
 - Track the real model/runtime selection, agent profiles, plugin enablement and
   settings, listener configuration and other reproducible operator choices under
   an Artifex-owned config directory. Changes must remain visible as ordinary Git
