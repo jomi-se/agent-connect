@@ -47,11 +47,18 @@ capabilities:
 
 ```sh
 openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.1 --pin --accept-capabilities
-openclaw agent-connect setup --origin https://your-gateway.example
-# Review the preview, then apply explicitly:
-openclaw agent-connect setup --origin https://your-gateway.example --apply
+openclaw agent-connect setup
 # Restart the gateway, then:
 openclaw agent-connect doctor
+```
+
+On a terminal, no-argument `setup` asks for the public HTTPS origin and optional
+restricted-agent model, shows one bounded summary, and applies only after
+confirmation. Existing automation keeps the old preview/apply contract:
+
+```sh
+openclaw agent-connect setup --origin https://your-gateway.example --json
+openclaw agent-connect setup --origin https://your-gateway.example --apply --non-interactive
 ```
 
 The first successful apply prints a one-time owner enrollment passphrase. Put it

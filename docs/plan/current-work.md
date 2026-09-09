@@ -2,10 +2,13 @@
 
 Updated: 2026-09-09
 
-Next implementation: [published packages and fresh Artifex deployment](npm-release-and-artifex-deployment.md).
-Replace the archived-checkout live runtime with npm releases installed by
-Artifex. Fresh credentials/grants; no migration. Jose owns all pushes and
-publication setup. This is the detailed handoff for the next Sol agent.
+Next gate: owner publication and fresh Artifex acceptance. The
+[release/deployment ledger](npm-release-and-artifex-deployment.md) and
+[guided-setup ledger](openclaw-owned-guided-setup.md) contain the exact handoff.
+Artifex now owns the actual non-secret OpenClaw profile configuration and uses
+the native foreground host instead of a bespoke gateway controller. Fresh
+credentials/grants; no migration. Jose owns pushes, publication, login, host
+start, sudo/ingress and the live Bookhand proof.
 
 This is the canonical unfinished-work list. It records current priorities and
 only enough completed context to explain them. Product boundaries live in the

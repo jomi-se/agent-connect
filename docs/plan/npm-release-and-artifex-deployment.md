@@ -267,11 +267,14 @@ erasing the old state is intentional and may be irreversible.
       and an existing `npm-publish` environment with no protection rules. npm trust
       settings require authenticated npm access and remain an owner verification.
 - [x] Artifex fresh-install bootstrap/runbook and smoke evidence. The adjacent
-      repository includes a default binaries-only bootstrap step, pinned public
-      dependencies, isolated config/state, stable launchers, tmux operations and
-      route-limited owner-reviewed Tailscale instructions. Its shell/profile smoke
-      passes. Before publication the installer fails actionably at the plugin
-      registry check and creates no fallback installation.
+      repository now installs the pinned host/plugin by default, selects its real
+      Git-tracked non-secret configuration for profile `artifex`, and uses
+      OpenClaw's native foreground lifecycle under ordinary operator tmux. The
+      earlier isolated home/state overrides and bespoke tmux gateway controller
+      were removed; the config-path selection deliberately remains so Git owns
+      the actual live configuration.
+      Before publication the installer fails actionably at the plugin registry
+      check and creates no checkout/tarball fallback installation.
 - [ ] Jose pushes / npm publication verified (external gate).
 - [ ] Fresh installation / owner login / Bookhand published SDK and live smoke.
 - [ ] Obsolete runtime deleted; final docs/commits/clean worktrees.

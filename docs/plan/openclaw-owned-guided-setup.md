@@ -1,7 +1,7 @@
 # OpenClaw-owned guided Agent Connect setup
 
-Date: 2026-09-09. Status: proposed implementation contract; plan only.
-Owner: next implementation agent. Jose owns pushes, publication and account actions.
+Date: 2026-09-09. Status: implemented through the owner publication/live gates.
+Owner: Jose owns pushes, publication and account actions.
 
 ## Problem and desired outcome
 
@@ -290,8 +290,39 @@ deletion gates; this plan supersedes its custom tmux-controller UX only.
 Ledger:
 
 - [x] Current pain and native service/custom-state mismatch documented.
-- [ ] Public setup/login/lifecycle seams proved against installed host.
-- [ ] Interactive plugin setup and script compatibility implemented.
-- [ ] Artifex native-compatible fresh layout/lifecycle implemented.
-- [ ] Focused package/host/Artifex checks and concise runbook complete.
+- [x] Public setup/login/lifecycle seams proved against pinned OpenClaw 2026.9.1.
+      Public plugin CLI registration has no prompt helper, so guided setup uses
+      Node's maintained `readline/promises`. Native `onboard`, named profiles,
+      `gateway install/start/status/restart/stop`, and foreground `gateway run`
+      are the supported seams. Custom HOME/STATE/CONFIG overrides intentionally
+      disable native service management; Artifex uses only the config override
+      because direct repository ownership is its higher-priority requirement.
+- [x] Interactive plugin setup and script compatibility implemented. TTY
+      no-argument setup reuses valid configuration, prompts for missing origin
+      and optional restricted model, summarizes policy/change/owner enrollment,
+      confirms once, and reruns without rotating owner identity. Explicit
+      `--origin` remains preview-only unless `--apply` is present; non-TTY
+      missing input returns structured `input_required` rather than hanging.
+- [x] Artifex repository-owned layout implemented in the adjacent repository.
+      The launcher selects profile `artifex` and points at one regular tracked
+      root config. A disposable proof found that OpenClaw onboarding rejects an
+      include-owned config write, even though `config set` can write through a
+      same-directory single-file include; the final flat tracked file supports
+      both native onboarding and plugin writes without synchronization. A custom
+      config path intentionally disables native service ownership, so private
+      state remains in `~/.openclaw-artifex`, the bespoke tmux controller is
+      retired, and this layout uses native foreground `gateway run` under the
+      operator's existing terminal/tmux.
+- [x] Focused package/host/Artifex checks and concise runbook complete. The
+      implementation is intentionally CLI-first: native onboarding handles
+      provider login, while setup distinguishes native service-managed profiles
+      from custom-config/external-supervisor layouts instead of importing private
+      OpenClaw internals or starting a duplicate host. A disposable pinned-host
+      probe resolved `${HOME}` in the restricted workspace, installed the
+      packed plugin, completed zero-change noninteractive setup into private
+      owner state, and verified cancellation from a real pseudo-TTY without
+      creating owner identity.
 - [ ] Owner release and fresh end-to-end onboarding acceptance.
+
+No live profile, login, service, sudo/Tailscale route, npm publication, push, or
+Bookhand flow was changed during implementation. Those remain owner gates.

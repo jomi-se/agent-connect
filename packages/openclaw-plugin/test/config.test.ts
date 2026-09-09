@@ -267,4 +267,43 @@ describe("stock OpenClaw plugin configuration", () => {
       upstreamAuth: { mode: "none" },
     });
   });
+
+  it("pins an optional model on the restricted agent without changing defaults", () => {
+    const config = representativeConfig();
+    const withModel = { ...requested, model: "openai/gpt-5.6-sol" };
+    applySetupMutation(config, withModel, stateDir, resolveGatewayAuth);
+    const agents = config.agents as Record<string, unknown>;
+    const entries = agents.entries as Record<string, unknown>;
+    expect(entries[requested.agentId]).toEqual(
+      restrictedAgentConfig(stateDir, withModel.model),
+    );
+    expect((agents.defaults as Record<string, unknown>).workspace).toBe(
+      "/tmp/personal-workspace",
+    );
+    expect(inspectSetup(config, withModel, inspectionOptions)).toMatchObject({
+      supported: true,
+      changes: [],
+      errors: [],
+    });
+  });
+
+  it("updates only an exact managed restricted-agent model", () => {
+    const config = representativeConfig();
+    applySetupMutation(config, requested, stateDir, resolveGatewayAuth);
+    const withModel = { ...requested, model: "openai/gpt-5.6-sol" };
+    expect(inspectSetup(config, withModel, inspectionOptions)).toMatchObject({
+      supported: true,
+      changes: [
+        "update restricted agent agent-connect-app model",
+        "set plugins.entries.agent-connect.config",
+      ],
+      errors: [],
+    });
+    applySetupMutation(config, withModel, stateDir, resolveGatewayAuth);
+    const entries = (config.agents as Record<string, unknown>)
+      .entries as Record<string, unknown>;
+    expect(entries[requested.agentId]).toEqual(
+      restrictedAgentConfig(stateDir, withModel.model),
+    );
+  });
 });
