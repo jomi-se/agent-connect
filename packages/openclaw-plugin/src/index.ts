@@ -25,6 +25,7 @@ import {
 import {
   applySetupMutation,
   DEFAULT_AGENT_ID,
+  DEFAULT_LISTEN_PORT,
   inspectSetup,
   parsePluginConfig,
   PLUGIN_ID,
@@ -33,6 +34,10 @@ import {
   type StockPluginConfig,
 } from "./config.js";
 import type { StockPluginApi } from "./host-api.js";
+import {
+  startAgentConnectListener,
+  type AgentConnectListener,
+} from "./listener.js";
 import { assertRuntimeCurrentUnlessAborted } from "./readiness.js";
 
 const OWNER_STATE_FILE = "owner.json";
@@ -42,6 +47,7 @@ const READY_TIMEOUT_MS = 15_000;
 
 interface ActiveService {
   handler: AgentConnectHandler;
+  listener: AgentConnectListener;
   ready: boolean;
   readiness: Promise<void>;
   stop: AbortController;
@@ -69,40 +75,27 @@ export default {
       await service.handler.handle(request, response);
     };
 
-    api.registerHttpRoute({
-      path: STOCK_PLUGIN_ENDPOINT_LAYOUT.authorizationServerMetadataPath,
-      auth: "plugin",
-      match: "exact",
-      handler: dispatch,
-    });
-    api.registerHttpRoute({
-      path: STOCK_PLUGIN_ENDPOINT_LAYOUT.protectedResourceMetadataPath,
-      auth: "plugin",
-      match: "exact",
-      handler: dispatch,
-    });
-    api.registerHttpRoute({
-      path: "/agent-connect/",
-      auth: "plugin",
-      match: "prefix",
-      handler: dispatch,
-    });
-
     api.registerService({
       id: "agent-connect-gateway",
       async start(context) {
         startupCode = "initializing";
+        let pendingHandler: AgentConnectHandler | undefined;
         try {
           const pluginConfig = parsePluginConfig(api.pluginConfig);
           const statePaths = resolveStatePaths(context.stateDir);
+          const runtimeConfig = api.runtime.config.current();
+          const resolvedGatewayAuth =
+            await resolveActiveGatewayAuth(runtimeConfig);
+          if (resolvedGatewayAuth.mode === "none") {
+            api.logger.warn(
+              "Native OpenClaw authentication is disabled. Do not expose its native port: clients could bypass Agent Connect grants and call the authless native Responses endpoint.",
+            );
+          }
           if (!existsSync(statePaths.owner)) {
             throw new Error(
               'owner identity is missing; run "openclaw agent-connect setup --apply"',
             );
           }
-          const runtimeConfig = api.runtime.config.current();
-          const resolvedGatewayAuth =
-            await resolveActiveGatewayAuth(runtimeConfig);
           const gatewayAuthResolver = () => resolvedGatewayAuth;
           const initial = resolveSupportedRuntime(runtimeConfig, pluginConfig, {
             stateDir: context.stateDir,
@@ -169,14 +162,31 @@ export default {
                 { sessionKey, limit: 200 },
               ),
           });
+          pendingHandler = handler;
           const stop = new AbortController();
+          const listener = await startAgentConnectListener({
+            port: initial.listenPort,
+            endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+            dispatch,
+            onError(error) {
+              startupCode = "listener_failed";
+              if (service) service.ready = false;
+              context.serviceHealth?.reportFailure(error);
+              api.logger.error(error.message);
+            },
+          });
           const active: ActiveService = {
             handler,
+            listener,
             ready: false,
             stop,
             readiness: Promise.resolve(),
           };
           service = active;
+          pendingHandler = undefined;
+          api.logger.info(
+            `Agent Connect application listener is available at http://${listener.host}:${listener.port}; do not forward the native OpenClaw port`,
+          );
           active.readiness = waitForNativeResponses(
             initial.upstreamBaseUrl,
             initial.upstreamAuth,
@@ -206,8 +216,14 @@ export default {
               },
             );
         } catch (error) {
+          await pendingHandler?.close();
           startupCode = "unsupported_configuration";
           context.serviceHealth?.reportFailure(error);
+          api.logger.error(
+            error instanceof Error
+              ? error.message
+              : "Agent Connect listener startup failed",
+          );
           api.logger.warn(
             "Agent Connect is installed but unavailable; run openclaw agent-connect doctor",
           );
@@ -219,7 +235,7 @@ export default {
         startupCode = "stopped";
         if (!active) return;
         active.stop.abort();
-        await active.handler.close();
+        await Promise.all([active.listener.close(), active.handler.close()]);
         await active.readiness;
       },
     });
@@ -237,6 +253,7 @@ function registerCli(api: StockPluginApi): void {
         .description("Inspect compatibility without changing configuration")
         .option("--origin <url>", "public HTTPS gateway origin")
         .option("--agent-id <id>", "restricted agent id")
+        .option("--listen-port <port>", "loopback application listener port")
         .option("--model <provider/model>", "restricted agent model")
         .action(async (options) => runDoctor(api, options));
       root
@@ -244,6 +261,7 @@ function registerCli(api: StockPluginApi): void {
         .description("Guide setup on a terminal, or preview/apply explicitly")
         .option("--origin <url>", "public HTTPS gateway origin")
         .option("--agent-id <id>", "restricted agent id")
+        .option("--listen-port <port>", "loopback application listener port")
         .option("--model <provider/model>", "restricted agent model")
         .option("--apply", "persist the reviewed setup")
         .option("--json", "print machine-readable output")
@@ -275,16 +293,32 @@ async function runDoctor(
     resolveGatewayAuth: () => resolvedGatewayAuth,
   });
   const ownerReady = existsSync(resolveStatePaths(stateDir).owner);
-  const readiness = setupReadiness(inspection, ownerReady);
+  const configuration = setupReadiness(inspection, ownerReady);
+  const live = configuration.ok
+    ? await probeLocalListener(config.listenPort)
+    : { listener: "not_checked", nativeUpstream: "not_checked" };
+  const ok = configuration.ok && live.nativeUpstream === "ready";
+  const status = configuration.ok
+    ? live.listener === "unavailable"
+      ? "listener_unavailable"
+      : live.nativeUpstream === "ready"
+        ? "ready"
+        : "native_upstream_unavailable"
+    : configuration.status;
   process.stdout.write(
     `${JSON.stringify(
       {
-        ok: readiness.ok,
-        status: readiness.status,
+        ok,
+        status,
         publicOrigin: config.publicOrigin,
         issuer: `${config.publicOrigin}/agent-connect`,
         resource: `${config.publicOrigin}/agent-connect/v1/responses`,
         agentId: config.agentId,
+        listenPort: config.listenPort,
+        localForwardTarget: `http://127.0.0.1:${config.listenPort}`,
+        listener: live.listener,
+        nativeUpstream: live.nativeUpstream,
+        publicIngress: "not_checked",
         ownerIdentity: ownerReady ? "initialized" : "missing",
         changes: inspection.changes,
         errors: inspection.errors,
@@ -296,7 +330,7 @@ async function runDoctor(
       2,
     )}\n`,
   );
-  if (!readiness.ok) process.exitCode = 2;
+  if (!ok) process.exitCode = 2;
 }
 
 async function runSetup(
@@ -427,6 +461,10 @@ async function runSetup(
     applied: true,
     changed: inspection.changes,
     warnings: inspection.warnings,
+    provider: `${config.publicOrigin}/agent-connect`,
+    localForwardTarget: `http://127.0.0.1:${config.listenPort}`,
+    forwardingWarning:
+      "Forward the Agent Connect application port, never the native OpenClaw port.",
     enrollmentPassphrase:
       enrollmentPassphrase ??
       "unchanged; use the passphrase shown by the first successful setup",
@@ -442,6 +480,11 @@ async function runSetup(
       `\nSave this one-time owner enrollment passphrase now:\n\n${enrollmentPassphrase}\n`,
     );
   }
+  stdout.write(`\nProvider: ${config.publicOrigin}/agent-connect\n`);
+  stdout.write(
+    `Local forwarding target: http://127.0.0.1:${config.listenPort}\n`,
+  );
+  stdout.write("Do not forward the native OpenClaw port to applications.\n");
   stdout.write(`\nNext: ${lifecycleNextStep()}.\n`);
 }
 
@@ -471,6 +514,10 @@ function requestedConfig(
   return parsePluginConfig({
     publicOrigin: options.origin ?? existing?.publicOrigin,
     agentId: options.agentId ?? existing?.agentId ?? DEFAULT_AGENT_ID,
+    listenPort:
+      requestedListenPort(options.listenPort) ??
+      existing?.listenPort ??
+      DEFAULT_LISTEN_PORT,
     model:
       options.model ??
       existing?.model ??
@@ -505,6 +552,8 @@ async function promptForRequestedConfig(
     return parsePluginConfig({
       publicOrigin: existing.publicOrigin,
       agentId: options.agentId ?? existing.agentId,
+      listenPort:
+        requestedListenPort(options.listenPort) ?? existing.listenPort,
       model: options.model ?? existing.model,
     });
   }
@@ -523,9 +572,17 @@ async function promptForRequestedConfig(
       "Model for delegated application requests (provider/model)",
       configuredDefaultModel(runtimeConfig),
     );
+    const listenPort = requestedListenPort(
+      await questionWithDefault(
+        prompt,
+        "Application access port (distinct from the native OpenClaw port)",
+        String(DEFAULT_LISTEN_PORT),
+      ),
+    );
     return parsePluginConfig({
       publicOrigin,
       agentId: options.agentId ?? DEFAULT_AGENT_ID,
+      listenPort,
       model,
     });
   } finally {
@@ -574,6 +631,10 @@ function writeGuidedSummary(
 ): void {
   stdout.write("\nProposed Agent Connect setup:\n");
   stdout.write(`  Address: ${config.publicOrigin}/agent-connect\n`);
+  stdout.write(
+    `  Local application listener: http://127.0.0.1:${config.listenPort}\n`,
+  );
+  stdout.write("  Do not forward the native OpenClaw port to applications.\n");
   stdout.write(`  Restricted agent: ${config.agentId}\n`);
   stdout.write(`  Model: ${config.model ?? "current OpenClaw default"}\n`);
   stdout.write("  Native tools, memory, skills and workspace access: denied\n");
@@ -691,6 +752,43 @@ async function delay(milliseconds: number, signal: AbortSignal): Promise<void> {
       { once: true },
     );
   });
+}
+
+function requestedListenPort(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !/^\d+$/.test(value)) {
+    throw new Error("listenPort must be an integer from 1 through 65535");
+  }
+  const port = Number(value);
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+    throw new Error("listenPort must be an integer from 1 through 65535");
+  }
+  return port;
+}
+
+async function probeLocalListener(listenPort: number): Promise<{
+  readonly listener: "available" | "unavailable";
+  readonly nativeUpstream: "ready" | "unavailable";
+}> {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${listenPort}${STOCK_PLUGIN_ENDPOINT_LAYOUT.healthPath}`,
+      { signal: AbortSignal.timeout(1_500) },
+    );
+    const body = await response.text();
+    if (response.status === 200) {
+      return { listener: "available", nativeUpstream: "ready" };
+    }
+    if (
+      response.status === 503 &&
+      body.includes("Agent Connect is unavailable")
+    ) {
+      return { listener: "available", nativeUpstream: "unavailable" };
+    }
+  } catch {
+    // A refused/timeout probe means the configured listener is not live.
+  }
+  return { listener: "unavailable", nativeUpstream: "unavailable" };
 }
 
 function sendUnavailable(response: ServerResponse, code: string): void {

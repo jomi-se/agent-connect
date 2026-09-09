@@ -1,6 +1,6 @@
 {
   "name": "@open-agent-connect/openclaw-plugin",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Stock OpenClaw-hosted Agent Connect gateway",
   "license": "MIT",
   "repository": {
@@ -25,7 +25,7 @@
     "node": ">=24.15.0 <25"
   },
   "peerDependencies": {
-    "openclaw": "2026.9.1"
+    "openclaw": ">=2026.9.1"
   },
   "peerDependenciesMeta": {
     "openclaw": {
@@ -41,7 +41,7 @@
       "./dist/index.mjs"
     ],
     "compat": {
-      "pluginApi": ">=2026.9.1 <2026.10.0",
+      "pluginApi": ">=2026.9.1",
       "minGatewayVersion": "2026.9.1"
     },
     "build": {

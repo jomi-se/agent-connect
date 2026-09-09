@@ -1,5 +1,3 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
-
 export interface OpenClawConfigMutationResult {
   readonly changed: boolean;
   readonly reason?: string;
@@ -43,15 +41,6 @@ export interface StockPluginApi {
     warn(message: string): void;
     error(message: string): void;
   };
-  registerHttpRoute(route: {
-    readonly path: string;
-    readonly auth: "plugin";
-    readonly match: "exact" | "prefix";
-    readonly handler: (
-      request: IncomingMessage,
-      response: ServerResponse,
-    ) => Promise<void> | void;
-  }): void;
   registerService(service: {
     readonly id: string;
     readonly start: (context: {
