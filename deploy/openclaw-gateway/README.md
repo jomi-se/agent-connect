@@ -17,11 +17,19 @@ Operational installs must use the published package. `npm-pack:` is reserved
 for isolated repository compatibility tests; do not use a checkout, `npm link`,
 or a local tarball for deployment.
 
-Preview setup before applying it:
+On an interactive terminal, use the guided setup:
+
+```sh
+openclaw agent-connect setup
+```
+
+It reuses valid current configuration, asks only for missing public-origin and
+restricted-model choices, shows one summary, and requires confirmation before
+writing. Existing scripts retain explicit preview/apply behavior:
 
 ```sh
 openclaw agent-connect setup --origin https://your-gateway.example
-openclaw agent-connect setup --origin https://your-gateway.example --apply
+openclaw agent-connect setup --origin https://your-gateway.example --apply --non-interactive
 ```
 
 Save the one-time enrollment passphrase shown by the first successful apply in

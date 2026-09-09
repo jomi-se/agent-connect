@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
+import { stdin, stdout } from "node:process";
+import { createInterface } from "node:readline/promises";
 import { resolveConfiguredSecretInputString } from "openclaw/plugin-sdk/config-runtime";
 import { resolveGatewayAuth } from "openclaw/plugin-sdk/gateway-runtime";
 
@@ -229,13 +231,17 @@ function registerCli(api: StockPluginApi): void {
         .description("Inspect compatibility without changing configuration")
         .option("--origin <url>", "public HTTPS gateway origin")
         .option("--agent-id <id>", "restricted agent id", DEFAULT_AGENT_ID)
+        .option("--model <provider/model>", "restricted agent model")
         .action(async (options) => runDoctor(api, options));
       root
         .command("setup")
-        .description("Preview setup; pass --apply to persist it")
+        .description("Guide setup on a terminal, or preview/apply explicitly")
         .option("--origin <url>", "public HTTPS gateway origin")
         .option("--agent-id <id>", "restricted agent id", DEFAULT_AGENT_ID)
+        .option("--model <provider/model>", "restricted agent model")
         .option("--apply", "persist the reviewed setup")
+        .option("--json", "print machine-readable output")
+        .option("--non-interactive", "never prompt")
         .action(async (options) => runSetup(api, options));
     },
     {
@@ -255,8 +261,8 @@ async function runDoctor(
   options: Record<string, unknown>,
 ): Promise<void> {
   const stateDir = api.runtime.state.resolveStateDir();
-  const config = requestedConfig(api, options);
   const runtimeConfig = api.runtime.config.current();
+  const config = requestedConfig(api, options, runtimeConfig);
   const resolvedGatewayAuth = await resolveActiveGatewayAuth(runtimeConfig);
   const inspection = inspectSetup(runtimeConfig, config, {
     stateDir,
@@ -292,8 +298,17 @@ async function runSetup(
   options: Record<string, unknown>,
 ): Promise<void> {
   const stateDir = api.runtime.state.resolveStateDir();
-  const config = requestedConfig(api, options);
   const runtimeConfig = api.runtime.config.current();
+  const guided = shouldGuideSetup(options);
+  let config: StockPluginConfig;
+  try {
+    config = guided
+      ? await promptForRequestedConfig(api, options, runtimeConfig)
+      : requestedConfig(api, options, runtimeConfig);
+  } catch (error) {
+    writeSetupInputError(error, guided);
+    return;
+  }
   const resolvedGatewayAuth = await resolveActiveGatewayAuth(runtimeConfig);
   const gatewayAuthResolver = () => resolvedGatewayAuth;
   const inspection = inspectSetup(runtimeConfig, config, {
@@ -301,23 +316,38 @@ async function runSetup(
     resolveGatewayAuth: gatewayAuthResolver,
   });
   if (!inspection.supported) {
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          applied: false,
-          status: "unsupported_host",
-          preview: inspection.changes,
-          errors: inspection.errors,
-          warnings: inspection.warnings,
-        },
-        null,
-        2,
-      )}\n`,
+    writeSetupInspection(
+      {
+        applied: false,
+        status: "unsupported_host",
+        preview: inspection.changes,
+        errors: inspection.errors,
+        warnings: inspection.warnings,
+      },
+      guided,
     );
     process.exitCode = 2;
     return;
   }
-  if (options.apply !== true) {
+  const ownerReady = existsSync(resolveStatePaths(stateDir).owner);
+  if (guided && inspection.changes.length === 0 && ownerReady) {
+    stdout.write(
+      `Agent Connect is already configured for ${config.publicOrigin}.\nRun "openclaw agent-connect doctor" to verify live readiness.\n`,
+    );
+    return;
+  }
+  let apply = options.apply === true;
+  if (guided) {
+    writeGuidedSummary(config, inspection, ownerReady);
+    apply = await confirmSetup();
+    if (!apply) {
+      stdout.write(
+        "Cancelled. No configuration or owner identity was changed.\n",
+      );
+      return;
+    }
+  }
+  if (!apply) {
     process.stdout.write(
       `${JSON.stringify(
         {
@@ -336,16 +366,43 @@ async function runSetup(
     );
     return;
   }
-  await api.runtime.config.mutateConfigFile({
-    afterWrite: {
-      mode: "none",
-      reason:
-        "Agent Connect setup requires an explicit reviewed gateway restart",
-    },
-    mutate(draft) {
-      applySetupMutation(draft, config, stateDir, gatewayAuthResolver);
-    },
-  });
+  if (inspection.changes.length > 0) {
+    await api.runtime.config.mutateConfigFile({
+      afterWrite: {
+        mode: "none",
+        reason:
+          "Agent Connect setup requires an explicit reviewed gateway restart",
+      },
+      mutate(draft) {
+        applySetupMutation(draft, config, stateDir, gatewayAuthResolver);
+      },
+    });
+  } else {
+    const latestRuntimeConfig = api.runtime.config.current();
+    const latestGatewayAuth =
+      await resolveActiveGatewayAuth(latestRuntimeConfig);
+    const latestInspection = inspectSetup(latestRuntimeConfig, config, {
+      stateDir,
+      resolveGatewayAuth: () => latestGatewayAuth,
+    });
+    if (!latestInspection.supported || latestInspection.changes.length > 0) {
+      writeSetupInspection(
+        {
+          applied: false,
+          status: "configuration_changed",
+          preview: latestInspection.changes,
+          errors: [
+            ...latestInspection.errors,
+            "OpenClaw configuration changed during setup; rerun setup from the new state",
+          ],
+          warnings: latestInspection.warnings,
+        },
+        guided,
+      );
+      process.exitCode = 2;
+      return;
+    }
+  }
   const paths = resolveStatePaths(stateDir);
   await mkdir(paths.directory, { recursive: true, mode: 0o700 });
   await mkdir(paths.workspace, { recursive: true, mode: 0o700 });
@@ -360,26 +417,43 @@ async function runSetup(
       },
     });
   }
-  process.stdout.write(
-    `${JSON.stringify(
-      {
-        applied: true,
-        changed: inspection.changes,
-        warnings: inspection.warnings,
-        enrollmentPassphrase:
-          enrollmentPassphrase ??
-          "unchanged; use the passphrase shown by the first successful setup",
-        next: "restart the OpenClaw gateway, then run openclaw agent-connect doctor",
-      },
-      null,
-      2,
-    )}\n`,
-  );
+  const result = {
+    applied: true,
+    changed: inspection.changes,
+    warnings: inspection.warnings,
+    enrollmentPassphrase:
+      enrollmentPassphrase ??
+      "unchanged; use the passphrase shown by the first successful setup",
+    next: lifecycleNextStep(),
+  };
+  if (!guided) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+  stdout.write("\nAgent Connect configuration applied.\n");
+  if (enrollmentPassphrase) {
+    stdout.write(
+      `\nSave this one-time owner enrollment passphrase now:\n\n${enrollmentPassphrase}\n`,
+    );
+  }
+  stdout.write(`\nNext: ${lifecycleNextStep()}.\n`);
+}
+
+function lifecycleNextStep(): string {
+  if (
+    process.env.OPENCLAW_HOME ||
+    process.env.OPENCLAW_STATE_DIR ||
+    process.env.OPENCLAW_CONFIG_PATH
+  ) {
+    return 'restart the existing external supervisor, or run "openclaw gateway run" in the foreground, then run "openclaw agent-connect doctor"';
+  }
+  return 'restart the shared host with "openclaw gateway restart", then run "openclaw agent-connect doctor"';
 }
 
 function requestedConfig(
   api: StockPluginApi,
   options: Record<string, unknown>,
+  runtimeConfig: Readonly<Record<string, unknown>>,
 ): StockPluginConfig {
   const existing = (() => {
     try {
@@ -391,7 +465,150 @@ function requestedConfig(
   return parsePluginConfig({
     publicOrigin: options.origin ?? existing?.publicOrigin,
     agentId: options.agentId ?? existing?.agentId ?? DEFAULT_AGENT_ID,
+    model:
+      options.model ??
+      existing?.model ??
+      (existing ? undefined : configuredDefaultModel(runtimeConfig)),
   });
+}
+
+function shouldGuideSetup(options: Record<string, unknown>): boolean {
+  return (
+    stdin.isTTY === true &&
+    stdout.isTTY === true &&
+    options.origin === undefined &&
+    options.apply !== true &&
+    options.json !== true &&
+    options.nonInteractive !== true
+  );
+}
+
+async function promptForRequestedConfig(
+  api: StockPluginApi,
+  options: Record<string, unknown>,
+  runtimeConfig: Readonly<Record<string, unknown>>,
+): Promise<StockPluginConfig> {
+  const existing = (() => {
+    try {
+      return parsePluginConfig(api.pluginConfig);
+    } catch {
+      return undefined;
+    }
+  })();
+  if (existing) {
+    return parsePluginConfig({
+      publicOrigin: existing.publicOrigin,
+      agentId: options.agentId ?? existing.agentId,
+      model: options.model ?? existing.model,
+    });
+  }
+  const prompt = createInterface({ input: stdin, output: stdout });
+  try {
+    stdout.write(
+      "Agent Connect adds a restricted, application-tools-only profile to this OpenClaw host.\n",
+    );
+    const publicOrigin = await questionWithDefault(
+      prompt,
+      "Public HTTPS origin",
+      undefined,
+    );
+    const model = await questionWithDefault(
+      prompt,
+      "Model for delegated application requests (provider/model)",
+      configuredDefaultModel(runtimeConfig),
+    );
+    return parsePluginConfig({
+      publicOrigin,
+      agentId: options.agentId ?? DEFAULT_AGENT_ID,
+      model,
+    });
+  } finally {
+    prompt.close();
+  }
+}
+
+async function questionWithDefault(
+  prompt: ReturnType<typeof createInterface>,
+  label: string,
+  defaultValue?: string,
+): Promise<string> {
+  const answer = (
+    await prompt.question(
+      `${label}${defaultValue ? ` [${defaultValue}]` : ""}: `,
+    )
+  ).trim();
+  return answer || defaultValue || "";
+}
+
+async function confirmSetup(): Promise<boolean> {
+  const prompt = createInterface({ input: stdin, output: stdout });
+  try {
+    const answer = (await prompt.question("Apply these changes? [y/N]: "))
+      .trim()
+      .toLowerCase();
+    return answer === "y" || answer === "yes";
+  } finally {
+    prompt.close();
+  }
+}
+
+function configuredDefaultModel(
+  config: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const model = record(record(config.agents)?.defaults)?.model;
+  if (typeof model === "string") return model;
+  const primary = record(model)?.primary;
+  return typeof primary === "string" ? primary : undefined;
+}
+
+function writeGuidedSummary(
+  config: StockPluginConfig,
+  inspection: ReturnType<typeof inspectSetup>,
+  ownerReady: boolean,
+): void {
+  stdout.write("\nProposed Agent Connect setup:\n");
+  stdout.write(`  Address: ${config.publicOrigin}/agent-connect\n`);
+  stdout.write(`  Restricted agent: ${config.agentId}\n`);
+  stdout.write(`  Model: ${config.model ?? "current OpenClaw default"}\n`);
+  stdout.write("  Native tools, memory, skills and workspace access: denied\n");
+  for (const change of inspection.changes)
+    stdout.write(`  Change: ${change}\n`);
+  if (!ownerReady)
+    stdout.write("  Change: create the one-time owner identity\n");
+  for (const warning of inspection.warnings)
+    stdout.write(`  Warning: ${warning}\n`);
+  stdout.write("  Each application still requires separate OAuth consent.\n\n");
+}
+
+function writeSetupInputError(error: unknown, guided: boolean): void {
+  const message =
+    error instanceof Error ? error.message : "invalid setup input";
+  if (guided) {
+    process.stderr.write(`Setup could not continue: ${message}\n`);
+  } else {
+    stdout.write(
+      `${JSON.stringify({ applied: false, status: "input_required", errors: [message] }, null, 2)}\n`,
+    );
+  }
+  process.exitCode = 2;
+}
+
+function writeSetupInspection(
+  value: {
+    readonly applied: false;
+    readonly status: string;
+    readonly preview: readonly string[];
+    readonly errors: readonly string[];
+    readonly warnings: readonly string[];
+  },
+  guided: boolean,
+): void {
+  if (!guided) {
+    stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+    return;
+  }
+  process.stderr.write("Agent Connect cannot be configured on this host:\n");
+  for (const error of value.errors) process.stderr.write(`  - ${error}\n`);
 }
 
 async function resolveActiveGatewayAuth(

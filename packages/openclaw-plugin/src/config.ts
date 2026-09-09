@@ -11,6 +11,7 @@ export const POLICY_REF = "application-tools-only";
 export interface StockPluginConfig {
   readonly publicOrigin: string;
   readonly agentId: string;
+  readonly model?: string;
 }
 
 export interface SupportedRuntime {
@@ -64,10 +65,13 @@ interface HostRuntimeSettingsInspection {
 export function parsePluginConfig(value: unknown): StockPluginConfig {
   const input = record(value);
   if (!input) throw new Error("Agent Connect setup has not been applied");
-  exactKeys(input, ["publicOrigin", "agentId"], "plugin config");
+  exactKeys(input, ["publicOrigin", "agentId", "model"], "plugin config");
   return {
     publicOrigin: canonicalHttpsOrigin(input.publicOrigin),
     agentId: identifier(input.agentId, "agentId"),
+    ...(input.model === undefined
+      ? {}
+      : { model: modelIdentifier(input.model) }),
   };
 }
 
@@ -93,13 +97,20 @@ export function inspectSetup(
   const agents = record(config.agents) ?? {};
   const entries = record(agents.entries) ?? {};
   const existingAgent = entries[requested.agentId];
-  const expectedAgent = restrictedAgentConfig(options.stateDir);
+  const expectedAgent = restrictedAgentConfig(
+    options.stateDir,
+    requested.model,
+  );
   if (existingAgent === undefined) {
     changes.push(`add restricted agent ${requested.agentId}`);
   } else if (!sameJson(existingAgent, expectedAgent)) {
-    errors.push(
-      `agents.entries.${requested.agentId} already exists and is not the Agent Connect restricted recipe`,
-    );
+    if (isManagedRestrictedAgent(existingAgent, options.stateDir)) {
+      changes.push(`update restricted agent ${requested.agentId} model`);
+    } else {
+      errors.push(
+        `agents.entries.${requested.agentId} already exists and is not the Agent Connect restricted recipe`,
+      );
+    }
   }
 
   const pluginEntry = record(record(config.plugins)?.entries)?.[PLUGIN_ID];
@@ -153,7 +164,7 @@ export function applySetupMutation(
 
   const agents = ensureRecord(draft, "agents");
   const entries = ensureRecord(agents, "entries");
-  entries[requested.agentId] ??= restrictedAgentConfig(stateDir);
+  entries[requested.agentId] = restrictedAgentConfig(stateDir, requested.model);
 
   const plugins = ensureRecord(draft, "plugins");
   const pluginEntries = ensureRecord(plugins, "entries");
@@ -308,6 +319,7 @@ function requireHostRuntimeSettings(
 
 export function restrictedAgentConfig(
   stateDir: string,
+  model?: string,
 ): Record<string, unknown> {
   return {
     name: "Agent Connect application delegation",
@@ -323,7 +335,17 @@ export function restrictedAgentConfig(
     },
     sandbox: { mode: "off", workspaceAccess: "none" },
     tools: { deny: ["*"], elevated: { enabled: false } },
+    ...(model === undefined ? {} : { model: { primary: model } }),
   };
+}
+
+function isManagedRestrictedAgent(value: unknown, stateDir: string): boolean {
+  if (sameJson(value, restrictedAgentConfig(stateDir))) return true;
+  const primary = record(record(value)?.model)?.primary;
+  return (
+    typeof primary === "string" &&
+    sameJson(value, restrictedAgentConfig(stateDir, primary))
+  );
 }
 
 function relevantPolicyConfig(
@@ -354,6 +376,19 @@ function canonicalHttpsOrigin(value: unknown): string {
     url.password
   ) {
     throw new Error("publicOrigin must be a canonical HTTPS origin");
+  }
+  return value;
+}
+
+function modelIdentifier(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > 256 ||
+    !/^[A-Za-z0-9._:@/-]+$/.test(value) ||
+    !value.includes("/")
+  ) {
+    throw new Error("model must be a provider/model identifier");
   }
   return value;
 }

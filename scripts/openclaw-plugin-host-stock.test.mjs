@@ -44,6 +44,7 @@ test(
     let setupOutput;
     let doctorBeforeSetup;
     let doctorAfterSetup;
+    let unattendedBeforeSetup;
     const runtime = await startOpenClawTestRuntime({
       configure(config, { directory }) {
         config.agents.entries = {
@@ -67,6 +68,15 @@ test(
           ],
           { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
         );
+        const unattended = spawnSync(
+          binary,
+          ["agent-connect", "setup", "--non-interactive", "--json"],
+          { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
+        );
+        unattendedBeforeSetup = {
+          status: unattended.status,
+          output: JSON.parse(unattended.stdout),
+        };
         const before = spawnSync(
           binary,
           ["agent-connect", "doctor", "--origin", publicOrigin],
@@ -119,6 +129,14 @@ test(
 
     try {
       assert.equal(setupOutput.applied, true);
+      assert.deepEqual(unattendedBeforeSetup, {
+        status: 2,
+        output: {
+          applied: false,
+          status: "input_required",
+          errors: ["publicOrigin is required"],
+        },
+      });
       assert.deepEqual(doctorBeforeSetup, {
         status: 2,
         output: {
@@ -384,7 +402,12 @@ test(
 );
 
 for (const authCase of [
-  { mode: "none", config: { mode: "none" }, warns: true },
+  {
+    mode: "none",
+    config: { mode: "none" },
+    warns: true,
+    preconfigured: true,
+  },
   {
     mode: "password",
     config: {
@@ -405,8 +428,53 @@ for (const authCase of [
     async () => {
       let setupOutput;
       const runtime = await startOpenClawTestRuntime({
-        configure(config) {
+        configure(config, { directory }) {
           config.gateway.auth = authCase.config;
+          if (authCase.preconfigured) {
+            config.agents.defaults.model = { primary: "fixture/fixture" };
+            config.agents.defaults.models = {
+              "fixture/fixture": {
+                agentRuntime: { id: "openclaw" },
+              },
+            };
+            config.agents.entries = {
+              "agent-connect-app": {
+                name: "Agent Connect application delegation",
+                description:
+                  "Restricted profile managed by the Agent Connect plugin",
+                workspace: join(
+                  directory,
+                  "state",
+                  "agent-connect",
+                  "workspace",
+                ),
+                contextInjection: "never",
+                skills: [],
+                memory: {
+                  search: {
+                    enabled: false,
+                    rememberAcrossConversations: false,
+                  },
+                },
+                sandbox: { mode: "off", workspaceAccess: "none" },
+                tools: { deny: ["*"], elevated: { enabled: false } },
+                model: { primary: "fixture/fixture" },
+              },
+            };
+            config.plugins = {
+              allow: ["agent-connect"],
+              entries: {
+                "agent-connect": {
+                  enabled: true,
+                  config: {
+                    publicOrigin,
+                    agentId: "agent-connect-app",
+                    model: "fixture/fixture",
+                  },
+                },
+              },
+            };
+          }
         },
         prepare({ binary, env, directory }) {
           Object.assign(env, authCase.env ?? {});
@@ -436,6 +504,9 @@ for (const authCase of [
 
       try {
         assert.equal(setupOutput.applied, true);
+        if (authCase.preconfigured) {
+          assert.deepEqual(setupOutput.changed, []);
+        }
         if (authCase.warns) {
           assert.match(
             setupOutput.warnings.join(" "),

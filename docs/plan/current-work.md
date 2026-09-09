@@ -2,10 +2,13 @@
 
 Updated: 2026-09-09
 
-Next implementation: [published packages and fresh operator infrastructure deployment](npm-release-and-operator-deployment.md).
-Replace the archived-checkout live runtime with npm releases installed by
-operator infrastructure. Fresh credentials/grants; no migration. the owner owns all pushes and
-publication setup. This is the detailed handoff for the next Sol agent.
+Next gate: owner publication and fresh operator infrastructure acceptance. The
+[release/deployment ledger](npm-release-and-operator-deployment.md) and
+[guided-setup ledger](openclaw-owned-guided-setup.md) contain the exact handoff.
+operator infrastructure now owns the actual non-secret OpenClaw profile configuration and uses
+the native foreground host instead of a bespoke gateway controller. Fresh
+credentials/grants; no migration. the owner owns pushes, publication, login, host
+start, sudo/ingress and the live Bookhand proof.
 
 This is the canonical unfinished-work list. It records current priorities and
 only enough completed context to explain them. Product boundaries live in the

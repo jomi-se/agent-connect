@@ -16,6 +16,10 @@
       "agentId": {
         "type": "string",
         "description": "Restricted OpenClaw agent offered to applications"
+      },
+      "model": {
+        "type": "string",
+        "description": "Optional server-owned provider/model for the restricted agent"
       }
     }
   }
