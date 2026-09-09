@@ -407,6 +407,7 @@ for (const authCase of [
     config: { mode: "none" },
     warns: true,
     preconfigured: true,
+    agentId: "custom-application-agent",
   },
   {
     mode: "password",
@@ -438,7 +439,7 @@ for (const authCase of [
               },
             };
             config.agents.entries = {
-              "agent-connect-app": {
+              [authCase.agentId]: {
                 name: "Agent Connect application delegation",
                 description:
                   "Restricted profile managed by the Agent Connect plugin",
@@ -468,7 +469,7 @@ for (const authCase of [
                   enabled: true,
                   config: {
                     publicOrigin,
-                    agentId: "agent-connect-app",
+                    agentId: authCase.agentId,
                     model: "fixture/fixture",
                   },
                 },
@@ -506,6 +507,18 @@ for (const authCase of [
         assert.equal(setupOutput.applied, true);
         if (authCase.preconfigured) {
           assert.deepEqual(setupOutput.changed, []);
+          const sourceConfig = JSON.parse(
+            await readFile(join(runtime.directory, "openclaw.json"), "utf8"),
+          );
+          assert.equal(
+            sourceConfig.plugins.entries["agent-connect"].config.agentId,
+            authCase.agentId,
+          );
+          assert.ok(sourceConfig.agents.entries[authCase.agentId]);
+          assert.equal(
+            sourceConfig.agents.entries["agent-connect-app"],
+            undefined,
+          );
         }
         if (authCase.warns) {
           assert.match(
