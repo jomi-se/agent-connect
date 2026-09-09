@@ -220,14 +220,17 @@ Implementation record, 2026-09-09:
   OAuth/tool/history composition through the plugin port, absence from the native
   listener, open-stream disable/re-enable and an occupied plugin port that leaves
   native OpenClaw usable. No subscription inference was used.
-- Artifex's tracked config, route schema and runbooks were inspected. Their atomic
-  `listenPort: 18790`, whole-port TLS forwarding, smoke and plugin-pin update is
-  intentionally deferred until `0.0.2` exists on npm, as required by this plan;
-  changing those files earlier would leave a fresh bootstrap pinned to `0.0.1`
-  with an unsupported config and dead ingress target.
-- Read-only npm registry evidence on 2026-09-09 shows plugin `0.0.1` and SDK
-  `0.0.4` are published; plugin `0.0.2` is the only new release candidate. The
-  obsolete first-package manual bootstrap instructions were removed.
+- npm publication completed for plugin `0.0.2` and SDK `0.0.4`. Artifex commit
+  `fce2ab9` pins the published plugin version and integrity, commits
+  `listenPort: 18790`, and declares whole-port TLS forwarding only to that
+  dedicated listener. Its reviewed transition retires the exact old shared-port
+  handlers or demo forward before adding the new route and refuses drift.
+- Artifex smoke checks and a disposable fresh-target install pass with exact
+  OpenClaw `2026.9.1` and plugin `0.0.2`. The actual user-local profile has the
+  same plugin and reconciled receipt. Read-only live Serve planning reports one
+  exact demo-forward removal, one dedicated-listener addition, and zero
+  conflicts; no route was applied because `18790` is not listening before owner
+  setup/startup.
 - Final local checks pass: plugin typecheck/unit/build, release logic,
   installed-tarball smoke, formatting, and the five-case installed stock-host
   suite. The prepared plugin tarball SHA-256 is
@@ -239,7 +242,27 @@ Ledger:
 - [x] Same-process service/listener seam proved on pinned stock host.
 - [x] Native mounting removed; dedicated server/config/lifecycle implemented.
 - [x] Existing composition and negative/lifecycle checks pass.
-- [ ] Artifex configuration, runbooks and exact plugin pin updated atomically
-      after `@open-agent-connect/openclaw-plugin@0.0.2` is published.
-- [ ] Owner publication, fresh deployment and public isolation proof.
+- [x] Artifex configuration, runbooks and exact plugin pin updated atomically
+      after `@open-agent-connect/openclaw-plugin@0.0.2` publication.
+- [x] Owner npm publication and fresh Artifex package-install proof.
+- [ ] Owner login, gateway startup, ingress apply and public isolation proof.
 - [ ] Owner Bookhand flow confirmation and final clean handoff.
+
+## Deferred review follow-ups
+
+Owner decision, 2026-09-09: neither item below blocks publication or the Artifex
+update. Keep the existing behavior for this cutover; these are bounded technical
+debt tasks, not additional deployment gates.
+
+- [ ] Exclude local `listenPort` from the delegated-policy fingerprint in
+      `packages/openclaw-plugin/src/config.ts`. Changing only the private listening
+      port currently invalidates grants even when the public origin and permissions
+      remain unchanged. Preserve invalidation for public-origin or policy changes.
+      Add a focused regression asserting that a port-only change preserves the
+      fingerprint. Until then, a port change may require reconnecting and consent.
+- [ ] Tighten doctor readiness identification in
+      `packages/openclaw-plugin/src/index.ts`. A stale service returning HTTP 200 on
+      the configured health path can be mistaken for the intended instance. Consider
+      checking non-secret provider/config identity, with one wrong-identity test.
+      This is diagnostic accuracy, not an authorization bypass: occupied-port startup
+      already fails. Avoid introducing a general instance-management subsystem.

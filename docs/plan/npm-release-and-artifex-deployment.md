@@ -275,8 +275,9 @@ erasing the old state is intentional and may be irreversible.
       the actual live configuration.
       Before publication the installer fails actionably at the plugin registry
       check and creates no checkout/tarball fallback installation.
-- [ ] Jose pushes / npm publication verified (external gate).
-- [ ] Fresh installation / owner login / Bookhand published SDK and live smoke.
+- [x] Jose push and npm publication verified: SDK `0.0.4`, plugin `0.0.2`.
+- [x] Artifex exact published-package installation and dedicated-listener config.
+- [ ] Owner login / ingress apply / Bookhand published SDK and live smoke.
 - [ ] Obsolete runtime deleted; final docs/commits/clean worktrees.
 
 ### Owner publication gate reached
@@ -313,9 +314,12 @@ workspace typechecking, unit tests, builds, `npm run analyze`, the packed
 real-stock plugin-host suite, and the complete default `npm run verify` gate
 against the integrity-pinned OpenClaw 2026.9.1 installation.
 
-No push, tag, GitHub release, npm publication, workflow dispatch, account change,
-provider login, service start, Tailscale mutation, or Bookhand change was
-performed. Jose's next action is to review the local commits and
-follow `docs/guides/npm-publication.md`. Phase 4 must not begin until the exact
-npm versions/integrities are verified and Jose separately authorizes the live
-Artifex installation.
+Post-publication update, 2026-09-09: main CI published SDK `0.0.4` and plugin
+`0.0.2`. Artifex commit `fce2ab9` pins and verifies plugin `0.0.2` plus registry
+integrity, configures its dedicated loopback listener on `18790`, and prepares
+the exact Tailscale transition from the existing demo forward. Artifex smoke and
+disposable fresh-target installation pass; the actual user-local plugin install
+and receipt are reconciled. No provider login, owner enrollment, gateway start,
+Tailscale mutation, or Bookhand change was performed. The remaining owner gate
+is login/setup, foreground startup and doctor, followed by reviewed ingress
+apply and public/Bookhand smoke.
