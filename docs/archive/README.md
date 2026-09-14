@@ -11,14 +11,6 @@ recovery path for removed executable implementations.
 - [OpenClaw replacement](../plan/openclaw-replacement.md): superseded
   standalone replacement-engine implementation and evidence. The stock plugin
   is now the only installation target.
-- [Dedicated plugin listener](../plan/dedicated-plugin-listener.md): completed
-  same-process listener, publication, and reference-deployment handoff. Its two deferred
-  review debts are retained as non-gates in [current work](../plan/current-work.md).
-- [OpenClaw-owned guided setup](../plan/openclaw-owned-guided-setup.md):
-  completed setup/doctor and host-coexistence ledger.
-- [npm release and operator infrastructure deployment](../plan/npm-release-and-operator-deployment.md):
-  dated publication and deployment handoff. Current package installation is in
-  the [stock OpenClaw setup guide](../../deploy/openclaw-gateway/README.md).
 - [Plugin SDK and Bookhand migration](../plan/plugin-sdk-bookhand-migration.md):
   completed SDK ownership migration and owner-reported application evidence.
 - [OpenClaw plugin host](../plan/openclaw-plugin-host.md): completed packaging,
@@ -32,8 +24,9 @@ recovery path for removed executable implementations.
   SDK validation](../plan/csp-safe-sdk-validation.md), and [multi-turn
   continuation](../plan/multi-turn-task-continuation.md): completed SDK and
   application-support ledgers.
-- [Shared Codex auth](../plan/shared-codex-auth.md), [repository maintenance](../plan/repository-maintenance.md),
-  [delegated grants](../plan/delegated-grants.md), and [grant-route security](../plan/grant-route-security-retrospective.md):
+- [Repository maintenance](../plan/repository-maintenance.md), [delegated
+  grants](../plan/delegated-grants.md), and [grant-route
+  security](../plan/grant-route-security-retrospective.md):
   completed supporting notes, not current operator plans.
 - [Build Week submission](../plan/openai-build-week-submission.md) and its
   [project-description draft](../plan/build-week-project-description.md):

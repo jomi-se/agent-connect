@@ -137,10 +137,9 @@ The remaining native-patch validation path, if retained, is:
    runtime setup. Follow the two-stage owner bootstrap in
    `openclaw-native-application-principal-seam.md`. Never approve real consent
    for the owner, expose credentials, or infer ownership from forwarded headers.
-3. Coordinate with the existing Bookhand Codex in tmux `<application-owned-session>`; it owns the
-   dirty `work/openclaw-tutor-demo` checkout. It received SDK/patch provenance
-   and reports its integration, focused tests, and disconnected mobile browser
-   checks pass. Verify current state rather than overwriting its work.
+3. Coordinate with the application-owned Bookhand work before changing its
+   integration checkout. Preserve concurrent edits, verify current state, and
+   treat its reported focused tests and mobile checks as application evidence.
 4. Run real owner consent and subscription-backed Bookhand source lookup →
    useful saved Study artifact → contextual follow-up → reload/source-link
    verification. Preserve partial effects; no automatic replay after ambiguity.

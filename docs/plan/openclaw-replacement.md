@@ -204,9 +204,8 @@ production deletion/ownership inventory and consistent source-of-truth docs.
 
 ### Shared implementation handoff, 2026-09-05
 
-- Work is isolated on `work/openclaw-gateway` in
-  `/workspace/agent-connect`; live main and the personal gateway have
-  not been switched or restarted. No pushes or credential changes.
+- Work is isolated on `work/openclaw-gateway`; live main and the operator's
+  gateway have not been switched or restarted. No pushes or credential changes.
 - Real dependency tests cover streaming calls, outputs, follow-ups, ordinary
   OpenAI-client nonstream use, isolation, cancellation and gateway process death.
   All 14 real gateway cases passed after correcting a fixture observation race;
@@ -222,17 +221,17 @@ production deletion/ownership inventory and consistent source-of-truth docs.
 - The clean pinned installer and private initialize/check/serve rehearsal passed
   without inference. Default verification now requires actual OpenClaw and
   includes process-crash tests. CI uses the same pin and Node 24.15.
-- **Next release gate:** the owner chose the built-in OpenClaw loop using his
-  subscription. Native Codex is not required. Validate that actual
+- **Next release gate:** the built-in OpenClaw subscription loop was selected.
+  Native Codex is not required. Validate that actual
   runtime through a browser and meaningful tool-result follow-up. No live
   cutover or full VAL-OC pass is implied by deterministic tests or scrutiny.
 
 ### Demo and verification update
 
-the owner selected **Bookhand**, not the bundled Canvas, as the replacement's real
-demo. The Bookhand agent in `<application-owned-session>` was instructed to switch its existing
-checkout to a dedicated branch, with no parallel worktree or old demo to keep
-running. Gateway cutover and subscription configuration remain coordinated here.
+**Bookhand**, not the bundled Canvas, was selected as the replacement's real
+demo. Its integration work used a dedicated branch, with no parallel worktree
+or old demo to keep running. Gateway cutover and subscription configuration
+remain coordinated here.
 
 Verification was collected in stages rather than repeating successful work:
 
@@ -263,10 +262,11 @@ activity events, and `responses-provider.ts` maps all HTTP 401 responses to
 
 ### Selected subscription runtime proven; Bookhand consent next
 
-the owner chose the built-in OpenClaw subscription loop. Actual model tool-result
+The built-in OpenClaw subscription loop was selected. Actual model tool-result
 consumption and follow-up passed, with unchanged source auth and no persisted
 credential copy. Background memory plugins are disabled to avoid an auxiliary
-embeddings API dependency. See the [subscription composition evidence](../research/2026-09-05-openclaw-live-subscription.md).
+embeddings API dependency. Deployment-specific composition evidence is retained
+outside this public repository.
 
 Browser acceptance requires a reachable isolated deployment and normal owner
 approval. It is a separate composition gate, not another runtime choice. Actual

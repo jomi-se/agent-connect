@@ -85,8 +85,8 @@ worked outside the boundary.
 ## 2026-07-15 source-level follow-up
 
 The generated profile mounted the pinned Codex ACP and native Codex paths, the
-dedicated Codex home, and writable `/tmp`, but did not mount Omnigent's Python
-installation under `<operator-local-omnigent>`. Omnigent's ACP
+dedicated Codex home, and writable `/tmp`, but did not mount the operator-local
+Omnigent Python installation. Omnigent's ACP
 bridge config tells Codex to start the relay with that installation's Python
 and `-m omnigent.claude_native_bridge`. The runtime is therefore unavailable at
 the path used by the MCP child inside the outer sandbox. This is now the leading

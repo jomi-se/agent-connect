@@ -43,8 +43,8 @@ provider framework or change Responses generation behavior in this slice.
   conversation outcomes; keep transport/invalid-body/auth failures distinct, not
   silently classed as lost conversation. Do not expose arbitrary server messages.
 - Move the relevant parsing logic from Bookhand into the SDK semantically, not
-  by importing Bookhand code. See `/workspace/bookhand/src/ai/conversation-history.ts`
-  and `connection-persistence.ts`; inspect current limits and test edge cases.
+  by importing Bookhand code. Inspect the application's conversation-history and
+  connection-persistence modules, current limits, and edge-case tests.
 - Reuse existing bounded JSON, schema and hash helpers where appropriate. Keep
   browser code CSP-safe and free of Node imports. Update SDK docs and package
   smoke exports; test both layouts, malformed/cross-origin endpoints, tool-hash

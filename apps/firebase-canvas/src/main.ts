@@ -29,59 +29,30 @@ type GatewayTerminalStep =
 const GATEWAY_TERMINAL_STEPS: readonly GatewayTerminalStep[] = [
   {
     kind: "output",
-    text: "# Node 24.15+ (<25), Tailscale, and a configured OpenClaw service required",
+    text: "# Node 24.15+ (<25), stock OpenClaw, and operator-owned HTTPS ingress required",
     tone: "muted",
   },
   {
     kind: "command",
-    text: "git clone https://github.com/jomi-se/agent-connect.git && cd agent-connect",
+    text: "openclaw plugins install @open-agent-connect/openclaw-plugin --pin --accept-capabilities",
   },
-  { kind: "command", text: "npm install && npm run build" },
   {
     kind: "command",
-    text: "cp deploy/openclaw-gateway/.env.example deploy/openclaw-gateway/.env && chmod 600 deploy/openclaw-gateway/.env",
+    text: "openclaw agent-connect setup",
   },
   {
     kind: "output",
-    text: "# set literal private upstream URL/token/agent, identity path, Serve URL and Tailscale login",
+    text: "# restart the existing OpenClaw supervisor, then verify the plugin",
     tone: "muted",
   },
   {
     kind: "command",
-    text: "$EDITOR deploy/openclaw-gateway/.env",
+    text: "openclaw agent-connect doctor",
   },
   {
     kind: "output",
-    text: "# upstream model/auth setup is separate; see deploy/openclaw-gateway/README.md",
-    tone: "muted",
-  },
-  {
-    kind: "command",
-    text: 'export AGENT_CONNECT_OPENCLAW_ENV_FILE="$PWD/deploy/openclaw-gateway/.env"',
-  },
-  {
-    kind: "output",
-    text: "# new identity only: initialize; never reinitialize existing state",
-    tone: "muted",
-  },
-  { kind: "command", text: "node scripts/openclaw-gateway.mjs initialize" },
-  {
-    kind: "output",
-    text: "runtime card + enrollment passphrase ready",
+    text: "Agent Connect ready; forward only its dedicated loopback listener",
     tone: "success",
-  },
-  {
-    kind: "command",
-    text: "node scripts/openclaw-gateway.mjs check && node scripts/openclaw-gateway.mjs serve",
-  },
-  {
-    kind: "output",
-    text: "# in another shell, publish the loopback gateway",
-    tone: "muted",
-  },
-  {
-    kind: "command",
-    text: "sudo tailscale serve --bg --https=8443 http://127.0.0.1:8787",
   },
 ];
 

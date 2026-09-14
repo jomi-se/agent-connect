@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, createHash } from "node:crypto";
-import { startOpenClawTestRuntime } from "/workspace/agent-connect/scripts/openclaw-test-runtime.mjs";
+import { startOpenClawTestRuntime } from "../../../scripts/openclaw-test-runtime.mjs";
 
 const runtime = await startOpenClawTestRuntime();
 try {

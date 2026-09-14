@@ -56,7 +56,8 @@ Supported reconfiguration is controlled disable/change/restart/reconsent.
 
 ## Verified baseline and runtime policy
 
-CI and a reference deployment pin an exact known-good deployment for reproducible evidence.
+CI and the reference deployment pin an exact known-good version for reproducible
+evidence.
 The published plugin permits OpenClaw 2026.9.1 or newer; there is deliberately
 no speculative compatibility matrix or upper version bound.
 

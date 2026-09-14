@@ -11,7 +11,7 @@ is not a product roadmap or an implementation gate.
 - Keep `gateway`, `/agent-connect`, the stock OpenClaw host boundary, the
   `127.0.0.1:18790` application listener, and native `127.0.0.1:18789`
   distinction explicit.
-- Separate deterministic package/host evidence from the owner's owner-reported
+- Separate deterministic package/host evidence from owner-reported
   live Bookhand vertical-slice success.
 - Reduce active-plan clutter by archiving completed or superseded management
   plans while preserving dated rationale and useful evidence links.
@@ -37,8 +37,8 @@ public documentation.
 
 ## Evidence boundary
 
-The published package versions and reference-deployment pin/install are recorded from the
-release/deployment handoff and repository history. The complete live vertical
+The published package versions and reference-deployment pin are recorded from
+the release handoff and repository history. The complete live vertical
 slice is an owner report, not an independently replayed edge-case certificate.
 
 ## Handoff

@@ -360,7 +360,7 @@ Application
 
 Device
   Suggested name: Readest on Android
-  Name this installation: [ Personal reading device            ]
+  Name this installation: [ Personal reading device   ]
 
 Pairing fingerprint
   amber-river-cobalt-lantern
@@ -484,12 +484,12 @@ the gateway from the browser at all. Only an HTTPS origin can.
 
 Address-space behaviour, serving pages from three address spaces on one host:
 
-| Initiator                              | Target                              | Result                                                         |
-| -------------------------------------- | ----------------------------------- | -------------------------------------------------------------- |
-| `http://100.64.0.10:9099` (tailnet) | `http://192.0.2.10:9098`            | ordinary preflight, succeeded                                  |
-| `http://100.64.0.10:9099` (tailnet) | `http://127.0.0.1:9098`             | never reached the server, hung pending                         |
-| `http://127.0.0.1:9099` (loopback)     | `http://192.0.2.10:9098`            | never reached the server, hung pending                         |
-| `http://127.0.0.1:9099` (loopback)     | `https://…ts.net:8443/v1/responses` | reached the gateway in 25 ms, refused by its own origin policy |
+| Initiator                            | Target                              | Result                                                         |
+| ------------------------------------ | ----------------------------------- | -------------------------------------------------------------- |
+| `http://tailnet-device.example:9099` | `http://lan-device.example:9098`    | ordinary preflight, succeeded                                  |
+| `http://tailnet-device.example:9099` | `http://127.0.0.1:9098`             | never reached the server, hung pending                         |
+| `http://127.0.0.1:9099` (loopback)   | `http://lan-device.example:9098`    | never reached the server, hung pending                         |
+| `http://127.0.0.1:9099` (loopback)   | `https://…ts.net:8443/v1/responses` | reached the gateway in 25 ms, refused by its own origin policy |
 
 The hangs are a permission gate rather than unreachability — the same browser
 loads pages from both addresses directly, and a policy-blocked request fails

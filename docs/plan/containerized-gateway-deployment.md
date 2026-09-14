@@ -137,8 +137,8 @@ person to spend the user's agent subscription.
 The hackathon temporarily used a separate anonymous gateway through Tailscale
 Funnel. That judge-only deployment and its `public-demo` transport profile were
 removed after judging. This plan now concerns future user-owned packaging only;
-see the [archived judge environment plan](judge-demo-environment.md) for the
-historical experiment.
+deployment-specific evidence for the retired environment is intentionally kept
+outside this public repository.
 
 ## Pending work
 
