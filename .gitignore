@@ -38,9 +38,7 @@ deploy/real-connector/.env
 # Also keep machine-specific deployment addresses and operator handoffs here.
 docs/research/local-evidence/
 
-# Local operator instructions and deployment work. Agent Connect is public;
-# machine-specific runbooks belong in the operator's infrastructure repository.
-/AGENTS.local.md
+# Local operator deployment work.
 /.local-operator/
 /*_LOCAL_PRETEST.md
 

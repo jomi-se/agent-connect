@@ -13,26 +13,6 @@ installation. Keep provider/plugin types out of the application API.
 Older runtime-card, replacement-engine and native-patch artifacts are historical
 compatibility/experiment paths, not prerequisites for the plugin.
 
-## Public repository and local deployment boundary
-
-This repository is public product source. Keep reusable protocol, SDK, plugin,
-security, deployment-interface, and provider-neutral verification contracts
-here. Do not record an operator's real hostname, domain, tailnet, IP address,
-email allowlist, machine name, home-directory layout, tunnel identifier, account
-configuration, service commands, tmux sessions, credential locations, or live
-deployment evidence in tracked files or commit history.
-
-Machine-specific ingress, DNS, tunnel, firewall, service, credential, rollout,
-and rollback work belongs in the operator's infrastructure repository or in the
-ignored `.local-operator/` directory. Public examples use reserved domains,
-fixture identities, and placeholders. Before staging documentation or evidence,
-check both the diff and repository history for personal deployment identifiers.
-
-If an ignored `AGENTS.local.md` exists at the repository root, read it before
-performing local deployment or live-environment work. It may identify the local
-infrastructure repository and evidence location, but it does not weaken this
-public boundary.
-
 ## Terminology
 
 Use **gateway** for the Agent Connect component that applications reach and
