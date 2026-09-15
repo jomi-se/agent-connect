@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-09
+Updated: 2026-09-15
 
 This is the canonical status page for unfinished work. Product boundaries live
 in the [mission](../mission.md), capability status lives in the [scope
@@ -18,8 +18,8 @@ application routes remain under `/agent-connect`.
 
 The published packages are:
 
-- `@open-agent-connect/web@0.0.4`;
-- `@open-agent-connect/openclaw-plugin@0.0.2`.
+- `@open-agent-connect/web@0.0.5`;
+- `@open-agent-connect/openclaw-plugin@0.0.3`.
 
 The reference deployment pins the published plugin and its integrity, records
 `listenPort: 18790`, and has passing smoke/fresh-target installation evidence.
