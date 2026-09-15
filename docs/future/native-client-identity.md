@@ -213,9 +213,9 @@ attestation-based client authentication draft is the right abstraction, and it
 is excessive for this stage.
 
 **Reachability is not identity.** None of these profiles answers how a phone
-reaches a tailnet-only gateway in the first place. That is
-`docs/future/hassle-free-tunnel-ingress.md`, and it gates the native work as
-firmly as identity does.
+reaches a tailnet-only gateway in the first place. HTTPS reachability is an
+operator deployment concern and remains a separate prerequisite for native
+work.
 
 ## Evidence from the Readest tree
 
@@ -638,4 +638,3 @@ application first, then the application installation earns a scoped grant.
 - Android App Links verification and Digital Asset Links
 - ADR 0004 (superseded), ADR 0005, ADR 0007, ADR 0009
 - `docs/research/2026-07-14-mutual-runtime-identity.md`
-- `docs/future/hassle-free-tunnel-ingress.md`

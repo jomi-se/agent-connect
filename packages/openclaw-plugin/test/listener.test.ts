@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "../../gateway/src/openclaw-plugin/contracts.js";
 import { startAgentConnectListener } from "../src/listener.js";
+import { AgentConnectAdmissionController } from "../src/runtime/admission.js";
 
 describe("dedicated Agent Connect listener", () => {
   it("dispatches only the metadata and Agent Connect route boundary", async () => {
@@ -21,7 +22,12 @@ describe("dedicated Agent Connect listener", () => {
         STOCK_PLUGIN_ENDPOINT_LAYOUT.protectedResourceMetadataPath,
         "/agent-connect/healthz",
       ]) {
-        expect((await fetch(`${baseUrl}${path}`)).status).toBe(204);
+        const response = await fetch(`${baseUrl}${path}`);
+        expect(response.status).toBe(204);
+        expect(response.headers.get("cache-control")).toBe("no-store");
+        expect(response.headers.get("x-robots-tag")).toBe(
+          "noindex, nofollow, noarchive, nosnippet",
+        );
       }
       for (const path of [
         "/",
@@ -31,7 +37,12 @@ describe("dedicated Agent Connect listener", () => {
         "/agent-connect%2Fhealthz",
         "/.well-known/oauth-authorization-server/unknown",
       ]) {
-        expect((await fetch(`${baseUrl}${path}`)).status).toBe(404);
+        const response = await fetch(`${baseUrl}${path}`);
+        expect(response.status).toBe(404);
+        expect(response.headers.get("cache-control")).toBe("no-store");
+        expect(response.headers.get("x-robots-tag")).toBe(
+          "noindex, nofollow, noarchive, nosnippet",
+        );
       }
       expect(dispatch).toHaveBeenCalledTimes(3);
     } finally {
@@ -110,6 +121,40 @@ describe("dedicated Agent Connect listener", () => {
         "CONNECT example.test:443 HTTP/1.1\r\nHost: example.test\r\n\r\n",
       );
     } finally {
+      await listener.close();
+    }
+  });
+
+  it("rejects excess HTTP work without dispatching or queueing it", async () => {
+    let releaseFirst!: () => void;
+    const firstPending = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const dispatch = vi.fn(async (_request, response) => {
+      await firstPending;
+      response.writeHead(204).end();
+    });
+    const listener = await startAgentConnectListener({
+      port: 0,
+      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+      admission: new AgentConnectAdmissionController({ maxHttpRequests: 1 }),
+      dispatch,
+    });
+    try {
+      const first = fetch(
+        `http://${listener.host}:${listener.port}/agent-connect/healthz`,
+      );
+      await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(1));
+      const rejected = await fetch(
+        `http://${listener.host}:${listener.port}/agent-connect/healthz`,
+      );
+      expect(rejected.status).toBe(503);
+      expect(rejected.headers.get("retry-after")).toBe("1");
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      releaseFirst();
+      expect((await first).status).toBe(204);
+    } finally {
+      releaseFirst();
       await listener.close();
     }
   });

@@ -2,8 +2,8 @@
 
 Agent Connect prepares two exact package tarballs together:
 
-- `@open-agent-connect/web@0.0.4` (already published; CI skips it)
-- `@open-agent-connect/openclaw-plugin@0.0.2` (published)
+- `@open-agent-connect/web@0.0.5` (prepared; not yet published)
+- `@open-agent-connect/openclaw-plugin@0.0.3` (prepared; not yet published)
 
 `npm run release:prepare` builds, packs, inspects, and records SHA-256 digests in
 `dist/npm-release/manifest.json`. `npm run release:smoke` installs and exercises
@@ -22,8 +22,9 @@ tool, saved-connection, and bounded conversation helpers described in the
 
 ## Owner checklist
 
-No agent performs these steps. the owner reviews the commits, owns the npm account and
-GitHub environment, pushes, and handles interactive 2FA or approval.
+No agent performs these steps. The repository owner reviews the commits, owns
+the npm account and GitHub environment, pushes, and handles interactive 2FA or
+approval.
 
 1. Reconfirm the GitHub `npm-publish` environment. Read-only inspection on
    2026-09-08 found that it exists with no protection rules, required reviewers,
@@ -36,9 +37,9 @@ GitHub environment, pushes, and handles interactive 2FA or approval.
    - workflow filename: `ci.yml` (filename only)
    - environment: `npm-publish`
    - allowed action: direct `npm publish`
-3. The packages now exist publicly: SDK `0.0.4` and plugin `0.0.2` were published
-   by the successful main-CI release. The earlier first-plugin manual bootstrap
-   is complete and must not be repeated for `0.0.2`.
+3. SDK `0.0.4` and plugin `0.0.2` are the currently published versions. The
+   prepared `0.0.5` and `0.0.3` release must come from successful main CI. The
+   earlier first-plugin manual bootstrap is complete and must not be repeated.
 4. Inspect the current bindings before changing them. A binding to the retired
    `publish-web-sdk.yml` workflow does not authorize `ci.yml`; do not guess or
    revoke an unknown binding. With npm CLI 11.19.1 or newer, the equivalent

@@ -312,7 +312,38 @@ describe("ResponsesProvider", () => {
     for await (const event of session.streamTask("hi")) events.push(event);
     expect(events.at(-1)).toMatchObject({
       type: "task.failed",
-      error: { message: "runtime is gone" },
+      error: {
+        code: "agent_execution_failed",
+        message: "runtime is gone",
+      },
+    });
+  });
+
+  it("preserves a sanitized underlying-agent authentication failure", async () => {
+    const harness = provider([
+      () =>
+        segment("resp_auth", {
+          type: "response.failed",
+          sequence_number: 3,
+          response: {
+            ...resource("resp_auth", "failed"),
+            error: {
+              code: "agent_authentication_failed",
+              message:
+                "The underlying agent cannot authenticate with its configured model provider.",
+            },
+          },
+        }),
+    ]);
+    const session = new AgentSession({
+      provider: harness.provider,
+      tools: [tool],
+    });
+
+    await expect(session.runTask("hi")).rejects.toMatchObject({
+      code: "agent_authentication_failed",
+      message:
+        "The underlying agent cannot authenticate with its configured model provider.",
     });
   });
 

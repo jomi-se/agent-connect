@@ -5,7 +5,9 @@ import {
   DEFAULT_LISTEN_PORT,
   inspectSetup,
   parsePluginConfig,
+  primaryEntryPoint,
   resolveSupportedRuntime,
+  resolveSupportedRuntimes,
   restrictedAgentConfig,
   setupReadiness,
   type GatewayAuthResolver,
@@ -274,10 +276,12 @@ describe("stock OpenClaw plugin configuration", () => {
 
   it("defaults and validates the dedicated listener port", () => {
     expect(
-      parsePluginConfig({
-        publicOrigin: requested.publicOrigin,
-        agentId: requested.agentId,
-      }).listenPort,
+      primaryEntryPoint(
+        parsePluginConfig({
+          publicOrigin: requested.publicOrigin,
+          agentId: requested.agentId,
+        }),
+      ).listenPort,
     ).toBe(DEFAULT_LISTEN_PORT);
     expect(() => parsePluginConfig({ ...requested, listenPort: 0 })).toThrow(
       "listenPort must be an integer from 1 through 65535",
@@ -285,6 +289,90 @@ describe("stock OpenClaw plugin configuration", () => {
     expect(() =>
       parsePluginConfig({ ...requested, listenPort: "18790" }),
     ).toThrow("listenPort must be an integer from 1 through 65535");
+  });
+
+  it("parses independent entry points and resolves distinct OAuth identities", () => {
+    const multi = parsePluginConfig({
+      entryPoints: [
+        {
+          id: "default",
+          publicOrigin: "https://private.example",
+          listenPort: 18_790,
+        },
+        {
+          id: "public",
+          publicOrigin: "https://public.example",
+          listenPort: 18_791,
+        },
+      ],
+      agentId: requested.agentId,
+    });
+    const config = representativeConfig();
+    applySetupMutation(config, multi, stateDir, resolveGatewayAuth);
+    const runtimes = resolveSupportedRuntimes(config, multi, inspectionOptions);
+    expect(runtimes).toMatchObject([
+      {
+        entryPointId: "default",
+        issuer: "https://private.example/agent-connect",
+        resource: "https://private.example/agent-connect/v1/responses",
+        listenPort: 18_790,
+      },
+      {
+        entryPointId: "public",
+        issuer: "https://public.example/agent-connect",
+        resource: "https://public.example/agent-connect/v1/responses",
+        listenPort: 18_791,
+      },
+    ]);
+    expect(runtimes[0]?.fingerprint).not.toBe(runtimes[1]?.fingerprint);
+    const singleConfig = representativeConfig();
+    const single = {
+      publicOrigin: "https://private.example",
+      agentId: requested.agentId,
+      listenPort: 18_790,
+    };
+    applySetupMutation(singleConfig, single, stateDir, resolveGatewayAuth);
+    expect(runtimes[0]?.fingerprint).toBe(
+      resolveSupportedRuntime(singleConfig, single, inspectionOptions)
+        .fingerprint,
+    );
+  });
+
+  it("rejects ambiguous entry-point identities and mixed config forms", () => {
+    const entryPoints = [
+      {
+        id: "default",
+        publicOrigin: "https://private.example",
+        listenPort: 18_790,
+      },
+      {
+        id: "public",
+        publicOrigin: "https://public.example",
+        listenPort: 18_791,
+      },
+    ];
+    expect(() =>
+      parsePluginConfig({
+        entryPoints: [entryPoints[0], { ...entryPoints[1], id: "default" }],
+        agentId: requested.agentId,
+      }),
+    ).toThrow("unique id");
+    expect(() =>
+      parsePluginConfig({
+        entryPoints: [
+          entryPoints[0],
+          { ...entryPoints[1], listenPort: 18_790 },
+        ],
+        agentId: requested.agentId,
+      }),
+    ).toThrow("unique listenPort");
+    expect(() =>
+      parsePluginConfig({
+        entryPoints,
+        publicOrigin: requested.publicOrigin,
+        agentId: requested.agentId,
+      }),
+    ).toThrow("unknown fields");
   });
 
   it("rejects sharing the native OpenClaw listener", () => {

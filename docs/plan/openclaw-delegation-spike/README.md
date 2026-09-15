@@ -21,8 +21,8 @@ hostile-app hardening. Such missing work must be listed explicitly in the verdic
 
 Readiness: isolated published OpenClaw 2026.9.1 and local deterministic inference
 already run via scripts/openclaw-test-runtime.mjs. Use disposable credentials and
-state only; do not touch agc, agc-openclaw, Bookhand, Serve, or personal auth. No
-external writes/posts/pushes. Runtime planning tools are unavailable here; local
+state only; do not touch live deployments, applications, ingress, or operator
+authentication. No external writes/posts/pushes. Runtime planning tools are unavailable here; local
 contracts, bounded agents, and executable evidence carry the investigation.
 
 Status: archived feasibility evidence; two sequential independent

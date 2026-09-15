@@ -13,6 +13,31 @@
         "type": "string",
         "description": "Canonical public HTTPS origin of this OpenClaw gateway"
       },
+      "entryPoints": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 16,
+        "description": "Independent canonical HTTPS origins and IPv4-loopback application listeners",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "publicOrigin", "listenPort"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,62}$"
+            },
+            "publicOrigin": {
+              "type": "string"
+            },
+            "listenPort": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          }
+        }
+      },
       "agentId": {
         "type": "string",
         "description": "Restricted OpenClaw agent offered to applications"
@@ -21,7 +46,6 @@
         "type": "integer",
         "minimum": 1,
         "maximum": 65535,
-        "default": 18790,
         "description": "IPv4 loopback port dedicated to Agent Connect application traffic"
       },
       "model": {

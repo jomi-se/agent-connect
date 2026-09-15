@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -29,6 +29,7 @@ const artifact = process.env.AGENT_CONNECT_PLUGIN_TARBALL
   ? resolve(process.env.AGENT_CONNECT_PLUGIN_TARBALL)
   : new URL(`../dist/${defaultArtifactName}`, import.meta.url).pathname;
 const publicOrigin = "https://gateway.example";
+const secondPublicOrigin = "https://public-gateway.example";
 const issuer = `${publicOrigin}/agent-connect`;
 const resource = `${issuer}/v1/responses`;
 const appOrigin = "https://books.example";
@@ -280,12 +281,25 @@ test(
       assert.equal(runtime.modelRequests.length, 0);
 
       const first = terminal(
-        await appEvents(runtime, credential.accessToken, {
-          model: "openclaw/default",
-          input: "Look up Flatland",
-          tools,
-          stream: true,
-        }),
+        await appEvents(
+          runtime,
+          credential.accessToken,
+          {
+            model: "openclaw/default",
+            input: "Look up Flatland",
+            tools,
+            stream: true,
+          },
+          {
+            forwarded: "for=192.0.2.1;proto=https;host=attacker.invalid",
+            "x-forwarded-for": "192.0.2.1",
+            "x-forwarded-host": "attacker.invalid",
+            "x-forwarded-proto": "http",
+            "cf-connecting-ip": "192.0.2.1",
+            "cf-ray": "fixture",
+            "tailscale-user-login": "attacker@example.invalid",
+          },
+        ),
       );
       const lookup = functionCall(first, "lookup_book");
       const second = terminal(
@@ -658,6 +672,185 @@ for (const authCase of [
 }
 
 test(
+  "one stock plugin hosts independent OAuth entry points",
+  { timeout: 180_000 },
+  async () => {
+    let setupOutput;
+    let enrollmentPassphrase;
+    const runtime = await startOpenClawTestRuntime({
+      async prepare({ binary, env, directory, pluginPort, secondPluginPort }) {
+        execFileSync(
+          binary,
+          [
+            "plugins",
+            "install",
+            `npm-pack:${artifact}`,
+            "--force",
+            "--accept-capabilities",
+          ],
+          { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
+        );
+        const initialSetup = JSON.parse(
+          execFileSync(
+            binary,
+            [
+              "agent-connect",
+              "setup",
+              "--origin",
+              publicOrigin,
+              "--listen-port",
+              String(pluginPort),
+              "--apply",
+              "--non-interactive",
+            ],
+            { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
+          ),
+        );
+        enrollmentPassphrase = initialSetup.enrollmentPassphrase;
+        const configPath = join(directory, "openclaw.json");
+        const config = JSON.parse(await readFile(configPath, "utf8"));
+        config.plugins.entries["agent-connect"].config = {
+          entryPoints: [
+            {
+              id: "default",
+              publicOrigin,
+              listenPort: pluginPort,
+            },
+            {
+              id: "public",
+              publicOrigin: secondPublicOrigin,
+              listenPort: secondPluginPort,
+            },
+          ],
+          agentId: "agent-connect-app",
+          model: "fixture/fixture",
+        };
+        await writeFile(configPath, JSON.stringify(config, null, 2), {
+          mode: 0o600,
+        });
+        setupOutput = JSON.parse(
+          execFileSync(
+            binary,
+            ["agent-connect", "setup", "--apply", "--non-interactive"],
+            { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
+          ),
+        );
+      },
+      onModelRequest(_body, model) {
+        model.text("The selected entry point reached shared OpenClaw.");
+      },
+    });
+
+    try {
+      await Promise.all([
+        waitForStatus(runtime.pluginBaseUrl, "/agent-connect/healthz", 200),
+        waitForStatus(
+          runtime.secondPluginBaseUrl,
+          "/agent-connect/healthz",
+          200,
+        ),
+      ]);
+      assert.deepEqual(
+        setupOutput.entryPoints.map(({ id, provider, localForwardTarget }) => ({
+          id,
+          provider,
+          localForwardTarget,
+        })),
+        [
+          {
+            id: "default",
+            provider: `${publicOrigin}/agent-connect`,
+            localForwardTarget: runtime.pluginBaseUrl,
+          },
+          {
+            id: "public",
+            provider: `${secondPublicOrigin}/agent-connect`,
+            localForwardTarget: runtime.secondPluginBaseUrl,
+          },
+        ],
+      );
+      const doctor = spawnSync(runtime.binary, ["agent-connect", "doctor"], {
+        cwd: runtime.directory,
+        env: runtime.env,
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+      assert.equal(doctor.status, 0, doctor.stderr);
+      assert.deepEqual(
+        JSON.parse(doctor.stdout).entryPoints.map(
+          ({ id, publicOrigin: origin, listener, nativeUpstream }) => ({
+            id,
+            origin,
+            listener,
+            nativeUpstream,
+          }),
+        ),
+        [
+          {
+            id: "default",
+            origin: publicOrigin,
+            listener: "available",
+            nativeUpstream: "ready",
+          },
+          {
+            id: "public",
+            origin: secondPublicOrigin,
+            listener: "available",
+            nativeUpstream: "ready",
+          },
+        ],
+      );
+
+      const privateCredential = await authorize(runtime, enrollmentPassphrase);
+      const publicCredential = await authorize(runtime, enrollmentPassphrase, {
+        origin: secondPublicOrigin,
+        pluginBaseUrl: runtime.secondPluginBaseUrl,
+      });
+      const request = {
+        model: "openclaw/default",
+        input: "Prove entry-point isolation",
+        tools,
+        stream: true,
+      };
+      assert.equal(
+        (
+          await appPost(
+            runtime,
+            privateCredential.accessToken,
+            request,
+            {},
+            runtime.secondPluginBaseUrl,
+          )
+        ).status,
+        401,
+      );
+      assert.equal(
+        (
+          await appPost(
+            runtime,
+            publicCredential.accessToken,
+            request,
+            {},
+            runtime.pluginBaseUrl,
+          )
+        ).status,
+        401,
+      );
+      const ownEntryPoint = await appPost(
+        runtime,
+        publicCredential.accessToken,
+        request,
+        {},
+        runtime.secondPluginBaseUrl,
+      );
+      assert.equal(ownEntryPoint.status, 200, await ownEntryPoint.text());
+    } finally {
+      await runtime.close();
+    }
+  },
+);
+
+test(
   "occupied plugin port fails closed without disturbing native OpenClaw",
   { timeout: 180_000 },
   async () => {
@@ -776,10 +969,14 @@ test(
   },
 );
 
-async function authorize(runtime, enrollmentPassphrase) {
-  const bridgeFetch = sdkFetch(runtime);
+async function authorize(
+  runtime,
+  enrollmentPassphrase,
+  { origin = publicOrigin, pluginBaseUrl = runtime.pluginBaseUrl } = {},
+) {
+  const bridgeFetch = sdkFetch(runtime, origin, pluginBaseUrl);
   const provider = await discoverOpenClawProvider({
-    providerUrl: issuer,
+    providerUrl: `${origin}/agent-connect`,
     experience: "https",
     fetch: bridgeFetch,
   });
@@ -796,39 +993,36 @@ async function authorize(runtime, enrollmentPassphrase) {
   });
   const requestUri = started.transaction.requestUri;
   const authorizePath = `${new URL(started.authorizationUrl).pathname}${new URL(started.authorizationUrl).search}`;
-  const login = await fetch(`${runtime.pluginBaseUrl}${authorizePath}`);
+  const login = await fetch(`${pluginBaseUrl}${authorizePath}`);
   assert.equal(login.status, 401);
   const challengeToken = hidden(await login.text(), "challenge");
-  const owner = await fetch(
-    `${runtime.pluginBaseUrl}/agent-connect/owner/login`,
-    {
-      method: "POST",
-      redirect: "manual",
-      headers: {
-        origin: publicOrigin,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        challenge: challengeToken,
-        passphrase: enrollmentPassphrase,
-      }),
+  const owner = await fetch(`${pluginBaseUrl}/agent-connect/owner/login`, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      origin,
+      "content-type": "application/x-www-form-urlencoded",
     },
-  );
+    body: new URLSearchParams({
+      challenge: challengeToken,
+      passphrase: enrollmentPassphrase,
+    }),
+  });
   assert.equal(owner.status, 303);
   const cookie = owner.headers.get("set-cookie").split(";", 1)[0];
-  const consent = await fetch(`${runtime.pluginBaseUrl}${authorizePath}`, {
+  const consent = await fetch(`${pluginBaseUrl}${authorizePath}`, {
     headers: { cookie },
   });
   assert.equal(consent.status, 200);
   const consentHtml = await consent.text();
   const decided = await fetch(
-    `${runtime.pluginBaseUrl}/agent-connect/oauth/authorize`,
+    `${pluginBaseUrl}/agent-connect/oauth/authorize`,
     {
       method: "POST",
       redirect: "manual",
       headers: {
         cookie,
-        origin: publicOrigin,
+        origin,
         "content-type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({
@@ -849,11 +1043,15 @@ async function authorize(runtime, enrollmentPassphrase) {
   });
 }
 
-function sdkFetch(runtime) {
+function sdkFetch(
+  runtime,
+  expectedOrigin = publicOrigin,
+  pluginBaseUrl = runtime.pluginBaseUrl,
+) {
   return (input, init) => {
     const url = new URL(String(input));
-    assert.equal(url.origin, publicOrigin);
-    return fetch(`${runtime.pluginBaseUrl}${url.pathname}${url.search}`, init);
+    assert.equal(url.origin, expectedOrigin);
+    return fetch(`${pluginBaseUrl}${url.pathname}${url.search}`, init);
   };
 }
 
@@ -866,8 +1064,14 @@ function appSdkFetch(runtime) {
   };
 }
 
-async function appPost(runtime, token, body, extraHeaders = {}) {
-  return fetch(`${runtime.pluginBaseUrl}/agent-connect/v1/responses`, {
+async function appPost(
+  runtime,
+  token,
+  body,
+  extraHeaders = {},
+  pluginBaseUrl = runtime.pluginBaseUrl,
+) {
+  return fetch(`${pluginBaseUrl}/agent-connect/v1/responses`, {
     method: "POST",
     headers: {
       origin: appOrigin,
@@ -880,8 +1084,8 @@ async function appPost(runtime, token, body, extraHeaders = {}) {
   });
 }
 
-async function appEvents(runtime, token, body) {
-  const response = await appPost(runtime, token, body);
+async function appEvents(runtime, token, body, extraHeaders = {}) {
+  const response = await appPost(runtime, token, body, extraHeaders);
   const text = await response.text();
   assert.equal(response.status, 200, text);
   return text

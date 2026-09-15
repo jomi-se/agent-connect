@@ -6,8 +6,8 @@ evidence; this note is not a current migration, setup, or acceptance plan.
 
 ## Verified baseline
 
-- Agent Connect baseline: 511a828. Working private Omnigent gateway remains in
-  tmux agc; do not replace its live configuration as part of exploratory tests.
+- Agent Connect baseline: 511a828. A working private Omnigent deployment was
+  deliberately left unchanged during these exploratory tests.
 - Published OpenClaw: 2026.9.1. Official source is available at tag v2026.9.1.
 - OpenClaw src/gateway/openresponses-http.ts implements client-defined function
   tools and SSE. Its response-to-session cache expires after 30 minutes and is
@@ -104,7 +104,7 @@ acceptable or native Codex must remain. Do not silently substitute harnesses.
 The common application-authorization boundary remains useful in either case.
 
 Development branch: work/openclaw-gateway. Product changes will use a separate
-checkout so the personal agc installation stays on its working source revision.
+checkout so the live operator deployment stays on its working source revision.
 
 The repeatable real-dependency suite now lives in scripts/openclaw-compat.test.mjs
 and scripts/openclaw-test-runtime.mjs. Fresh evidence at

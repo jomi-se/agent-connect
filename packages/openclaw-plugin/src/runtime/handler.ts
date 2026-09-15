@@ -29,6 +29,7 @@ import {
   requireOpenClawUpstreamAuth,
   type OpenClawUpstreamAuth,
 } from "./upstream-auth.js";
+import { AgentConnectAdmissionController } from "./admission.js";
 
 export interface AgentConnectHandlerOptions {
   readonly issuer: string;
@@ -49,6 +50,7 @@ export interface AgentConnectHandlerOptions {
   readonly now?: () => number;
   readonly readHistory?: (sessionKey: string) => Promise<unknown>;
   readonly endpoints: AgentConnectEndpointLayout;
+  readonly admission?: AgentConnectAdmissionController;
 }
 
 export interface AgentConnectHandler {
@@ -59,12 +61,7 @@ export interface AgentConnectHandler {
 const OWNER_COOKIE = "agent_connect_owner";
 const MAX_LOGIN_BYTES = 16 * 1024;
 const MAX_SSE_EVENT_BYTES = 1024 * 1024;
-const DANGEROUS_REQUEST_HEADERS = [
-  "forwarded",
-  "tailscale-user-login",
-  "x-forwarded-for",
-  "x-forwarded-host",
-  "x-forwarded-proto",
+const RESERVED_NATIVE_REQUEST_HEADERS = [
   "x-openclaw-agent-id",
   "x-openclaw-message-channel",
   "x-openclaw-model",
@@ -76,6 +73,12 @@ interface ObservedResponse {
   responseId?: string;
   readonly pendingCalls: Map<string, string>;
   terminal?: "completed" | "failed" | "incomplete";
+  failure?: PublicUpstreamFailure;
+}
+
+export interface PublicUpstreamFailure {
+  readonly code: "agent_authentication_failed" | "agent_execution_failed";
+  readonly message: string;
 }
 
 export function createAgentConnectHandler(
@@ -96,6 +99,7 @@ export function createAgentConnectHandler(
   const registry = options.continuationRegistry ?? new ContinuationRegistry();
   const ownerSubject = options.ownerSubject ?? "local-owner";
   const now = options.now ?? Date.now;
+  const admission = options.admission ?? new AgentConnectAdmissionController();
   const ownerLoginSecret = randomBytes(32);
   let accepting = true;
   const activeResponses = new Set<ServerResponse>();
@@ -217,7 +221,7 @@ export function createAgentConnectHandler(
     response: ServerResponse,
     conversationId?: string,
   ): Promise<void> {
-    rejectDangerousHeaders(request);
+    rejectReservedNativeHeaders(request);
     const origin = requireBrowserOrigin(request);
     setCors(response, origin);
     const grant = options.grantService.verify(requireBearer(request), {
@@ -274,7 +278,7 @@ export function createAgentConnectHandler(
     request: IncomingMessage,
     response: ServerResponse,
   ): Promise<void> {
-    rejectDangerousHeaders(request);
+    rejectReservedNativeHeaders(request);
     const origin = requireBrowserOrigin(request);
     setCors(response, origin);
     requireJsonContentType(request);
@@ -285,6 +289,11 @@ export function createAgentConnectHandler(
     });
     if (!grant) throw new ProxyHttpError(401, "invalid_application_credential");
     options.policySnapshot.assertUnchanged();
+    const admitted = admission.tryEnterInference(grant.grantId);
+    if (!admitted.accepted) {
+      response.setHeader("retry-after", String(admitted.retryAfterSeconds));
+      throw new ProxyHttpError(429, "service_busy");
+    }
     const controller = new AbortController();
     const abortOnDisconnect = () => controller.abort();
     const abortOnResponseClose = () => {
@@ -300,6 +309,7 @@ export function createAgentConnectHandler(
     } finally {
       request.off("aborted", abortOnDisconnect);
       response.off("close", abortOnResponseClose);
+      admitted.lease.release();
     }
   }
 
@@ -509,7 +519,7 @@ export function createAgentConnectHandler(
       }
     } else {
       registry.fail(reservation);
-      writeProxyFailureEvent(response, observed.responseId);
+      writeProxyFailureEvent(response, observed.responseId, observed.failure);
     }
     response.end();
     inflight.delete(observed.responseId);
@@ -521,7 +531,7 @@ export function createAgentConnectHandler(
     response: ServerResponse,
     responseId: string,
   ): void {
-    rejectDangerousHeaders(request);
+    rejectReservedNativeHeaders(request);
     const origin = requireBrowserOrigin(request);
     setCors(response, origin);
     const grant = authenticate(request, origin);
@@ -703,6 +713,7 @@ function inspectEvent(
   } else if (type === "response.failed") {
     setObservedId(observed, id);
     observed.terminal = "failed";
+    observed.failure = classifyUpstreamFailure(response?.error);
   } else if (type === "response.incomplete") {
     setObservedId(observed, id);
     observed.terminal = "incomplete";
@@ -848,7 +859,13 @@ function parseSseData(frame: Buffer): Record<string, unknown> | undefined {
 function writeProxyFailureEvent(
   response: ServerResponse,
   responseId?: string,
+  failure?: PublicUpstreamFailure,
 ): void {
+  const publicFailure = failure ?? {
+    code: "proxy_interrupted",
+    message:
+      "The private upstream response was interrupted; it was not replayed.",
+  };
   response.write(
     `data: ${JSON.stringify({
       type: "response.failed",
@@ -857,13 +874,35 @@ function writeProxyFailureEvent(
         status: "failed",
         error: {
           type: "server_error",
-          code: "proxy_interrupted",
-          message:
-            "The private upstream response was interrupted; it was not replayed.",
+          code: publicFailure.code,
+          message: publicFailure.message,
         },
       },
     })}\n\n`,
   );
+}
+
+export function classifyUpstreamFailure(value: unknown): PublicUpstreamFailure {
+  const failure = record(value);
+  const code = typeof failure?.code === "string" ? failure.code : "";
+  const message = typeof failure?.message === "string" ? failure.message : "";
+  const detail = `${code}\n${message}`;
+  if (
+    /(?:route-compatible authentication source|compatible credential source|authentication source is configured|invalid api key|incorrect api key|authentication failed|unauthorized)/i.test(
+      detail,
+    )
+  ) {
+    return {
+      code: "agent_authentication_failed",
+      message:
+        "The underlying agent cannot authenticate with its configured model provider. Ask the agent operator to repair provider authentication, then start a new conversation.",
+    };
+  }
+  return {
+    code: "agent_execution_failed",
+    message:
+      "The underlying agent failed while processing the request. Ask the agent operator to inspect its runtime, then start a new conversation.",
+  };
 }
 
 function previousResponseId(value: unknown): string | undefined {
@@ -972,8 +1011,13 @@ function responsePreflight(
   response.end();
 }
 
-function rejectDangerousHeaders(request: IncomingMessage): void {
-  for (const name of DANGEROUS_REQUEST_HEADERS) {
+function rejectReservedNativeHeaders(request: IncomingMessage): void {
+  // This listener is IPv4-loopback-only and derives all authority from its
+  // configured origin, exact browser Origin, and delegated grant. Reverse
+  // proxy metadata such as Forwarded, X-Forwarded-*, CF-* and Tailscale
+  // identity headers is deliberately ignored rather than trusted. Only
+  // headers that could alter the native OpenClaw request remain forbidden.
+  for (const name of RESERVED_NATIVE_REQUEST_HEADERS) {
     if (request.headers[name] !== undefined) {
       throw new AgentConnectRequestError(
         "invalid_request",
@@ -1159,6 +1203,7 @@ function sendError(response: ServerResponse, error: unknown): void {
   } else if (error instanceof AgentConnectRequestError) {
     sendJson(response, 400, error.code, error.message);
   } else if (error instanceof ContinuationRegistryError) {
+    response.setHeader("retry-after", "1");
     sendJson(response, 429, error.code, publicMessage(error.code));
   } else if (error instanceof DelegatedGrantError) {
     sendJson(response, 400, error.code, publicMessage(error.code));

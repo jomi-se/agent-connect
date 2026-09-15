@@ -7,6 +7,7 @@ import {
 import type { Socket } from "node:net";
 
 import type { AgentConnectEndpointLayout } from "../../gateway/src/openclaw-plugin/contracts.js";
+import type { AgentConnectAdmissionController } from "./runtime/admission.js";
 
 const LISTEN_HOST = "127.0.0.1";
 
@@ -23,11 +24,22 @@ export async function startAgentConnectListener(options: {
     request: IncomingMessage,
     response: ServerResponse,
   ) => Promise<void>;
+  readonly admission?: AgentConnectAdmissionController;
   readonly onError?: (error: Error) => void;
 }): Promise<AgentConnectListener> {
   let accepting = true;
   const sockets = new Set<Socket>();
   const server = createServer((request, response) => {
+    applyPublicResponsePolicy(response);
+    const admission = options.admission?.tryEnterHttp();
+    if (options.admission && !admission) {
+      response.setHeader("retry-after", "1");
+      sendJsonError(response, 503, "service_busy");
+      return;
+    }
+    const releaseAdmission = () => admission?.release();
+    response.once("finish", releaseAdmission);
+    response.once("close", releaseAdmission);
     if (!accepting) {
       sendJsonError(response, 503, "service_stopping");
       return;
@@ -109,9 +121,17 @@ export async function startAgentConnectListener(options: {
   };
 }
 
+function applyPublicResponsePolicy(response: ServerResponse): void {
+  response.setHeader("cache-control", "no-store");
+  response.setHeader("x-robots-tag", "noindex, nofollow, noarchive, nosnippet");
+}
+
 function configureServer(server: Server): void {
   server.headersTimeout = 15_000;
-  server.requestTimeout = 0;
+  // This limits receipt of request headers and bodies only; it does not cap a
+  // long-lived SSE response. Silent streamed responses therefore remain valid
+  // while slow request-body attacks release their shared admission slot.
+  server.requestTimeout = 30_000;
   server.keepAliveTimeout = 5_000;
   server.maxHeadersCount = 100;
 }

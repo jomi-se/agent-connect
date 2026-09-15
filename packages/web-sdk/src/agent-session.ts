@@ -245,7 +245,10 @@ export class AgentSession {
             terminal = true;
             yield {
               type: "task.failed",
-              error: taskError("protocol_error", event.message),
+              error: taskError(
+                event.code ?? "agent_execution_failed",
+                event.message,
+              ),
             };
             break;
           case "task.cancelled":

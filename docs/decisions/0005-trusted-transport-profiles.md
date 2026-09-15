@@ -1,6 +1,6 @@
 # 0005: Bootstrap runtime identity through trusted transport profiles
 
-- Status: accepted; narrow Tailscale Serve profile implemented and remotely validated
+- Status: accepted security rationale; current stock-plugin outcome noted below
 - Date: 2026-07-14
 
 ## Context
@@ -35,12 +35,30 @@ Each profile must define:
 6. the resulting assurance level and limitations.
 
 The first supported remote profile will be **Tailscale Serve**. Localhost is a
-development profile. Microsoft Dev Tunnels is the next profile to investigate.
-A naked custom URL remains an advanced, unverified profile until it is paired
-through QR/fingerprint transfer or account-backed gateway enrollment.
+development profile. A naked custom URL remains an advanced, unverified profile
+until it is paired through QR/fingerprint transfer or account-backed gateway
+enrollment.
 
 Hostname suffix detection may suggest a profile in the UI. It must never
 establish trust.
+
+### Current stock-plugin outcome (2026-09-14)
+
+The supported stock OpenClaw plugin has one or more independent canonical HTTPS
+public origins. Its
+application-facing SDK retains two experience values, `tailscale` and `https`,
+for owner-login copy and deployment guidance; neither changes the OAuth or
+Responses protocol. Microsoft Dev Tunnels and ngrok were investigated but are
+not transport profiles or SDK modes. Like other reverse proxies, they may carry
+an entry point only when the deployment independently satisfies the gateway's
+security and browser-transport requirements.
+
+Tailscale Serve remains a useful deployment because tailnet membership protects
+reachability before Agent Connect authorization. A `.ts.net` suffix may select
+or suggest the Tailscale experience in an application UI, but it cannot prove
+Serve rather than Funnel, endpoint ownership, or requester identity. Any such
+security claim still requires verification at the gateway or by the local
+Tailscale deployment; the browser must not manufacture it from the URL.
 
 Agent Connect application authorization remains a separate layer. A trusted
 transport does not authorize an arbitrary origin to send prompts or lend tools.
@@ -110,11 +128,11 @@ The connection should expose a normalized assurance description such as:
 
 ```ts
 type RuntimeAssurance = {
-  profile: "localhost" | "tailscale-serve" | "dev-tunnel" | "custom";
+  profile: "localhost" | "tailscale-serve" | "https";
   transportAuthenticated: boolean;
   connectorKeyVerified: boolean;
   enrollment: "local-transfer" | "provider-account" | "tofu" | "none";
-  requesterIdentitySource?: "tailscale-serve" | "tunnel-provider";
+  requesterIdentitySource?: "tailscale-serve";
   warnings: string[];
 };
 ```
@@ -144,4 +162,3 @@ harness-neutral and must not expose Omnigent, Codex, or ACP types.
 - [Tailscale identity](https://tailscale.com/docs/concepts/tailscale-identity)
 - [Tailscale Serve and identity headers](https://tailscale.com/docs/features/tailscale-serve)
 - [Tailscale tsidp](https://tailscale.com/docs/features/tsidp)
-- [Microsoft Dev Tunnels security](https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/security)

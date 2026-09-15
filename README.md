@@ -247,10 +247,12 @@ compatibility tests, and selected subscription-runtime composition smoke tests.
 ## Project status
 
 This is an early `0.x` system, not a claim of a hardened general-purpose agent
-sandbox. The stock plugin host is the sole installation target. SDK `0.0.4` and
-plugin `0.0.2` are published; The reference deployment has a matching pinned installation path.
-the owner has reported the complete Bookhand vertical slice working, but that report
-does not certify every runtime edge case. The prior Canvas runtime-card demo is
+sandbox. The stock plugin host is the sole installation target. SDK `0.0.5` and
+plugin `0.0.3` are prepared release candidates; the previous `0.0.4` and `0.0.2`
+remain published until the reviewed main-branch release succeeds. The reference
+deployment has a matching fail-closed `0.0.3` candidate pin.
+The owner has reported the complete Bookhand vertical slice working, but that
+report does not certify every runtime edge case. The prior Canvas runtime-card demo is
 historical product evidence, not a setup prerequisite. Use at your own risk ^^.
 
 See [the documentation index](docs/README.md), [mission](docs/mission.md), and

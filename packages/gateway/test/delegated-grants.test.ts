@@ -108,6 +108,30 @@ function approveAndExchange(
 }
 
 describe("delegated grant requests", () => {
+  it("bounds persistent grants and prunes fully expired grants", () => {
+    let now = 1_000;
+    const service = createService(new MemoryStore(), { now: () => now });
+    for (let index = 0; index < 256; index += 1) {
+      approveAndExchange(service);
+    }
+    const overflow = createRequest(service);
+    expect(() =>
+      service.approve(overflow.requestUri, {
+        ownerSubject: "tailscale:user@example.com",
+        policyRef: POLICY.ref,
+      }),
+    ).toThrow("grant_capacity");
+
+    now += 30 * 24 * 60 * 60 * 1000 + 1;
+    const replacement = createRequest(service);
+    expect(() =>
+      service.approve(replacement.requestUri, {
+        ownerSubject: "tailscale:user@example.com",
+        policyRef: POLICY.ref,
+      }),
+    ).not.toThrow();
+  });
+
   it("binds a canonical HTTPS origin, same-origin redirect and fixed resource", () => {
     const service = createService(new MemoryStore());
     const request = createRequest(service);

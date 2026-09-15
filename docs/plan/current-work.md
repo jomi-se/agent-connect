@@ -21,7 +21,7 @@ The published packages are:
 - `@open-agent-connect/web@0.0.4`;
 - `@open-agent-connect/openclaw-plugin@0.0.2`.
 
-A reference deployment pins the published plugin and its integrity, records
+The reference deployment pins the published plugin and its integrity, records
 `listenPort: 18790`, and has passing smoke/fresh-target installation evidence.
 The repository's reproducible host pin is OpenClaw `2026.9.1` on Node `>=24.15
 <25`; the plugin permits that version or newer without an upper bound.
@@ -47,11 +47,34 @@ separate from deterministic test evidence.
 
 ## Unfinished work
 
+### Setup quality and visible product flow
+
+The next product phase improves the owner and application experience around the
+working stock-plugin vertical slice. These are proposed features, not release
+gates or accepted architecture. Work them in this order:
+
+1. [Owner console and managed agent profiles](../future/owner-console-and-profiles.md):
+   replace the raw enrollment and consent presentation with a mobile-first,
+   familiar OAuth flow and investigate a tasteful OpenClaw-native persistence
+   boundary for owner-managed restricted profiles.
+2. [Firebase Canvas stock-plugin migration](../future/firebase-canvas-plugin-migration.md):
+   turn the historical Canvas into both a polished public demonstration and a
+   readable reference application using the current address-based OAuth flow.
+3. [Provider-owned conversation recovery and library](../future/provider-owned-conversation-recovery.md):
+   preserve enough provider provenance for applications to restore a valid
+   conversation as it was presented, then expose an application-owned picker
+   for active conversations without inventing a second transcript authority.
+   [Trusted application identity, a browser-visible connection doctor, and
+   bounded owner recovery controls](../future/setup-quality-candidates.md) are
+   unprioritized adjacent candidates. Their briefs preserve the ideas without
+   committing them to the sequence above.
+
 ### Legacy implementation cleanup (owned separately)
 
 Canvas/runtime-card migration and removal of the older gateway implementation
-remain pending, not plugin-release gates. The Canvas migration task is being
-tracked in a separate owner session; this cleanup does not define its plan.
+remain pending, not plugin-release gates. The Canvas migration now has a
+[focused brief](../future/firebase-canvas-plugin-migration.md); do not remove
+shared modules or the older gateway while it still consumes them.
 Retain shared modules and existing consumers until their replacements land.
 The native OpenClaw patch experiment and its obsolete build/probe wiring also
 remain cleanup targets; do not confuse them with the separately required AI SDK

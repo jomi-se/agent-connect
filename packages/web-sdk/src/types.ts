@@ -61,7 +61,12 @@ export type AgentProviderEvent =
       readonly arguments: unknown;
     }
   | { readonly type: "task.completed"; readonly continuationToken?: string }
-  | { readonly type: "task.failed"; readonly message: string }
+  | {
+      readonly type: "task.failed";
+      /** Stable failure category when the provider can classify it. */
+      readonly code?: AgentConnectErrorCode;
+      readonly message: string;
+    }
   | { readonly type: "task.cancelled" };
 
 export interface AgentProvider {
@@ -86,6 +91,8 @@ export type AgentConnectErrorCode =
   | "tool_execution_failed"
   | "continuation_unavailable"
   | "task_busy"
+  | "agent_authentication_failed"
+  | "agent_execution_failed"
   | "webmcp_unavailable"
   | "webmcp_snapshot_invalidated";
 

@@ -1,9 +1,10 @@
 # Stock OpenClaw plugin host
 
 The reference installation is `@open-agent-connect/openclaw-plugin`. Stock OpenClaw
-loads the package and starts/stops its managed service. That service owns a
-dedicated HTTP listener on IPv4 loopback (default `127.0.0.1:18790`) while native
-OpenClaw keeps its own listener (commonly `127.0.0.1:18789`). The service uses
+loads the package and starts/stops its managed service. That service owns one or
+more dedicated HTTP listeners on IPv4 loopback (single-entry default
+`127.0.0.1:18790`) while native OpenClaw keeps its own listener (commonly
+`127.0.0.1:18789`). The service uses
 the plugin-owned scoped request, grant, continuation and native-output inspection
 implementation. It forwards bounded
 requests internally to the same gateway's native `/v1/responses` endpoint with
@@ -36,6 +37,57 @@ the well-known suffix between the host and issuer/resource path. Native
 OpenClaw's listener. The application credential is valid only for the namespaced
 resource and fails at native Responses.
 
+One plugin installation may declare multiple transport-neutral entry points.
+Each entry point has a stable ID, canonical HTTPS public origin and unique
+loopback port. It derives its own issuer and resource from that configured
+origin; forwarded host headers never select authority. The entry points share
+the restricted agent and authenticated native OpenClaw upstream, but maintain
+separate delegated grants, OAuth transactions and process-local conversation
+authority. A bearer, authorization code or refresh token issued through one
+entry point is invalid at every other listener. Entry-point IDs, origins and
+ports must each be unique.
+
+Reverse-proxy metadata is accepted but never treated as authority. `Forwarded`,
+`X-Forwarded-*`, provider-specific forwarding and identity headers do not select
+the issuer, resource, client, owner, agent, model or session. The plugin derives
+those exclusively from reviewed configuration, the exact browser Origin and the
+delegated grant. Caller-supplied `X-OpenClaw-*` routing headers are rejected
+instead of reaching the native request.
+
+## Admission and resource bounds
+
+One admission controller covers every entry point in the plugin service. It
+allows at most 64 active HTTP requests, four active inference requests globally,
+two active inference requests per grant and 60 inference starts per minute per
+grant. It tracks at most 1,024 grant-rate buckets. Saturation receives an
+immediate `429` or `503` with `Retry-After`; there is no in-memory work queue.
+Leases are released on completion, rejection, timeout, disconnect, cancellation
+and shutdown.
+
+The listener allows 15 seconds for headers and 30 seconds for request receipt;
+these timers do not limit response generation or silent SSE intervals. A
+Responses request is bounded to 20 MiB and a native response to 8 MiB. Structural
+array and SSE-frame bounds are enforced before relay, while transformation text
+and instructions may use the total request envelope. Applications may request
+up to 65,536 output tokens, subject to the selected model and provider. Native
+execution retains its separate 30-minute deadline.
+
+Upstream terminal failures are not transport interruptions. Before relaying a
+failed response, the plugin replaces arbitrary provider/runtime text with a
+small public classification. A recognizable model-credential failure becomes
+`agent_authentication_failed`; every other terminal agent failure becomes
+`agent_execution_failed`. Only a stream that actually breaks without a usable
+terminal failure remains `proxy_interrupted`. This preserves actionable status
+without exposing provider names, credentials, filesystem paths or exception
+details.
+
+OAuth requests and codes, passphrase verification, owner devices, delegated
+grants and conversation mappings all have explicit count and expiry bounds. At
+most 256 delegated grants are retained; revoked and fully expired grants are
+pruned before new approval. Conversation turn count is deliberately not capped:
+such a limit would not constrain an authorized application that can start a new
+conversation and would unnecessarily break long-running transformations.
+
 ## State and lifecycle
 
 Owner identity and delegated grants live below the OpenClaw state directory in
@@ -44,6 +96,12 @@ once and stores only its verifier. Conversation/checkpoint authority remains
 bounded and process-local. Stop, disable, reload, or restart refuses new work,
 aborts owned streams, clears continuations, and never replays an uncertain
 application operation.
+
+The backwards-compatible single entry point and a multiple-entry configuration
+whose entry point ID is `default` use `delegated-grants.json`. Other entry points
+use an ID-namespaced delegated-grant file. This preserves existing grants when
+a deployment promotes its original endpoint to `default` while preventing
+credential reuse across additional origins.
 
 The plugin service does not wait synchronously for a native route that starts
 later in gateway startup. It stays unavailable while a bounded readiness probe
@@ -70,6 +128,7 @@ no speculative compatibility matrix or upper version bound.
 | `gateway.auth.mode: none`                                               | Supported with an explicit native-endpoint warning       |
 | Trusted-proxy or CLI-only auth override not present in host config      | Unsupported                                              |
 | Native TLS on the loopback listener                                     | Unsupported; terminate public HTTPS outside the listener |
+| Multiple unique HTTPS origins on separate loopback listeners            | Supported by one plugin service                          |
 | One plugin-managed app-only agent                                       | Supported                                                |
 | Native public search or code execution in an offered profile            | Not offered in this slice                                |
 | Personal agents, channels, models, credentials, tools, memory, and cron | Preserved and unreachable through the app-only agent     |

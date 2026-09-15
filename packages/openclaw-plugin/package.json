@@ -1,6 +1,6 @@
 {
   "name": "@open-agent-connect/openclaw-plugin",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Stock OpenClaw-hosted Agent Connect gateway",
   "license": "MIT",
   "repository": {

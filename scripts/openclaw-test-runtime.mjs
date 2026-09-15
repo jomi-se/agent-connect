@@ -205,7 +205,10 @@ export async function startOpenClawTestRuntime({
   try {
     await new Promise((resolve) => model.listen(0, "127.0.0.1", resolve));
     const port = await reserveLoopbackPort();
-    const pluginPort = await reserveLoopbackPort();
+    const pluginPort = await reserveLoopbackPort(new Set([port]));
+    const secondPluginPort = await reserveLoopbackPort(
+      new Set([port, pluginPort]),
+    );
     const config = {
       gateway: {
         mode: "local",
@@ -247,7 +250,13 @@ export async function startOpenClawTestRuntime({
     // Research callers can exercise real auth/plugin configuration in this
     // disposable runtime without touching a personal installation.
     if (configure)
-      await configure(config, { directory, token, port, pluginPort });
+      await configure(config, {
+        directory,
+        token,
+        port,
+        pluginPort,
+        secondPluginPort,
+      });
     await writeFile(env.OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2), {
       mode: 0o600,
     });
@@ -259,6 +268,7 @@ export async function startOpenClawTestRuntime({
         env,
         port,
         pluginPort,
+        secondPluginPort,
         token,
       });
     }
@@ -274,6 +284,7 @@ export async function startOpenClawTestRuntime({
     });
     const baseUrl = `http://127.0.0.1:${port}`;
     const pluginBaseUrl = `http://127.0.0.1:${pluginPort}`;
+    const secondPluginBaseUrl = `http://127.0.0.1:${secondPluginPort}`;
     let ready = false;
     for (let attempt = 0; attempt < 180; attempt++) {
       if (spawnError) throw spawnError;
@@ -303,6 +314,8 @@ export async function startOpenClawTestRuntime({
       baseUrl,
       pluginBaseUrl,
       pluginPort,
+      secondPluginPort,
+      secondPluginBaseUrl,
       token,
       agentId: "main",
       model: "openclaw",
@@ -338,10 +351,12 @@ export async function startOpenClawTestRuntime({
   }
 }
 
-async function reserveLoopbackPort() {
-  const reservation = http.createServer();
-  await new Promise((resolve) => reservation.listen(0, "127.0.0.1", resolve));
-  const port = reservation.address().port;
-  await new Promise((resolve) => reservation.close(resolve));
-  return port;
+async function reserveLoopbackPort(excluded = new Set()) {
+  for (;;) {
+    const reservation = http.createServer();
+    await new Promise((resolve) => reservation.listen(0, "127.0.0.1", resolve));
+    const port = reservation.address().port;
+    await new Promise((resolve) => reservation.close(resolve));
+    if (!excluded.has(port)) return port;
+  }
 }

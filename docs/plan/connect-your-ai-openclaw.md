@@ -3,16 +3,11 @@
 Date: 2026-09-06. Status: archived historical sequencing plan; the published
 stock OpenClaw plugin path supersedes this in-progress proposal.
 
-## Active execution ledger
+## Historical execution ledger
 
-For a fresh session, start with [the compact handoff](connect-your-ai-handoff.md).
-
-Latest sequencing decision: inspect the supported patchless plugin execution
-path before more implementation. We may support both plugin deployment and
-upstream native hooks. The handoff records the concrete `runEmbeddedAgent`
-candidate and unresolved authority, continuation and owner-auth questions.
-Use one implementation lane for now; earlier parallel-lane entries below are
-historical status, not instructions to restart workers.
+The operator-specific continuation handoff was removed from this public
+repository after the stock-plugin path superseded it. The entries below retain
+product and protocol provenance, not instructions to restart the old deployment.
 
 2026-09-06 composition checkpoint: the actual compiled consent plugin passed
 PAR, managed-ingress fixture owner consent, token issuance, native client tool

@@ -40,7 +40,7 @@ The [probe](support/openclaw-delegation-probe.mjs) uses published internal pairi
 functions to create/approve a disposable device and issue its token. This proves
 token issuance/verification and the actual HTTP boundary, **not a browser pairing
 ceremony or WebSocket handshake**. Internal chunk names and paths are pinned to
-this VM's inspected artifact; it is a research probe, not a supported SDK example.
+the inspected artifact; it is a research probe, not a supported SDK example.
 
 Executed output (2026-09-05):
 
@@ -58,7 +58,7 @@ OpenClaw refused to issue a token. The corrected probe supplies owner admin scop
 Fixture services were stopped in `finally`; temporary evidence/state was retained.
 No secret values are in the checked-in probe or this report.
 
-Reproduction on this VM:
+Reproduction in the disposable development environment:
 
 ```sh
 ./scripts/quiet-run.sh --detach "delegation auth probe" env \

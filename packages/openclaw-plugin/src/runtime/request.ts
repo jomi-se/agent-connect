@@ -6,10 +6,9 @@ import type {
 // Full source-reading tools return documents, not just short chat messages.
 // The total wire cap includes JSON escaping, instructions and the tool catalog.
 export const MAX_RESPONSE_REQUEST_BYTES = 20 * 1024 * 1024;
-const MAX_TEXT_BYTES = 64 * 1024;
-const MAX_INSTRUCTIONS_BYTES = 16 * 1024;
 const MAX_INPUT_ITEMS = 64;
 const MAX_TOOL_OUTPUTS = 16;
+const MAX_OUTPUT_TOKENS = 65_536;
 const REQUEST_FIELDS = new Set([
   "model",
   "input",
@@ -81,7 +80,7 @@ export function buildBoundedUpstreamRequest(
   const instructions = optionalText(
     body.instructions,
     "instructions",
-    MAX_INSTRUCTIONS_BYTES,
+    MAX_RESPONSE_REQUEST_BYTES,
   );
   // AI SDK repeats application instructions on tool-result steps. They are
   // bounded prompt text, not authority; grant/tool/routing checks still apply.
@@ -93,7 +92,7 @@ export function buildBoundedUpstreamRequest(
     body.max_output_tokens,
     "max_output_tokens",
     1,
-    4096,
+    MAX_OUTPUT_TOKENS,
   );
   const temperature = optionalNumber(body.temperature, "temperature", 0, 2);
   const topP = optionalNumber(body.top_p, "top_p", 0, 1);
@@ -125,7 +124,7 @@ function validateInput(
   continuation: ContinuationExpectation | undefined,
 ): string | readonly Record<string, unknown>[] {
   if (typeof value === "string") {
-    requireText(value, "input", MAX_TEXT_BYTES);
+    requireText(value, "input", MAX_RESPONSE_REQUEST_BYTES);
     if (continuation?.pendingCallIds.length) {
       throw invalid(
         "A pending function call requires function_call_output input",
@@ -195,7 +194,7 @@ function validateInputItem(value: unknown): Record<string, unknown> {
 
 function validateMessageContent(value: unknown): string | readonly unknown[] {
   if (typeof value === "string")
-    return requiredText(value, "content", MAX_TEXT_BYTES);
+    return requiredText(value, "content", MAX_RESPONSE_REQUEST_BYTES);
   if (!Array.isArray(value) || value.length === 0 || value.length > 32) {
     throw invalid("Message content must be text or input_text parts");
   }
@@ -207,9 +206,10 @@ function validateMessageContent(value: unknown): string | readonly unknown[] {
     if (part.type !== "input_text") {
       throw invalid("Media and non-text content are not supported");
     }
-    const text = requiredText(part.text, "text", MAX_TEXT_BYTES);
+    const text = requiredText(part.text, "text", MAX_RESPONSE_REQUEST_BYTES);
     total += Buffer.byteLength(text);
-    if (total > MAX_TEXT_BYTES) throw invalid("Message content is too large");
+    if (total > MAX_RESPONSE_REQUEST_BYTES)
+      throw invalid("Message content is too large");
     return { type: "input_text", text };
   });
 }

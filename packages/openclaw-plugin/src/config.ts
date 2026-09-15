@@ -8,15 +8,32 @@ export const PLUGIN_ID = "agent-connect";
 export const DEFAULT_AGENT_ID = "agent-connect-app";
 export const DEFAULT_LISTEN_PORT = 18_790;
 export const POLICY_REF = "application-tools-only";
+const MAX_ENTRY_POINTS = 16;
 
-export interface StockPluginConfig {
+export interface StockPluginEntryPoint {
+  readonly id: string;
+  readonly publicOrigin: string;
+  readonly listenPort: number;
+}
+
+export interface SingleEntryPointPluginConfig {
   readonly publicOrigin: string;
   readonly agentId: string;
   readonly listenPort: number;
   readonly model?: string;
 }
 
+export interface MultipleEntryPointPluginConfig {
+  readonly entryPoints: readonly StockPluginEntryPoint[];
+  readonly agentId: string;
+  readonly model?: string;
+}
+
+export type StockPluginConfig =
+  SingleEntryPointPluginConfig | MultipleEntryPointPluginConfig;
+
 export interface SupportedRuntime {
+  readonly entryPointId: string;
   readonly publicOrigin: string;
   readonly issuer: string;
   readonly resource: string;
@@ -68,6 +85,40 @@ interface HostRuntimeSettingsInspection {
 export function parsePluginConfig(value: unknown): StockPluginConfig {
   const input = record(value);
   if (!input) throw new Error("Agent Connect setup has not been applied");
+  if (input.entryPoints !== undefined) {
+    exactKeys(input, ["entryPoints", "agentId", "model"], "plugin config");
+    if (
+      !Array.isArray(input.entryPoints) ||
+      input.entryPoints.length === 0 ||
+      input.entryPoints.length > MAX_ENTRY_POINTS
+    ) {
+      throw new Error(
+        `entryPoints must contain between 1 and ${MAX_ENTRY_POINTS} entries`,
+      );
+    }
+    const entryPoints = input.entryPoints.map((value, index) => {
+      const entry = record(value);
+      if (!entry) throw new Error(`entryPoints[${index}] must be an object`);
+      exactKeys(
+        entry,
+        ["id", "publicOrigin", "listenPort"],
+        `entryPoints[${index}]`,
+      );
+      return {
+        id: identifier(entry.id, `entryPoints[${index}].id`),
+        publicOrigin: canonicalHttpsOrigin(entry.publicOrigin),
+        listenPort: port(entry.listenPort, `entryPoints[${index}].listenPort`),
+      };
+    });
+    requireUniqueEntryPoints(entryPoints);
+    return {
+      entryPoints,
+      agentId: identifier(input.agentId, "agentId"),
+      ...(input.model === undefined
+        ? {}
+        : { model: modelIdentifier(input.model) }),
+    };
+  }
   exactKeys(
     input,
     ["publicOrigin", "agentId", "listenPort", "model"],
@@ -83,6 +134,26 @@ export function parsePluginConfig(value: unknown): StockPluginConfig {
   };
 }
 
+export function configuredEntryPoints(
+  config: StockPluginConfig,
+): readonly StockPluginEntryPoint[] {
+  return "entryPoints" in config
+    ? config.entryPoints
+    : [
+        {
+          id: "default",
+          publicOrigin: config.publicOrigin,
+          listenPort: config.listenPort,
+        },
+      ];
+}
+
+export function primaryEntryPoint(
+  config: StockPluginConfig,
+): StockPluginEntryPoint {
+  return configuredEntryPoints(config)[0]!;
+}
+
 export function inspectSetup(
   value: unknown,
   requested: StockPluginConfig,
@@ -96,10 +167,12 @@ export function inspectSetup(
   const host = inspectHostRuntimeSettings(config, options.resolveGatewayAuth);
   errors.push(...host.errors);
   warnings.push(...host.warnings);
-  if (host.port === requested.listenPort) {
-    errors.push(
-      "listenPort must differ from gateway.port so application routes cannot share the native OpenClaw listener",
-    );
+  for (const entryPoint of configuredEntryPoints(requested)) {
+    if (host.port === entryPoint.listenPort) {
+      errors.push(
+        `${entryPointLabel(entryPoint)}listenPort must differ from gateway.port so application routes cannot share the native OpenClaw listener`,
+      );
+    }
   }
   const http = record(gateway.http) ?? {};
   const endpoints = record(http.endpoints) ?? {};
@@ -191,6 +264,18 @@ export function resolveSupportedRuntime(
   pluginConfig: StockPluginConfig,
   options: ConfigInspectionOptions,
 ): SupportedRuntime {
+  const runtimes = resolveSupportedRuntimes(value, pluginConfig, options);
+  if (runtimes.length !== 1) {
+    throw new Error("resolveSupportedRuntime requires exactly one entry point");
+  }
+  return runtimes[0]!;
+}
+
+export function resolveSupportedRuntimes(
+  value: unknown,
+  pluginConfig: StockPluginConfig,
+  options: ConfigInspectionOptions,
+): readonly SupportedRuntime[] {
   const config = record(value);
   if (!config) throw new Error("OpenClaw runtime config is unavailable");
   const inspection = inspectSetup(config, pluginConfig, options);
@@ -203,31 +288,77 @@ export function resolveSupportedRuntime(
     );
   }
   const host = requireHostRuntimeSettings(config, options.resolveGatewayAuth);
-  const issuer = `${pluginConfig.publicOrigin}/agent-connect`;
-  const resource = `${issuer}/v1/responses`;
   const relevant = relevantPolicyConfig(config, pluginConfig.agentId);
-  const fingerprint = `sha256:${createHash("sha256")
-    .update(canonicalJson({ pluginConfig, relevant }))
-    .digest("hex")}`;
-  return {
-    publicOrigin: pluginConfig.publicOrigin,
-    issuer,
-    resource,
-    agentId: pluginConfig.agentId,
-    listenPort: pluginConfig.listenPort,
-    upstreamBaseUrl: `http://127.0.0.1:${host.port}`,
-    upstreamAuth: host.auth,
-    fingerprint,
-    policy: {
-      ref: POLICY_REF,
-      label: "Application tools only",
-      description:
-        "No native OpenClaw tools, memory, skills, or workspace context",
+  return configuredEntryPoints(pluginConfig).map((entryPoint) => {
+    const issuer = `${entryPoint.publicOrigin}/agent-connect`;
+    const resource = `${issuer}/v1/responses`;
+    const fingerprint = `sha256:${createHash("sha256")
+      .update(
+        canonicalJson(
+          entryPoint.id === "default"
+            ? {
+                pluginConfig: {
+                  publicOrigin: entryPoint.publicOrigin,
+                  agentId: pluginConfig.agentId,
+                  listenPort: entryPoint.listenPort,
+                  ...(pluginConfig.model === undefined
+                    ? {}
+                    : { model: pluginConfig.model }),
+                },
+                relevant,
+              }
+            : {
+                entryPoint,
+                agentId: pluginConfig.agentId,
+                model: pluginConfig.model,
+                relevant,
+              },
+        ),
+      )
+      .digest("hex")}`;
+    return {
+      entryPointId: entryPoint.id,
+      publicOrigin: entryPoint.publicOrigin,
+      issuer,
+      resource,
       agentId: pluginConfig.agentId,
+      listenPort: entryPoint.listenPort,
+      upstreamBaseUrl: `http://127.0.0.1:${host.port}`,
+      upstreamAuth: host.auth,
       fingerprint,
-      nativeCapabilities: [],
-    },
-  };
+      policy: {
+        ref: POLICY_REF,
+        label: "Application tools only",
+        description:
+          "No native OpenClaw tools, memory, skills, or workspace context",
+        agentId: pluginConfig.agentId,
+        fingerprint,
+        nativeCapabilities: [],
+      },
+    };
+  });
+}
+
+function requireUniqueEntryPoints(
+  entryPoints: readonly StockPluginEntryPoint[],
+): void {
+  for (const [field, label] of [
+    ["id", "id"],
+    ["publicOrigin", "publicOrigin"],
+    ["listenPort", "listenPort"],
+  ] as const) {
+    const values = new Set<string | number>();
+    for (const entryPoint of entryPoints) {
+      if (values.has(entryPoint[field])) {
+        throw new Error(`entryPoints must have unique ${label} values`);
+      }
+      values.add(entryPoint[field]);
+    }
+  }
+}
+
+function entryPointLabel(entryPoint: StockPluginEntryPoint): string {
+  return entryPoint.id === "default" ? "" : `entry point ${entryPoint.id} `;
 }
 
 function inspectHostRuntimeSettings(

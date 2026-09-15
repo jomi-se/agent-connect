@@ -72,18 +72,18 @@ this file is the persistent contract and progress record.
 - Two bounded contract review passes completed; independent implementation review
   found the multipleOf issue, and confirmed its fail-closed correction.
 - Final focused run: typecheck, 98 SDK tests, 14 native WebMCP tests and installed
-  package smoke passed. Log: /tmp/agent-connect-command-logs/quiet-run.CMDJY9.log.
+  package smoke passed. The bounded command log was retained outside the repository.
   No full gateway/Omnigent/Canvas rerun: their implementations did not change.
 - CSP test serves ordinary page JavaScript under script-src 'self'; it proves
   new Function is blocked, then imports SDK, discovers a native tool, rejects an
   invalid call, executes a valid one and completes without CSP violations.
   CDP evaluation alone was insufficient because it can bypass unsafe-eval checks.
-- Local candidate tarball: /tmp/bookhand-csp-sdk.mDAkoZ/open-agent-connect-web-0.0.3.tgz.
+- Local candidate tarball: a disposable `open-agent-connect-web-0.0.3.tgz` build.
   This is a local patched artifact, not the published 0.0.3 release. A new release
   version and explicit user permission are required before pushing/publishing.
-- Public runtime card: /tmp/bookhand-agent-connect-runtime-card.json, fetched
-  through the existing HTTPS runtime challenge. Exact Bookhand origin :8445
-  succeeds against gateway :8443 through Tailscale Serve; direct-loopback results
+- Public runtime card supplied out of band, fetched through the existing HTTPS
+  runtime challenge. The exact Bookhand origin succeeds against the gateway
+  through Tailscale Serve; direct-loopback results
   are not a substitute for that path. No gateway configuration or credentials
   changed. Human authorization and actual Bookhand tutoring flow remain owned
   by the Bookhand integration session.

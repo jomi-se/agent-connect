@@ -1,5 +1,6 @@
 import { AgentConnectError } from "./agent-session.js";
 import type {
+  AgentConnectErrorCode,
   AgentProvider,
   AgentProviderEvent,
   AgentProviderTaskRequest,
@@ -315,6 +316,7 @@ function terminalOf(
       return {
         event: {
           type: "task.failed",
+          code: responseFailureCode(event["response"]),
           message:
             errorMessage ??
             messageOf(errorOf(event["response"])) ??
@@ -326,6 +328,15 @@ function terminalOf(
     default:
       return undefined;
   }
+}
+
+function responseFailureCode(value: unknown): AgentConnectErrorCode {
+  const error = errorOf(value);
+  const code = isRecord(error) ? error["code"] : undefined;
+  return code === "agent_authentication_failed" ||
+    code === "agent_execution_failed"
+    ? code
+    : "agent_execution_failed";
 }
 
 function functionCallOf(

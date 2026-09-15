@@ -24,6 +24,7 @@ const ACCESS_TTL_MS = 60 * 60 * 1000;
 const GRANT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_PENDING_REQUESTS = 256;
 const MAX_AUTHORIZATION_CODES = 256;
+const MAX_STORED_GRANTS = 256;
 const MAX_SPENT_REFRESH_TOKEN_HASHES = 256;
 
 export type DelegatedNativeCapability =
@@ -353,6 +354,13 @@ export class DelegatedGrantService {
     };
     const code = `ac_code_${randomBytes(32).toString("base64url")}`;
     const next = cloneState(this.state);
+    next.grants = next.grants.filter(
+      (candidate) =>
+        candidate.grantExpiresAt > now && candidate.revokedAt === undefined,
+    );
+    if (next.grants.length >= MAX_STORED_GRANTS) {
+      throw new DelegatedGrantError("grant_capacity");
+    }
     next.grants.push(grant);
     this.commit(next);
 
@@ -867,7 +875,12 @@ function normalizeApplicationTools(value: unknown): {
 }
 
 function parseState(value: unknown): StoredDelegatedGrantState {
-  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.grants)) {
+  if (
+    !isRecord(value) ||
+    value.version !== 1 ||
+    !Array.isArray(value.grants) ||
+    value.grants.length > MAX_STORED_GRANTS
+  ) {
     throw new DelegatedGrantError("invalid_state_file");
   }
   const grantIds = new Set<string>();

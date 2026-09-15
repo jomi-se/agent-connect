@@ -200,8 +200,8 @@ wire-level requirement for every provider.
 ## Transport is deployment, not application identity
 
 The contract should work over a reachable, correctly authenticated HTTPS
-connection. Tailscale, VS Code/Dev Tunnels and ordinary reverse proxies are
-possible ways to provide that connection, not mandatory authentication protocols.
+connection. Tailscale and ordinary HTTPS reverse proxies are possible ways to
+provide that connection, not mandatory application authentication protocols.
 
 Separate three questions: can the app reach the endpoint, can the owner approve
 the app, and what may its credential do afterward? A private tunnel may add its

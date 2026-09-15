@@ -55,7 +55,7 @@ not erased, but they do not define today's installation or application routes.
 The [north star](vision.md) is accepted product direction, not a finished
 standard or implementation promise. The [narrow protocol profile](architecture/narrow-protocol-profile.md)
 is an unstable ACP/MCP-over-ACP prototype, not the default browser/gateway path.
-Future deployment, native-client identity, tunnel, and multi-turn documents are
+Future deployment, native-client identity, and multi-turn documents are
 design exploration only. Dated research, reviews, experiments, and the
 historical Canvas/Build Week material remain under their existing directories;
 use the archive index and each document's date/status for provenance.

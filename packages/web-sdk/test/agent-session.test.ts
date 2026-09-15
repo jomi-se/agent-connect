@@ -442,13 +442,17 @@ describe("AgentSession", () => {
   it("maps provider failure and cancellation through the neutral API", async () => {
     const failed = new AgentSession({
       provider: new FakeProvider([
-        { type: "task.failed", message: "runner failed" },
+        {
+          type: "task.failed",
+          code: "agent_execution_failed",
+          message: "runner failed",
+        },
       ]),
       tools: [nonceTool()],
     });
     await expect(failed.runTask("fail")).rejects.toMatchObject({
       name: "AgentConnectError",
-      code: "protocol_error",
+      code: "agent_execution_failed",
       message: "runner failed",
     });
 

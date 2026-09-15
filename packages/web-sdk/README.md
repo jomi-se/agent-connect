@@ -8,7 +8,7 @@ implementations.
 Install the published package in the web application:
 
 ```sh
-npm install @open-agent-connect/web@0.0.4
+npm install @open-agent-connect/web@0.0.5
 ```
 
 The package provides:
@@ -222,6 +222,11 @@ preserve retry readiness. Unknown network/5xx failures do not prove that nothing
 ran, so they invalidate readiness rather than silently replaying a side effect.
 Responses admission is observed before text; custom providers can emit
 `task.admitted`, with the first other event serving as a compatibility fallback.
+Terminal agent failures preserve the gateway's sanitized distinction:
+`agent_authentication_failed` tells the application that the user-owned agent
+cannot authenticate with its model provider, while `agent_execution_failed`
+covers another underlying agent failure. Both are admitted terminal failures,
+require a new session, and are never replayed automatically.
 
 ### Study-note export
 
