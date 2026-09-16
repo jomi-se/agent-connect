@@ -289,6 +289,15 @@ export class DelegatedGrantService {
     return request ? cloneJson(request) : undefined;
   }
 
+  /** Process-local pending decisions for the authenticated owner console. */
+  listPendingRequests(): readonly PendingDelegatedGrantRequest[] {
+    this.requirePersistenceAvailable();
+    this.pruneTransientState();
+    return [...this.pending.values()]
+      .map((request) => cloneJson(request))
+      .sort((left, right) => right.createdAt - left.createdAt);
+  }
+
   deny(requestUri: string): PendingDelegatedGrantRequest {
     this.requirePersistenceAvailable();
     const request = this.getRequest(requestUri);
@@ -316,6 +325,14 @@ export class DelegatedGrantService {
       agentId: policy.agentId,
       nativeCapabilities: [...policy.nativeCapabilities],
     }));
+  }
+
+  /** Trusted, non-secret grant projection for an authenticated owner surface. */
+  listGrants(): readonly DelegatedGrantView[] {
+    this.requirePersistenceAvailable();
+    return this.state.grants
+      .map(grantView)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
   approve(
@@ -568,6 +585,27 @@ export class DelegatedGrantService {
     );
     if (!grant || grant.revokedAt !== undefined) return false;
     return this.commitRevocation(grant);
+  }
+
+  /** Trusted owner/operator revocation of every active grant they approved. */
+  revokeAllByOwner(ownerSubject: string): number {
+    this.requirePersistenceAvailable();
+    requireBoundedIdentity(ownerSubject, "invalid_owner_subject");
+    const now = this.now();
+    const next = cloneState(this.state);
+    let revoked = 0;
+    for (const grant of next.grants) {
+      if (grant.ownerSubject !== ownerSubject || !isActive(grant, now))
+        continue;
+      grant.revokedAt = now;
+      delete grant.accessTokenHash;
+      delete grant.accessTokenVersion;
+      delete grant.accessTokenExpiresAt;
+      delete grant.refreshTokenHash;
+      revoked += 1;
+    }
+    if (revoked > 0) this.commit(next);
+    return revoked;
   }
 
   /** Public-client revocation by possession, without accepting a grant id. */

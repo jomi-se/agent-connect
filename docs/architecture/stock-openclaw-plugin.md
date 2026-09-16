@@ -81,8 +81,8 @@ terminal failure remains `proxy_interrupted`. This preserves actionable status
 without exposing provider names, credentials, filesystem paths or exception
 details.
 
-OAuth requests and codes, passphrase verification, owner devices, delegated
-grants and conversation mappings all have explicit count and expiry bounds. At
+OAuth requests and codes, passphrase verification, owner-browser sessions,
+delegated grants and conversation mappings all have explicit count and expiry bounds. At
 most 256 delegated grants are retained; revoked and fully expired grants are
 pruned before new approval. Conversation turn count is deliberately not capped:
 such a limit would not constrain an authorized application that can start a new

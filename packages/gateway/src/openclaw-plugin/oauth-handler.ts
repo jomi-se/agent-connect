@@ -272,6 +272,7 @@ export class OpenClawOAuthHandler {
       200,
       consentPage({
         clientId,
+        action: this.endpoints.authorizationPath,
         requestUri,
         csrfToken,
         tools: pending.applicationTools.map((tool) => tool.name),

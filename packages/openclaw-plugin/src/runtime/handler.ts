@@ -5,12 +5,19 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   ConnectorAuth,
   ConnectorAuthError,
+  DEFAULT_OWNER_SESSION_TTL_SECONDS,
 } from "../../../gateway/src/connector-auth.js";
 import {
   DelegatedGrantError,
   type DelegatedGrantService,
   type VerifiedDelegatedGrant,
 } from "../../../gateway/src/delegated-grants.js";
+import {
+  errorPage,
+  ownerForgottenPage,
+  ownerConsolePage,
+  ownerLoginPage,
+} from "../../../gateway/src/openclaw-plugin/owner-html.js";
 import { OpenClawOAuthHandler } from "../../../gateway/src/openclaw-plugin/oauth-handler.js";
 import type { AgentConnectEndpointLayout } from "../../../gateway/src/openclaw-plugin/contracts.js";
 import {
@@ -60,6 +67,8 @@ export interface AgentConnectHandler {
 
 const OWNER_COOKIE = "agent_connect_owner";
 const MAX_LOGIN_BYTES = 16 * 1024;
+const OWNER_ACTION_TTL_MS = 10 * 60 * 1000;
+const MAX_OWNER_ACTIONS = 512;
 const MAX_SSE_EVENT_BYTES = 1024 * 1024;
 const RESERVED_NATIVE_REQUEST_HEADERS = [
   "x-openclaw-agent-id",
@@ -101,6 +110,16 @@ export function createAgentConnectHandler(
   const now = options.now ?? Date.now;
   const admission = options.admission ?? new AgentConnectAdmissionController();
   const ownerLoginSecret = randomBytes(32);
+  const ownerActionSecret = randomBytes(32);
+  const ownerActions = new Map<
+    string,
+    {
+      readonly action: "revoke" | "revoke-all" | "forget";
+      readonly grantId?: string;
+      readonly ownerSubject: string;
+      readonly expiresAt: number;
+    }
+  >();
   let accepting = true;
   const activeResponses = new Set<ServerResponse>();
   const inflight = new Map<
@@ -149,6 +168,18 @@ export function createAgentConnectHandler(
       }
       if (url.pathname === endpoints.ownerLoginPath) {
         return await handleOwnerLogin(request, response, url);
+      }
+      if (url.pathname === endpoints.ownerConsolePath) {
+        return await handleOwnerConsole(request, response, url);
+      }
+      if (url.pathname === endpoints.ownerRevokePath) {
+        return await handleOwnerRevoke(request, response, url);
+      }
+      if (url.pathname === endpoints.ownerRevokeAllPath) {
+        return await handleOwnerRevokeAll(request, response, url);
+      }
+      if (url.pathname === endpoints.ownerForgetPath) {
+        return await handleOwnerForget(request, response, url);
       }
       if (url.pathname === endpoints.authorizationPath) {
         if (
@@ -561,16 +592,262 @@ export function createAgentConnectHandler(
     return grant;
   }
 
-  function showOwnerLogin(response: ServerResponse, returnTo: string): void {
+  function showOwnerLogin(
+    response: ServerResponse,
+    returnTo: string,
+    error?: string,
+    errorStatus = 403,
+  ): void {
     const challenge = signOwnerLoginChallenge(ownerLoginSecret, {
       returnTo,
       expiresAt: now() + 10 * 60 * 1000,
     });
+    const clientId = clientIdFromOwnerReturnTo(returnTo, endpoints, origin);
     sendHtml(
       response,
-      401,
-      `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Owner sign in</title></head><body><main><h1>Owner sign in</h1><p>Enter the gateway enrollment secret to review this request.</p><form method="post" action="${endpoints.ownerLoginPath}"><input type="hidden" name="challenge" value="${challenge}"><label>Enrollment secret <input type="password" name="passphrase" autocomplete="current-password" required></label><button type="submit">Continue</button></form></main></body></html>`,
+      error ? errorStatus : 401,
+      ownerLoginPage({
+        action: endpoints.ownerLoginPath,
+        challenge,
+        ...(clientId === undefined ? {} : { clientId }),
+        ...(error === undefined ? {} : { error }),
+      }),
     );
+  }
+
+  async function handleOwnerConsole(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL,
+  ): Promise<void> {
+    if (request.method !== "GET" || url.search) {
+      return methodNotAllowed(response, "GET");
+    }
+    if (
+      !options.ownerAuth.isOwnerSession(
+        cookie(request, OWNER_COOKIE),
+        ownerSubject,
+      )
+    ) {
+      return showOwnerLogin(response, endpoints.ownerConsolePath);
+    }
+    let runtimeProblem: string | undefined;
+    try {
+      options.policySnapshot.assertUnchanged();
+      await options.policySnapshot.assertRuntimeCurrent();
+    } catch {
+      runtimeProblem =
+        "The configured restricted profiles changed or are not currently available. Existing grants remain visible, but review the gateway configuration and restart state before authorizing new access.";
+    }
+    const policies = options.grantService.listOfferedPolicies();
+    const policyLabels = new Map(
+      policies.map((policy) => [policy.ref, policy.label] as const),
+    );
+    const grants = options.grantService.listGrants().map((grant) => {
+      const profileLabel = policyLabels.get(grant.policyRef);
+      const status = grant.revokedAt
+        ? ("revoked" as const)
+        : Date.parse(grant.grantExpiresAt) <= now()
+          ? ("expired" as const)
+          : ("active" as const);
+      return {
+        ...grant,
+        status,
+        ...(profileLabel === undefined ? {} : { profileLabel }),
+        ...(status === "active"
+          ? { revokeCsrfToken: issueOwnerAction("revoke", grant.grantId) }
+          : {}),
+      };
+    });
+    sendHtml(
+      response,
+      200,
+      ownerConsolePage({
+        grants,
+        pending: options.grantService.listPendingRequests().map((pending) => ({
+          clientId: pending.clientId,
+          requestUri: pending.requestUri,
+          applicationToolNames: pending.applicationTools.map(
+            (tool) => tool.name,
+          ),
+          expiresAt: new Date(pending.expiresAt).toISOString(),
+        })),
+        authorizationPath: endpoints.authorizationPath,
+        policies: runtimeProblem ? [] : policies,
+        revokeAction: endpoints.ownerRevokePath,
+        revokeAllAction: endpoints.ownerRevokeAllPath,
+        revokeAllCsrfToken: issueOwnerAction("revoke-all"),
+        forgetAction: endpoints.ownerForgetPath,
+        forgetCsrfToken: issueOwnerAction("forget"),
+        ...(runtimeProblem === undefined ? {} : { runtimeProblem }),
+      }),
+    );
+  }
+
+  async function handleOwnerRevoke(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL,
+  ): Promise<void> {
+    if (request.method !== "POST" || url.search) {
+      return methodNotAllowed(response, "POST");
+    }
+    if (
+      !options.ownerAuth.isOwnerSession(
+        cookie(request, OWNER_COOKIE),
+        ownerSubject,
+      )
+    ) {
+      return sendHtml(
+        response,
+        401,
+        errorPage("Your owner session is no longer valid."),
+      );
+    }
+    if (singleHeader(request, "origin") !== origin) {
+      throw new ProxyHttpError(403, "owner_action_origin_mismatch");
+    }
+    const contentType = singleHeader(request, "content-type")?.split(";", 1)[0];
+    if (contentType !== "application/x-www-form-urlencoded") {
+      throw new ProxyHttpError(400, "invalid_owner_action");
+    }
+    const form = new URLSearchParams(
+      (await readBytes(request, MAX_LOGIN_BYTES)).toString("utf8"),
+    );
+    if (
+      [...new Set(form.keys())].sort().join("\0") !== "csrf_token\0grant_id"
+    ) {
+      throw new ProxyHttpError(400, "invalid_owner_action");
+    }
+    const grantId = singleFormValue(form, "grant_id");
+    consumeOwnerAction(singleFormValue(form, "csrf_token"), "revoke", {
+      grantId,
+    });
+    options.grantService.revoke(grantId);
+    response.writeHead(303, {
+      location: endpoints.ownerConsolePath,
+      "cache-control": "no-store",
+    });
+    response.end();
+  }
+
+  async function handleOwnerRevokeAll(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL,
+  ): Promise<void> {
+    const token = requireOwnerSession(request, response, url);
+    if (!token) return;
+    const form = await readOwnerActionForm(request);
+    consumeOwnerAction(singleFormValue(form, "csrf_token"), "revoke-all");
+    options.grantService.revokeAllByOwner(`openclaw-profile:${ownerSubject}`);
+    response.writeHead(303, {
+      location: endpoints.ownerConsolePath,
+      "cache-control": "no-store",
+    });
+    response.end();
+  }
+
+  async function handleOwnerForget(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL,
+  ): Promise<void> {
+    const token = requireOwnerSession(request, response, url);
+    if (!token) return;
+    const form = await readOwnerActionForm(request);
+    consumeOwnerAction(singleFormValue(form, "csrf_token"), "forget");
+    options.ownerAuth.revokeOwnerSession(token, ownerSubject);
+    response.setHeader(
+      "set-cookie",
+      `${OWNER_COOKIE}=; Path=/agent-connect/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`,
+    );
+    sendHtml(response, 200, ownerForgottenPage(endpoints.ownerConsolePath));
+  }
+
+  function issueOwnerAction(
+    action: "revoke" | "revoke-all" | "forget",
+    grantId?: string,
+  ): string {
+    pruneOwnerActions();
+    if (ownerActions.size >= MAX_OWNER_ACTIONS) {
+      throw new ProxyHttpError(503, "owner_action_capacity");
+    }
+    const token = randomBytes(32).toString("base64url");
+    ownerActions.set(ownerActionHash(ownerActionSecret, token), {
+      action,
+      ...(grantId === undefined ? {} : { grantId }),
+      ownerSubject,
+      expiresAt: now() + OWNER_ACTION_TTL_MS,
+    });
+    return token;
+  }
+
+  function consumeOwnerAction(
+    token: string,
+    expectedAction: "revoke" | "revoke-all" | "forget",
+    expected: { readonly grantId?: string } = {},
+  ): void {
+    pruneOwnerActions();
+    const key = ownerActionHash(ownerActionSecret, token);
+    const action = ownerActions.get(key);
+    ownerActions.delete(key);
+    if (
+      !action ||
+      action.expiresAt <= now() ||
+      action.action !== expectedAction ||
+      action.grantId !== expected.grantId ||
+      action.ownerSubject !== ownerSubject
+    ) {
+      throw new ProxyHttpError(403, "invalid_owner_action_csrf");
+    }
+  }
+
+  function requireOwnerSession(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL,
+  ): string | undefined {
+    if (request.method !== "POST" || url.search) {
+      methodNotAllowed(response, "POST");
+      return undefined;
+    }
+    const token = cookie(request, OWNER_COOKIE);
+    if (!options.ownerAuth.isOwnerSession(token, ownerSubject)) {
+      sendHtml(
+        response,
+        401,
+        errorPage("Your owner session is no longer valid."),
+      );
+      return undefined;
+    }
+    if (singleHeader(request, "origin") !== origin) {
+      throw new ProxyHttpError(403, "owner_action_origin_mismatch");
+    }
+    return token;
+  }
+
+  async function readOwnerActionForm(
+    request: IncomingMessage,
+  ): Promise<URLSearchParams> {
+    const contentType = singleHeader(request, "content-type")?.split(";", 1)[0];
+    if (contentType !== "application/x-www-form-urlencoded") {
+      throw new ProxyHttpError(400, "invalid_owner_action");
+    }
+    const form = new URLSearchParams(
+      (await readBytes(request, MAX_LOGIN_BYTES)).toString("utf8"),
+    );
+    if ([...new Set(form.keys())].join("\0") !== "csrf_token") {
+      throw new ProxyHttpError(400, "invalid_owner_action");
+    }
+    return form;
+  }
+
+  function pruneOwnerActions(): void {
+    const current = now();
+    for (const [key, action] of ownerActions) {
+      if (action.expiresAt <= current) ownerActions.delete(key);
+    }
   }
 
   async function handleOwnerLogin(
@@ -596,7 +873,12 @@ export function createAgentConnectHandler(
       throw new ProxyHttpError(400, "invalid_owner_login");
     }
     const challengeId = singleFormValue(form, "challenge");
-    const challenge = verifyOwnerLoginChallenge(ownerLoginSecret, challengeId);
+    const challenge = verifyOwnerLoginChallenge(
+      ownerLoginSecret,
+      challengeId,
+      endpoints,
+      origin,
+    );
     if (!challenge || challenge.expiresAt <= now()) {
       throw new ProxyHttpError(400, "owner_login_expired");
     }
@@ -607,7 +889,7 @@ export function createAgentConnectHandler(
       );
       response.setHeader(
         "set-cookie",
-        `${OWNER_COOKIE}=${encodeURIComponent(token)}; Path=/agent-connect/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000`,
+        `${OWNER_COOKIE}=${encodeURIComponent(token)}; Path=/agent-connect/; HttpOnly; Secure; SameSite=Strict; Max-Age=${DEFAULT_OWNER_SESSION_TTL_SECONDS}`,
       );
       response.writeHead(303, {
         location: challenge.returnTo,
@@ -616,9 +898,13 @@ export function createAgentConnectHandler(
       response.end();
     } catch (error) {
       if (error instanceof ConnectorAuthError) {
-        throw new ProxyHttpError(
+        return showOwnerLogin(
+          response,
+          challenge.returnTo,
+          error.code === "enrollment_locked"
+            ? "Too many attempts were made. Wait a moment, then try again."
+            : "That enrollment passphrase was not accepted. Check it and try again.",
           error.code === "enrollment_locked" ? 429 : 403,
-          "owner_login_failed",
         );
       }
       throw error;
@@ -632,6 +918,7 @@ export function createAgentConnectHandler(
       accepting = false;
       for (const active of inflight.values()) active.controller.abort();
       inflight.clear();
+      ownerActions.clear();
       registry.clear();
       for (const response of activeResponses) response.destroy();
       activeResponses.clear();
@@ -658,6 +945,8 @@ function signOwnerLoginChallenge(
 function verifyOwnerLoginChallenge(
   secret: Buffer,
   token: string,
+  endpoints: AgentConnectEndpointLayout,
+  origin: string,
 ): { readonly returnTo: string; readonly expiresAt: number } | undefined {
   if (token.length > 4096) return undefined;
   const parts = token.split(".");
@@ -678,7 +967,7 @@ function verifyOwnerLoginChallenge(
     if (
       !value ||
       typeof value.returnTo !== "string" ||
-      !value.returnTo.startsWith("/agent-connect/oauth/authorize?") ||
+      !isAllowedOwnerReturnTo(value.returnTo, endpoints, origin) ||
       typeof value.expiresAt !== "number" ||
       !Number.isSafeInteger(value.expiresAt)
     ) {
@@ -688,6 +977,53 @@ function verifyOwnerLoginChallenge(
   } catch {
     return undefined;
   }
+}
+
+function isAllowedOwnerReturnTo(
+  value: string,
+  endpoints: AgentConnectEndpointLayout,
+  origin: string,
+): boolean {
+  if (value === endpoints.ownerConsolePath) return true;
+  try {
+    const url = new URL(value, origin);
+    return (
+      url.origin === origin &&
+      value === `${url.pathname}${url.search}` &&
+      url.pathname === endpoints.authorizationPath &&
+      !url.hash &&
+      [...url.searchParams.keys()].sort().join("\0") ===
+        "client_id\0request_uri" &&
+      url.searchParams.getAll("client_id").length === 1 &&
+      url.searchParams.getAll("request_uri").length === 1
+    );
+  } catch {
+    return false;
+  }
+}
+
+function clientIdFromOwnerReturnTo(
+  value: string,
+  endpoints: AgentConnectEndpointLayout,
+  origin: string,
+): string | undefined {
+  if (!isAllowedOwnerReturnTo(value, endpoints, origin)) return undefined;
+  const url = new URL(value, origin);
+  if (url.pathname !== endpoints.authorizationPath) return undefined;
+  const clientId = url.searchParams.get("client_id");
+  if (!clientId) return undefined;
+  try {
+    const client = new URL(clientId);
+    return client.protocol === "https:" && clientId === client.origin
+      ? clientId
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function ownerActionHash(secret: Buffer, token: string): string {
+  return createHmac("sha256", secret).update(token).digest("base64url");
 }
 
 function escapeRegExp(value: string): string {
@@ -1156,7 +1492,8 @@ function sendHtml(
   response.writeHead(status, {
     ...safeResponseHeaders("text/html; charset=utf-8", Buffer.byteLength(body)),
     "content-security-policy":
-      "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "x-frame-options": "DENY",
     // Preserve Origin on same-origin browser form POSTs without leaking
     // referrers to the application's cross-origin OAuth callback.
     "referrer-policy": "same-origin",

@@ -301,7 +301,40 @@ describe("managed application sessions", () => {
   });
 });
 
-describe("connector enrollment and app authorization", () => {
+describe("owner browser sessions", () => {
+  it("revokes only the matching active aco session and persists the result", async () => {
+    const directory = mkdtempSync(
+      join(tmpdir(), "agent-connect-owner-revoke-"),
+    );
+    temporaryDirectories.push(directory);
+    const statePath = join(directory, "owner.json");
+    const auth = new ConnectorAuth({
+      statePath,
+      publicEndpoint: "https://runtime.example",
+      enrollmentPassphrase: "owner revoke test phrase",
+    });
+    const token = await auth.enrollOwnerSession(
+      "owner revoke test phrase",
+      "local-owner",
+    );
+
+    expect(auth.revokeOwnerSession("not-an-owner-session", "local-owner")).toBe(
+      false,
+    );
+    expect(auth.revokeOwnerSession(token, "different-owner")).toBe(false);
+    expect(auth.revokeOwnerSession(token, "local-owner")).toBe(true);
+    expect(auth.revokeOwnerSession(token, "local-owner")).toBe(false);
+    expect(auth.isOwnerSession(token, "local-owner")).toBe(false);
+
+    const reloaded = new ConnectorAuth({
+      statePath,
+      publicEndpoint: "https://runtime.example",
+    });
+    expect(reloaded.isOwnerSession(token, "local-owner")).toBe(false);
+  });
+});
+
+describe("connector passphrase verification and app authorization", () => {
   it("bounds concurrent passphrase verification without blocking the event loop", async () => {
     const directory = mkdtempSync(
       join(tmpdir(), "agent-connect-auth-verification-"),
@@ -328,17 +361,17 @@ describe("connector enrollment and app authorization", () => {
     ];
 
     const attempts = await Promise.allSettled([
-      auth.enrollDevice(
+      auth.verifyAuthorizationPassphrase(
         "concurrency test phrase",
         "owner@example.com",
         requests[0]!.id,
       ),
-      auth.enrollDevice(
+      auth.verifyAuthorizationPassphrase(
         "concurrency test phrase",
         "owner@example.com",
         requests[1]!.id,
       ),
-      auth.enrollDevice(
+      auth.verifyAuthorizationPassphrase(
         "concurrency test phrase",
         "owner@example.com",
         requests[2]!.id,
@@ -357,7 +390,7 @@ describe("connector enrollment and app authorization", () => {
     );
   });
 
-  it("serializes enrollment for one authorization request", async () => {
+  it("serializes passphrase verification for one authorization request", async () => {
     const directory = mkdtempSync(
       join(tmpdir(), "agent-connect-auth-duplicate-enrollment-"),
     );
@@ -378,12 +411,12 @@ describe("connector enrollment and app authorization", () => {
     });
 
     const attempts = await Promise.allSettled([
-      auth.enrollDevice(
+      auth.verifyAuthorizationPassphrase(
         "duplicate test phrase",
         "owner@example.com",
         request.id,
       ),
-      auth.enrollDevice(
+      auth.verifyAuthorizationPassphrase(
         "duplicate test phrase",
         "owner@example.com",
         request.id,
@@ -437,7 +470,7 @@ describe("connector enrollment and app authorization", () => {
     expect(() => auth.createAuthorizationRequest(input)).not.toThrow();
   });
 
-  it("enrolls on the connector origin, grants with PKCE, and revokes durably", async () => {
+  it("verifies on the connector origin, grants with PKCE, and revokes durably", async () => {
     const directory = mkdtempSync(join(tmpdir(), "agent-connect-auth-"));
     temporaryDirectories.push(directory);
     const statePath = join(directory, "connector.json");
@@ -541,9 +574,7 @@ describe("connector enrollment and app authorization", () => {
       }),
     });
     expect(approval.status).toBe(303);
-    expect(approval.headers.get("set-cookie")).toContain(
-      "agent_connect_device=",
-    );
+    expect(approval.headers.get("set-cookie")).toBeNull();
     const redirect = new URL(approval.headers.get("location") ?? "");
     expect(redirect.origin).toBe("https://preview.example");
     expect(redirect.searchParams.get("state")).toBe("state_state_state_state");

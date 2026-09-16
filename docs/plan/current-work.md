@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-15
+Updated: 2026-09-16
 
 This is the canonical status page for unfinished work. Product boundaries live
 in the [mission](../mission.md), capability status lives in the [scope
@@ -54,9 +54,10 @@ working stock-plugin vertical slice. These are proposed features, not release
 gates or accepted architecture. Work them in this order:
 
 1. [Owner console and managed agent profiles](../future/owner-console-and-profiles.md):
-   replace the raw enrollment and consent presentation with a mobile-first,
-   familiar OAuth flow and investigate a tasteful OpenClaw-native persistence
-   boundary for owner-managed restricted profiles.
+   the mobile-first owner authentication, consent, grant inspection, individual
+   and bulk revocation, and browser-session management slice is implemented.
+   Next, investigate a tasteful OpenClaw-native persistence boundary before
+   adding owner-managed restricted profile editing.
 2. [Firebase Canvas stock-plugin migration](../future/firebase-canvas-plugin-migration.md):
    turn the historical Canvas into both a polished public demonstration and a
    readable reference application using the current address-based OAuth flow.

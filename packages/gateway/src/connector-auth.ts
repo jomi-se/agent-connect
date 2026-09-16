@@ -40,10 +40,12 @@ export interface ConnectorAuthOptions {
   readonly transportProfile?: string;
   readonly enrollmentPassphrase?: string;
   readonly grantTtlSeconds?: number;
-  readonly deviceTtlSeconds?: number;
+  readonly ownerSessionTtlSeconds?: number;
   readonly now?: () => number;
   readonly onEnrollmentBundle?: (bundle: EnrollmentBundle) => void;
 }
+
+export const DEFAULT_OWNER_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 export interface AuthorizationRequestInput {
   readonly origin: string;
@@ -105,16 +107,28 @@ interface StoredGrant {
   revokedAt?: number;
 }
 
-interface StoredDevice {
+interface StoredOwnerSession {
   readonly id: string;
   readonly tokenHash: string;
-  readonly tailscaleUser: string;
+  readonly ownerSubject: string;
   readonly createdAt: number;
   readonly expiresAt: number;
   revokedAt?: number;
 }
 
 interface StoredConnectorState {
+  readonly version: 2;
+  readonly runtimeId: string;
+  readonly connectorPrivateKey: JsonWebKey;
+  readonly connectorPublicKey: JsonWebKey;
+  readonly enrollmentSalt: string;
+  readonly enrollmentVerifier: string;
+  readonly capabilitySigningSecret: string;
+  readonly grants: StoredGrant[];
+  readonly ownerSessions: StoredOwnerSession[];
+}
+
+interface LegacyStoredConnectorState {
   readonly version: 1;
   readonly runtimeId: string;
   readonly connectorPrivateKey: JsonWebKey;
@@ -123,7 +137,14 @@ interface StoredConnectorState {
   readonly enrollmentVerifier: string;
   readonly capabilitySigningSecret: string;
   readonly grants: StoredGrant[];
-  readonly devices: StoredDevice[];
+  readonly devices: readonly {
+    readonly id: string;
+    readonly tokenHash: string;
+    readonly tailscaleUser: string;
+    readonly createdAt: number;
+    readonly expiresAt: number;
+    readonly revokedAt?: number;
+  }[];
 }
 
 interface AuthorizationCode {
@@ -140,7 +161,7 @@ const MAX_PENDING_AUTHORIZATIONS = 256;
 const MAX_AUTHORIZATION_CODES = 256;
 const MAX_PASSPHRASE_FAILURES = 256;
 const MAX_CONCURRENT_PASSPHRASE_VERIFICATIONS = 2;
-const MAX_ENROLLED_DEVICES = 256;
+const MAX_OWNER_SESSIONS = 256;
 const ALLOWED_SCOPES = new Set([
   "agent:prompt",
   "agent:result",
@@ -155,7 +176,7 @@ export class ConnectorAuth {
   private readonly statePath: string;
   private readonly now: () => number;
   private readonly grantTtlSeconds: number;
-  private readonly deviceTtlSeconds: number;
+  private readonly ownerSessionTtlSeconds: number;
   private state: StoredConnectorState;
   private readonly pending = new Map<string, PendingAuthorization>();
   private readonly codes = new Map<string, AuthorizationCode>();
@@ -163,14 +184,15 @@ export class ConnectorAuth {
     string,
     { count: number; resetAt: number; requestId: string }
   >();
-  private readonly activeEnrollmentRequests = new Set<string>();
+  private readonly activeAuthorizationVerifications = new Set<string>();
   private activePassphraseVerifications = 0;
 
   constructor(options: ConnectorAuthOptions) {
     this.statePath = options.statePath;
     this.now = options.now ?? Date.now;
     this.grantTtlSeconds = options.grantTtlSeconds ?? 30 * 24 * 60 * 60;
-    this.deviceTtlSeconds = options.deviceTtlSeconds ?? 365 * 24 * 60 * 60;
+    this.ownerSessionTtlSeconds =
+      options.ownerSessionTtlSeconds ?? DEFAULT_OWNER_SESSION_TTL_SECONDS;
     const loaded = loadState(options.statePath);
     if (loaded) {
       this.state = loaded;
@@ -262,34 +284,45 @@ export class ConnectorAuth {
     return request;
   }
 
-  isDeviceEnrolled(token: string | undefined, tailscaleUser: string): boolean {
-    if (!token) return false;
+  isOwnerSession(token: string | undefined, ownerSubject: string): boolean {
+    if (token?.startsWith("aco_") !== true) return false;
     const tokenHash = sha256(token);
     const now = this.now();
-    return this.state.devices.some(
-      (device) =>
-        device.tokenHash === tokenHash &&
-        device.tailscaleUser === tailscaleUser &&
-        device.expiresAt > now &&
-        device.revokedAt === undefined,
+    return this.state.ownerSessions.some(
+      (session) =>
+        session.tokenHash === tokenHash &&
+        session.ownerSubject === ownerSubject &&
+        session.expiresAt > now &&
+        session.revokedAt === undefined,
     );
   }
 
-  isOwnerSession(token: string | undefined, ownerSubject: string): boolean {
-    return token?.startsWith("aco_") === true
-      ? this.isDeviceEnrolled(token, ownerSubject)
-      : false;
+  revokeOwnerSession(token: string | undefined, ownerSubject: string): boolean {
+    if (token?.startsWith("aco_") !== true) return false;
+    const tokenHash = sha256(token);
+    const now = this.now();
+    const session = this.state.ownerSessions.find(
+      (candidate) =>
+        candidate.tokenHash === tokenHash &&
+        candidate.ownerSubject === ownerSubject &&
+        candidate.expiresAt > now &&
+        candidate.revokedAt === undefined,
+    );
+    if (!session) return false;
+    session.revokedAt = now;
+    this.persist();
+    return true;
   }
 
-  async enrollDevice(
+  async verifyAuthorizationPassphrase(
     passphrase: string,
-    tailscaleUser: string,
+    ownerSubject: string,
     authorizationRequestId: string,
-  ): Promise<string> {
+  ): Promise<void> {
     this.pruneTransientState();
-    const attemptKey = `${tailscaleUser}\u0000${authorizationRequestId}`;
+    const attemptKey = `${ownerSubject}\u0000${authorizationRequestId}`;
     this.requirePassphraseAllowed(attemptKey);
-    if (this.activeEnrollmentRequests.has(authorizationRequestId)) {
+    if (this.activeAuthorizationVerifications.has(authorizationRequestId)) {
       throw new ConnectorAuthError("enrollment_busy");
     }
     if (
@@ -302,43 +335,18 @@ export class ConnectorAuth {
     if (!pending) {
       throw new ConnectorAuthError("authorization_request_expired");
     }
-    this.activeEnrollmentRequests.add(authorizationRequestId);
+    this.activeAuthorizationVerifications.add(authorizationRequestId);
     try {
-      this.activePassphraseVerifications += 1;
-      let actual: Buffer;
-      try {
-        actual = await deriveEnrollmentVerifier(
-          passphrase,
-          Buffer.from(this.state.enrollmentSalt, "base64url"),
-        );
-      } finally {
-        this.activePassphraseVerifications -= 1;
-      }
-      const expected = Buffer.from(this.state.enrollmentVerifier, "base64url");
-      if (
-        actual.length !== expected.length ||
-        !timingSafeEqual(actual, expected)
-      ) {
-        this.recordPassphraseFailure(attemptKey, authorizationRequestId);
-        throw new ConnectorAuthError("invalid_enrollment_passphrase");
-      }
+      await this.verifyPassphrase(
+        passphrase,
+        attemptKey,
+        authorizationRequestId,
+      );
       if (this.getPending(authorizationRequestId) !== pending) {
         throw new ConnectorAuthError("authorization_request_expired");
       }
-      this.failedPassphrases.delete(attemptKey);
-      const token = `acd_${randomBytes(32).toString("base64url")}`;
-      const now = this.now();
-      this.state.devices.push({
-        id: `device_${randomBytes(12).toString("base64url")}`,
-        tokenHash: sha256(token),
-        tailscaleUser,
-        createdAt: now,
-        expiresAt: now + this.deviceTtlSeconds * 1000,
-      });
-      this.persist();
-      return token;
     } finally {
-      this.activeEnrollmentRequests.delete(authorizationRequestId);
+      this.activeAuthorizationVerifications.delete(authorizationRequestId);
     }
   }
 
@@ -364,43 +372,27 @@ export class ConnectorAuth {
     ) {
       throw new ConnectorAuthError("enrollment_busy");
     }
-    this.activePassphraseVerifications += 1;
-    let actual: Buffer;
-    try {
-      actual = await deriveEnrollmentVerifier(
-        passphrase,
-        Buffer.from(this.state.enrollmentSalt, "base64url"),
-      );
-    } finally {
-      this.activePassphraseVerifications -= 1;
-    }
-    const expected = Buffer.from(this.state.enrollmentVerifier, "base64url");
-    if (
-      actual.length !== expected.length ||
-      !timingSafeEqual(actual, expected)
-    ) {
-      this.recordPassphraseFailure(attemptKey, "explicit-owner-login");
-      throw new ConnectorAuthError("invalid_enrollment_passphrase");
-    }
-    this.failedPassphrases.delete(attemptKey);
-    const activeDevices = this.state.devices.filter(
-      (device) =>
-        device.expiresAt > this.now() && device.revokedAt === undefined,
+    await this.verifyPassphrase(passphrase, attemptKey, "explicit-owner-login");
+    const activeSessions = this.state.ownerSessions.filter(
+      (session) =>
+        session.expiresAt > this.now() && session.revokedAt === undefined,
     );
-    this.state.devices.splice(0, this.state.devices.length, ...activeDevices);
-    if (this.state.devices.length >= MAX_ENROLLED_DEVICES) {
+    this.state.ownerSessions.splice(
+      0,
+      this.state.ownerSessions.length,
+      ...activeSessions,
+    );
+    if (this.state.ownerSessions.length >= MAX_OWNER_SESSIONS) {
       throw new ConnectorAuthError("enrollment_capacity");
     }
     const token = `aco_${randomBytes(32).toString("base64url")}`;
     const now = this.now();
-    this.state.devices.push({
+    this.state.ownerSessions.push({
       id: `owner_${randomBytes(12).toString("base64url")}`,
       tokenHash: sha256(token),
-      // This legacy internal field stores the explicit owner subject for this
-      // path. No Tailscale header participates in verification.
-      tailscaleUser: ownerSubject,
+      ownerSubject,
       createdAt: now,
-      expiresAt: now + this.deviceTtlSeconds * 1000,
+      expiresAt: now + this.ownerSessionTtlSeconds * 1000,
     });
     this.persist();
     return token;
@@ -567,6 +559,32 @@ export class ConnectorAuth {
     if (attempt.count >= 5) throw new ConnectorAuthError("enrollment_locked");
   }
 
+  private async verifyPassphrase(
+    passphrase: string,
+    attemptKey: string,
+    requestId: string,
+  ): Promise<void> {
+    this.activePassphraseVerifications += 1;
+    let actual: Buffer;
+    try {
+      actual = await deriveEnrollmentVerifier(
+        passphrase,
+        Buffer.from(this.state.enrollmentSalt, "base64url"),
+      );
+    } finally {
+      this.activePassphraseVerifications -= 1;
+    }
+    const expected = Buffer.from(this.state.enrollmentVerifier, "base64url");
+    if (
+      actual.length !== expected.length ||
+      !timingSafeEqual(actual, expected)
+    ) {
+      this.recordPassphraseFailure(attemptKey, requestId);
+      throw new ConnectorAuthError("invalid_enrollment_passphrase");
+    }
+    this.failedPassphrases.delete(attemptKey);
+  }
+
   private recordPassphraseFailure(
     attemptKey: string,
     authorizationRequestId: string,
@@ -665,7 +683,7 @@ function createState(passphrase: string): StoredConnectorState {
   const runtimeId = `sha256:${sha256(JSON.stringify(connectorPublicKey))}`;
   const salt = randomBytes(16);
   return {
-    version: 1,
+    version: 2,
     runtimeId,
     connectorPrivateKey,
     connectorPublicKey,
@@ -677,7 +695,7 @@ function createState(passphrase: string): StoredConnectorState {
     ).toString("base64url"),
     capabilitySigningSecret: randomBytes(32).toString("base64url"),
     grants: [],
-    devices: [],
+    ownerSessions: [],
   };
 }
 
@@ -703,15 +721,48 @@ function createEnrollmentPassphrase(): string {
 
 function loadState(path: string): StoredConnectorState | undefined {
   try {
-    const value = JSON.parse(
-      readFileSync(path, "utf8"),
-    ) as StoredConnectorState;
+    const value = JSON.parse(readFileSync(path, "utf8")) as
+      StoredConnectorState | LegacyStoredConnectorState;
+    if (value.version === 1) {
+      if (
+        typeof value.runtimeId !== "string" ||
+        typeof value.capabilitySigningSecret !== "string" ||
+        !Array.isArray(value.grants) ||
+        !Array.isArray(value.devices)
+      ) {
+        throw new Error("unsupported connector state");
+      }
+      const migrated: StoredConnectorState = {
+        version: 2,
+        runtimeId: value.runtimeId,
+        connectorPrivateKey: value.connectorPrivateKey,
+        connectorPublicKey: value.connectorPublicKey,
+        enrollmentSalt: value.enrollmentSalt,
+        enrollmentVerifier: value.enrollmentVerifier,
+        capabilitySigningSecret: value.capabilitySigningSecret,
+        grants: value.grants,
+        ownerSessions: value.devices
+          .filter((session) => session.id.startsWith("owner_"))
+          .map((session) => ({
+            id: session.id,
+            tokenHash: session.tokenHash,
+            ownerSubject: session.tailscaleUser,
+            createdAt: session.createdAt,
+            expiresAt: session.expiresAt,
+            ...(session.revokedAt === undefined
+              ? {}
+              : { revokedAt: session.revokedAt }),
+          })),
+      };
+      persistState(path, migrated);
+      return migrated;
+    }
     if (
-      value.version !== 1 ||
+      value.version !== 2 ||
       typeof value.runtimeId !== "string" ||
       typeof value.capabilitySigningSecret !== "string" ||
       !Array.isArray(value.grants) ||
-      !Array.isArray(value.devices)
+      !Array.isArray(value.ownerSessions)
     ) {
       throw new Error("unsupported connector state");
     }

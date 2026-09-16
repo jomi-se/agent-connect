@@ -122,8 +122,6 @@ const DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 15 * 60;
 const DEFAULT_PARKED_CALL_TIMEOUT_SECONDS = 3 * 60;
 const DEFAULT_RUNNING_TURN_TIMEOUT_SECONDS = 30 * 60;
 const CONSOLE_RECENT_SESSIONS = 20;
-const DEVICE_COOKIE = "agent_connect_device";
-
 export function createGateway(options: GatewayOptions) {
   const dynamicAppEnrollment = options.dynamicAppEnrollment === true;
   if (options.allowedOrigins.size === 0 && !dynamicAppEnrollment) {
@@ -625,7 +623,6 @@ export function createGateway(options: GatewayOptions) {
       } else if (error instanceof ConnectorAuthError) {
         const capacityError =
           error.code === "authorization_capacity" ||
-          error.code === "enrollment_capacity" ||
           error.code === "enrollment_busy";
         if (capacityError) response.setHeader("Retry-After", "1");
         sendJson(response, capacityError ? 429 : 400, { error: error.code });
@@ -1203,11 +1200,7 @@ async function handleAuthorizationPage(
       );
       return;
     }
-    const enrolled = auth.isDeviceEnrolled(
-      cookie(request, DEVICE_COOKIE),
-      tailscaleUser,
-    );
-    sendHtml(response, 200, consentPage(pending, enrolled), pending.origin);
+    sendHtml(response, 200, consentPage(pending), pending.origin);
     return;
   }
   if (request.method !== "POST") {
@@ -1235,15 +1228,11 @@ async function handleAuthorizationPage(
     );
     return;
   }
-  let deviceToken = cookie(request, DEVICE_COOKIE);
-  if (!auth.isDeviceEnrolled(deviceToken, tailscaleUser)) {
-    const passphrase = form.get("passphrase") ?? "";
-    deviceToken = await auth.enrollDevice(passphrase, tailscaleUser, requestId);
-    response.setHeader(
-      "Set-Cookie",
-      `${DEVICE_COOKIE}=${encodeURIComponent(deviceToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`,
-    );
-  }
+  await auth.verifyAuthorizationPassphrase(
+    form.get("passphrase") ?? "",
+    tailscaleUser,
+    requestId,
+  );
   const approved = auth.approve(requestId, {
     nonBrowserClients: form.get("non_browser_clients") === "yes",
   });
@@ -1278,10 +1267,7 @@ async function handleGrantPage(
   sendHtml(response, 200, grantsPage(auth.listGrants()));
 }
 
-function consentPage(
-  request: PendingAuthorization,
-  deviceEnrolled: boolean,
-): string {
+function consentPage(request: PendingAuthorization): string {
   const tools = request.tools
     .map(
       (tool) =>
@@ -1299,11 +1285,7 @@ function consentPage(
 <dl><dt>Application</dt><dd>${escapeHtml(request.appId)}</dd><dt>Return URL</dt><dd>${escapeHtml(request.redirectUri)}</dd><dt>Request expires</dt><dd>${escapeHtml(iso(request.expiresAt))}</dd><dt>Tools lent to the agent</dt><dd><ul>${tools}</ul></dd><dt>Access</dt><dd><ul>${scopes}</ul></dd></dl>
 <form method="post" action="/authorize">
 <input type="hidden" name="request" value="${escapeHtml(request.id)}">
-${
-  deviceEnrolled
-    ? '<p class="ok">This browser device is enrolled.</p>'
-    : '<label>Enrollment passphrase<input name="passphrase" type="password" autocomplete="current-password" required><small>Enter the passphrase saved when you installed this gateway. It stays on this gateway-owned page.</small></label>'
-}
+<label>Enrollment passphrase<input name="passphrase" type="password" autocomplete="current-password" required><small>Enter the passphrase saved when you installed this gateway. It stays on this gateway-owned page and is required for each authorization.</small></label>
 <label class="choice"><input type="checkbox" name="non_browser_clients" value="yes"><span>Also allow non-browser clients (scripts, servers, CLI tools) to use this authorization.<small>Leave this off unless you need it. With it off, only the browser application at ${escapeHtml(request.origin)} can use this authorization; a caller that presents no browser origin is refused.</small></span></label>
 <div class="actions"><button name="decision" value="approve">Allow</button><button class="secondary" name="decision" value="deny" formnovalidate>Deny</button></div>
 </form></main>`,
@@ -1460,16 +1442,6 @@ function redirect(response: ServerResponse, location: string): void {
   response.setHeader("Location", location);
   response.setHeader("Cache-Control", "no-store");
   response.end();
-}
-
-function cookie(request: IncomingMessage, name: string): string | undefined {
-  const raw = header(request, "cookie");
-  if (!raw) return undefined;
-  for (const item of raw.split(";")) {
-    const [key, ...parts] = item.trim().split("=");
-    if (key === name) return decodeURIComponent(parts.join("="));
-  }
-  return undefined;
 }
 
 function escapeHtml(value: string): string {

@@ -1,7 +1,10 @@
 # Future feature: owner console and managed agent profiles
 
-Status: proposed, not started. Product intent captured 2026-09-09; persistence
-and OpenClaw integration require investigation before implementation.
+Status: in progress. The unified owner-authentication, consent, grant inspection,
+individual and bulk revocation, and browser-session management slice was
+implemented on 2026-09-16. Managed profile editing and its persistence/OpenClaw
+integration boundary remain proposed and require investigation before
+implementation.
 
 ## Goal
 
@@ -11,10 +14,12 @@ Agent Connect plugin. The common path should remain quick: identify the
 application, authenticate, inspect the requested authority, choose an agent
 profile, and approve or cancel.
 
-The stock plugin currently renders a raw owner-passphrase form followed by a
-small consent page. It has durable grant state and revocation machinery but no
-standalone owner-facing grant dashboard. This feature therefore adds an owner
-console as well as redesigning the existing pages.
+The stock plugin now renders owner authentication and consent inside one
+responsive authorization shell, followed by a direct owner console for pending
+requests, grant inspection, individual and bulk revocation, browser forgetting,
+and read-only restricted profile inspection. Owner-browser sessions expire after
+30 days. The remaining feature work is profile management rather than the
+authorization and grant-management foundation.
 
 ## Experience
 

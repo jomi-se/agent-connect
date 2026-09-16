@@ -1,0 +1,390 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-16T06:21:58Z",
+  "title": "Design System: Agent Connect Gateway Authorization",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Cool Work Surface",
+        "canonical": "oklch(0.972 0.006 250)",
+        "tonalRamp": [
+          "oklch(15% 0.012 255)",
+          "oklch(27% 0.012 255)",
+          "oklch(39% 0.012 255)",
+          "oklch(51% 0.012 255)",
+          "oklch(63% 0.012 255)",
+          "oklch(75% 0.012 255)",
+          "oklch(87% 0.012 255)",
+          "oklch(95% 0.012 255)"
+        ]
+      },
+      "plate": {
+        "role": "neutral",
+        "displayName": "Crisp Plate",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(27% 0 0)",
+          "oklch(39% 0 0)",
+          "oklch(51% 0 0)",
+          "oklch(63% 0 0)",
+          "oklch(75% 0 0)",
+          "oklch(87% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Workbench Ink",
+        "canonical": "oklch(0.2 0.018 250)",
+        "tonalRamp": [
+          "oklch(15% 0.035 260)",
+          "oklch(27% 0.035 260)",
+          "oklch(39% 0.035 260)",
+          "oklch(51% 0.035 260)",
+          "oklch(63% 0.035 260)",
+          "oklch(75% 0.035 260)",
+          "oklch(87% 0.035 260)",
+          "oklch(95% 0.035 260)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Candid Slate",
+        "canonical": "oklch(0.46 0.018 250)",
+        "tonalRamp": [
+          "oklch(15% 0.03 255)",
+          "oklch(27% 0.03 255)",
+          "oklch(39% 0.03 255)",
+          "oklch(51% 0.03 255)",
+          "oklch(63% 0.03 255)",
+          "oklch(75% 0.03 255)",
+          "oklch(87% 0.03 255)",
+          "oklch(95% 0.03 255)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Quiet Rule",
+        "canonical": "oklch(0.85 0.012 250)",
+        "tonalRamp": [
+          "oklch(15% 0.018 255)",
+          "oklch(27% 0.018 255)",
+          "oklch(39% 0.018 255)",
+          "oklch(51% 0.018 255)",
+          "oklch(63% 0.018 255)",
+          "oklch(75% 0.018 255)",
+          "oklch(87% 0.018 255)",
+          "oklch(95% 0.018 255)"
+        ]
+      },
+      "soft": {
+        "role": "neutral",
+        "displayName": "Soft Wash",
+        "canonical": "oklch(0.935 0.01 250)",
+        "tonalRamp": [
+          "oklch(15% 0.014 255)",
+          "oklch(27% 0.014 255)",
+          "oklch(39% 0.014 255)",
+          "oklch(51% 0.014 255)",
+          "oklch(63% 0.014 255)",
+          "oklch(75% 0.014 255)",
+          "oklch(87% 0.014 255)",
+          "oklch(95% 0.014 255)"
+        ]
+      },
+      "control-border": {
+        "role": "neutral",
+        "displayName": "Strong Structural Gray",
+        "canonical": "oklch(0.7 0.018 250)",
+        "tonalRamp": [
+          "oklch(15% 0.022 255)",
+          "oklch(27% 0.022 255)",
+          "oklch(39% 0.022 255)",
+          "oklch(51% 0.022 255)",
+          "oklch(63% 0.022 255)",
+          "oklch(75% 0.022 255)",
+          "oklch(87% 0.022 255)",
+          "oklch(95% 0.022 255)"
+        ]
+      },
+      "action": {
+        "role": "primary",
+        "displayName": "Workbench Ink Action",
+        "canonical": "oklch(0.2 0.018 250)",
+        "tonalRamp": [
+          "oklch(15% 0.16 260)",
+          "oklch(27% 0.16 260)",
+          "oklch(39% 0.16 260)",
+          "oklch(51% 0.16 260)",
+          "oklch(63% 0.16 260)",
+          "oklch(75% 0.16 260)",
+          "oklch(87% 0.16 260)",
+          "oklch(95% 0.16 260)"
+        ]
+      },
+      "action-hover": {
+        "role": "primary",
+        "displayName": "Raised Ink",
+        "canonical": "oklch(0.27 0.022 250)",
+        "tonalRamp": [
+          "oklch(15% 0.14 260)",
+          "oklch(27% 0.14 260)",
+          "oklch(39% 0.14 260)",
+          "oklch(51% 0.14 260)",
+          "oklch(63% 0.14 260)",
+          "oklch(75% 0.14 260)",
+          "oklch(87% 0.14 260)",
+          "oklch(95% 0.14 260)"
+        ]
+      },
+      "focus": {
+        "role": "primary",
+        "displayName": "Agent Periwinkle Focus",
+        "canonical": "oklch(0.52 0.15 275)",
+        "tonalRamp": [
+          "oklch(15% 0.12 255)",
+          "oklch(27% 0.12 255)",
+          "oklch(39% 0.12 255)",
+          "oklch(51% 0.12 255)",
+          "oklch(63% 0.12 255)",
+          "oklch(75% 0.12 255)",
+          "oklch(87% 0.12 255)",
+          "oklch(95% 0.12 255)"
+        ]
+      },
+      "app-coral": {
+        "role": "primary",
+        "displayName": "Application Coral",
+        "canonical": "oklch(0.56 0.16 32.1)"
+      },
+      "gateway-teal": {
+        "role": "secondary",
+        "displayName": "Gateway Teal",
+        "canonical": "oklch(0.43 0.09 190)"
+      },
+      "agent-periwinkle": {
+        "role": "secondary",
+        "displayName": "Agent Periwinkle",
+        "canonical": "oklch(0.52 0.15 275)"
+      },
+      "signal-amber": {
+        "role": "tertiary",
+        "displayName": "Signal Amber",
+        "canonical": "oklch(0.79 0.14 83)"
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Revocation Red",
+        "canonical": "oklch(0.5 0.18 25)",
+        "tonalRamp": [
+          "oklch(15% 0.12 25)",
+          "oklch(27% 0.12 25)",
+          "oklch(39% 0.12 25)",
+          "oklch(51% 0.12 25)",
+          "oklch(63% 0.12 25)",
+          "oklch(75% 0.12 25)",
+          "oklch(87% 0.12 25)",
+          "oklch(95% 0.12 25)"
+        ]
+      },
+      "danger-soft": {
+        "role": "tertiary",
+        "displayName": "Danger Wash",
+        "canonical": "oklch(0.96 0.03 25)",
+        "tonalRamp": [
+          "oklch(15% 0.025 25)",
+          "oklch(27% 0.025 25)",
+          "oklch(39% 0.025 25)",
+          "oklch(51% 0.025 25)",
+          "oklch(63% 0.025 25)",
+          "oklch(75% 0.025 25)",
+          "oklch(87% 0.025 25)",
+          "oklch(95% 0.025 25)"
+        ]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Active Green",
+        "canonical": "oklch(0.48 0.12 150)",
+        "tonalRamp": [
+          "oklch(15% 0.09 155)",
+          "oklch(27% 0.09 155)",
+          "oklch(39% 0.09 155)",
+          "oklch(51% 0.09 155)",
+          "oklch(63% 0.09 155)",
+          "oklch(75% 0.09 155)",
+          "oklch(87% 0.09 155)",
+          "oklch(95% 0.09 155)"
+        ]
+      },
+      "pending": {
+        "role": "tertiary",
+        "displayName": "Pending Amber",
+        "canonical": "#805600",
+        "tonalRamp": [
+          "oklch(15% 0.09 75)",
+          "oklch(27% 0.09 75)",
+          "oklch(39% 0.09 75)",
+          "oklch(51% 0.09 75)",
+          "oklch(63% 0.09 75)",
+          "oklch(75% 0.09 75)",
+          "oklch(87% 0.09 75)",
+          "oklch(95% 0.09 75)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Task Display",
+        "purpose": "One decisive heading for the current owner task."
+      },
+      "title": {
+        "displayName": "Section Title",
+        "purpose": "Groups profiles, authority, and operational access."
+      },
+      "body": {
+        "displayName": "Candid Body",
+        "purpose": "Plain-language explanations and operational facts."
+      },
+      "label": {
+        "displayName": "Control Label",
+        "purpose": "Buttons, fields, metadata, and explicit statuses."
+      }
+    },
+    "shadows": [
+      {
+        "name": "authorization-plate",
+        "value": "0 0.5rem 1.8rem oklch(0.2 0.018 250 / 0.1)",
+        "purpose": "The sole desktop lift, separating the owner task from the cool page field."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-response",
+        "value": "background-color 0.16s ease-out, border-color 0.16s ease-out",
+        "purpose": "Quiet hover feedback for buttons and authorization choices; omitted when reduced motion is preferred."
+      }
+    ],
+    "breakpoints": [{ "name": "phone", "value": "560px" }]
+  },
+  "components": [
+    {
+      "name": "Agent Connect Wordmark",
+      "kind": "custom",
+      "description": "The shared Canvas identity: three circles map application, gateway, and agent before the Agent Connect name.",
+      "html": "<span class=\"ds-wordmark\"><span aria-hidden=\"true\"><i></i><i></i><i></i></span>Agent Connect</span>",
+      "css": ".ds-wordmark { display: inline-flex; align-items: center; gap: 0.65rem; color: oklch(0.2 0.018 250); font: 760 1rem/1.5 ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.025em; } .ds-wordmark > span { display: inline-flex; gap: 0.19rem; } .ds-wordmark i { width: 0.44rem; height: 0.44rem; border-radius: 50%; } .ds-wordmark i:nth-child(1) { background: oklch(0.56 0.16 32.1); } .ds-wordmark i:nth-child(2) { background: oklch(0.43 0.09 190); } .ds-wordmark i:nth-child(3) { background: oklch(0.52 0.15 275); }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Affirmative owner actions such as Continue, Allow access, and Review request.",
+      "html": "<button class=\"ds-button-primary\" type=\"button\">Allow access</button>",
+      "css": ".ds-button-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 3rem; padding: 0.65rem 1rem; border: 1px solid transparent; border-radius: 0.625rem; background: oklch(0.2 0.018 250); color: oklch(1 0 0); font: 700 1rem/1.5 ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background-color 0.16s ease-out; } .ds-button-primary:hover { background: oklch(0.27 0.022 250); } .ds-button-primary:focus-visible { outline: 3px solid oklch(0.52 0.15 275); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A legible non-destructive alternative, most often Cancel.",
+      "html": "<button class=\"ds-button-secondary\" type=\"button\">Cancel</button>",
+      "css": ".ds-button-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 3rem; padding: 0.65rem 1rem; border: 1px solid oklch(0.7 0.018 250); border-radius: 0.625rem; background: oklch(1 0 0); color: oklch(0.2 0.018 250); font: 700 1rem/1.5 ui-sans-serif, system-ui, sans-serif; cursor: pointer; } .ds-button-secondary:hover { background: oklch(0.972 0.006 250); } .ds-button-secondary:focus-visible { outline: 3px solid oklch(0.52 0.15 275); outline-offset: 2px; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Explicit revocation action with restrained destructive color.",
+      "html": "<button class=\"ds-button-danger\" type=\"button\">Revoke access</button>",
+      "css": ".ds-button-danger { display: inline-flex; align-items: center; justify-content: center; min-height: 3rem; padding: 0.65rem 1rem; border: 1px solid color-mix(in oklch, oklch(0.5 0.18 25) 45%, white); border-radius: 0.625rem; background: white; color: oklch(0.5 0.18 25); font: 700 1rem/1.5 ui-sans-serif, system-ui, sans-serif; cursor: pointer; } .ds-button-danger:hover { background: oklch(0.96 0.03 25); } .ds-button-danger:focus-visible { outline: 3px solid oklch(0.52 0.15 275); outline-offset: 2px; }"
+    },
+    {
+      "name": "Enrollment Field",
+      "kind": "input",
+      "refersTo": "text-field",
+      "description": "A plainly labeled owner credential field with persistent recovery guidance.",
+      "html": "<label class=\"ds-field\"><span>Enrollment passphrase</span><input type=\"password\" aria-describedby=\"ds-field-help\"><small id=\"ds-field-help\">Use the passphrase created when this gateway was enrolled.</small></label>",
+      "css": ".ds-field { display: grid; gap: 0.45rem; color: oklch(0.2 0.018 250); font: 700 1rem/1.5 ui-sans-serif, system-ui, sans-serif; } .ds-field input { width: 100%; min-height: 3rem; padding: 0.72rem 0.8rem; border: 1px solid oklch(0.7 0.018 250); border-radius: 0.625rem; background: white; color: oklch(0.2 0.018 250); font: 400 1rem/1.5 ui-sans-serif, system-ui, sans-serif; caret-color: oklch(0.43 0.09 190); } .ds-field input:hover { border-color: oklch(0.43 0.09 190); } .ds-field input:focus-visible { outline: 3px solid oklch(0.52 0.15 275); outline-offset: 2px; } .ds-field small { color: oklch(0.46 0.018 250); font-size: 0.875rem; font-weight: 400; }"
+    },
+    {
+      "name": "Authorization Plate",
+      "kind": "card",
+      "refersTo": "authorization-plate",
+      "description": "The stable task shell shared by authentication, consent, problems, and owner access management.",
+      "html": "<section class=\"ds-plate\"><header><strong>reader.example</strong><span>Authorization request</span></header><div><h2>Review access</h2><p>Choose the restricted profile this application may use.</p></div></section>",
+      "css": ".ds-plate { width: min(100%, 32rem); overflow: hidden; border-radius: 0.875rem; background: white; color: oklch(0.2 0.018 250); box-shadow: 0 0.5rem 1.8rem oklch(0.2 0.018 250 / 0.1); font: 400 1rem/1.5 ui-sans-serif, system-ui, sans-serif; } .ds-plate header, .ds-plate > div { padding: clamp(1.25rem, 4vw, 2rem); } .ds-plate header { display: grid; border-bottom: 1px solid oklch(0.85 0.012 250); } .ds-plate header span, .ds-plate p { color: oklch(0.46 0.018 250); } .ds-plate h2 { margin: 0; font-size: clamp(1.55rem, 5vw, 2rem); line-height: 1.18; letter-spacing: -0.025em; } .ds-plate p { margin: 0.75rem 0 0; } @media (max-width: 560px) { .ds-plate { width: 100%; border-radius: 0; box-shadow: none; } }"
+    },
+    {
+      "name": "Restricted Profile Choice",
+      "kind": "custom",
+      "description": "A full-row radio target that names the profile and its native authority.",
+      "html": "<label class=\"ds-choice\"><input type=\"radio\" name=\"profile\" checked><strong>Application tools only</strong><span>Use only tools supplied by the application</span><small>No native capabilities</small></label>",
+      "css": ".ds-choice { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.75rem; padding: 0.9rem; border: 1px solid oklch(0.85 0.012 250); border-radius: 0.625rem; color: oklch(0.2 0.018 250); font: 400 1rem/1.5 ui-sans-serif, system-ui, sans-serif; cursor: pointer; } .ds-choice input { grid-row: 1 / 4; margin-top: 0.3rem; accent-color: oklch(0.43 0.09 190); } .ds-choice strong, .ds-choice span, .ds-choice small { grid-column: 2; } .ds-choice span { color: oklch(0.46 0.018 250); } .ds-choice:hover { border-color: oklch(0.7 0.018 250); background: oklch(0.972 0.006 250); } .ds-choice:has(input:checked) { border-color: oklch(0.43 0.09 190); background: oklch(0.95 0.025 190); } .ds-choice:has(input:focus-visible) { outline: 3px solid oklch(0.52 0.15 275); outline-offset: 2px; }"
+    },
+    {
+      "name": "Active Status",
+      "kind": "custom",
+      "description": "A compact status word whose dot reinforces but never replaces its meaning.",
+      "html": "<span class=\"ds-status-active\">Active</span>",
+      "css": ".ds-status-active { display: inline-flex; align-items: center; gap: 0.4rem; color: oklch(0.48 0.12 150); font: 750 0.8rem/1.5 ui-sans-serif, system-ui, sans-serif; } .ds-status-active::before { content: \"\"; width: 0.48rem; height: 0.48rem; border-radius: 50%; background: currentColor; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Owner's Authorization Plate",
+    "overview": "Agent Connect uses the familiar topology of a modern identity-provider flow without borrowing a vendor's identity or implying that familiarity is proof of security. A cool work surface holds one crisp authorization plate whose stable brand, reading order, and action placement carry authentication, consent, errors, and access management. Application context appears inside the plate only when a requesting application is in scope. The three-circle Canvas wordmark and its actor palette are the shared Agent Connect identity.\n\nThe system is calm, candid, and capable. It favors workhorse type, plain authority language, generous breathing room, and restrained state color over decorative security imagery or dashboard density. On narrow screens, the plate becomes the page while preserving the same order and explicit owner choices.",
+    "keyCharacteristics": [
+      "One centered authorization plate on wide screens and one full-width task surface on phones.",
+      "Workbench-ink hierarchy, quiet cool neutrals, and actor colors inherited from the Canvas application.",
+      "Authority details disclosed progressively without hiding application identity or owner choices.",
+      "Status expressed with wording as well as restrained color."
+    ],
+    "rules": [
+      {
+        "name": "The Actor Color Rule",
+        "body": "Coral means application, teal means gateway boundary, and periwinkle means agent or focus. Primary decisions remain workbench ink; semantic states keep their own restrained colors.",
+        "section": "colors"
+      },
+      {
+        "name": "The Words Carry Status Rule",
+        "body": "Color may reinforce state, but active, pending, expired, revoked, and problem states must remain understandable from their text.",
+        "section": "colors"
+      },
+      {
+        "name": "The Workhorse Type Rule",
+        "body": "Use one native sans-serif family and let content hierarchy—not typographic novelty—carry the authorization flow.",
+        "section": "typography"
+      },
+      {
+        "name": "The Stable Reading Order Rule",
+        "body": "Responsive changes may alter width, padding, and columns, but never reorder application identity, the current task, authority details, and owner actions.",
+        "section": "layout"
+      },
+      {
+        "name": "The One Lift Rule",
+        "body": "Only the desktop authorization plate is elevated; hierarchy inside it comes from spacing, rules, and tonal fills.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Nested Corner Rule",
+        "body": "Corners tighten as elements nest: plate, then choice, then control. Do not introduce ornamental pills or mixed corner styles.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do preserve the same shell and action placement across owner authentication, consent, problems, and access management; include the context header only for application-scoped requests.",
+      "Do name the requesting application before asking the owner to authenticate or authorize.",
+      "Do keep application tools visibly distinct from native capabilities and selected restricted profiles.",
+      "Do provide explicit keyboard focus, touch-sized controls, reduced-motion behavior, and text alongside every semantic color.",
+      "Do let mobile become a full-width task surface while preserving the desktop reading order."
+    ],
+    "donts": [
+      "Don't use visual familiarity, color, or a polished plate as evidence of security; the copy must state actual authority and boundaries.",
+      "Don't add decorative security imagery, trust scores, ornamental dashboards, or unexplained protocol language.",
+      "Don't hide cancel or revocation behind low-contrast links, menus, or color-only warnings.",
+      "Don't introduce a second affirmative accent, stacked card shadows, pill-shaped controls, or a decorative display face."
+    ]
+  }
+}

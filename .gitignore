@@ -70,6 +70,9 @@ id_ed25519
 .codex/.uv-cache/
 .codex-home/
 .claude/settings.local.json
+.impeccable/config.local.json
+.impeccable/questions/
+.impeccable/review/
 .mcp.json
 
 # Harness-materialized skill catalog. A harness (Claude/Codex) drops its full skill
@@ -77,6 +80,7 @@ id_ed25519
 # validators, mission playbooks) — into the adapter dirs on load. Never committed;
 # not repo content. Keep only the tracked ck-orchestration adapter in each.
 /.claude/skills/*
+/.claude/agents/impeccable-*.md
 /.codex/skills/*
 /.gemini/skills/*
 /.agents/skills/*

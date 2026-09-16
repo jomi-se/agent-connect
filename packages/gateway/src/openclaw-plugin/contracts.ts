@@ -19,7 +19,11 @@ export interface AgentConnectEndpointLayout {
   readonly tokenPath: string;
   readonly revocationPath: string;
   readonly parPath: string;
+  readonly ownerConsolePath: string;
   readonly ownerLoginPath: string;
+  readonly ownerRevokePath: string;
+  readonly ownerRevokeAllPath: string;
+  readonly ownerForgetPath: string;
   readonly healthPath: string;
   readonly responsesPath: string;
   readonly conversationsPath: string;
@@ -34,7 +38,11 @@ export const STANDALONE_ENDPOINT_LAYOUT: AgentConnectEndpointLayout =
     tokenPath: "/agent-connect/oauth/token",
     revocationPath: "/agent-connect/oauth/revoke",
     parPath: "/agent-connect/oauth/par",
+    ownerConsolePath: "/agent-connect/owner",
     ownerLoginPath: "/agent-connect/owner/login",
+    ownerRevokePath: "/agent-connect/owner/grants/revoke",
+    ownerRevokeAllPath: "/agent-connect/owner/grants/revoke-all",
+    ownerForgetPath: "/agent-connect/owner/forget",
     healthPath: "/healthz",
     responsesPath: "/v1/responses",
     conversationsPath: "/v1/agent-connect/conversations",
@@ -51,7 +59,11 @@ export const STOCK_PLUGIN_ENDPOINT_LAYOUT: AgentConnectEndpointLayout =
     tokenPath: "/agent-connect/oauth/token",
     revocationPath: "/agent-connect/oauth/revoke",
     parPath: "/agent-connect/oauth/par",
+    ownerConsolePath: "/agent-connect/owner",
     ownerLoginPath: "/agent-connect/owner/login",
+    ownerRevokePath: "/agent-connect/owner/grants/revoke",
+    ownerRevokeAllPath: "/agent-connect/owner/grants/revoke-all",
+    ownerForgetPath: "/agent-connect/owner/forget",
     healthPath: "/agent-connect/healthz",
     responsesPath: "/agent-connect/v1/responses",
     conversationsPath: "/agent-connect/v1/conversations",

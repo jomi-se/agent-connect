@@ -221,6 +221,25 @@ describe("delegated grant requests", () => {
 });
 
 describe("delegated token lifecycle", () => {
+  it("returns a newest-first non-secret owner projection", () => {
+    let now = 1_000;
+    const store = new MemoryStore();
+    const service = createService(store, { now: () => now });
+    const first = approveAndExchange(service);
+    now += 1_000;
+    const second = approveAndExchange(service);
+
+    const listed = service.listGrants();
+    expect(listed.map((grant) => grant.grantId)).toEqual([
+      second.grant.grantId,
+      first.grant.grantId,
+    ]);
+    expect(JSON.stringify(listed)).not.toContain(first.accessToken);
+    expect(JSON.stringify(listed)).not.toContain(first.refreshToken);
+    expect(listed[0]).not.toHaveProperty("accessTokenHash");
+    expect(listed[0]).not.toHaveProperty("refreshTokenHash");
+  });
+
   it("stores only token hashes and keeps one grant subject across refresh", () => {
     const store = new MemoryStore();
     const service = createService(store);
