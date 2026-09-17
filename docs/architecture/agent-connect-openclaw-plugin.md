@@ -1,7 +1,8 @@
-# Stock OpenClaw plugin host
+# Agent Connect plugin for OpenClaw host architecture
 
-The reference installation is `@open-agent-connect/openclaw-plugin`. Stock OpenClaw
-loads the package and starts/stops its managed service. That service owns one or
+The reference installation is `@open-agent-connect/openclaw-plugin`. The Agent Connect plugin
+for OpenClaw runs inside the user's OpenClaw host, which starts/stops its managed
+service. That service owns one or
 more dedicated HTTP listeners on IPv4 loopback (single-entry default
 `127.0.0.1:18790`) while native OpenClaw keeps its own listener (commonly
 `127.0.0.1:18789`). The service uses
@@ -119,20 +120,20 @@ evidence.
 The published plugin permits OpenClaw 2026.9.1 or newer; there is deliberately
 no speculative compatibility matrix or upper version bound.
 
-| Configuration                                                           | Status                                                   |
-| ----------------------------------------------------------------------- | -------------------------------------------------------- |
-| Tested/deployed OpenClaw `2026.9.1`; Node `>=24.15 <25`                 | Exact evidence pin                                       |
-| Resolved `gateway.auth.mode: token`                                     | Supported                                                |
-| Resolved `gateway.auth.mode: password`                                  | Supported                                                |
-| Configured token/password SecretRef resolved by the active host         | Supported; environment-backed password is package-tested |
-| `gateway.auth.mode: none`                                               | Supported with an explicit native-endpoint warning       |
-| Trusted-proxy or CLI-only auth override not present in host config      | Unsupported                                              |
-| Native TLS on the loopback listener                                     | Unsupported; terminate public HTTPS outside the listener |
-| Multiple unique HTTPS origins on separate loopback listeners            | Supported by one plugin service                          |
-| One plugin-managed app-only agent                                       | Supported                                                |
-| Native public search or code execution in an offered profile            | Not offered in this slice                                |
-| Personal agents, channels, models, credentials, tools, memory, and cron | Preserved and unreachable through the app-only agent     |
-| Stock and owner-installed plugins, plugin load paths, and global hooks  | Preserved; inside the trusted user-owned host boundary   |
+| Configuration                                                                     | Status                                                   |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Tested/deployed OpenClaw `2026.9.1`; Node `>=24.15 <25`                           | Exact evidence pin                                       |
+| Resolved `gateway.auth.mode: token`                                               | Supported                                                |
+| Resolved `gateway.auth.mode: password`                                            | Supported                                                |
+| Configured token/password SecretRef resolved by the active host                   | Supported; environment-backed password is package-tested |
+| `gateway.auth.mode: none`                                                         | Supported with an explicit native-endpoint warning       |
+| Trusted-proxy or CLI-only auth override not present in host config                | Unsupported                                              |
+| Native TLS on the loopback listener                                               | Unsupported; terminate public HTTPS outside the listener |
+| Multiple unique HTTPS origins on separate loopback listeners                      | Supported by one plugin service                          |
+| One plugin-managed app-only agent                                                 | Supported                                                |
+| Native public search or code execution in an offered profile                      | Not offered in this slice                                |
+| Personal agents, channels, models, credentials, tools, memory, and cron           | Preserved and unreachable through the app-only agent     |
+| OpenClaw-managed and owner-installed plugins, plugin load paths, and global hooks | Preserved; inside the trusted user-owned host boundary   |
 
 The managed agent has its own private workspace, `contextInjection: never`, an
 empty skills list, disabled cross-conversation memory/search, no sandbox or

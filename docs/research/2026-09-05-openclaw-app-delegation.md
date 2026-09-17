@@ -1,7 +1,7 @@
 # Can OpenClaw replace the Agent Connect gateway?
 
 Date: 2026-09-05. Status: historical feasibility investigation, superseded by
-accepted ADR 0015 and the published stock OpenClaw plugin. This note is not a
+accepted ADR 0015 and the published Agent Connect plugin for OpenClaw. This note is not a
 current cutover or setup instruction.
 
 ## Answer

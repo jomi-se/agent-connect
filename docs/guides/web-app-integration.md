@@ -1,7 +1,7 @@
 # Integrate Agent Connect into a web application
 
 This guide connects an HTTPS web application to the Agent Connect plugin hosted
-by stock OpenClaw.
+inside the user's OpenClaw host.
 The app declares functions implemented in its own JavaScript, redirects the user
 to owner-controlled consent, then uses AI SDK over a bounded Open Responses wire.
 No OpenClaw credential, agent ID or session key enters the browser.
@@ -209,7 +209,7 @@ that an already admitted upstream effect was undone.
 ## Deployment requirements
 
 The owner must follow the [plugin setup guide](../../deploy/openclaw-gateway/README.md):
-published pinned stock OpenClaw and plugin, explicit capability consent, loopback
+published pinned OpenClaw and the Agent Connect plugin, explicit capability consent, loopback
 hosting, reviewed HTTPS ingress, and a dedicated restricted application agent.
 The current scope is one owner, one configured application policy, and bounded
 process-local conversations. Selected subscription/browser behavior remains a

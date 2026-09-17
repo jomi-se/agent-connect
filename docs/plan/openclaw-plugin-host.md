@@ -48,18 +48,18 @@ to root, do not edit Bookhand or instruct a live cutover independently.
 - `packages/openclaw-plugin/src/{delegated-grants,owner-auth,tool-snapshot}.ts`
   and `src/authorization/`: plugin-owned authorization, consent, owner-console,
   grant, and approved-tool logic.
-- `packages/web-sdk/src/openclaw-connection.ts` validates the stock-plugin
+- `packages/web-sdk/src/openclaw-connection.ts` validates the Agent Connect plugin for OpenClaw
   namespaced issuer/resource. A bare gateway Origin is accepted as an input
   convenience and normalized to the `/agent-connect` provider base.
 - `scripts/openclaw-test-runtime.mjs` supplies isolated real pinned OpenClaw,
   disposable state and fake inference. The packed plugin-host test owns the
   OAuth/tool/history composition scenarios.
-- `config/openclaw-test-compat.json` is the compatibility pin. Use installed stock
+- `config/openclaw-test-compat.json` is the compatibility pin. Use installed OpenClaw
   package declarations/docs as the oracle, not latest online APIs blindly.
 
 Prior disposable probe (not production code): `registerService`,
 `registerHttpRoute({auth:"plugin",match:"exact"})`, startup activation, and
-`api.runtime.config.current()` worked on stock 2026.9.1. The route forwarded to
+`api.runtime.config.current()` worked on OpenClaw 2026.9.1. The route forwarded to
 the SAME gateway's `/v1/responses` with server-owned auth/routing, relayed native
 SSE, and completed a client function-output continuation. Missing app auth and
 using the app token at native Responses both returned 401. The initial readiness
@@ -71,7 +71,7 @@ check preceded plugin availability; wait for plugin readiness, not only health.
    one implementation of security-sensitive routing, grants and continuation
    inspection; after plugin acceptance, make it plugin-owned and remove the
    standalone wrapper and its duplicate integration suite.
-2. Add a distinct stock-plugin package/entry with `openclaw.plugin.json`, compiled
+2. Add a distinct Agent Connect plugin for OpenClaw package/entry with `openclaw.plugin.json`, compiled
    ESM entry, explicit startup activation, config schema, runtime dependencies
    and tested host-version compatibility. Prefer focused host SDK imports/types.
 3. Register plugin-owned routes on OpenClaw's existing listener and a managed
@@ -152,7 +152,7 @@ this milestone is not satisfied by the synthetic minimal config alone.
 
 ## M4: Focused real-package validation
 
-- Install the packed artifact into disposable stock OpenClaw using its supported
+- Install the packed artifact into disposable OpenClaw 2026.9.1 using its supported
   package install path; source-checkout success alone does not prove packaging.
 - Exercise existing owner login -> consent -> SDK -> two tool/result segments ->
   follow-up/history -> refresh/revoke through the PLUGIN endpoint, with fake
@@ -166,7 +166,7 @@ this milestone is not satisfied by the synthetic minimal config alone.
 - Service disable/restart closes active work and invalidates process-local heads;
   stale continuation is never silently replayed. Exercise a relevant config-change
   case and record the remaining trusted-operator race boundary honestly.
-- Reuse deterministic state fixtures for AC-owned faults, real stock for host
+- Reuse deterministic state fixtures for AC-owned faults, real OpenClaw for host
   behavior. No mock OpenClaw event streams. One focused browser/package CSP gate
   if SDK/bundling changes touch that boundary; no broad browser matrix.
 - Use `quiet-run.sh`; detach slow checks, keep failure tails bounded. Narrow tests
@@ -189,9 +189,9 @@ Root reviews implementation and test evidence before merge or live rollout.
 ## Persistent implementation ledger
 
 - [x] Target architecture accepted; branch created from clean main.
-- [x] Stock plugin HTTP/service/native Responses seam probed independently.
+- [x] Agent Connect plugin HTTP/service/native Responses seam probed independently.
 - [x] M1 packaged plugin hosting and lifecycle. The installable package uses the
-      shared scoped handler and a stock managed service; focused lifecycle and
+      shared scoped handler and an OpenClaw-managed service; focused lifecycle and
       bundle tests pass.
 - [x] M2 verified namespace/discovery and SDK compatibility. The SDK preserves
       the origin-only standalone layout and binds the plugin issuer/resource,
@@ -203,7 +203,7 @@ Root reviews implementation and test evidence before merge or live rollout.
       boundary rather than audited or allowlisted; static configuration does not
       claim to prove their behavior.
 - [x] M4 real installed-package composition and negative tests. The npm-pack was
-      installed through stock OpenClaw and passed OAuth/SDK, two tool segments,
+      installed through OpenClaw 2026.9.1 and passed OAuth/SDK, two tool segments,
       history/follow-up, refresh/revoke, native-root coexistence, unsafe-policy
       refusal, token/password/no-auth host modes and disable/re-enable stale-head
       coverage with fake inference.
@@ -215,7 +215,7 @@ Root reviews implementation and test evidence before merge or live rollout.
       separated. Legacy gateway source remains in the checkout for the pending
       Canvas migration; it is not the supported deployment path.
 
-Current checkpoint: the corrected packed real-stock composition gate passes
+Current checkpoint: the corrected packed real OpenClaw composition gate passes
 under the required Node 24.15 fixture. Failed iterations exposed and fixed the
 consent redirect status, history transport authority, reload-close handling and
 the native personal-agent session selector; the last failure caught an invalid
@@ -226,7 +226,7 @@ Review follow-up: setup preview/apply, doctor and service startup now share the
 same host-auth/TLS/port checker. Doctor is nonzero for planned setup, missing
 owner identity or unsupported host configuration; unsupported apply returns
 before mutation or identity creation. Token, environment-backed password and
-explicit no-auth upstream paths pass through the packed stock host;
+explicit no-auth OpenClaw paths pass through the packed OpenClaw host;
 no-auth keeps application grants mandatory while warning that native endpoints
 are outside that protection. No model/runtime fingerprint change is included in
 this bounded checker follow-up.

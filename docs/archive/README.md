@@ -9,7 +9,7 @@ recovery path for removed executable implementations.
 ## Completed release and implementation ledgers
 
 - [OpenClaw replacement](../plan/openclaw-replacement.md): superseded
-  standalone replacement-engine implementation and evidence. The stock plugin
+  standalone replacement-engine implementation and evidence. The Agent Connect plugin for OpenClaw
   is now the only installation target.
 - [Plugin SDK and Bookhand migration](../plan/plugin-sdk-bookhand-migration.md):
   completed SDK ownership migration and owner-reported application evidence.

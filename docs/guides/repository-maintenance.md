@@ -40,7 +40,7 @@ The CI runner is disposable Ubuntu 24.04 x64 with read-only repository access,
 no operator credentials and no self-hosted runner. It runs:
 
 - format, typecheck, unit tests and build;
-- real pinned stock OpenClaw with deterministic inference (no model usage);
+- real pinned OpenClaw package with deterministic inference (no model usage);
 - installed npm-package consumer and AI SDK/provider composition;
 - native WebMCP using the explicit Chrome-for-Testing pin, and Canvas;
 - lint and dependency-boundary checks.

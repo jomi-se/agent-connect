@@ -1,7 +1,7 @@
 # `@open-agent-connect/web`
 
 Browser SDK for adding AI features backed by a user-owned agent. The current
-published provider path is the stock OpenClaw plugin; the application talks to
+published provider path is the Agent Connect plugin for OpenClaw; the application talks to
 the gateway through the bounded Open Responses contract and keeps its own tool
 implementations.
 
@@ -13,13 +13,13 @@ npm install @open-agent-connect/web@0.0.6
 
 The package provides:
 
-- Stock-plugin discovery, OAuth authorization and token management;
+- Agent Connect plugin for OpenClaw discovery, OAuth authorization and token management;
 - Open Responses (`/v1/responses`) HTTP/SSE communication with multi-turn response continuation (`previous_response_id`);
 - Provider-neutral `AgentSession` and task event streaming;
 - JSON Schema validation before browser tool execution;
 - Correlated tool results returned to the same agent turn.
 
-For the stock OpenClaw plugin, pass the path-bound provider URL
+For the Agent Connect plugin for OpenClaw, pass the path-bound provider URL
 `https://<gateway-host>/agent-connect` to `discoverOpenClawProvider`. The SDK
 uses RFC well-known discovery for that issuer and returns the namespaced
 `/agent-connect/v1/responses` resource. A bare HTTPS origin is normalized to
@@ -68,8 +68,8 @@ so the caller's existing refresh path can rotate it. The SDK does not extend an
 application's consent lifetime or prove that a stored grant has not been
 revoked. Keep any stricter app-owned absolute expiry and lifecycle checks.
 
-`normalizeOpenClawProviderUrl` accepts a bare HTTPS origin or the stock-plugin
-`/agent-connect` issuer and always returns the stock-plugin form. On an OAuth
+`normalizeOpenClawProviderUrl` accepts a bare HTTPS origin or the Agent Connect plugin's
+`/agent-connect` issuer and always returns the Agent Connect plugin form. On an OAuth
 callback, rediscover using the saved transaction's verified `issuer`.
 
 Conversation history is a bounded execution projection, not a faithful human
@@ -85,7 +85,7 @@ Agent Connect gateway and are never exposed directly to the browser.
 
 ## Authorization and sessions
 
-Applications discover the stock plugin, authorize their fixed page-owned tool
+Applications discover the Agent Connect plugin for OpenClaw, authorize their fixed page-owned tool
 snapshot, and then construct an `AgentSession` over the namespaced Responses
 resource. The access-token getter refreshes through the same OAuth connection;
 the application owns storage and compare-and-swap of the updated connection.
@@ -276,7 +276,7 @@ because the interpreter's numeric tolerance can accept invalid multiples. Use
 
 An application that already registers tools with `document.modelContext` can
 reuse those tools through Agent Connect. Pass the snapshot's tools to the
-stock-plugin authorization and `AgentSession` flow above, or to
+Agent Connect plugin authorization and `AgentSession` flow above, or to
 `createAiSdkApplicationTools()` for the current AI SDK integration.
 
 ```ts

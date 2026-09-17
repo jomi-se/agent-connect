@@ -2,7 +2,7 @@
 
 Date: 2026-09-06.
 Status: archived SDK contract ledger; native composition and owner acceptance
-are recorded in the current stock-plugin sources.
+are recorded in the current Agent Connect plugin for OpenClaw sources.
 
 ## Public shape
 
@@ -100,6 +100,6 @@ as revoked or expired because the wire does not prove which happened.
 The focused SDK tests use an owned OAuth contract fixture. They prove request
 shape, validation, PKCE transaction behavior, token rotation, single-flight and
 the disconnect/refresh race; they are not evidence that a real OpenClaw runtime
-or owner-login experience works. Stock plugin compatibility is covered by the
+or owner-login experience works. Agent Connect plugin for OpenClaw compatibility is covered by the
 pinned OpenClaw plugin-host suite. Owner-reported Bookhand evidence and its
 remaining limitations are retained in the [archived closeout ledger](../archive/plans/stock-openclaw-vertical-closeout.md).

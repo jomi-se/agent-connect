@@ -1,7 +1,7 @@
 import { connect } from "node:net";
 import { describe, expect, it, vi } from "vitest";
 
-import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "../src/authorization/contracts.js";
+import { AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT } from "../src/authorization/contracts.js";
 import { startAgentConnectListener } from "../src/listener.js";
 import { AgentConnectAdmissionController } from "../src/runtime/admission.js";
 
@@ -12,14 +12,14 @@ describe("dedicated Agent Connect listener", () => {
     });
     const listener = await startAgentConnectListener({
       port: 0,
-      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+      endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
       dispatch,
     });
     const baseUrl = `http://${listener.host}:${listener.port}`;
     try {
       for (const path of [
-        STOCK_PLUGIN_ENDPOINT_LAYOUT.authorizationServerMetadataPath,
-        STOCK_PLUGIN_ENDPOINT_LAYOUT.protectedResourceMetadataPath,
+        AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.authorizationServerMetadataPath,
+        AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.protectedResourceMetadataPath,
         "/agent-connect/healthz",
       ]) {
         const response = await fetch(`${baseUrl}${path}`);
@@ -53,7 +53,7 @@ describe("dedicated Agent Connect listener", () => {
   it("sanitizes async dispatcher failures", async () => {
     const listener = await startAgentConnectListener({
       port: 0,
-      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+      endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
       dispatch: async () => {
         throw new Error("secret internal failure");
       },
@@ -72,7 +72,7 @@ describe("dedicated Agent Connect listener", () => {
   it("does not fall back when occupied and releases the same port on close", async () => {
     const first = await startAgentConnectListener({
       port: 0,
-      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+      endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
       dispatch: async (_request, response) => {
         response.writeHead(204).end();
       },
@@ -80,7 +80,7 @@ describe("dedicated Agent Connect listener", () => {
     await expect(
       startAgentConnectListener({
         port: first.port,
-        endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+        endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
         dispatch: async (_request, response) => {
           response.writeHead(204).end();
         },
@@ -95,7 +95,7 @@ describe("dedicated Agent Connect listener", () => {
     await first.close();
     const replacement = await startAgentConnectListener({
       port,
-      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+      endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
       dispatch: async (_request, response) => {
         response.writeHead(204).end();
       },
@@ -106,7 +106,7 @@ describe("dedicated Agent Connect listener", () => {
   it("closes unsupported upgrade and CONNECT sockets", async () => {
     const listener = await startAgentConnectListener({
       port: 0,
-      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+      endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
       dispatch: async (_request, response) => {
         response.writeHead(204).end();
       },
@@ -136,7 +136,7 @@ describe("dedicated Agent Connect listener", () => {
     });
     const listener = await startAgentConnectListener({
       port: 0,
-      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+      endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
       admission: new AgentConnectAdmissionController({ maxHttpRequests: 1 }),
       dispatch,
     });

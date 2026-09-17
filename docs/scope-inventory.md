@@ -2,7 +2,7 @@
 
 Updated: 2026-09-17
 
-This inventory describes the supported stock OpenClaw plugin selected by
+This inventory describes the supported Agent Connect plugin for OpenClaw selected by
 [ADR 0015](decisions/0015-openclaw-plugin-host.md). The retired standalone and
 replacement gateway implementations have been removed; historical rationale
 remains in Git and the documentation archive.
@@ -25,13 +25,13 @@ remains in Git and the documentation archive.
 
 | Capability                               | Status                                   | Current boundary                                                                         |
 | ---------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Install into published stock OpenClaw    | Implemented and deterministically tested | Exact host version/integrity and the packed public plugin tarball                        |
+| Install into published OpenClaw package  | Implemented and deterministically tested | Exact host version/integrity and the packed public plugin tarball                        |
 | Keep operator credentials private        | Implemented                              | Resolved inside the host; never becomes application authority                            |
 | Prevent caller routing escalation        | Implemented                              | Agent, model, session and protected headers are server-owned; unknown fields fail closed |
 | Bind response IDs to authority           | Implemented                              | Grant version, policy fingerprint, agent, tool hash and private conversation are checked |
 | Bound continuation state                 | Implemented                              | One current mapping, 30-minute TTL, 1,024 total and eight per grant by default           |
 | Stop unapproved function publication     | Implemented                              | Function items are checked before their first event is published                         |
-| Enforce restricted application agent     | Configured and stock-tested              | No native tools, bootstrap, context injection, skills, memory, tool search, or elevation |
+| Enforce restricted application agent     | Configured and OpenClaw-tested           | No native tools, bootstrap, context injection, skills, memory, tool search, or elevation |
 | Preserve personal OpenClaw configuration | Implemented                              | Setup adds only namespaced Agent Connect state and refuses conflicts                     |
 | Handle subscription credentials          | OpenClaw-owned                           | Agent Connect neither stores nor exposes provider credentials                            |
 

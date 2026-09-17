@@ -1,6 +1,6 @@
 # Bounded scoped conversation history
 
-The stock OpenClaw plugin exposes recent conversations for the **current grant**:
+The Agent Connect plugin for OpenClaw exposes recent conversations for the **current grant**:
 
 - `GET /v1/agent-connect/conversations` returns `{ conversations }`.
 - `GET /v1/agent-connect/conversations/:conversationId/history` returns the
@@ -17,7 +17,7 @@ includes only terminal completed heads still in the in-memory registry (at most
 heads are unavailable. Pending-call heads can be inspected but cannot be reopened
 as a new learner turn. Reads do not extend expiry or consume a head.
 
-History comes from stock OpenClaw `chat.history`, not a copied transcript store.
+History comes from OpenClaw `chat.history`, not a copied transcript store.
 Grant/policy authority is checked before reading and again after the upstream
 wait; changed or consumed heads fail with `conversation_changed`. Refresh of the
 same grant works; another grant, even for the same app, gains no ownership.
@@ -31,10 +31,10 @@ Entries are `{ kind: "input" | "assistant", text }`. A native input may be a
 learner prompt **or an application function output**, including native framing.
 Show it as “Input (prompt or application output)”, never “You”. Do not infer
 authorship from JSON, text patterns or the native owner marker. Tool-result
-placeholders are omitted: stock can retain a delegated/pending placeholder even
+placeholders are omitted: OpenClaw can retain a delegated/pending placeholder even
 after application output has arrived, so it is not reliable execution status.
 
-The stock Responses implementation separates instructions into extra system
+The OpenClaw Responses implementation separates instructions into extra system
 context but does not expose a join from its generated response ID to native
 input-message IDs. Existing history metadata does not identify input kind.
 A reliable per-message attribution index was therefore not added; this surface
@@ -53,7 +53,7 @@ The provider's future cache expiry and restart semantics are not recovery
 guarantees. A failed continuation requires an explicit new conversation, not
 automatic replay.
 
-Verification: the packed-plugin real stock OpenClaw integration reads the native
+Verification: the packed Agent Connect plugin's real OpenClaw integration reads the native
 history after two application-tool results, excludes supplied instructions,
 refreshes the same grant and continues using the returned response head without
 replaying either application action. In-process tests cover explicit projection,

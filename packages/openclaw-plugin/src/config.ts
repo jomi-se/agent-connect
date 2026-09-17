@@ -10,7 +10,7 @@ export const DEFAULT_LISTEN_PORT = 18_790;
 export const POLICY_REF = "application-tools-only";
 const MAX_ENTRY_POINTS = 16;
 
-export interface StockPluginEntryPoint {
+export interface AgentConnectOpenClawPluginEntryPoint {
   readonly id: string;
   readonly publicOrigin: string;
   readonly listenPort: number;
@@ -24,12 +24,12 @@ export interface SingleEntryPointPluginConfig {
 }
 
 export interface MultipleEntryPointPluginConfig {
-  readonly entryPoints: readonly StockPluginEntryPoint[];
+  readonly entryPoints: readonly AgentConnectOpenClawPluginEntryPoint[];
   readonly agentId: string;
   readonly model?: string;
 }
 
-export type StockPluginConfig =
+export type AgentConnectOpenClawPluginConfig =
   SingleEntryPointPluginConfig | MultipleEntryPointPluginConfig;
 
 export interface SupportedRuntime {
@@ -50,7 +50,7 @@ export interface SetupInspection {
   readonly changes: readonly string[];
   readonly errors: readonly string[];
   readonly warnings: readonly string[];
-  readonly config: StockPluginConfig;
+  readonly config: AgentConnectOpenClawPluginConfig;
 }
 
 export interface SetupReadiness {
@@ -82,7 +82,9 @@ interface HostRuntimeSettingsInspection {
   readonly port?: number;
 }
 
-export function parsePluginConfig(value: unknown): StockPluginConfig {
+export function parsePluginConfig(
+  value: unknown,
+): AgentConnectOpenClawPluginConfig {
   const input = record(value);
   if (!input) throw new Error("Agent Connect setup has not been applied");
   if (input.entryPoints !== undefined) {
@@ -135,8 +137,8 @@ export function parsePluginConfig(value: unknown): StockPluginConfig {
 }
 
 export function configuredEntryPoints(
-  config: StockPluginConfig,
-): readonly StockPluginEntryPoint[] {
+  config: AgentConnectOpenClawPluginConfig,
+): readonly AgentConnectOpenClawPluginEntryPoint[] {
   return "entryPoints" in config
     ? config.entryPoints
     : [
@@ -149,14 +151,14 @@ export function configuredEntryPoints(
 }
 
 export function primaryEntryPoint(
-  config: StockPluginConfig,
-): StockPluginEntryPoint {
+  config: AgentConnectOpenClawPluginConfig,
+): AgentConnectOpenClawPluginEntryPoint {
   return configuredEntryPoints(config)[0]!;
 }
 
 export function inspectSetup(
   value: unknown,
-  requested: StockPluginConfig,
+  requested: AgentConnectOpenClawPluginConfig,
   options: ConfigInspectionOptions,
 ): SetupInspection {
   const config = record(value) ?? {};
@@ -232,7 +234,7 @@ export function setupReadiness(
 
 export function applySetupMutation(
   draft: Record<string, unknown>,
-  requested: StockPluginConfig,
+  requested: AgentConnectOpenClawPluginConfig,
   stateDir: string,
   resolveGatewayAuth: GatewayAuthResolver,
 ): void {
@@ -261,7 +263,7 @@ export function applySetupMutation(
 
 export function resolveSupportedRuntime(
   value: unknown,
-  pluginConfig: StockPluginConfig,
+  pluginConfig: AgentConnectOpenClawPluginConfig,
   options: ConfigInspectionOptions,
 ): SupportedRuntime {
   const runtimes = resolveSupportedRuntimes(value, pluginConfig, options);
@@ -273,7 +275,7 @@ export function resolveSupportedRuntime(
 
 export function resolveSupportedRuntimes(
   value: unknown,
-  pluginConfig: StockPluginConfig,
+  pluginConfig: AgentConnectOpenClawPluginConfig,
   options: ConfigInspectionOptions,
 ): readonly SupportedRuntime[] {
   const config = record(value);
@@ -340,7 +342,7 @@ export function resolveSupportedRuntimes(
 }
 
 function requireUniqueEntryPoints(
-  entryPoints: readonly StockPluginEntryPoint[],
+  entryPoints: readonly AgentConnectOpenClawPluginEntryPoint[],
 ): void {
   for (const [field, label] of [
     ["id", "id"],
@@ -357,7 +359,9 @@ function requireUniqueEntryPoints(
   }
 }
 
-function entryPointLabel(entryPoint: StockPluginEntryPoint): string {
+function entryPointLabel(
+  entryPoint: AgentConnectOpenClawPluginEntryPoint,
+): string {
   return entryPoint.id === "default" ? "" : `entry point ${entryPoint.id} `;
 }
 

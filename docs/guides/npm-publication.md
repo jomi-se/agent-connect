@@ -12,8 +12,8 @@ job independently queries each declared package version, skips an existing
 version, and publishes only an absent version from the same inspected tarball.
 Any registry failure other than a real 404 fails the job.
 
-The packages require Node 24 for release preparation. The plugin uses stock
-OpenClaw 2026.9.1 as its exact tested build while allowing newer hosts, and
+The packages require Node 24 for release preparation. The plugin uses OpenClaw
+2026.9.1 as its exact tested build while allowing newer hosts, and
 retains its public `/agent-connect` namespace and plugin ID `agent-connect`. It
 is a fresh setup path, not a credential or state migration.
 The web SDK exposes the OAuth/PKCE, Open Responses, continuation, application

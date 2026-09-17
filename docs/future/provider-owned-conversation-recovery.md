@@ -24,7 +24,7 @@ reading context, search results, mutation receipts, and duplicated JSON as peer
 chat messages after reload. A UI-only “hide JSON” heuristic cannot faithfully
 recreate the original conversation.
 
-Inspect the deployed and current stock OpenClaw source and representative
+Inspect the deployed and current OpenClaw source and representative
 history responses to determine:
 
 - which stable roles, content block types, response boundaries, timestamps,

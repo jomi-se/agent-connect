@@ -1,7 +1,7 @@
 # OpenClaw replacement investigation
 
 Status: historical investigation, superseded by accepted ADR 0015 and the
-published stock OpenClaw plugin. The probes and conclusions below remain dated
+published Agent Connect plugin for OpenClaw. The probes and conclusions below remain dated
 evidence; this note is not a current migration, setup, or acceptance plan.
 
 ## Verified baseline

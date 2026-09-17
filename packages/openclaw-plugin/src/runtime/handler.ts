@@ -1447,7 +1447,7 @@ function requireLoopbackOrigin(value: string): string {
     url.password
   ) {
     throw new TypeError(
-      "stock OpenClaw upstream must be an explicit loopback HTTP origin",
+      "OpenClaw must be configured with an explicit loopback HTTP origin",
     );
   }
   return value;

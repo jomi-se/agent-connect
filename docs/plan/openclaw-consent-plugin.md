@@ -1,7 +1,7 @@
 # OpenClaw consent plugin progress
 
 Date: 2026-09-06. Status: archived superseded consent-plugin proposal; the
-published stock OpenClaw plugin and setup guide define the current path.
+published Agent Connect plugin for OpenClaw and setup guide define the current path.
 
 The provider-owned plugin now implements the OpenClaw-first version-zero OAuth
 surface as a public-client Authorization Code flow with S256 PKCE and pushed

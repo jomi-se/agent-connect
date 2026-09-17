@@ -14,7 +14,7 @@ Agent Connect plugin. The common path should remain quick: identify the
 application, authenticate, inspect the requested authority, choose an agent
 profile, and approve or cancel.
 
-The stock plugin now renders owner authentication and consent inside one
+The Agent Connect plugin now renders owner authentication and consent inside one
 responsive authorization shell, followed by a direct owner console for pending
 requests, grant inspection, individual and bulk revocation, browser forgetting,
 and read-only restricted profile inspection. Owner-browser sessions expire after
@@ -56,7 +56,7 @@ remain on the authority they received until the owner reconsents; editing a
 profile must not silently expand their power.
 
 Persistence is intentionally undecided. Before designing a schema or write
-path, inspect the deployed and current stock OpenClaw source for supported agent
+path, inspect the deployed and current OpenClaw source for supported agent
 configuration, plugin state, mutation, reload, validation, and rollback hooks.
 Compare at least:
 

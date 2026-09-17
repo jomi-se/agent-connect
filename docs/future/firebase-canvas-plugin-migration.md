@@ -1,4 +1,4 @@
-# Future feature: migrate Firebase Canvas to the stock plugin
+# Future feature: migrate Firebase Canvas to the Agent Connect plugin for OpenClaw
 
 Status: implementation in progress. Product intent captured 2026-09-09;
 workbench, deterministic scenarios, and address-based OAuth entry implemented
@@ -36,7 +36,7 @@ but the real integration must remain easy for a developer to locate and read.
 
 The first implemented slice removes the runtime-card surface, adds the two
 honest entry paths, runs all three deterministic scenarios through the real
-page-owned tool handlers, and starts the current stock-plugin OAuth flow from a
+page-owned tool handlers, and starts the current Agent Connect plugin OAuth flow from a
 compatible HTTPS address. Controlled live-plugin composition and the full
 conversation/recovery matrix below remain acceptance work rather than claims
 of this slice.
@@ -65,6 +65,6 @@ the unfinished acceptance work.
 - A visitor with a compatible endpoint can complete the real OAuth and tool
   flow without pasting a runtime card or following retired setup instructions.
 - The browser suite covers all three scenarios in deterministic demo mode and a
-  focused current-SDK integration flow against a controlled real stock plugin.
+  focused current-SDK integration flow against a controlled real Agent Connect plugin.
 - The reference example does not embed credentials, a private operator address,
   or a publicly funded model endpoint.

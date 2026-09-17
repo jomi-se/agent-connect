@@ -2,7 +2,7 @@
 
 The Canvas is a static Firebase Hosting application. Visitors can run its
 deterministic local demo without an account, or connect their own configured
-Agent Connect stock OpenClaw plugin over HTTPS. Firebase never hosts inference,
+Agent Connect plugin for OpenClaw over HTTPS. Firebase never hosts inference,
 the gateway, or an application grant.
 
 ## One-time Firebase and GitHub setup
@@ -25,7 +25,7 @@ the gateway, or an application grant.
 
 ## Connect a gateway
 
-Configure the stock plugin using the
+Configure the Agent Connect plugin for OpenClaw using the
 [OpenClaw setup guide](../../deploy/openclaw-gateway/README.md), and give the
 Canvas the browser-reachable HTTPS address for its Agent Connect gateway. A bare
 Origin is accepted and normalized to the plugin's `/agent-connect` provider

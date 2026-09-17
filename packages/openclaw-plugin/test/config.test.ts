@@ -70,7 +70,7 @@ function representativeConfig(): Record<string, unknown> {
   };
 }
 
-describe("stock OpenClaw plugin configuration", () => {
+describe("Agent Connect plugin for OpenClaw configuration", () => {
   it("adds only the namespaced agent, Responses flag, and plugin config", () => {
     const config = representativeConfig();
     const beforePersonal = structuredClone({

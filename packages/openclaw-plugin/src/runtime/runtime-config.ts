@@ -6,7 +6,7 @@ import {
   type OpenClawUpstreamAuth,
 } from "./upstream-auth.js";
 
-export interface StockOpenClawConfigGet {
+export interface AgentConnectOpenClawConfigGet {
   readonly valid?: unknown;
   readonly sourceConfig?: unknown;
   readonly hash?: unknown;
@@ -19,7 +19,7 @@ export interface OpenClawRuntimePolicyVerifier {
   assertCurrent(): Promise<void>;
 }
 
-export type OpenClawConfigReader = () => Promise<StockOpenClawConfigGet>;
+export type OpenClawConfigReader = () => Promise<AgentConnectOpenClawConfigGet>;
 
 export async function createOpenClawRuntimePolicyVerifier(options: {
   readonly readConfig: OpenClawConfigReader;
@@ -42,15 +42,15 @@ export async function createOpenClawRuntimePolicyVerifier(options: {
   };
 }
 
-export async function readStockOpenClawConfig(options: {
+export async function readOpenClawConfig(options: {
   readonly upstreamBaseUrl: string;
   readonly upstreamAuth: OpenClawUpstreamAuth;
   readonly timeoutMs?: number;
-}): Promise<StockOpenClawConfigGet> {
-  return readStockOpenClawRpc(options, "config.get", {});
+}): Promise<AgentConnectOpenClawConfigGet> {
+  return readOpenClawRpc(options, "config.get", {});
 }
 
-export async function readStockOpenClawRpc<T>(
+export async function readOpenClawRpc<T>(
   options: {
     readonly upstreamBaseUrl: string;
     readonly upstreamAuth: OpenClawUpstreamAuth;
@@ -119,7 +119,9 @@ export async function readStockOpenClawRpc<T>(
   });
 }
 
-function requireAppliedRevision(snapshot: StockOpenClawConfigGet): string {
+function requireAppliedRevision(
+  snapshot: AgentConnectOpenClawConfigGet,
+): string {
   if (snapshot.valid !== true) {
     throw new Error("OpenClaw config.get reported an invalid configuration");
   }

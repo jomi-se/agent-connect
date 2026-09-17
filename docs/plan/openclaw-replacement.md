@@ -6,7 +6,7 @@ retains prior implementation and validation evidence; its separate mediation
 layer is no longer a requirement for the next implementation.
 
 Status: historical implementation evidence from `work/openclaw-gateway`. The
-supported stock path is now the OpenClaw plugin, with earlier standalone proof
+supported path is now the Agent Connect plugin for OpenClaw, with earlier standalone proof
 and owner acceptance retained in the
 [archived vertical-slice closeout](../archive/plans/stock-openclaw-vertical-closeout.md). The native patch
 and custom replacement engine described below are preserved experiments, not

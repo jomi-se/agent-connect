@@ -1,7 +1,7 @@
 # Current architecture and acceptance boundary
 
 [ADR 0015](../decisions/0015-openclaw-plugin-host.md) selects a published
-Agent Connect plugin hosted by stock OpenClaw. There is no separate Agent
+Agent Connect plugin for OpenClaw. There is no separate Agent
 Connect proxy process.
 
 ## Component map
@@ -12,7 +12,7 @@ application / browser
                  |
                  | OAuth/PKCE + bounded Open Responses
                  v
-stock OpenClaw gateway
+OpenClaw gateway
   Agent Connect plugin under /agent-connect
   owner login, consent, grants, fixed tool snapshot
   process-local conversation authority
@@ -58,7 +58,7 @@ presented as a faithful human-chat transcript.
 
 ## Evidence and limits
 
-Credential-free tests install the exact packed plugin into pinned stock OpenClaw
+Credential-free tests install the exact packed plugin into the pinned OpenClaw package
 and exercise setup/doctor, discovery, owner login, OAuth, bounded application
 tools, continuation, history, refresh/revoke, lifecycle disable/re-enable,
 configuration refusal, and coexistence with a native owner request. Inference is

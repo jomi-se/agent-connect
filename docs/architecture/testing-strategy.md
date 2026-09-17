@@ -3,7 +3,7 @@
 Tests should fail when the dependency we operate changes, not stay green because
 an imitation agrees with an old assumption.
 
-> If changing OpenClaw could invalidate the assertion, exercise stock OpenClaw.
+> If changing OpenClaw could invalidate the assertion, exercise OpenClaw.
 
 ## Evidence layers
 
@@ -11,8 +11,8 @@ an imitation agrees with an old assumption.
    bounds, exact tools, continuation ownership, history projection, revocation,
    lifecycle cleanup, and deliberate fault handling. Controlled doubles prove
    only Agent Connect-owned behavior.
-2. **Packed stock-plugin composition.** Build the public tarball, install it
-   through pinned stock OpenClaw with isolated state, and exercise the real CLI,
+2. **Packed Agent Connect plugin composition.** Build the public tarball, install it
+   through the pinned OpenClaw package with isolated state, and exercise the real CLI,
    plugin lifecycle, HTTP routes, OAuth flow, native Responses boundary, and
    configuration enforcement. Only inference is deterministic.
 3. **Selected live composition.** Separately demonstrate the configured
@@ -28,10 +28,10 @@ dedicated prefix with `scripts/openclaw-install.mjs` and sets
 `OPENCLAW_TEST_BIN`.
 
 ```sh
-# Active stock-plugin boundary
+# Active Agent Connect plugin for OpenClaw boundary
 npm run test:openclaw:plugin-host
 
-# Repository verification, including the active stock-plugin boundary
+# Repository verification, including the active Agent Connect plugin for OpenClaw boundary
 npm run verify
 
 # Release, native WebMCP, and browser gates
@@ -39,14 +39,14 @@ npm run verify:full
 ```
 
 The fixture is disposable, loopback-only, and model-free. Missing or mismatched
-pins fail rather than skip in CI. Never use a modified OpenClaw checkout as stock
+pins fail rather than skip in CI. Never use a modified OpenClaw checkout as
 compatibility evidence.
 
 ## Interpreting failures
 
-Name evidence precisely: an Agent Connect invariant, packed stock-plugin
+Name evidence precisely: an Agent Connect invariant, packed Agent Connect plugin for OpenClaw
 composition, or selected live composition. None substitutes for the others. A
 disconnect prevents further local publication/admission; it does not prove every
 upstream effect stopped. Deterministic inference is not subscription-runtime
-evidence. When stock behavior contradicts a double, correct the implementation
+evidence. When OpenClaw behavior contradicts a double, correct the implementation
 or claim rather than teaching the double to mimic an assumption.

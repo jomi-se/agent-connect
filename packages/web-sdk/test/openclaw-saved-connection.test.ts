@@ -14,7 +14,7 @@ const APP_ORIGIN = "https://books.example";
 const NOW = Date.parse("2026-09-08T12:00:00.000Z");
 
 describe("saved OpenClaw connections", () => {
-  it("round trips the stock-plugin layout", async () => {
+  it("round trips the Agent Connect plugin layout", async () => {
     const original = await connection();
     const parsed = await parseOpenClawConnection(JSON.stringify(original), {
       clientId: APP_ORIGIN,

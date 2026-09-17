@@ -80,7 +80,7 @@ export async function startOpenClawTestRuntime({
   }
   const packageDirectory = dirname(realpathSync(binary));
   const packageJsonPath = join(packageDirectory, "package.json");
-  let stockPackage;
+  let openClawPackage;
   try {
     const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
     const packageLock = JSON.parse(
@@ -90,7 +90,7 @@ export async function startOpenClawTestRuntime({
       ),
     );
     const locked = packageLock.packages?.["node_modules/openclaw"];
-    stockPackage = {
+    openClawPackage = {
       version: packageJson.version,
       resolved: locked?.resolved,
       integrity: locked?.integrity,
@@ -101,8 +101,8 @@ export async function startOpenClawTestRuntime({
   } catch {
     // A wrapper executable may not live below the package. Version enforcement
     // above remains mandatory; tests that require provenance inspect the
-    // wrapper's target separately. `stockPackage` stays undefined so a caller
-    // cannot mistake an unverified wrapper for stock provenance.
+    // wrapper's target separately. `openClawPackage` stays undefined so a caller
+    // cannot mistake an unverified wrapper for pinned-package provenance.
   }
   let child;
   let log;
@@ -322,7 +322,7 @@ export async function startOpenClawTestRuntime({
       directory,
       env,
       modelRequests,
-      stockPackage,
+      openClawPackage,
       close,
       async request(
         body,

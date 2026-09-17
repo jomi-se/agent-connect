@@ -16,7 +16,7 @@ const DESCRIPTOR = {
 };
 
 describe("OpenClaw conversation history", () => {
-  it("uses the stock-plugin scoped conversation path", async () => {
+  it("uses the Agent Connect plugin scoped conversation path", async () => {
     const endpoint = `${ORIGIN}/agent-connect/v1/responses`;
     const listUrl = `${ORIGIN}/agent-connect/v1/conversations`;
     const requests: Array<{ url: string; init?: RequestInit }> = [];

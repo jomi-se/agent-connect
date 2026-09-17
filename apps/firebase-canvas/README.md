@@ -14,7 +14,7 @@ The workbench has two deliberately separate entry paths:
   and consumes no model allowance. It is product illustration, not protocol
   compatibility evidence.
 - **Connect your agent** accepts a compatible Agent Connect HTTPS gateway
-  address, discovers the stock OpenClaw plugin's OAuth metadata, and starts the
+  address, discovers the Agent Connect plugin for OpenClaw's OAuth metadata, and starts the
   published SDK's PKCE-bound authorization flow. Any live inference uses only
   the visitor's configured provider allowance.
 
@@ -27,7 +27,7 @@ configuration and design-system metadata live under `.impeccable/` in this
 application, not at the monorepo root.
 
 The real path needs a browser-reachable HTTPS address for an already configured
-Agent Connect stock OpenClaw plugin. Consent and sign-in happen on the user's
+Agent Connect plugin for OpenClaw. Consent and sign-in happen on the user's
 gateway, never in this application's JavaScript. The page keeps the resulting
 delegated connection in `sessionStorage` for the life of the tab and refreshes
 it through the SDK when required. **Disconnect & revoke access** revokes the

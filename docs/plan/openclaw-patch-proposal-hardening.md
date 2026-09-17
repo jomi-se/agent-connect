@@ -1,7 +1,7 @@
 # OpenClaw application-principal patch proposal hardening
 
 Status: archived superseded patched-host experiment; pinned validation is dated
-evidence only and is not a current-upstream compatibility claim.
+evidence only and is not a current OpenClaw compatibility claim.
 
 ## Scope
 
@@ -9,7 +9,7 @@ Harden the minimum host seams needed for a plugin-issued application principal t
 use native `/v1/responses` without becoming an operator. Keep OAuth, consent,
 Agent Connect capability vocabulary, and the app-only deployment recipe in the
 plugin. Preserve native Responses execution and the pinned, reproducible combined
-patch; do not claim current-upstream compatibility or maintainer acceptance.
+patch; do not claim current OpenClaw compatibility or maintainer acceptance.
 
 ## Settled design
 
@@ -84,7 +84,7 @@ personal credentials were used.
 - Full TypeScript compiler attempts exceeded both 4 GiB and 8 GiB heaps. Fast
   `tsgo` is clean; logs `/tmp/agent-connect-command-logs/quiet-run.zuoUQH.log`
   and `/tmp/agent-connect-command-logs/quiet-run.Up3exw.log`.
-- Real pinned application-principal composition: pass, including stock auth
+- Real pinned application-principal composition: pass, including OpenClaw auth
   pass-through, claimed-invalid denial, no-fetch request denial, two-turn token
   rotation, cross-grant isolation, stored application creator, and
   sandbox-unavailable fail-closed before inference; log

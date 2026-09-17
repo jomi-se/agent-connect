@@ -10,7 +10,7 @@ import {
   DelegatedGrantService,
   type DelegatedGrantStore,
 } from "../src/delegated-grants.js";
-import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "../src/authorization/contracts.js";
+import { AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT } from "../src/authorization/contracts.js";
 import { createAgentConnectHandler } from "../src/runtime/handler.js";
 
 const ISSUER = "https://openclaw.example/agent-connect";
@@ -183,7 +183,7 @@ describe("owner authorization surface", () => {
         },
       ],
     });
-    const authorizePath = `${STOCK_PLUGIN_ENDPOINT_LAYOUT.authorizationPath}?${new URLSearchParams({ client_id: CLIENT_ID, request_uri: pending.requestUri })}`;
+    const authorizePath = `${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.authorizationPath}?${new URLSearchParams({ client_id: CLIENT_ID, request_uri: pending.requestUri })}`;
 
     const signIn = await fetch(`${fixture.baseUrl}${authorizePath}`);
     const signInHtml = await signIn.text();
@@ -231,7 +231,7 @@ describe("owner authorization surface", () => {
     expect(consentHtml).toContain('class="brand"');
 
     const consolePage = await fetch(
-      `${fixture.baseUrl}${STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
+      `${fixture.baseUrl}${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
       { headers: { cookie: cookie as string } },
     );
     const consoleHtml = await consolePage.text();
@@ -245,7 +245,7 @@ describe("owner authorization surface", () => {
 
   it("does not turn an unvalidated client identifier into a cancel link", async () => {
     const fixture = await startFixture();
-    const authorizePath = `${STOCK_PLUGIN_ENDPOINT_LAYOUT.authorizationPath}?${new URLSearchParams(
+    const authorizePath = `${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.authorizationPath}?${new URLSearchParams(
       {
         client_id: "javascript:alert(1)",
         request_uri: `${ORIGIN}/agent-connect/requests/unvalidated`,
@@ -276,7 +276,7 @@ describe("owner authorization surface", () => {
     });
     const cookie = await ownerCookie(fixture.baseUrl);
     const consolePage = await fetch(
-      `${fixture.baseUrl}${STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
+      `${fixture.baseUrl}${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
       { headers: { cookie } },
     );
     const html = await consolePage.text();
@@ -303,7 +303,7 @@ describe("owner authorization surface", () => {
     );
     expect(revoked.status).toBe(303);
     expect(revoked.headers.get("location")).toBe(
-      STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath,
+      AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath,
     );
     expect(fixture.grants.listGrants()[0]?.revokedAt).toBeDefined();
 
@@ -336,19 +336,19 @@ describe("owner authorization surface", () => {
     }
     const cookie = await ownerCookie(fixture.baseUrl);
     const consoleResponse = await fetch(
-      `${fixture.baseUrl}${STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
+      `${fixture.baseUrl}${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
       { headers: { cookie } },
     );
     const html = await consoleResponse.text();
     const csrf = hiddenValueForAction(
       html,
-      STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerRevokeAllPath,
+      AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerRevokeAllPath,
       "csrf_token",
     );
 
     const revoked = await postOwnerAction(
       fixture.baseUrl,
-      STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerRevokeAllPath,
+      AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerRevokeAllPath,
       cookie,
       csrf,
     );
@@ -357,14 +357,14 @@ describe("owner authorization surface", () => {
       true,
     );
     const stillSignedIn = await fetch(
-      `${fixture.baseUrl}${STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
+      `${fixture.baseUrl}${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
       { headers: { cookie } },
     );
     expect(stillSignedIn.status).toBe(200);
 
     const replay = await postOwnerAction(
       fixture.baseUrl,
-      STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerRevokeAllPath,
+      AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerRevokeAllPath,
       cookie,
       csrf,
     );
@@ -388,18 +388,18 @@ describe("owner authorization surface", () => {
     });
     const cookie = await ownerCookie(fixture.baseUrl);
     const consoleResponse = await fetch(
-      `${fixture.baseUrl}${STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
+      `${fixture.baseUrl}${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
       { headers: { cookie } },
     );
     const csrf = hiddenValueForAction(
       await consoleResponse.text(),
-      STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerForgetPath,
+      AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerForgetPath,
       "csrf_token",
     );
 
     const forgotten = await postOwnerAction(
       fixture.baseUrl,
-      STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerForgetPath,
+      AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerForgetPath,
       cookie,
       csrf,
     );
@@ -409,7 +409,7 @@ describe("owner authorization surface", () => {
     expect(fixture.grants.listGrants()[0]?.revokedAt).toBeUndefined();
 
     const oldSession = await fetch(
-      `${fixture.baseUrl}${STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
+      `${fixture.baseUrl}${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
       { headers: { cookie } },
     );
     expect(oldSession.status).toBe(401);
@@ -449,7 +449,7 @@ describe("owner authorization surface", () => {
         assertUnchanged() {},
         async assertRuntimeCurrent() {},
       },
-      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+      endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
     });
     const server: Server = createServer((request, response) => {
       void handler.handle(request, response);
@@ -472,7 +472,7 @@ describe("owner authorization surface", () => {
 
   async function ownerCookie(baseUrl: string): Promise<string> {
     const page = await fetch(
-      `${baseUrl}${STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
+      `${baseUrl}${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerConsolePath}`,
     );
     const response = await postLogin(
       baseUrl,
@@ -488,15 +488,18 @@ async function postLogin(
   challenge: string,
   passphrase: string,
 ): Promise<Response> {
-  return fetch(`${baseUrl}${STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerLoginPath}`, {
-    method: "POST",
-    redirect: "manual",
-    headers: {
-      origin: ORIGIN,
-      "content-type": "application/x-www-form-urlencoded",
+  return fetch(
+    `${baseUrl}${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerLoginPath}`,
+    {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        origin: ORIGIN,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ challenge, passphrase }),
     },
-    body: new URLSearchParams({ challenge, passphrase }),
-  });
+  );
 }
 
 async function postRevoke(
@@ -506,16 +509,19 @@ async function postRevoke(
   csrfToken: string,
   origin: string,
 ): Promise<Response> {
-  return fetch(`${baseUrl}${STOCK_PLUGIN_ENDPOINT_LAYOUT.ownerRevokePath}`, {
-    method: "POST",
-    redirect: "manual",
-    headers: {
-      cookie,
-      origin,
-      "content-type": "application/x-www-form-urlencoded",
+  return fetch(
+    `${baseUrl}${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.ownerRevokePath}`,
+    {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        cookie,
+        origin,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ grant_id: grantId, csrf_token: csrfToken }),
     },
-    body: new URLSearchParams({ grant_id: grantId, csrf_token: csrfToken }),
-  });
+  );
 }
 
 async function postOwnerAction(

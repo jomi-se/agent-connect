@@ -3,8 +3,8 @@
 Bring your AI subscription to any web app.
 
 Build AI features using the user's existing AI subscription instead of requiring
-an application API key or a second subscription. Agent Connect installs as a
-plugin in the user's stock OpenClaw gateway. It adds an application-scoped OAuth
+an application API key or a second subscription. Agent Connect installs as the
+Agent Connect plugin for OpenClaw in the user's gateway. It adds an application-scoped OAuth
 and Open Responses boundary while OpenClaw continues to own execution, context,
 tools, sandboxing, models, and provider credentials. Applications see a
 harness-neutral gateway API; OpenClaw and other provider adapters stay behind it.
@@ -18,7 +18,8 @@ uncertain application effects are never replayed automatically.
 ## Canvas example
 
 The reference Canvas under [`apps/firebase-canvas`](apps/firebase-canvas/) can
-run as a deterministic browser-only demo or connect to a stock-plugin gateway
+run as a deterministic browser-only demo or connect to an Agent Connect plugin
+for OpenClaw
 you operate using its browser-reachable HTTPS address. Its static deployment is
 documented separately; this repository does not assume that any older hosted
 build has already been replaced.
@@ -152,9 +153,9 @@ Web application
         ▼
 User-owned Agent Connect gateway
   explicit owner login, consent, grants, bounded conversation ownership
-        │ namespaced plugin routes inside the same stock host
+        │ namespaced plugin routes inside the same OpenClaw host
         ▼
-Stock OpenClaw → operator-configured runtime/model
+OpenClaw → operator-configured runtime/model
   client function calls return through Agent Connect to the application
 ```
 
@@ -169,7 +170,8 @@ process. See
 
 - Web SDK: modern HTTPS browsers with Fetch, SSE, Web Crypto, and Web Storage.
 - Development/operator checks: Node.js 24 LTS >=24.15 and <25.
-- Gateway plugin: pinned stock OpenClaw 2026.9.1 on Node >=24.15 and <25,
+- Gateway plugin: Agent Connect plugin for OpenClaw, tested with OpenClaw 2026.9.1
+  on Node >=24.15 and <25,
   exercised through disposable real-host package installation on Linux.
 
 Other Linux distributions and architectures may work but have not passed the
@@ -246,13 +248,13 @@ compatibility tests, and selected subscription-runtime composition smoke tests.
 ## Project status
 
 This is an early `0.x` system, not a claim of a hardened general-purpose agent
-sandbox. The stock plugin host is the sole installation target. SDK `0.0.6` and
+sandbox. The Agent Connect plugin for OpenClaw is the sole installation target. SDK `0.0.6` and
 plugin `0.0.5` ship through the reviewed main-branch workflow with npm
 provenance. The reference deployment pins that exact plugin version and registry
 integrity fail closed.
 The owner has reported the complete Bookhand vertical slice working, but that
 report does not certify every runtime edge case. The Canvas offers a simulated
-path and a current stock-plugin connection path; neither is a setup prerequisite.
+path and a current Agent Connect plugin for OpenClaw connection path; neither is a setup prerequisite.
 Use at your own risk ^^.
 
 See [the documentation index](docs/README.md), [mission](docs/mission.md), and

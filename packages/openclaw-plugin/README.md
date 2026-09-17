@@ -1,6 +1,7 @@
 # Agent Connect for OpenClaw
 
-Install `@open-agent-connect/openclaw-plugin` into a stock OpenClaw gateway.
+Install `@open-agent-connect/openclaw-plugin`, the Agent Connect plugin for
+OpenClaw, into the user's OpenClaw gateway.
 OpenClaw owns its lifecycle; the plugin owns one or more dedicated
 IPv4-loopback HTTP listeners for application traffic. There is no second
 gateway process.
@@ -60,7 +61,7 @@ form; edit reviewed host configuration to declare multiple entry points.
 Run `openclaw agent-connect doctor` after restarting the gateway. This is a
 fresh setup path; it does not migrate owner identity, grants, conversations,
 provider credentials, or refresh tokens from a retired standalone deployment.
-An in-place upgrade from the immediately preceding stock-plugin auth state
+An in-place upgrade from the immediately preceding Agent Connect plugin auth state
 preserves its enrollment verifier and active owner-browser sessions while
 discarding retired device keys and device grants.
 
@@ -82,7 +83,7 @@ no-queue admission controller bounds HTTP and inference concurrency across all
 entry points, applies a per-grant request rate, and releases capacity on every
 terminal path. Generous byte limits support document transformation while
 bounding memory; callers may request up to 65,536 output tokens. See
-[`docs/architecture/stock-openclaw-plugin.md`](../../docs/architecture/stock-openclaw-plugin.md)
+[Agent Connect plugin for OpenClaw architecture](../../docs/architecture/agent-connect-openclaw-plugin.md)
 for the exact limits.
 
 Conversation ownership and continuation mappings are bounded and process-local;

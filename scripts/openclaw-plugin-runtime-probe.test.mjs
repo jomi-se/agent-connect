@@ -1,11 +1,11 @@
-// Research probe: stock public plugin runtime, not an application-auth implementation.
+// Research probe: OpenClaw public plugin runtime, not an application-auth implementation.
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { startOpenClawTestRuntime } from "./openclaw-test-runtime.mjs";
 
-test("stock plugin runtime: restricted tools, streaming and a second turn", async () => {
+test("OpenClaw plugin runtime: restricted tools, streaming and a second turn", async () => {
   const runtime = await startOpenClawTestRuntime({
     onModelRequest(body, inference) {
       assert.deepEqual(

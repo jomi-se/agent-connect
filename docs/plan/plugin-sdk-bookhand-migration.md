@@ -81,7 +81,7 @@ leave branch and deployments unchanged until owner-approved rollout.
       tests reported passing by Sol. Root reviewed shared validation and auth use.
 - [x] SDK helpers implemented and root source review completed; focused and full
       web SDK tests, typecheck, build, formatting, packed-consumer smoke and real
-      installed-stock-plugin history composition pass.
+      installed Agent Connect plugin for OpenClaw history composition pass.
 - [x] Final SDK artifact from `e3fa090` delivered for CDX2 install at
       `dist/open-agent-connect-web-0.0.3.tgz`, SHA-256
       `ccd489d55189df32654c3e3bf2dc667ee65545d4d0d453f52eff7cbbfb128480`.
@@ -97,7 +97,7 @@ leave branch and deployments unchanged until owner-approved rollout.
 
 ## Subsequent owner-approved live switch
 
-On 2026-09-08 the reviewed plugin was installed into the existing stock OpenClaw
+On 2026-09-08 the reviewed plugin was installed into the existing OpenClaw
 profile and the standalone proxy stopped. Subscription credentials were not
 copied or rotated. HTTPS discovery/health passed and both scoped and native
 Responses rejected unauthenticated requests. Bookhand served the exact reviewed

@@ -30,7 +30,7 @@ export interface OpenClawTestRuntime {
   directory: string;
   env: NodeJS.ProcessEnv;
   modelRequests: ModelObservation[];
-  stockPackage?: {
+  openClawPackage?: {
     version: string;
     resolved?: string;
     integrity?: string;

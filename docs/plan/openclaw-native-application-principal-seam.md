@@ -115,7 +115,7 @@ The host generates the first canonical session key. Continuation uses only
 agent, and generated session. Supplying an unknown or cross-principal previous
 response id is an authorization error, not a request for a fresh session.
 
-This matters during token refresh: hashing the bearer, as the stock endpoint
+This matters during token refresh: hashing the bearer, as the OpenClaw endpoint
 does, loses continuity when the token changes. Conversely, keying only by client
 id would let a new grant inherit a revoked grant's conversation. The grant id is
 the stable subject.

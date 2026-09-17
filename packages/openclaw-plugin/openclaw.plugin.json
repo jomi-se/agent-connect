@@ -1,7 +1,7 @@
 {
   "id": "agent-connect",
   "name": "Agent Connect",
-  "description": "Application-scoped delegation hosted by stock OpenClaw",
+  "description": "Application-scoped delegation for OpenClaw",
   "activation": {
     "onStartup": true
   },

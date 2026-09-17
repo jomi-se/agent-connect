@@ -1,6 +1,6 @@
 # Open Responses vertical-slice implementation plan
 
-Updated: 2026-08-29. Status: archived completed implementation plan; the stock
+Updated: 2026-08-29. Status: archived completed implementation plan; the Agent Connect plugin for OpenClaw
 OpenClaw plugin is now the supported installation target.
 
 ## Outcome

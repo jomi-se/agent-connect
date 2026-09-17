@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe("OpenClaw delegated OAuth connection", () => {
-  it("normalizes a bare origin to the stock-plugin Responses profile", async () => {
+  it("normalizes a bare origin to the Agent Connect plugin Responses profile", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const provider = await discoverOpenClawProvider({
       providerUrl: `${ORIGIN}/`,
@@ -71,7 +71,7 @@ describe("OpenClaw delegated OAuth connection", () => {
     ).rejects.toMatchObject({ code: "invalid_input" });
   });
 
-  it("discovers the stock-plugin path issuer through standard well-known URLs", async () => {
+  it("discovers the Agent Connect plugin path issuer through standard well-known URLs", async () => {
     const issuer = `${ORIGIN}/agent-connect`;
     const resource = `${ORIGIN}/agent-connect/v1/responses`;
     const requests: string[] = [];

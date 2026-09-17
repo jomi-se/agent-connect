@@ -97,7 +97,9 @@ async function startAuthorization(): Promise<void> {
   setConnectBusy(true);
   status.textContent = "Checking this gateway and preparing approval…";
   try {
-    const providerUrl = stockPluginProviderUrl(gatewayInput.value);
+    const providerUrl = agentConnectOpenClawPluginProviderUrl(
+      gatewayInput.value,
+    );
     localStorage.setItem(STORAGE_PROVIDER, providerUrl);
     addActivity("app", "Canvas", "Connection requested", providerUrl);
     const provider = await discoverOpenClawProvider({
@@ -686,7 +688,7 @@ function callbackUri(): string {
   const origin = configuredOrigin?.trim() || location.origin;
   return new URL(location.pathname, `${origin}/`).href;
 }
-function stockPluginProviderUrl(value: string): string {
+function agentConnectOpenClawPluginProviderUrl(value: string): string {
   const normalized = normalizeOpenClawProviderUrl(value);
   const url = new URL(normalized);
   return url.pathname === "/" ? `${url.origin}/agent-connect` : normalized;

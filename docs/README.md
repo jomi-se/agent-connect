@@ -9,7 +9,7 @@ installation, SDK example, supported platforms, and verification commands.
   and explicit non-goals.
 - [Scope inventory](scope-inventory.md): implemented, deferred, and unsupported
   capabilities plus their evidence boundary.
-- [Stock OpenClaw architecture](architecture/stock-openclaw-plugin.md): listener
+- [Agent Connect plugin for OpenClaw architecture](architecture/agent-connect-openclaw-plugin.md): listener
   layout, trust boundaries, lifecycle, and supported host policy.
 - [Target architecture](architecture/target-architecture.md): component and
   trust boundaries and future adapter seams.
@@ -17,7 +17,7 @@ installation, SDK example, supported platforms, and verification commands.
   three evidence layers.
 - [Current work](plan/current-work.md): the small set of genuine unfinished work
   and explicit non-gates.
-- [Stock OpenClaw setup](../deploy/openclaw-gateway/README.md): install the
+- [Agent Connect plugin for OpenClaw setup](../deploy/openclaw-gateway/README.md): install the
   published plugin, configure the dedicated listener, run doctor, and forward
   public HTTPS safely.
 - [Web application integration](guides/web-app-integration.md): install the
@@ -37,7 +37,7 @@ useful provenance, but their commands and gates are not current instructions.
 
 ## Accepted decisions
 
-- [ADR 0015: Stock OpenClaw plugin host](decisions/0015-openclaw-plugin-host.md)
+- [ADR 0015: Agent Connect plugin for OpenClaw host](decisions/0015-openclaw-plugin-host.md)
   is the active installation decision.
 - [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md)
   and [ADR 0008: Control-plane and runtime confinement boundary](decisions/0008-control-plane-and-runtime-confinement-boundary.md)

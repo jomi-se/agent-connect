@@ -1,9 +1,9 @@
-# Stock OpenClaw Agent Connect setup
+# Agent Connect plugin for OpenClaw setup
 
-The supported provider is the published Agent Connect plugin hosted by the
-user's stock OpenClaw gateway. Users do not operate a separate Agent Connect
+The supported provider is the published Agent Connect plugin for OpenClaw,
+hosted by the user's OpenClaw gateway. Users do not operate a separate Agent Connect
 proxy process. See [ADR 0015](../../docs/decisions/0015-openclaw-plugin-host.md)
-and the [implementation contract](../../docs/architecture/stock-openclaw-plugin.md).
+and the [implementation contract](../../docs/architecture/agent-connect-openclaw-plugin.md).
 
 Use Node 24 LTS >=24.15 and <25 with OpenClaw 2026.9.1 or newer. The reference
 deployment and deterministic tests pin 2026.9.1; the plugin has no upper host

@@ -4,12 +4,12 @@ Date: 2026-09-08. Status: accepted and implemented.
 
 ## Decision
 
-The reference provider is an installable OpenClaw plugin, not an additional
-executable that users must configure and operate. Stock OpenClaw loads the
-plugin and manages its lifecycle. The plugin owns a second IPv4-loopback HTTP
+The reference provider is the installable Agent Connect plugin for OpenClaw, not
+an additional executable that users must configure and operate. OpenClaw loads
+the plugin and manages its lifecycle. The plugin owns a second IPv4-loopback HTTP
 listener dedicated to consent and app-scoped Responses; it does not mount
 application routes on OpenClaw's native listener.
-The plugin internally constructs authenticated requests to stock OpenClaw's
+The plugin internally constructs authenticated requests to OpenClaw's
 native Responses endpoint. No core patch, replacement agent loop, second
 OpenClaw installation, or external proxy supervisor is required.
 

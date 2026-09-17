@@ -25,7 +25,7 @@ export interface AgentConnectEndpointLayout {
   readonly conversationsPath: string;
 }
 
-export const STOCK_PLUGIN_ENDPOINT_LAYOUT: AgentConnectEndpointLayout =
+export const AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT: AgentConnectEndpointLayout =
   Object.freeze({
     issuerPath: "/agent-connect",
     authorizationServerMetadataPath:

@@ -9,7 +9,7 @@ import {
 } from "../src/delegated-grants.js";
 import {
   FIXED_TOOLS_AUTHORIZATION_DETAIL,
-  STOCK_PLUGIN_ENDPOINT_LAYOUT,
+  AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
 } from "../src/authorization/contracts.js";
 import { OpenClawOAuthHandler } from "../src/authorization/oauth-handler.js";
 
@@ -70,7 +70,7 @@ describe("OpenClaw provider OAuth plugin", () => {
     const handler = new OpenClawOAuthHandler({
       issuer: ISSUER,
       resource: RESOURCE,
-      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+      endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
       grantService: grants,
       allowedOwnerProfileIds: ["owner-profile", "second-owner"],
       ownerVerifier: ({ headers }) => {

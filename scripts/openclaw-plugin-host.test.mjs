@@ -40,7 +40,7 @@ const tools = [
 ];
 
 test(
-  "packed stock plugin composes OAuth, bounded tools, lifecycle, and native Responses",
+  "packed Agent Connect plugin for OpenClaw composes OAuth, bounded tools, lifecycle, and native Responses",
   { timeout: 180_000 },
   async () => {
     let setupOutput;
@@ -497,7 +497,7 @@ for (const authCase of [
   },
 ]) {
   test(
-    `packed stock plugin uses ${authCase.mode} upstream while retaining app grants`,
+    `packed Agent Connect plugin for OpenClaw uses ${authCase.mode} OpenClaw authentication while retaining app grants`,
     { timeout: 180_000 },
     async () => {
       let setupOutput;
@@ -672,7 +672,7 @@ for (const authCase of [
 }
 
 test(
-  "one stock plugin hosts independent OAuth entry points",
+  "one Agent Connect plugin for OpenClaw hosts independent OAuth entry points",
   { timeout: 180_000 },
   async () => {
     let setupOutput;

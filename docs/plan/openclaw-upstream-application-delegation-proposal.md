@@ -8,8 +8,8 @@ pinned OpenClaw 2026.9.1 only.
 An owner-installed plugin needs to issue revocable, app-scoped credentials that
 run the owner's native subscription-backed OpenClaw agent through
 `POST /v1/responses`. The application must not receive an operator credential,
-choose a private agent/model/session, or inherit unrelated conversations. A stock
-plugin HTTP route can run embedded agents, but it cannot inject a verified
+choose a private agent/model/session, or inherit unrelated conversations. An
+Agent Connect plugin route can run embedded agents, but it cannot inject a verified
 principal into native Responses ownership, continuation, and streaming without
 reimplementing that protocol surface.
 
@@ -53,7 +53,7 @@ for v0; conflicts are explicit and failed registration rolls back atomically.
 
 ## Security and compatibility semantics
 
-`pass` preserves stock operator authentication. A provider that claims a
+`pass` preserves OpenClaw operator authentication. A provider that claims a
 credential must return terminal `deny`; exceptions do not fall through. Browser
 CORS grants transport permission only and cannot expand operator access.
 
@@ -89,7 +89,7 @@ Responses engine.
 - Deterministic barriers for config revision and plugin retirement between
   authentication and admission.
 - Register-then-throw rollback followed by successful replacement registration.
-- Claimed-invalid terminal denial and unclaimed stock operator compatibility.
+- Claimed-invalid terminal denial and unclaimed OpenClaw operator compatibility.
 - Real pinned native two-turn client-tool composition with token rotation,
   cross-grant denial, exact stored application creator, and sandbox stamp.
 - Optional sandbox capability only after a sandbox-unavailable run proves no

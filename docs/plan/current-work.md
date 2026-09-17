@@ -10,7 +10,8 @@ in the [archive](../archive/README.md); they are not active instructions.
 
 ## Current release
 
-Agent Connect is installed as a plugin in the user's stock OpenClaw process.
+Agent Connect is installed as the Agent Connect plugin for OpenClaw in the user's
+OpenClaw process.
 There is no separately operated Agent Connect proxy. The plugin owns a bounded
 application-only listener on `127.0.0.1:18790` by default; native OpenClaw stays
 on its own listener (the reference profile uses `127.0.0.1:18789`). Public
@@ -26,7 +27,7 @@ The reference deployment pins the published plugin and its integrity, records
 The repository's reproducible host pin is OpenClaw `2026.9.1` on Node `>=24.15
 <25`; the plugin permits that version or newer without an upper bound.
 
-Setup and operations are documented in the [stock OpenClaw setup
+Setup and operations are documented in the [Agent Connect plugin for OpenClaw setup
 guide](../../deploy/openclaw-gateway/README.md). The setup path is fresh: it
 does not migrate provider credentials, owner identity, grants, conversations,
 or refresh tokens from an older deployment.
@@ -50,7 +51,7 @@ separate from deterministic test evidence.
 ### Setup quality and visible product flow
 
 The next product phase improves the owner and application experience around the
-working stock-plugin vertical slice. These are proposed features, not release
+working Agent Connect plugin for OpenClaw vertical slice. These are proposed features, not release
 gates or accepted architecture. Work them in this order:
 
 1. [Owner console and managed agent profiles](../future/owner-console-and-profiles.md):
@@ -58,7 +59,7 @@ gates or accepted architecture. Work them in this order:
    and bulk revocation, and browser-session management slice is implemented.
    Next, investigate a tasteful OpenClaw-native persistence boundary before
    adding owner-managed restricted profile editing.
-2. [Firebase Canvas stock-plugin migration](../future/firebase-canvas-plugin-migration.md):
+2. [Firebase Canvas Agent Connect plugin migration](../future/firebase-canvas-plugin-migration.md):
    the polished workbench, deterministic three-scenario demo, and current
    address-based OAuth entry are implemented. Complete controlled live-plugin
    composition and the conversation/recovery acceptance matrix next.
@@ -76,7 +77,7 @@ gates or accepted architecture. Work them in this order:
 The runtime-card SDK, replacement gateway, replacement-engine tests, standalone
 wrappers, and native OpenClaw patch experiment were removed on 2026-09-17 after
 Canvas moved to the current address-based OAuth flow. Shared authorization,
-grant, owner-console, and tool-snapshot code now belongs to the stock plugin
+grant, owner-console, and tool-snapshot code now belongs to the Agent Connect plugin
 package. Historical rationale remains in Git and clearly marked archives; it is
 not an active compatibility surface. On first load, the plugin converts its
 immediately preceding combined version-2 auth file into owner-only state,

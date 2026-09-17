@@ -1,6 +1,6 @@
 # 0005: Bootstrap runtime identity through trusted transport profiles
 
-- Status: accepted security rationale; current stock-plugin outcome noted below
+- Status: accepted security rationale; current Agent Connect plugin outcome noted below
 - Date: 2026-07-14
 
 ## Context
@@ -42,9 +42,9 @@ enrollment.
 Hostname suffix detection may suggest a profile in the UI. It must never
 establish trust.
 
-### Current stock-plugin outcome (2026-09-14)
+### Current Agent Connect plugin outcome (2026-09-14)
 
-The supported stock OpenClaw plugin has one or more independent canonical HTTPS
+The supported Agent Connect plugin for OpenClaw has one or more independent canonical HTTPS
 public origins. Its
 application-facing SDK retains two experience values, `tailscale` and `https`,
 for owner-login copy and deployment guidance; neither changes the OAuth or

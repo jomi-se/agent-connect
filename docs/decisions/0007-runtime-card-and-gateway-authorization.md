@@ -8,7 +8,7 @@ transport was removed after judging. The accepted runtime-card, enrollment,
 consent, PKCE, and grant design continues through the private Tailscale Serve
 profile.
 
-Retirement note (2026-09-17): the stock-plugin flow retains gateway-owned
+Retirement note (2026-09-17): the Agent Connect plugin flow retains gateway-owned
 consent, PKCE, and scoped grants but accepts an HTTPS gateway address and OAuth
 discovery instead of a runtime card. The runtime-card SDK and replacement
 gateway implementation have been removed.

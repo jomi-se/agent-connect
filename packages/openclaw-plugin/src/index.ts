@@ -9,15 +9,15 @@ import { resolveGatewayAuth } from "openclaw/plugin-sdk/gateway-runtime";
 
 import { DelegatedGrantService } from "./delegated-grants.js";
 import { OwnerAuth } from "./owner-auth.js";
-import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "./authorization/contracts.js";
+import { AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT } from "./authorization/contracts.js";
 import {
   createAgentConnectHandler,
   type AgentConnectHandler,
 } from "./runtime/handler.js";
 import { AgentConnectAdmissionController } from "./runtime/admission.js";
 import {
-  readStockOpenClawConfig,
-  readStockOpenClawRpc,
+  readOpenClawConfig,
+  readOpenClawRpc,
 } from "./runtime/runtime-config.js";
 import {
   openClawHttpAuthHeaders,
@@ -34,9 +34,9 @@ import {
   primaryEntryPoint,
   resolveSupportedRuntimes,
   setupReadiness,
-  type StockPluginConfig,
+  type AgentConnectOpenClawPluginConfig,
 } from "./config.js";
-import type { StockPluginApi } from "./host-api.js";
+import type { AgentConnectOpenClawPluginApi } from "./host-api.js";
 import {
   startAgentConnectListener,
   type AgentConnectListener,
@@ -64,8 +64,8 @@ interface ActiveEntryPoint {
 export default {
   id: PLUGIN_ID,
   name: "Agent Connect",
-  description: "Application-scoped delegation hosted by stock OpenClaw",
-  register(api: StockPluginApi): void {
+  description: "Application-scoped delegation for OpenClaw",
+  register(api: AgentConnectOpenClawPluginApi): void {
     registerCli(api);
     if (api.registrationMode !== "full") return;
 
@@ -130,7 +130,7 @@ export default {
             }
           };
           const assertAppliedRuntimeCurrent = async () => {
-            const snapshot = await readStockOpenClawConfig({
+            const snapshot = await readOpenClawConfig({
               upstreamBaseUrl: initial[0]!.upstreamBaseUrl,
               upstreamAuth: initial[0]!.upstreamAuth,
             });
@@ -157,7 +157,7 @@ export default {
               grantService,
               ownerAuth,
               ownerSubject: OWNER_SUBJECT,
-              endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+              endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
               admission,
               policySnapshot: {
                 assertUnchanged: assertRuntimeCurrent,
@@ -166,7 +166,7 @@ export default {
                 },
               },
               readHistory: (sessionKey) =>
-                readStockOpenClawRpc(
+                readOpenClawRpc(
                   {
                     upstreamBaseUrl: runtime.upstreamBaseUrl,
                     upstreamAuth: runtime.upstreamAuth,
@@ -179,7 +179,7 @@ export default {
             let activeEntry: ActiveEntryPoint | undefined;
             const listener = await startAgentConnectListener({
               port: runtime.listenPort,
-              endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+              endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
               admission,
               async dispatch(request, response) {
                 if (!activeEntry?.ready) {
@@ -280,7 +280,7 @@ export default {
   },
 };
 
-function registerCli(api: StockPluginApi): void {
+function registerCli(api: AgentConnectOpenClawPluginApi): void {
   api.registerCli(
     ({ program }) => {
       const root = program
@@ -319,7 +319,7 @@ function registerCli(api: StockPluginApi): void {
 }
 
 async function runDoctor(
-  api: StockPluginApi,
+  api: AgentConnectOpenClawPluginApi,
   options: Record<string, unknown>,
 ): Promise<void> {
   const stateDir = api.runtime.state.resolveStateDir();
@@ -394,13 +394,13 @@ async function runDoctor(
 }
 
 async function runSetup(
-  api: StockPluginApi,
+  api: AgentConnectOpenClawPluginApi,
   options: Record<string, unknown>,
 ): Promise<void> {
   const stateDir = api.runtime.state.resolveStateDir();
   const runtimeConfig = api.runtime.config.current();
   const guided = shouldGuideSetup(options);
-  let config: StockPluginConfig;
+  let config: AgentConnectOpenClawPluginConfig;
   try {
     config = guided
       ? await promptForRequestedConfig(api, options, runtimeConfig)
@@ -575,10 +575,10 @@ function lifecycleNextStep(): string {
 }
 
 function requestedConfig(
-  api: StockPluginApi,
+  api: AgentConnectOpenClawPluginApi,
   options: Record<string, unknown>,
   runtimeConfig: Readonly<Record<string, unknown>>,
-): StockPluginConfig {
+): AgentConnectOpenClawPluginConfig {
   const existing = (() => {
     try {
       return parsePluginConfig(api.pluginConfig);
@@ -624,10 +624,10 @@ function shouldGuideSetup(options: Record<string, unknown>): boolean {
 }
 
 async function promptForRequestedConfig(
-  api: StockPluginApi,
+  api: AgentConnectOpenClawPluginApi,
   options: Record<string, unknown>,
   runtimeConfig: Readonly<Record<string, unknown>>,
-): Promise<StockPluginConfig> {
+): Promise<AgentConnectOpenClawPluginConfig> {
   const existing = (() => {
     try {
       return parsePluginConfig(api.pluginConfig);
@@ -719,7 +719,7 @@ function configuredDefaultModel(
 }
 
 function writeGuidedSummary(
-  config: StockPluginConfig,
+  config: AgentConnectOpenClawPluginConfig,
   inspection: ReturnType<typeof inspectSetup>,
   ownerReady: boolean,
 ): void {
@@ -876,7 +876,7 @@ async function probeLocalListener(listenPort: number): Promise<{
 }> {
   try {
     const response = await fetch(
-      `http://127.0.0.1:${listenPort}${STOCK_PLUGIN_ENDPOINT_LAYOUT.healthPath}`,
+      `http://127.0.0.1:${listenPort}${AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT.healthPath}`,
       { signal: AbortSignal.timeout(1_500) },
     );
     const body = await response.text();
@@ -921,7 +921,7 @@ function assertAppliedSourceConfig(
     readonly configRevisionHash?: unknown;
     readonly appliedConfigHash?: unknown;
   },
-  pluginConfig: StockPluginConfig,
+  pluginConfig: AgentConnectOpenClawPluginConfig,
   options: {
     readonly stateDir: string;
     readonly resolveGatewayAuth: () => ReturnType<typeof resolveGatewayAuth>;

@@ -3,7 +3,7 @@ export interface OpenClawConfigMutationResult {
   readonly reason?: string;
 }
 
-export interface StockPluginApi {
+export interface AgentConnectOpenClawPluginApi {
   readonly id: string;
   readonly rootDir?: string;
   readonly registrationMode:

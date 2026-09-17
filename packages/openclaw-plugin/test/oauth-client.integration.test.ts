@@ -16,7 +16,7 @@ import {
   type DelegatedGrantStore,
 } from "../src/delegated-grants.js";
 import { OpenClawOAuthHandler } from "../src/authorization/oauth-handler.js";
-import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "../src/authorization/contracts.js";
+import { AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT } from "../src/authorization/contracts.js";
 
 const ORIGIN = "https://provider.example";
 const ISSUER = `${ORIGIN}/agent-connect`;
@@ -70,7 +70,7 @@ describe("web SDK against the provider OAuth handler", () => {
     const oauth = new OpenClawOAuthHandler({
       issuer: ISSUER,
       resource: RESOURCE,
-      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
+      endpoints: AGENT_CONNECT_OPENCLAW_PLUGIN_ENDPOINT_LAYOUT,
       grantService,
       allowedOwnerProfileIds: ["fixture-owner"],
       // This is test-only host attribution. It is deliberately not evidence of

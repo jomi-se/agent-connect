@@ -1,12 +1,12 @@
 # Connect your AI: OpenClaw-first implementation plan
 
 Date: 2026-09-06. Status: archived historical sequencing plan; the published
-stock OpenClaw plugin path supersedes this in-progress proposal.
+Agent Connect plugin for OpenClaw path supersedes this in-progress proposal.
 
 ## Historical execution ledger
 
 The operator-specific continuation handoff was removed from this public
-repository after the stock-plugin path superseded it. The entries below retain
+repository after the Agent Connect plugin path superseded it. The entries below retain
 product and protocol provenance, not instructions to restart the old deployment.
 
 2026-09-06 composition checkpoint: the actual compiled consent plugin passed

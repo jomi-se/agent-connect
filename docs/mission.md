@@ -19,9 +19,9 @@ Agent Connect is the application-delegation boundary, not another agent
 platform. The accepted installation target is an OpenClaw plugin that hosts
 this boundary without a separately operated executable; see
 [ADR 0015](decisions/0015-openclaw-plugin-host.md). The installable plugin and
-credential-free stock-host composition gates are implemented. Agent Connect
+credential-free OpenClaw-host composition gates are implemented. Agent Connect
 retains consent, application authority, browser integration and a bounded
-grant-to-conversation map; stock OpenClaw owns execution, native events, context,
+grant-to-conversation map; OpenClaw owns execution, native events, context,
 tools and sandboxing. The retired standalone and replacement gateway
 implementations have been removed; their history remains available through Git
 and explicitly archived design records.
@@ -54,7 +54,7 @@ The following describes the plugin-hosted implementation. Any changed reliabilit
 or consent guarantees must be made explicit.
 
 - Keep the bounded Open Responses profile as the sole application wire:
-  served by the stock plugin at `POST /agent-connect/v1/responses`, with the SDK coordinating function outputs and linear
+  served by the Agent Connect plugin for OpenClaw at `POST /agent-connect/v1/responses`, with the SDK coordinating function outputs and linear
   follow-up through `previous_response_id`.
 - Delegate inference, model history, compaction, runtime credentials and
   process behavior to OpenClaw. Do not retain a parallel Omnigent backend,
@@ -68,7 +68,7 @@ or consent guarantees must be made explicit.
   It is intentionally process-local: restart/expiry interrupts continuation,
   and an admitted failure is never automatically replayed.
 - Allow the active grant to list its recent terminal heads and read a bounded
-  projection of stock `chat.history`. Native user entries may be learner prompts
+  projection of OpenClaw `chat.history`. Native user entries may be learner prompts
   or application outputs, so expose them only as inputs, never as **You** or a
   faithful human-chat transcript.
 - Keep transport ingress, owner authentication, gateway identity, application
@@ -90,7 +90,7 @@ or consent guarantees must be made explicit.
 
 ## Current implementation and acceptance boundary
 
-The stock plugin package provides delegated OAuth/PAR/PKCE,
+The Agent Connect plugin for OpenClaw provides delegated OAuth/PAR/PKCE,
 rotating refresh, revocation and public AI SDK contract inside OpenClaw's managed
 service lifecycle. Its application issuer and Responses resource are namespaced
 under `/agent-connect`; native root Responses remains available to the owner.
@@ -100,10 +100,10 @@ to an application grant, and exposes recent grant-owned execution history and
 completed-head reopening while that process-local mapping remains live. The
 ADR 0014 standalone scoped proxy and the older replacement gateway have been
 removed. The current auth, grant, consent, owner-console, and tool-snapshot
-implementation is owned by the stock plugin package.
+implementation is owned by the Agent Connect plugin for OpenClaw package.
 
 Real published OpenClaw tests using deterministic inference install the packed
-plugin and exercise stock deny-all enforcement, owner login -> OAuth -> two-tool
+plugin and exercise OpenClaw deny-all enforcement, owner login -> OAuth -> two-tool
 -> refresh -> follow-up/history -> revoke, disable/re-enable cleanup, unsafe
 policy refusal and coexistence with a native owner request. They are transport and policy
 evidence, not proof that the selected subscription-backed runtime usefully
