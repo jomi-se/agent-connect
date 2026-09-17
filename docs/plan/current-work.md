@@ -18,8 +18,8 @@ application routes remain under `/agent-connect`.
 
 The published packages are:
 
-- `@open-agent-connect/web@0.0.5`;
-- `@open-agent-connect/openclaw-plugin@0.0.3`.
+- `@open-agent-connect/web@0.0.6`;
+- `@open-agent-connect/openclaw-plugin@0.0.5`.
 
 The reference deployment pins the published plugin and its integrity, records
 `listenPort: 18790`, and has passing smoke/fresh-target installation evidence.
@@ -71,16 +71,18 @@ gates or accepted architecture. Work them in this order:
    unprioritized adjacent candidates. Their briefs preserve the ideas without
    committing them to the sequence above.
 
-### Legacy implementation cleanup (owned separately)
+### Legacy implementation cleanup
 
-Canvas no longer consumes the runtime-card surface, but controlled live-plugin
-acceptance remains pending and is not a plugin-release gate. The migration has
-a [focused brief](../future/firebase-canvas-plugin-migration.md); inventory all
-remaining consumers before removing shared modules or the older gateway.
-Retain shared modules and existing consumers until their replacements land.
-The native OpenClaw patch experiment and its obsolete build/probe wiring also
-remain cleanup targets; do not confuse them with the separately required AI SDK
-patch. Archive their contracts and evidence as consumers are retired.
+The runtime-card SDK, replacement gateway, replacement-engine tests, standalone
+wrappers, and native OpenClaw patch experiment were removed on 2026-09-17 after
+Canvas moved to the current address-based OAuth flow. Shared authorization,
+grant, owner-console, and tool-snapshot code now belongs to the stock plugin
+package. Historical rationale remains in Git and clearly marked archives; it is
+not an active compatibility surface. On first load, the plugin converts its
+immediately preceding combined version-2 auth file into owner-only state,
+preserving the enrollment verifier and active `aco_` browser sessions while
+discarding retired device keys and grants. Older standalone state formats are
+not supported migration inputs.
 
 ### Personal deployment metadata and shared-history cleanup
 

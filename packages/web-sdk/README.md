@@ -8,13 +8,12 @@ implementations.
 Install the published package in the web application:
 
 ```sh
-npm install @open-agent-connect/web@0.0.5
+npm install @open-agent-connect/web@0.0.6
 ```
 
 The package provides:
 
-- Signed runtime-card verification (retained for the historical Canvas flow);
-- Gateway authorization and token management;
+- Stock-plugin discovery, OAuth authorization and token management;
 - Open Responses (`/v1/responses`) HTTP/SSE communication with multi-turn response continuation (`previous_response_id`);
 - Provider-neutral `AgentSession` and task event streaming;
 - JSON Schema validation before browser tool execution;
@@ -23,10 +22,9 @@ The package provides:
 For the stock OpenClaw plugin, pass the path-bound provider URL
 `https://<gateway-host>/agent-connect` to `discoverOpenClawProvider`. The SDK
 uses RFC well-known discovery for that issuer and returns the namespaced
-`/agent-connect/v1/responses` resource. Origin-only provider URLs remain
-retained for legacy runtime-card consumers; they are not the supported plugin
-installation path. Metadata and token bindings from the two layouts cannot be
-mixed. For a complete current setup and authorization example, see the
+`/agent-connect/v1/responses` resource. A bare HTTPS origin is normalized to
+that path as an input convenience; it does not select a different gateway
+implementation. For a complete current setup and authorization example, see the
 [web application integration guide](../../docs/guides/web-app-integration.md).
 
 ## Saved connections and scoped history
@@ -70,9 +68,9 @@ so the caller's existing refresh path can rotate it. The SDK does not extend an
 application's consent lifetime or prove that a stored grant has not been
 revoked. Keep any stricter app-owned absolute expiry and lifecycle checks.
 
-`normalizeOpenClawProviderUrl` accepts only the standalone origin and stock
-plugin `/agent-connect` issuer forms. On an OAuth callback, rediscover using the
-saved transaction's verified `issuer`, not its origin-only `providerOrigin`.
+`normalizeOpenClawProviderUrl` accepts a bare HTTPS origin or the stock-plugin
+`/agent-connect` issuer and always returns the stock-plugin form. On an OAuth
+callback, rediscover using the saved transaction's verified `issuer`.
 
 Conversation history is a bounded execution projection, not a faithful human
 chat transcript. The client derives the scoped history URLs from the validated
@@ -85,21 +83,21 @@ Communication with the gateway uses the standard Open Responses protocol profile
 Harness orchestrators like Omnigent remain internal backends behind the user's
 Agent Connect gateway and are never exposed directly to the browser.
 
-## Legacy runtime-card compatibility
+## Authorization and sessions
 
-The runtime-card functions below remain exported for the preserved Firebase
-Canvas demo and older consumers. They target the older standalone gateway
-layout, not the published stock OpenClaw plugin. New applications should use
-`discoverOpenClawProvider`, `beginOpenClawAuthorization`, and the namespaced
-provider URL described above.
+Applications discover the stock plugin, authorize their fixed page-owned tool
+snapshot, and then construct an `AgentSession` over the namespaced Responses
+resource. The access-token getter refreshes through the same OAuth connection;
+the application owns storage and compare-and-swap of the updated connection.
 
 ```ts
 import {
-  beginAgentAuthorization,
-  completeAgentAuthorization,
-  connectAgent,
+  AgentSession,
+  ResponsesProvider,
+  beginOpenClawAuthorization,
+  createOpenClawAccessTokenGetter,
   defineTool,
-  parseRuntimeCard,
+  discoverOpenClawProvider,
 } from "@open-agent-connect/web";
 
 const tools = [
@@ -116,31 +114,45 @@ const tools = [
   }),
 ];
 
-const runtimeCard = parseRuntimeCard(cardEnteredByTheUser);
-const authorization = await beginAgentAuthorization({
-  runtimeCard,
-  appId: "my-spreadsheet",
+const provider = await discoverOpenClawProvider({
+  providerUrl: "https://gateway.example/agent-connect",
+  experience: "https",
+});
+const authorization = await beginOpenClawAuthorization({
+  provider,
   redirectUri: `${location.origin}${location.pathname}`,
   tools,
 });
 
-// Save authorization.transaction, navigate to authorization.authorizeUrl,
-// then exchange the returned code with completeAgentAuthorization().
-
-const connection = await connectAgent({
-  baseUrl: runtimeCard.endpoint,
-  appId: "my-spreadsheet",
+// Save authorization.transaction, navigate to authorization.authorizationUrl,
+// and complete the callback as shown in the integration guide. With the saved
+// `connection`, create an authenticated fetch and session:
+const getAccessToken = createOpenClawAccessTokenGetter({
+  getConnection: () => connection,
+  saveConnection: (updated, expected) => saveIfCurrent(updated, expected),
+});
+const authenticatedFetch = async (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => {
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${await getAccessToken(init?.signal)}`);
+  return fetch(input, { ...init, headers, credentials: "omit" });
+};
+const session = new AgentSession({
+  provider: new ResponsesProvider({
+    baseUrl: connection.resource,
+    fetch: authenticatedFetch,
+    credentials: "omit",
+  }),
   tools,
-  accessToken: approvedGrant.accessToken,
 });
 
-for await (const event of connection.session.streamTask(
-  "Clean up the selected table",
-)) {
+for await (const event of session.streamTask("Clean up the selected table")) {
   renderAgentEvent(event);
 }
 
-for await (const event of connection.session.streamContinuation(
+for await (const event of session.streamContinuation(
   "Keep the cleanup, but leave the totals row unchanged",
 )) {
   renderAgentEvent(event);
@@ -263,32 +275,23 @@ because the interpreter's numeric tolerance can accept invalid multiples. Use
 ## Native WebMCP tools (experimental)
 
 An application that already registers tools with `document.modelContext` can
-reuse those tools through Agent Connect. The example below demonstrates the
-**legacy AgentSession/runtime-card path**, not the current plugin connection.
-For the current AI SDK integration, pass the snapshot's tools to
-`createAiSdkApplicationTools()` and use the OpenClaw authorization flow above.
+reuse those tools through Agent Connect. Pass the snapshot's tools to the
+stock-plugin authorization and `AgentSession` flow above, or to
+`createAiSdkApplicationTools()` for the current AI SDK integration.
 
 ```ts
-import {
-  createWebMcpToolSnapshot,
-  connectAgent,
-} from "@open-agent-connect/web";
+import { createWebMcpToolSnapshot } from "@open-agent-connect/web";
 
 // Register your page's tools first. No iframe tools are included.
 const snapshot = await createWebMcpToolSnapshot({
   toolNames: ["read_range"], // optional: otherwise all current-document tools
 });
-// Use snapshot.tools with beginAgentAuthorization for the normal consent flow.
-// After a redirect, rediscover from the new document. The gateway still checks
-// the definitions against the approved grant before admitting a session.
+// Use snapshot.tools with beginOpenClawAuthorization for the normal consent
+// flow. After the callback, create the AgentSession as shown above. The gateway
+// checks the definitions against the approved grant on every request.
 try {
-  const connection = await connectAgent({
-    baseUrl: runtimeCard.endpoint,
-    appId: "my-spreadsheet",
-    tools: snapshot.tools,
-    accessToken: approvedGrant.accessToken,
-  });
-  await connection.session.runTask("Read the selected cells");
+  const session = createAuthorizedSession(snapshot.tools, connection);
+  await session.runTask("Read the selected cells");
 } finally {
   snapshot.dispose();
 }
@@ -300,16 +303,16 @@ rejections become ordinary application tool failures. Tool metadata such as
 annotations/title is not added to the gateway's name/description/schema grant
 contract and must not be treated as an extra permission.
 
-`toolchange`, `pagehide`, explicit `dispose()`, or the optional caller
-`signal` permanently invalidates the snapshot and requests cancellation of
-pending local calls. Inspect `snapshot.signal.aborted` or listen for its abort
-event to show reconnect UI. Rediscover and establish a new authorized connection
-after a change; the adapter never adds tools to a live session. Disposal removes
-listeners. Keep the snapshot alive for as long as you need completed-task
-continuation, then dispose it when disconnecting. `connection.session.cancel()`
-also signals the current native tool invocation, without invalidating the whole
-snapshot. Disposing the snapshot alone does not cancel a gateway run and cannot
-roll back a side effect; cancel the session too when ending the interaction.
+`toolchange`, `pagehide`, explicit `dispose()`, or the optional caller `signal`
+permanently invalidates the snapshot and requests cancellation of pending local
+calls. Inspect `snapshot.signal.aborted` or listen for its abort event to show
+reconnect UI. A changed snapshot requires fresh consent; the adapter never adds
+tools to a live grant. Disposal removes listeners. Keep the snapshot alive for
+as long as you need completed-task continuation, then dispose it when
+disconnecting. `session.cancel()` also signals the current native tool
+invocation, without invalidating the whole snapshot. Disposing the snapshot
+alone does not cancel a gateway run and cannot roll back a side effect; cancel
+the session too when ending the interaction.
 
 Compatibility is deliberately narrow: native Chrome for Testing 153.0.8010.12
 with experimental web platform features enabled, whose discovery schemas and
@@ -340,32 +343,13 @@ and the real gateway setup.
 - A fixed tool snapshot per session
 - No generic exactly-once execution
 
-`connectAgent` with an application grant always starts a new independent
-conversation: it provisions a new opaque application session and provider
-session, and does not require reauthorization. Sessions run in parallel and are
-independent.
+The OAuth grant fixes the application identity, restricted profile, native
+capabilities and page-owned tool snapshot. Changing those inputs requires new
+consent. Access tokens rotate through the refresh authority; revocation ends
+that authority immediately.
 
-To reconnect to a conversation rather than start one, pass that session's own
-capability — the `accessToken` the previous connect returned — as
-`accessToken`. Reconnecting is therefore something the application has to
-prepare for: persist the session capability (and, for continuing a turn, its
-checkpoint) somewhere that survives the reload. An application grant cannot
-find a session for you. There is no key it could search by that is not shared
-with every other tab of the same application, so a lookup would sooner or later
-hand one tab another tab's conversation; a page reload that has kept nothing
-simply starts a new session, and the old one ends on its own.
-
-`freshSession` is deprecated and now has no effect, since presenting the
-application grant already means "create".
-
-The gateway holds at most eight live sessions per grant, application, and tool
-snapshot. Beyond that it answers `429` with `Retry-After` and a `manageUrl`
-pointing at the gateway's own session page, where the owner can end a session
-to free a slot immediately. Slots also free themselves: a session is retired
-after roughly fifteen minutes idle, after three minutes holding a function call
-the application never answered, or after thirty minutes of a turn making no
-progress. All three are configurable on the gateway.
-
-A capability that still verifies but names a retired session is answered with
-`401 {"error": "session_expired"}`, distinct from `invalid_session_capability`.
-The correct response is to start a new session rather than refresh the token.
+Conversation ownership remains application-scoped and process-local. Keep the
+provider checkpoint returned by a completed task for an explicit follow-up, or
+use the scoped conversation client for recent execution-history projections.
+Those projections are not faithful human-chat transcripts and may become
+unavailable after restart or policy change.

@@ -6,7 +6,6 @@ import {
   FIXED_TOOLS_AUTHORIZATION_DETAIL,
   OPENCLAW_MODEL_ALIAS,
   RESPONSES_SCOPE,
-  STANDALONE_ENDPOINT_LAYOUT,
   type AgentConnectEndpointLayout,
   type AuthenticatedOwnerPrincipal,
   type OpenClawOAuthOptions,
@@ -57,7 +56,7 @@ export class OpenClawOAuthHandler {
   private readonly csrf = new Map<string, CsrfRecord>();
 
   constructor(options: OpenClawOAuthOptions) {
-    this.endpoints = options.endpoints ?? STANDALONE_ENDPOINT_LAYOUT;
+    this.endpoints = options.endpoints;
     this.issuer = canonicalIssuer(options.issuer, this.endpoints.issuerPath);
     this.resource = canonicalResource(
       options.resource,

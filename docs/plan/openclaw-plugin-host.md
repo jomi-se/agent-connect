@@ -45,16 +45,12 @@ to root, do not edit Bookhand or instruct a live cutover independently.
   bounded mediation and process-local conversation ownership.
 - `packages/openclaw-plugin/src/runtime/{runtime-config,upstream-auth}.ts`:
   private native RPC configuration and host-owned authentication.
-- `packages/gateway/src/{delegated-grants,connector-auth}.ts` and
-  `openclaw-plugin/{oauth-handler,oauth-utils,consent-html}.ts`: reusable auth.
-- `packages/gateway/src/openclaw-plugin/index.ts` imports patch-only host
-  exports. It is historical, NOT the stock plugin starting point; neither it
-  nor its ambient host type shim may enter the new published package's
-  dependency graph.
-- `packages/web-sdk/src/openclaw-connection.ts` now validates both the legacy
-  origin layout and the stock-plugin namespaced issuer/resource. The namespace
-  change was an M2 outcome; this archived source map records the implementation
-  file, not an outstanding SDK task.
+- `packages/openclaw-plugin/src/{delegated-grants,owner-auth,tool-snapshot}.ts`
+  and `src/authorization/`: plugin-owned authorization, consent, owner-console,
+  grant, and approved-tool logic.
+- `packages/web-sdk/src/openclaw-connection.ts` validates the stock-plugin
+  namespaced issuer/resource. A bare gateway Origin is accepted as an input
+  convenience and normalized to the `/agent-connect` provider base.
 - `scripts/openclaw-test-runtime.mjs` supplies isolated real pinned OpenClaw,
   disposable state and fake inference. The packed plugin-host test owns the
   OAuth/tool/history composition scenarios.

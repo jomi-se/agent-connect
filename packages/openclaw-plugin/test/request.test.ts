@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { VerifiedDelegatedGrant } from "../../gateway/src/delegated-grants.js";
+import type { VerifiedDelegatedGrant } from "../src/delegated-grants.js";
 import {
   AgentConnectRequestError,
   buildBoundedUpstreamRequest,

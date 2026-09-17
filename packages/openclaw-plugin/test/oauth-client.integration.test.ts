@@ -15,10 +15,12 @@ import {
   DelegatedGrantService,
   type DelegatedGrantStore,
 } from "../src/delegated-grants.js";
-import { OpenClawOAuthHandler } from "../src/openclaw-plugin/oauth-handler.js";
+import { OpenClawOAuthHandler } from "../src/authorization/oauth-handler.js";
+import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "../src/authorization/contracts.js";
 
-const ISSUER = "https://provider.example";
-const RESOURCE = `${ISSUER}/v1/responses`;
+const ORIGIN = "https://provider.example";
+const ISSUER = `${ORIGIN}/agent-connect`;
+const RESOURCE = `${ORIGIN}/agent-connect/v1/responses`;
 const CLIENT_ID = "https://bookhand.example";
 const REDIRECT_URI = `${CLIENT_ID}/connect/openclaw/callback`;
 const TEST_OWNER_HEADERS = {
@@ -68,6 +70,7 @@ describe("web SDK against the provider OAuth handler", () => {
     const oauth = new OpenClawOAuthHandler({
       issuer: ISSUER,
       resource: RESOURCE,
+      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
       grantService,
       allowedOwnerProfileIds: ["fixture-owner"],
       // This is test-only host attribution. It is deliberately not evidence of
@@ -110,7 +113,7 @@ describe("web SDK against the provider OAuth handler", () => {
       expect(provider).toMatchObject({
         issuer: ISSUER,
         resource: RESOURCE,
-        tokenEndpoint: `${ISSUER}/agent-connect/oauth/token`,
+        tokenEndpoint: `${ORIGIN}/agent-connect/oauth/token`,
       });
 
       const started = await beginOpenClawAuthorization({
@@ -121,7 +124,7 @@ describe("web SDK against the provider OAuth handler", () => {
         fetch: applicationFetch,
       });
       expect(started.authorizationUrl).toBe(
-        `${ISSUER}/agent-connect/oauth/authorize?${new URLSearchParams({
+        `${ORIGIN}/agent-connect/oauth/authorize?${new URLSearchParams({
           client_id: CLIENT_ID,
           request_uri: started.transaction.requestUri,
         })}`,
@@ -140,13 +143,13 @@ describe("web SDK against the provider OAuth handler", () => {
       expect(requestUri).toBe(started.transaction.requestUri);
 
       const approved = await transportFetch(
-        `${ISSUER}/agent-connect/oauth/authorize`,
+        `${ORIGIN}/agent-connect/oauth/authorize`,
         {
           method: "POST",
           redirect: "manual",
           headers: {
             ...TEST_OWNER_HEADERS,
-            origin: ISSUER,
+            origin: ORIGIN,
             "content-type": "application/x-www-form-urlencoded",
           },
           body: new URLSearchParams({
@@ -245,7 +248,7 @@ function mappedFetch(
       throw new Error("integration transport expects an absolute URL");
     }
     const logicalUrl = new URL(input.toString());
-    if (logicalUrl.origin !== ISSUER) {
+    if (logicalUrl.origin !== ORIGIN) {
       throw new Error("integration transport refused an unexpected origin");
     }
     options.observe?.(logicalUrl, init);

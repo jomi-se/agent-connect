@@ -61,7 +61,7 @@ writeFileSync(
 );
 writeFileSync(
   join(consumerDir, "check.mjs"),
-  `import { defineTool, parseRuntimeCard, createWebMcpToolSnapshot, AgentSession, createAgentChat, exportAgentChatMarkdown, createOpenClawConversationClient, getOpenClawConnectionProviderUrl, normalizeOpenClawProviderUrl, parseOpenClawConnection, serializeOpenClawConnection } from "@open-agent-connect/web";
+  `import { defineTool, createWebMcpToolSnapshot, AgentSession, createAgentChat, exportAgentChatMarkdown, createOpenClawConversationClient, getOpenClawConnectionProviderUrl, normalizeOpenClawProviderUrl, parseOpenClawConnection, serializeOpenClawConnection } from "@open-agent-connect/web";
 
 if (typeof createWebMcpToolSnapshot !== "function") throw new Error("Missing WebMCP export");
 if (normalizeOpenClawProviderUrl("https://gateway.example/agent-connect") !== "https://gateway.example/agent-connect") throw new Error("Missing plugin provider layout");
@@ -78,20 +78,7 @@ const tool = defineTool({
   inputSchema: { type: "object", additionalProperties: false },
   execute: () => "external-consumer-ok",
 });
-const card = parseRuntimeCard(JSON.stringify({
-  version: 1,
-  runtimeId: "sha256:external-consumer",
-  endpoint: "https://runtime.example",
-  connectorPublicKey: {
-    kty: "OKP",
-    crv: "Ed25519",
-    x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-  },
-  transportProfile: "tailscale-serve",
-  authorizationServer: "https://runtime.example"
-}));
-if (tool.name !== "external_consumer_tool" ||
-    card.runtimeId !== "sha256:external-consumer") process.exit(1);
+if (tool.name !== "external_consumer_tool") process.exit(1);
 const requests = [];
 const outputs = [];
 const chat = createAgentChat({ session: new AgentSession({

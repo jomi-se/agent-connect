@@ -53,10 +53,10 @@ of this slice.
 - Update deployment and reference documentation so the published Canvas and its
   source describe the same supported flow.
 
-After the migrated Canvas and its tests no longer import legacy runtime-card or
-standalone-gateway surfaces, inventory those consumers before removing the old
-implementation. Migration is the prerequisite for cleanup, not evidence that
-all shared legacy modules can be deleted at once.
+The migrated Canvas and its tests no longer import runtime-card or standalone
+gateway surfaces. The retired SDK APIs and replacement gateway were removed on
+2026-09-17; controlled live-plugin composition and the recovery matrix remain
+the unfinished acceptance work.
 
 ## Acceptance outcomes
 

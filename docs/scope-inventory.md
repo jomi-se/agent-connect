@@ -1,11 +1,11 @@
 # Scope and capability inventory
 
-Updated: 2026-09-09
+Updated: 2026-09-17
 
 This inventory describes the supported stock OpenClaw plugin selected by
-[ADR 0015](decisions/0015-openclaw-plugin-host.md). Legacy standalone gateway
-source and compatibility checks remain in the checkout for the pending Canvas
-migration, but are not the supported installation or deployment path.
+[ADR 0015](decisions/0015-openclaw-plugin-host.md). The retired standalone and
+replacement gateway implementations have been removed; historical rationale
+remains in Git and the documentation archive.
 
 ## Application and SDK
 

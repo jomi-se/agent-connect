@@ -1,15 +1,13 @@
 # Validation contracts
 
-For the OpenClaw replacement branch, the current acceptance contract is
-[VAL-OC-001 through VAL-OC-004](../docs/plan/openclaw-replacement.md).
-Its final subscription-runtime and browser gates remain open.
+The `VAL-*.md` files retain historical assertions and evidence from the retired
+Omnigent and replacement-gateway implementations. References there to removed
+scripts, provider fixtures, runtime cards, and deployment paths describe those
+dated baselines, not executable instructions or current OpenClaw-plugin
+guarantees.
 
-The older `VAL-*.md` files retain historical assertions and evidence from the
-Omnigent implementation. References there to removed scripts, provider fixtures
-and deployment paths describe that baseline, not executable instructions for
-this branch. They do not establish OpenClaw compatibility. The vendored
-`open-responses/` specification remains the active public wire reference.
-
-See the [current test mapping](../packages/gateway/test/README.md) for preserved
-behavior, replacement evidence and remaining limits. Do not mark a historical
-provider assertion passed merely because the replacement's tests are green.
+The vendored `open-responses/` specification records the protocol pin used by
+that historical validation. Current stock-plugin behavior is defined by the
+[mission](../docs/mission.md), [scope inventory](../docs/scope-inventory.md),
+and its package and installed-host tests. Do not mark a historical provider or
+durability assertion passed merely because current plugin tests are green.

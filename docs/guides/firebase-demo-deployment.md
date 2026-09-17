@@ -1,12 +1,9 @@
-# Deploy the historical Firebase Canvas
+# Deploy the Firebase Canvas
 
-Status: maintained for the published Build Week/runtime-card demo. This guide
-does not install or configure the current stock OpenClaw plugin; use the
-[stock OpenClaw setup guide](../../deploy/openclaw-gateway/README.md) for that
-path.
-
-The Canvas is a static Firebase Hosting application. Its deployment credential
-does not need to exist on the gateway host.
+The Canvas is a static Firebase Hosting application. Visitors can run its
+deterministic local demo without an account, or connect their own configured
+Agent Connect stock OpenClaw plugin over HTTPS. Firebase never hosts inference,
+the gateway, or an application grant.
 
 ## One-time Firebase and GitHub setup
 
@@ -26,23 +23,24 @@ does not need to exist on the gateway host.
 5. Run the `Deploy Firebase demo` workflow manually. It builds and deploys only
    the Canvas workspace to the live Hosting channel.
 
-## Connect a runtime
+## Connect a gateway
 
-The hosted app is independent of the runtime profile. This preserved demo
-expects a runtime card from an already configured legacy gateway. The current
-[stock OpenClaw plugin](../../deploy/openclaw-gateway/README.md) uses a
-path-bound provider URL instead and does not emit runtime cards, so do not use
-that guide to operate this Canvas. Migration of the Canvas is tracked in
-[current work](../plan/current-work.md).
+Configure the stock plugin using the
+[OpenClaw setup guide](../../deploy/openclaw-gateway/README.md), and give the
+Canvas the browser-reachable HTTPS address for its Agent Connect gateway. A bare
+Origin is accepted and normalized to the plugin's `/agent-connect` provider
+base. The gateway's allowed application Origins must include the exact Firebase
+Hosting Origin.
 
-With the legacy runtime available, paste its runtime card. The app verifies the
-gateway key, redirects to gateway-owned authorization, and stores the resulting
-app grant only in the tab's `sessionStorage`.
+The Canvas discovers OAuth metadata at that address and redirects the browser
+to the gateway-owned owner sign-in and consent flow. It stores the resulting
+delegated connection only in the tab's `sessionStorage`. **Disconnect & revoke
+access** revokes refresh authority at the gateway before clearing that browser
+copy.
 
-For a legacy Tailscale Serve profile, expose only that legacy loopback gateway
-and make its configured public endpoint match the selected HTTPS Serve port.
-The current plugin listener is not a drop-in replacement for that runtime-card
-endpoint. Do not forward native OpenClaw's listener to make this demo connect.
+Do not expose native OpenClaw's owner listener as though it were the application
+gateway. The plugin owns a separate bounded listener and the public
+`/agent-connect` routes.
 
 ## Credential boundary
 
@@ -51,7 +49,7 @@ endpoint. Do not forward native OpenClaw's listener to make this demo connect.
 - The enrollment passphrase is entered only on the gateway Origin. It must
   not appear in Firebase configuration, application storage, URLs, logs, or
   source control.
-- The runtime card is public identity and routing material, not an app grant or
-  model credential.
-- The app grant is revocable and bound to the exact Origin, redirect, app id,
-  scopes, and tool snapshot.
+- The delegated grant is revocable and bound to the exact application Origin,
+  redirect, app id, scopes, and approved tool snapshot.
+- OpenClaw credentials and provider allowance remain on the user's host. The
+  Canvas receives neither.

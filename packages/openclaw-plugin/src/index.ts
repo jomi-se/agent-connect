@@ -7,9 +7,9 @@ import { createInterface } from "node:readline/promises";
 import { resolveConfiguredSecretInputString } from "openclaw/plugin-sdk/config-runtime";
 import { resolveGatewayAuth } from "openclaw/plugin-sdk/gateway-runtime";
 
-import { ConnectorAuth } from "../../gateway/src/connector-auth.js";
-import { DelegatedGrantService } from "../../gateway/src/delegated-grants.js";
-import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "../../gateway/src/openclaw-plugin/contracts.js";
+import { DelegatedGrantService } from "./delegated-grants.js";
+import { OwnerAuth } from "./owner-auth.js";
+import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "./authorization/contracts.js";
 import {
   createAgentConnectHandler,
   type AgentConnectHandler,
@@ -103,10 +103,8 @@ export default {
               resolveGatewayAuth: gatewayAuthResolver,
             },
           );
-          const ownerAuth = new ConnectorAuth({
+          const ownerAuth = new OwnerAuth({
             statePath: statePaths.owner,
-            publicEndpoint: initial[0]!.issuer,
-            transportProfile: "explicit-owner-login",
           });
           const admission = new AgentConnectAdmissionController();
           const assertRuntimeCurrent = () => {
@@ -514,12 +512,10 @@ async function runSetup(
   let enrollmentPassphrase: string | undefined;
   const primary = primaryEntryPoint(config);
   if (!existsSync(paths.owner)) {
-    new ConnectorAuth({
+    new OwnerAuth({
       statePath: paths.owner,
-      publicEndpoint: `${primary.publicOrigin}/agent-connect`,
-      transportProfile: "explicit-owner-login",
-      onEnrollmentBundle(bundle) {
-        enrollmentPassphrase = bundle.enrollmentPassphrase;
+      onEnrollmentPassphrase(passphrase) {
+        enrollmentPassphrase = passphrase;
       },
     });
   }

@@ -22,9 +22,9 @@ this boundary without a separately operated executable; see
 credential-free stock-host composition gates are implemented. Agent Connect
 retains consent, application authority, browser integration and a bounded
 grant-to-conversation map; stock OpenClaw owns execution, native events, context,
-tools and sandboxing. Legacy standalone gateway source remains in the checkout
-for the pending Canvas migration and historical compatibility checks; it is not
-the supported installation or deployment path.
+tools and sandboxing. The retired standalone and replacement gateway
+implementations have been removed; their history remains available through Git
+and explicitly archived design records.
 
 ## Product promise
 
@@ -98,9 +98,9 @@ The plugin constrains requests, selects a dedicated restricted agent/private
 session, streams observed native events, binds one current response checkpoint
 to an application grant, and exposes recent grant-owned execution history and
 completed-head reopening while that process-local mapping remains live. The
-ADR 0014 standalone scoped proxy was removed. The older replacement gateway
-and its compatibility checks remain for shared modules and legacy consumers
-until separate cleanup; they are not the current deployment path.
+ADR 0014 standalone scoped proxy and the older replacement gateway have been
+removed. The current auth, grant, consent, owner-console, and tool-snapshot
+implementation is owned by the stock plugin package.
 
 Real published OpenClaw tests using deterministic inference install the packed
 plugin and exercise stock deny-all enforcement, owner login -> OAuth -> two-tool

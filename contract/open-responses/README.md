@@ -23,8 +23,9 @@ sha256sum contract/open-responses/openapi.json
 
 Then update the checksum here, in
 [the vertical-slice plan](../../docs/plan/open-responses-vertical-slice.md), and in
-`packages/gateway/test/open-responses-fixture.test.ts`, which fails if the file
-drifts from the recorded checksum.
+the archived vertical-slice evidence. The executable checksum test was removed
+with the replacement gateway; this pin is retained only to make that historical
+evidence independently inspectable.
 
 The file is listed in `.prettierignore`: it must stay byte-identical to the
 upstream document or the checksum stops meaning anything.

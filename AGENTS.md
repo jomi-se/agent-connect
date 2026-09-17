@@ -7,19 +7,18 @@ Agent Connect is an application-to-user-owned-agent bridge. Keep the application
 The sole installation target is the stock OpenClaw plugin host (ADR 0015),
 tracked in docs/plan/openclaw-plugin-host.md. Users must not operate a separate
 proxy process. The ADR 0014 standalone scoped proxy was removed; its source is
-available in git history. The older replacement gateway remains in the checkout
-for shared modules and legacy consumers pending cleanup, not as the supported
-installation. Keep provider/plugin types out of the application API.
-Older runtime-card, replacement-engine and native-patch artifacts are historical
-compatibility/experiment paths, not prerequisites for the plugin.
+available in git history. The older replacement gateway, runtime-card API, and
+native-patch experiment have also been removed. Current authorization, grant,
+and tool-snapshot modules live in the plugin package. Keep provider/plugin types
+out of the application API.
 
 ## Terminology
 
 Use **gateway** for the Agent Connect component that applications reach and
 users operate. Public documentation, UI copy, deployment paths, and new APIs
-must not call it a connector. Older internal compatibility names may remain
-until a dedicated migration, including `ConnectorAuth`, `connectorPublicKey`,
-`connector.json`, and `AGENT_CONNECT_REAL_CONNECTOR_ENV`.
+must not call it a connector. Historical documents may retain old names when
+they are clearly archival; current code and documentation must not introduce
+new connector terminology.
 
 ## Current scope
 
@@ -48,8 +47,6 @@ npm run analyze
 ```
 
 `npm run verify` includes deterministic real-stock-OpenClaw compatibility tests.
-The historical replacement-engine process-crash suite is a separate command;
-it is not evidence of restart recovery for the process-local plugin state.
 Use Node 24 LTS >=24.15 and <25 and the pin in `config/openclaw-test-compat.json`
 on `PATH` or at `OPENCLAW_TEST_BIN`. See `deploy/openclaw-gateway/README.md`.
 This is intentional: provider
@@ -68,7 +65,7 @@ information beyond the exit code—builds, typechecks, tests, lint, and similar
 checks—use `scripts/quiet-run.sh` by default:
 
 ```sh
-./scripts/quiet-run.sh "gateway tests" npm test --workspace @agent-connect/gateway
+./scripts/quiet-run.sh "plugin tests" npm test --workspace @open-agent-connect/openclaw-plugin
 ./scripts/quiet-run.sh "build" npm run build
 ```
 

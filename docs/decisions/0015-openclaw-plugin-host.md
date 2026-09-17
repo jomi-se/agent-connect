@@ -18,8 +18,8 @@ not its app-delegation boundary. Reuse its grant/PKCE/refresh/revocation, approv
 snapshot, restricted request construction, response inspection, and bounded
 conversation ownership code. The forwarding remains an internal plugin
 implementation detail. Legacy standalone executable/source and compatibility
-tests remain in the checkout for the pending Canvas migration and cleanup; they
-are not the supported installation or deployment path.
+tests were removed after the Canvas migration on 2026-09-17. Their rationale and
+dated evidence remain in Git and explicitly historical records.
 
 Use a plugin-owned listener and namespace rather than intercepting native
 `/v1/responses`. The default application port is `127.0.0.1:18790`, must differ

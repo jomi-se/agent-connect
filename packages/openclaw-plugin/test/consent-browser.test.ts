@@ -1,11 +1,8 @@
 import { createServer } from "node:http";
 import { chromium } from "@playwright/test";
 import { expect, it } from "vitest";
-import {
-  sendHtml,
-  redirectAuthorization,
-} from "../src/openclaw-plugin/http.js";
-import { requireSameOrigin } from "../src/openclaw-plugin/oauth-utils.js";
+import { sendHtml, redirectAuthorization } from "../src/authorization/http.js";
+import { requireSameOrigin } from "../src/authorization/oauth-utils.js";
 
 it("real browser consent preserves Origin and returns to the application", async () => {
   let origin = "";

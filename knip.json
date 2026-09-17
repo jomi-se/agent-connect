@@ -14,8 +14,8 @@
         "@fontsource/ibm-plex-mono"
       ]
     },
-    "packages/gateway": {
-      "entry": ["src/index.ts", "src/main.ts", "test/**/*.test.ts"],
+    "packages/openclaw-plugin": {
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/web-sdk": {

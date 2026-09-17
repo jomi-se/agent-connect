@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
-import type { OfferedDelegatedPolicy } from "../../gateway/src/delegated-grants.js";
+import type { OfferedDelegatedPolicy } from "./delegated-grants.js";
 import type { OpenClawUpstreamAuth } from "./runtime/upstream-auth.js";
 
 export const PLUGIN_ID = "agent-connect";

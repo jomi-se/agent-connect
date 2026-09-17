@@ -15,17 +15,19 @@ agent, and a fixed approved application-tool snapshot. Conversation ownership
 and continuation state are bounded and process-local, so restart ends them and
 uncertain application effects are never replayed automatically.
 
-## Historical Canvas example
+## Canvas example
 
-Open [agent-connect-demo.web.app](https://agent-connect-demo.web.app/) and
-connect it to a gateway you operate using that gateway's public runtime card.
+The reference Canvas under [`apps/firebase-canvas`](apps/firebase-canvas/) can
+run as a deterministic browser-only demo or connect to a stock-plugin gateway
+you operate using its browser-reachable HTTPS address. Its static deployment is
+documented separately; this repository does not assume that any older hosted
+build has already been replaced.
 
 The demo includes three example apps: a project-board app with bulk editing,
 in-place document review in a document editor, and product research in a
-shopping app. It uses the preserved runtime-card gateway flow. It is useful
-historical product evidence, but it is not the current stock-plugin setup or
-OAuth path. The published demo is unchanged; connect it only to a gateway you
-operate.
+shopping app. The live path discovers the gateway's namespaced OAuth metadata,
+keeps consent and owner sign-in on the gateway Origin, and uses the current Web
+SDK. Connect it only to a gateway you operate.
 
 The anonymous judge profile is retired; connect to a gateway you own.
 
@@ -38,7 +40,7 @@ OpenClaw's supported package flow and explicitly accept its declared host
 capabilities:
 
 ```sh
-openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.3 --pin --accept-capabilities
+openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.5 --pin --accept-capabilities
 openclaw agent-connect setup
 # Restart the gateway, then:
 openclaw agent-connect doctor
@@ -66,9 +68,9 @@ loopback port, never the native OpenClaw port. Native UI, RPC, terminal and
 `/v1/responses` routes do not exist on the plugin listener. The OpenClaw
 operator credential remains server-side and is never an application credential. The
 [gateway guide](deploy/openclaw-gateway/README.md) covers setup, doctor states,
-coexistence, ingress, and recovery limitations. Legacy standalone gateway
-source remains in this checkout for the pending Canvas migration and historical
-compatibility checks; it is not the supported installation or deployment path.
+coexistence, ingress, and recovery limitations. Retired standalone and
+replacement gateway implementations are available only through Git history and
+clearly marked archival documents.
 
 The pinned real OpenClaw host passes deterministic package-install, application
 tool, continuation, native-tool denial, lifecycle, and sandbox-failure tests.
@@ -86,11 +88,11 @@ snapshot.
 npm as [`@open-agent-connect/web`](https://www.npmjs.com/package/@open-agent-connect/web).
 The published SDK remains versioned `0.0.x` while the wire format settles. The
 [web application integration guide](docs/guides/web-app-integration.md) shows
-how to install it in another application, authorize a runtime, send a prompt,
+how to install it in another application, authorize a gateway, send a prompt,
 and handle live tool calls.
 
 ```sh
-npm install @open-agent-connect/web@0.0.5
+npm install @open-agent-connect/web@0.0.6
 ```
 
 The application-facing shape is meant to be agent- and harness-neutral:
@@ -181,7 +183,7 @@ it does not independently attest the host or OpenClaw process. A saved enrollmen
 passphrase establishes the owner browser session; tailnet membership or
 caller-provided identity headers do not. Gateway-owned consent and PKCE create a
 revocable capability bound to the exact application and tool snapshot. The
-runtime-card signature remains part of the preserved older gateway/Canvas flow.
+browser never receives OpenClaw operator credentials.
 
 Treat every authorized app as a potentially adversarial principal. The real
 profile is not a hardened sandbox for arbitrary hostile apps. The selected
@@ -224,9 +226,6 @@ Additional real-boundary checks:
 # Run the isolated real-OpenClaw compatibility suite directly.
 npm run test:integration:openclaw
 
-# Run preserved historical standalone-engine process-death evidence.
-npm run test:integration:response-crash
-
 # Pack the SDK, install it into a clean external npm project, and import it.
 npm run test:package:web
 
@@ -247,13 +246,14 @@ compatibility tests, and selected subscription-runtime composition smoke tests.
 ## Project status
 
 This is an early `0.x` system, not a claim of a hardened general-purpose agent
-sandbox. The stock plugin host is the sole installation target. SDK `0.0.5` and
-plugin `0.0.3` are published from the reviewed main-branch workflow with npm
+sandbox. The stock plugin host is the sole installation target. SDK `0.0.6` and
+plugin `0.0.5` ship through the reviewed main-branch workflow with npm
 provenance. The reference deployment pins that exact plugin version and registry
 integrity fail closed.
 The owner has reported the complete Bookhand vertical slice working, but that
-report does not certify every runtime edge case. The prior Canvas runtime-card demo is
-historical product evidence, not a setup prerequisite. Use at your own risk ^^.
+report does not certify every runtime edge case. The Canvas offers a simulated
+path and a current stock-plugin connection path; neither is a setup prerequisite.
+Use at your own risk ^^.
 
 See [the documentation index](docs/README.md), [mission](docs/mission.md), and
 [accepted decisions](docs/decisions/).

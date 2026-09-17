@@ -6,7 +6,7 @@ import {
 } from "node:http";
 import type { Socket } from "node:net";
 
-import type { AgentConnectEndpointLayout } from "../../gateway/src/openclaw-plugin/contracts.js";
+import type { AgentConnectEndpointLayout } from "./authorization/contracts.js";
 import type { AgentConnectAdmissionController } from "./runtime/admission.js";
 
 const LISTEN_HOST = "127.0.0.1";

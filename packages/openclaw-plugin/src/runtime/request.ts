@@ -1,7 +1,7 @@
 import type {
   ApprovedApplicationTool,
   VerifiedDelegatedGrant,
-} from "../../../gateway/src/delegated-grants.js";
+} from "../delegated-grants.js";
 
 // Full source-reading tools return documents, not just short chat messages.
 // The total wire cap includes JSON escaping, instructions and the tool catalog.

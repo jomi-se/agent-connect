@@ -1,7 +1,7 @@
 import { connect } from "node:net";
 import { describe, expect, it, vi } from "vitest";
 
-import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "../../gateway/src/openclaw-plugin/contracts.js";
+import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "../src/authorization/contracts.js";
 import { startAgentConnectListener } from "../src/listener.js";
 import { AgentConnectAdmissionController } from "../src/runtime/admission.js";
 

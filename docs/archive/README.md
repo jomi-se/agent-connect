@@ -16,8 +16,9 @@ recovery path for removed executable implementations.
 - [OpenClaw plugin host](../plan/openclaw-plugin-host.md): completed packaging,
   setup, coexistence, and stock-host validation plan.
 - [Open Responses vertical slice](../plan/open-responses-vertical-slice.md):
-  completed pre-plugin implementation plan; contract files remain under
-  [`contract/`](../../contract/).
+  completed pre-plugin implementation plan; its historical validation records
+  and protocol pin remain under [`contract/`](../../contract/), but are not
+  current plugin guarantees.
 - [Headless chat](../plan/headless-chat.md) and [WebMCP tool source](../plan/webmcp-tool-source.md):
   completed SDK building blocks and dated validation ledgers.
 - [OpenClaw connection client](../plan/openclaw-connection-client.md), [CSP-safe

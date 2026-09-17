@@ -5,12 +5,12 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ConnectorAuth } from "../../gateway/src/connector-auth.js";
+import { OwnerAuth } from "../src/owner-auth.js";
 import {
   DelegatedGrantService,
   type DelegatedGrantStore,
-} from "../../gateway/src/delegated-grants.js";
-import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "../../gateway/src/openclaw-plugin/contracts.js";
+} from "../src/delegated-grants.js";
+import { STOCK_PLUGIN_ENDPOINT_LAYOUT } from "../src/authorization/contracts.js";
 import { createAgentConnectHandler } from "../src/runtime/handler.js";
 
 const ISSUER = "https://openclaw.example/agent-connect";
@@ -42,9 +42,8 @@ describe("owner authorization surface", () => {
     const directory = mkdtempSync(join(tmpdir(), "agent-connect-owner-ttl-"));
     cleanups.push(() => rmSync(directory, { recursive: true, force: true }));
     let now = Date.UTC(2026, 8, 16);
-    const ownerAuth = new ConnectorAuth({
+    const ownerAuth = new OwnerAuth({
       statePath: join(directory, "owner.json"),
-      publicEndpoint: ISSUER,
       enrollmentPassphrase: PASSPHRASE,
       now: () => now,
     });
@@ -56,13 +55,61 @@ describe("owner authorization surface", () => {
     expect(ownerAuth.isOwnerSession(token, "local-owner")).toBe(false);
   });
 
-  it("migrates owner sessions without retaining historical device enrollments", async () => {
+  it("revokes only the matching owner session and persists the result", async () => {
+    const directory = mkdtempSync(
+      join(tmpdir(), "agent-connect-owner-revoke-"),
+    );
+    cleanups.push(() => rmSync(directory, { recursive: true, force: true }));
+    const statePath = join(directory, "owner.json");
+    const ownerAuth = new OwnerAuth({
+      statePath,
+      enrollmentPassphrase: PASSPHRASE,
+    });
+    const token = await ownerAuth.enrollOwnerSession(PASSPHRASE, "local-owner");
+
+    expect(
+      ownerAuth.revokeOwnerSession("not-an-owner-session", "local-owner"),
+    ).toBe(false);
+    expect(ownerAuth.revokeOwnerSession(token, "different-owner")).toBe(false);
+    expect(ownerAuth.revokeOwnerSession(token, "local-owner")).toBe(true);
+    expect(ownerAuth.revokeOwnerSession(token, "local-owner")).toBe(false);
+
+    const reloaded = new OwnerAuth({ statePath });
+    expect(reloaded.isOwnerSession(token, "local-owner")).toBe(false);
+  });
+
+  it("bounds concurrent enrollment-passphrase verification", async () => {
+    const directory = mkdtempSync(
+      join(tmpdir(), "agent-connect-owner-concurrency-"),
+    );
+    cleanups.push(() => rmSync(directory, { recursive: true, force: true }));
+    const ownerAuth = new OwnerAuth({
+      statePath: join(directory, "owner.json"),
+      enrollmentPassphrase: PASSPHRASE,
+    });
+
+    const attempts = await Promise.allSettled([
+      ownerAuth.enrollOwnerSession(PASSPHRASE, "owner-one"),
+      ownerAuth.enrollOwnerSession(PASSPHRASE, "owner-two"),
+      ownerAuth.enrollOwnerSession(PASSPHRASE, "owner-three"),
+    ]);
+
+    expect(
+      attempts.filter(({ status }) => status === "fulfilled"),
+    ).toHaveLength(2);
+    expect(attempts.filter(({ status }) => status === "rejected")).toEqual([
+      expect.objectContaining({
+        reason: expect.objectContaining({ code: "enrollment_busy" }),
+      }),
+    ]);
+  });
+
+  it("migrates the current combined state into owner-only state", async () => {
     const directory = mkdtempSync(join(tmpdir(), "agent-connect-owner-state-"));
     cleanups.push(() => rmSync(directory, { recursive: true, force: true }));
     const statePath = join(directory, "owner.json");
-    const original = new ConnectorAuth({
+    const original = new OwnerAuth({
       statePath,
-      publicEndpoint: ISSUER,
       enrollmentPassphrase: PASSPHRASE,
     });
     const ownerToken = await original.enrollOwnerSession(
@@ -70,7 +117,8 @@ describe("owner authorization surface", () => {
       "local-owner",
     );
     const current = JSON.parse(readFileSync(statePath, "utf8")) as {
-      version: number;
+      enrollmentSalt: string;
+      enrollmentVerifier: string;
       ownerSessions: Array<{
         id: string;
         tokenHash: string;
@@ -78,55 +126,44 @@ describe("owner authorization surface", () => {
         createdAt: number;
         expiresAt: number;
       }>;
-      [key: string]: unknown;
     };
-    const { ownerSessions, ...shared } = current;
     writeFileSync(
       statePath,
       JSON.stringify({
-        ...shared,
-        version: 1,
-        devices: [
-          ...ownerSessions.map((session) => ({
-            id: session.id,
-            tokenHash: session.tokenHash,
-            tailscaleUser: session.ownerSubject,
-            createdAt: session.createdAt,
-            expiresAt: session.expiresAt,
-          })),
-          {
-            id: "device_historical",
-            tokenHash: "discarded-historical-token-hash",
-            tailscaleUser: "legacy-owner@example.com",
-            createdAt: 1,
-            expiresAt: Number.MAX_SAFE_INTEGER,
-          },
-        ],
+        version: 2,
+        runtimeId: "retired-runtime-id",
+        connectorPrivateKey: { kty: "OKP" },
+        connectorPublicKey: { kty: "OKP" },
+        enrollmentSalt: current.enrollmentSalt,
+        enrollmentVerifier: current.enrollmentVerifier,
+        capabilitySigningSecret: "retired-signing-secret",
+        grants: [{ id: "retired-grant" }],
+        ownerSessions: current.ownerSessions,
       }),
     );
 
-    const migrated = new ConnectorAuth({
+    const migrated = new OwnerAuth({
       statePath,
-      publicEndpoint: ISSUER,
     });
     expect(migrated.isOwnerSession(ownerToken, "local-owner")).toBe(true);
     await migrated.enrollOwnerSession(PASSPHRASE, "second-owner-session");
     const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      kind: string;
       version: number;
       ownerSessions: Array<{ id: string; tokenHash: string }>;
-      devices?: unknown;
+      runtimeId?: unknown;
+      grants?: unknown;
     };
-    expect(persisted.version).toBe(2);
-    expect(persisted.devices).toBeUndefined();
+    expect(persisted).toMatchObject({
+      kind: "agent-connect-owner-auth",
+      version: 1,
+    });
+    expect(persisted.runtimeId).toBeUndefined();
+    expect(persisted.grants).toBeUndefined();
     expect(persisted.ownerSessions).toHaveLength(2);
     expect(
       persisted.ownerSessions.every(({ id }) => id.startsWith("owner_")),
     ).toBe(true);
-    expect(
-      persisted.ownerSessions.some(
-        ({ tokenHash }) => tokenHash === "discarded-historical-token-hash",
-      ),
-    ).toBe(false);
   });
 
   it("keeps enrollment, consent and console in one authenticated surface", async () => {
@@ -383,10 +420,8 @@ describe("owner authorization surface", () => {
     grants: DelegatedGrantService;
   }> {
     const directory = mkdtempSync(join(tmpdir(), "agent-connect-owner-ui-"));
-    const ownerAuth = new ConnectorAuth({
+    const ownerAuth = new OwnerAuth({
       statePath: join(directory, "owner.json"),
-      publicEndpoint: ISSUER,
-      transportProfile: "explicit-owner-login",
       enrollmentPassphrase: PASSPHRASE,
     });
     const grants = new DelegatedGrantService({

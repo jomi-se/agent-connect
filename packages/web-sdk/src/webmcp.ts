@@ -42,8 +42,9 @@ interface ChromiumModelContext extends EventTarget {
 }
 
 /**
- * Discover tools before consent, then pass `.tools` to beginAgentAuthorization
- * and connectAgent. Validated with Chrome 153's native JSON-string binding.
+ * Discover tools before consent, then pass `.tools` to
+ * beginOpenClawAuthorization and the resulting AgentSession. Validated with
+ * Chrome 153's native JSON-string binding.
  * The current CG draft uses objects instead; do not auto-retry an invocation
  * in a second format, because the first call may already have side effects.
  * Any observed registry change invalidates this snapshot rather than expanding

@@ -7,12 +7,15 @@ import {
   DelegatedGrantService,
   type DelegatedGrantStore,
 } from "../src/delegated-grants.js";
-import { createOpenResponsesApplicationAuthProvider } from "../src/openclaw-plugin/application-auth.js";
-import { FIXED_TOOLS_AUTHORIZATION_DETAIL } from "../src/openclaw-plugin/contracts.js";
-import { OpenClawOAuthHandler } from "../src/openclaw-plugin/oauth-handler.js";
+import {
+  FIXED_TOOLS_AUTHORIZATION_DETAIL,
+  STOCK_PLUGIN_ENDPOINT_LAYOUT,
+} from "../src/authorization/contracts.js";
+import { OpenClawOAuthHandler } from "../src/authorization/oauth-handler.js";
 
-const ISSUER = "https://openclaw.example";
-const RESOURCE = `${ISSUER}/v1/responses`;
+const ORIGIN = "https://openclaw.example";
+const ISSUER = `${ORIGIN}/agent-connect`;
+const RESOURCE = `${ORIGIN}/agent-connect/v1/responses`;
 const CLIENT_ID = "https://bookhand.example";
 const REDIRECT_URI = `${CLIENT_ID}/connect/callback`;
 const VERIFIER = "correct-horse-battery-staple-correct-horse-battery";
@@ -67,6 +70,7 @@ describe("OpenClaw provider OAuth plugin", () => {
     const handler = new OpenClawOAuthHandler({
       issuer: ISSUER,
       resource: RESOURCE,
+      endpoints: STOCK_PLUGIN_ENDPOINT_LAYOUT,
       grantService: grants,
       allowedOwnerProfileIds: ["owner-profile", "second-owner"],
       ownerVerifier: ({ headers }) => {
@@ -96,14 +100,14 @@ describe("OpenClaw provider OAuth plugin", () => {
 
   it("advertises only the implemented public-client S256 PAR surface", async () => {
     const authorization = await jsonGet(
-      `${baseUrl}/.well-known/oauth-authorization-server`,
+      `${baseUrl}/.well-known/oauth-authorization-server/agent-connect`,
     );
     expect(authorization).toMatchObject({
       issuer: ISSUER,
-      authorization_endpoint: `${ISSUER}/agent-connect/oauth/authorize`,
-      token_endpoint: `${ISSUER}/agent-connect/oauth/token`,
-      revocation_endpoint: `${ISSUER}/agent-connect/oauth/revoke`,
-      pushed_authorization_request_endpoint: `${ISSUER}/agent-connect/oauth/par`,
+      authorization_endpoint: `${ORIGIN}/agent-connect/oauth/authorize`,
+      token_endpoint: `${ORIGIN}/agent-connect/oauth/token`,
+      revocation_endpoint: `${ORIGIN}/agent-connect/oauth/revoke`,
+      pushed_authorization_request_endpoint: `${ORIGIN}/agent-connect/oauth/par`,
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code", "refresh_token"],
       token_endpoint_auth_methods_supported: ["none"],
@@ -114,7 +118,7 @@ describe("OpenClaw provider OAuth plugin", () => {
       authorization_response_iss_parameter_supported: true,
     });
     const protectedResource = await jsonGet(
-      `${baseUrl}/.well-known/oauth-protected-resource`,
+      `${baseUrl}/.well-known/oauth-protected-resource/agent-connect/v1/responses`,
     );
     expect(protectedResource).toEqual({
       resource: RESOURCE,
@@ -179,7 +183,7 @@ describe("OpenClaw provider OAuth plugin", () => {
         decision: "allow",
         policy_choice: "0",
       },
-      ISSUER,
+      ORIGIN,
     );
     expect(wrongCsrf.status).toBe(403);
 
@@ -191,7 +195,7 @@ describe("OpenClaw provider OAuth plugin", () => {
         decision: "allow",
         policy_choice: "0",
       },
-      ISSUER,
+      ORIGIN,
     );
     expect(replay.status).toBe(403);
     expect(grants.getRequest(requestUri)).toBeDefined();
@@ -212,7 +216,7 @@ describe("OpenClaw provider OAuth plugin", () => {
         decision: "allow",
         policy_choice: "0",
       },
-      ISSUER,
+      ORIGIN,
       "second-owner",
     );
     expect(ownerSwap.status).toBe(403);
@@ -244,71 +248,24 @@ describe("OpenClaw provider OAuth plugin", () => {
     };
     expect(token.scope).toBe("responses");
 
-    const provider = createOpenResponsesApplicationAuthProvider({
-      resource: RESOURCE,
-      grantService: grants,
-    });
     expect(
-      provider.authenticate({
-        headers: {
-          authorization: `Bearer ${token.access_token}`,
-          origin: "https://other.example",
-        },
+      grants.verify(token.access_token, {
+        resource: RESOURCE,
+        origin: "https://other.example",
       }),
-    ).toMatchObject({ status: "deny" });
+    ).toBeUndefined();
     expect(
-      provider.authenticate({
-        headers: {
-          authorization: `Bearer ${token.access_token} malformed`,
-        },
-      }),
-    ).toMatchObject({ status: "deny" });
-    const authenticated = provider.authenticate({
-      headers: {
-        authorization: `Bearer ${token.access_token}`,
+      grants.verify(`${token.access_token} malformed`, { resource: RESOURCE }),
+    ).toBeUndefined();
+    expect(
+      grants.verify(token.access_token, {
+        resource: RESOURCE,
         origin: CLIENT_ID,
-      },
+      }),
+    ).toMatchObject({
+      clientId: CLIENT_ID,
+      applicationTools: [TOOL],
     });
-    expect(authenticated.status).toBe("authenticated");
-    if (authenticated.status !== "authenticated") throw new Error("not auth");
-    expect(
-      provider.authorize({
-        principal: authenticated.principal,
-        request: {
-          clientTools: [TOOL],
-          toolChoice: "auto",
-          hasMediaInput: false,
-        },
-      }),
-    ).toBe(true);
-    expect(
-      provider.authorize({
-        principal: authenticated.principal,
-        request: {
-          clientTools: [{ ...TOOL, name: "delete_everything" }],
-          toolChoice: "auto",
-          hasMediaInput: false,
-        },
-      }),
-    ).toBe(false);
-    const { description: _description, ...toolWithoutDescription } = TOOL;
-    for (const request of [
-      { clientTools: [TOOL], toolChoice: "auto", hasMediaInput: true },
-      {
-        clientTools: [{ ...TOOL, strict: false }],
-        toolChoice: "auto",
-        hasMediaInput: false,
-      },
-      {
-        clientTools: [toolWithoutDescription],
-        toolChoice: "auto",
-        hasMediaInput: false,
-      },
-    ]) {
-      expect(
-        provider.authorize({ principal: authenticated.principal, request }),
-      ).toBe(false);
-    }
 
     const refreshedResponse = await postForm(
       `${baseUrl}/agent-connect/oauth/token`,
@@ -327,10 +284,8 @@ describe("OpenClaw provider OAuth plugin", () => {
     };
     expect(refreshed.access_token).not.toBe(token.access_token);
     expect(
-      provider.authenticate({
-        headers: { authorization: `bearer ${token.access_token}` },
-      }),
-    ).toMatchObject({ status: "deny" });
+      grants.verify(token.access_token, { resource: RESOURCE }),
+    ).toBeUndefined();
 
     const revoke = await postForm(
       `${baseUrl}/agent-connect/oauth/revoke`,
@@ -339,10 +294,8 @@ describe("OpenClaw provider OAuth plugin", () => {
     );
     expect(revoke.status).toBe(200);
     expect(
-      provider.authenticate({
-        headers: { authorization: `Bearer ${refreshed.access_token}` },
-      }),
-    ).toMatchObject({ status: "deny" });
+      grants.verify(refreshed.access_token, { resource: RESOURCE }),
+    ).toBeUndefined();
   });
 
   it("returns a prevalidated access_denied redirect without creating a grant", async () => {
@@ -359,7 +312,7 @@ describe("OpenClaw provider OAuth plugin", () => {
         decision: "deny",
         policy_choice: "",
       },
-      ISSUER,
+      ORIGIN,
     );
     expect(denied.status).toBe(303);
     const location = new URL(denied.headers.get("location") as string);
@@ -410,7 +363,7 @@ async function approve(
       decision: "allow",
       policy_choice: "0",
     },
-    ISSUER,
+    ORIGIN,
   );
   expect(approved.status).toBe(303);
   const location = new URL(approved.headers.get("location") as string);

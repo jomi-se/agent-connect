@@ -3,23 +3,23 @@ import { once } from "node:events";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
-  ConnectorAuth,
-  ConnectorAuthError,
   DEFAULT_OWNER_SESSION_TTL_SECONDS,
-} from "../../../gateway/src/connector-auth.js";
+  OwnerAuth,
+  OwnerAuthError,
+} from "../owner-auth.js";
 import {
   DelegatedGrantError,
   type DelegatedGrantService,
   type VerifiedDelegatedGrant,
-} from "../../../gateway/src/delegated-grants.js";
+} from "../delegated-grants.js";
 import {
   errorPage,
   ownerForgottenPage,
   ownerConsolePage,
   ownerLoginPage,
-} from "../../../gateway/src/openclaw-plugin/owner-html.js";
-import { OpenClawOAuthHandler } from "../../../gateway/src/openclaw-plugin/oauth-handler.js";
-import type { AgentConnectEndpointLayout } from "../../../gateway/src/openclaw-plugin/contracts.js";
+} from "../authorization/owner-html.js";
+import { OpenClawOAuthHandler } from "../authorization/oauth-handler.js";
+import type { AgentConnectEndpointLayout } from "../authorization/contracts.js";
 import {
   ContinuationRegistry,
   ContinuationRegistryError,
@@ -44,7 +44,7 @@ export interface AgentConnectHandlerOptions {
   readonly upstreamBaseUrl: string;
   readonly upstreamAuth: OpenClawUpstreamAuth;
   readonly grantService: DelegatedGrantService;
-  readonly ownerAuth: ConnectorAuth;
+  readonly ownerAuth: OwnerAuth;
   readonly ownerSubject?: string;
   readonly policySnapshot: {
     assertUnchanged(): void;
@@ -897,7 +897,7 @@ export function createAgentConnectHandler(
       });
       response.end();
     } catch (error) {
-      if (error instanceof ConnectorAuthError) {
+      if (error instanceof OwnerAuthError) {
         return showOwnerLogin(
           response,
           challenge.returnTo,

@@ -1,13 +1,17 @@
 # 0007: Bootstrap once with a runtime card, then authorize apps through the gateway
 
-- Status: accepted; dynamic Tailscale application enrollment implemented,
-  hardening deferred
+- Status: superseded by ADR 0015; retained as historical security rationale
 - Date: 2026-07-14
 
 Implementation note (2026-08-28): the hackathon-only anonymous `public-demo`
 transport was removed after judging. The accepted runtime-card, enrollment,
 consent, PKCE, and grant design continues through the private Tailscale Serve
 profile.
+
+Retirement note (2026-09-17): the stock-plugin flow retains gateway-owned
+consent, PKCE, and scoped grants but accepts an HTTPS gateway address and OAuth
+discovery instead of a runtime card. The runtime-card SDK and replacement
+gateway implementation have been removed.
 
 ## Context
 

@@ -11,7 +11,7 @@ not implement OAuth discovery or HTTP response shapes. Routes can translate its
 typed methods and errors into the applicable OAuth responses without teaching
 the core about a web framework or OpenClaw internals.
 
-Implementation: `packages/gateway/src/delegated-grants.ts`.
+Implementation: `packages/openclaw-plugin/src/delegated-grants.ts`.
 
 ## Authority model
 
@@ -134,10 +134,9 @@ enforceable.
 - owner authentication, consent presentation or denial redirects
 - OpenClaw plugin registration and native policy enforcement
 - sandbox provisioning or claims about its isolation
-- runtime cards, enrollment passphrases, devices or application sessions
+- owner authentication, browser sessions, or application conversations
 
-Those concerns stay in their existing host-specific layers. In particular,
-this module does not reuse `ConnectorAuth`: that class couples legacy runtime
-card, enrollment, device and session concerns and has no rotating refresh-token
-family. It reuses only the safe tool normalization/hash and the established
-atomic file-write shape.
+Those concerns stay in their host-specific layers. Owner authentication is
+implemented separately by the plugin's focused `OwnerAuth`; it is not grant or
+refresh-token authority. This module reuses only the safe tool
+normalization/hash and the established atomic file-write shape.

@@ -39,13 +39,12 @@ useful provenance, but their commands and gates are not current instructions.
 
 - [ADR 0015: Stock OpenClaw plugin host](decisions/0015-openclaw-plugin-host.md)
   is the active installation decision.
-- [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md),
-  [ADR 0007: Runtime-card and gateway authorization](decisions/0007-runtime-card-and-gateway-authorization.md),
+- [ADR 0005: Trusted transport profiles](decisions/0005-trusted-transport-profiles.md)
   and [ADR 0008: Control-plane and runtime confinement boundary](decisions/0008-control-plane-and-runtime-confinement-boundary.md)
   remain rationale for security and trust boundaries where they do not conflict
   with ADR 0015.
 
-ADR 0001, 0002, 0004, 0006, and 0009–0013 are retained as superseded or
+ADR 0001, 0002, 0004, 0006, 0007, and 0009–0013 are retained as superseded or
 historical decision records; [ADR 0014](archive/decisions/0014-stock-openclaw-scoped-proxy.md)
 is archived with the standalone proxy decision it replaced. Their history is
 not erased, but they do not define today's installation or application routes.

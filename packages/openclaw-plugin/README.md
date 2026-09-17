@@ -13,7 +13,7 @@ and verification evidence.
 Installation requires explicit host-capability consent:
 
 ```sh
-openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.3 --pin --accept-capabilities
+openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.5 --pin --accept-capabilities
 ```
 
 The plugin keeps the public namespace `/agent-connect`. Run
@@ -59,7 +59,10 @@ form; edit reviewed host configuration to declare multiple entry points.
 
 Run `openclaw agent-connect doctor` after restarting the gateway. This is a
 fresh setup path; it does not migrate owner identity, grants, conversations,
-provider credentials, or refresh tokens from an older deployment.
+provider credentials, or refresh tokens from a retired standalone deployment.
+An in-place upgrade from the immediately preceding stock-plugin auth state
+preserves its enrollment verifier and active owner-browser sessions while
+discarding retired device keys and device grants.
 
 The plugin follows the active host's configured token, password, or explicit
 no-auth gateway mode through published OpenClaw resolution APIs. These native

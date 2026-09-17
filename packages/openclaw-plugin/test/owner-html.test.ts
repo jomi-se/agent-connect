@@ -4,7 +4,7 @@ import {
   consentPage,
   ownerConsolePage,
   ownerLoginPage,
-} from "../src/openclaw-plugin/owner-html.js";
+} from "../src/authorization/owner-html.js";
 
 describe("owner HTML", () => {
   it("escapes untrusted labels while keeping authority classes distinct", () => {

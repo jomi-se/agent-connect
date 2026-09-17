@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 import {
   ownerConsolePage,
   ownerLoginPage,
-} from "../src/openclaw-plugin/owner-html.js";
+} from "../src/authorization/owner-html.js";
 
 it("keeps the enrollment action visible near its content on a Pixel 7", async () => {
   const html = ownerLoginPage({

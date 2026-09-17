@@ -58,7 +58,6 @@ export type {
   OpenClawExecutionHistoryEntry,
 } from "./openclaw-conversations.js";
 export { AgentConnectError, AgentSession } from "./agent-session.js";
-export { connectAgent } from "./agent-connection.js";
 export { createAgentChat, exportAgentChatMarkdown } from "./agent-chat.js";
 export type {
   AgentChat,
@@ -75,14 +74,6 @@ export type {
   WebMcpToolSnapshot,
   WebMcpToolSnapshotOptions,
 } from "./webmcp.js";
-export { parseRuntimeCard } from "./runtime-card.js";
-export {
-  beginAgentAuthorization,
-  completeAgentAuthorization,
-  parseAuthorizationTransaction,
-  revokeAgentAuthorization,
-  serializeAuthorizationTransaction,
-} from "./authorization.js";
 export { ResponsesProvider } from "./responses-provider.js";
 export {
   McpOverAcpError,
@@ -95,10 +86,6 @@ export type {
   ApplicationToolHandler,
   ApplicationToolResult,
   AgentConnectErrorCode,
-  AgentConnection,
-  AgentAuthorizationGrant,
-  AgentAuthorizationStart,
-  AgentAuthorizationTransaction,
   AgentProvider,
   AgentProviderEvent,
   AgentProviderTaskRequest,
@@ -108,15 +95,10 @@ export type {
   AgentTaskResult,
   AgentToolDefinition,
   BrowserAcpStreamOptions,
-  ConnectAgentOptions,
-  BeginAgentAuthorizationOptions,
-  CompleteAgentAuthorizationOptions,
-  RevokeAgentAuthorizationOptions,
   JsonObject,
   JsonSchema,
   JsonValue,
   ResponsesProviderOptions,
-  RuntimeCard,
   McpContent,
   SingleMcpServerOptions,
 } from "./types.js";
