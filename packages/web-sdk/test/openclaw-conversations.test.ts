@@ -16,16 +16,9 @@ const DESCRIPTOR = {
 };
 
 describe("OpenClaw conversation history", () => {
-  it.each([
-    {
-      endpoint: `${ORIGIN}/v1/responses`,
-      listUrl: `${ORIGIN}/v1/agent-connect/conversations`,
-    },
-    {
-      endpoint: `${ORIGIN}/agent-connect/v1/responses`,
-      listUrl: `${ORIGIN}/agent-connect/v1/conversations`,
-    },
-  ])("selects the scoped path for $endpoint", async ({ endpoint, listUrl }) => {
+  it("uses the stock-plugin scoped conversation path", async () => {
+    const endpoint = `${ORIGIN}/agent-connect/v1/responses`;
+    const listUrl = `${ORIGIN}/agent-connect/v1/conversations`;
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const controller = new AbortController();
     const getAccessToken = vi.fn(async () => "current-token");
@@ -228,7 +221,9 @@ describe("OpenClaw conversation history", () => {
   });
 });
 
-function connection(endpoint = `${ORIGIN}/v1/responses`): OpenClawConnection {
+function connection(
+  endpoint = `${ORIGIN}/agent-connect/v1/responses`,
+): OpenClawConnection {
   return {
     version: 1,
     providerOrigin: ORIGIN,

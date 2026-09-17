@@ -22,14 +22,14 @@ afterEach(() => {
 });
 
 describe("OpenClaw delegated OAuth connection", () => {
-  it("discovers one same-origin delegated Responses profile", async () => {
+  it("normalizes a bare origin to the stock-plugin Responses profile", async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const provider = await discoverOpenClawProvider({
       providerUrl: `${ORIGIN}/`,
       experience: "tailscale",
       fetch: vi.fn(async (input, init) => {
         requests.push({ url: String(input), init });
-        return String(input).endsWith("oauth-authorization-server")
+        return String(input).includes("oauth-authorization-server")
           ? Response.json(authorizationMetadata())
           : Response.json(resourceMetadata());
       }),
@@ -37,8 +37,8 @@ describe("OpenClaw delegated OAuth connection", () => {
 
     expect(provider).toMatchObject({
       experience: "tailscale",
-      issuer: ORIGIN,
-      resource: `${ORIGIN}/v1/responses`,
+      issuer: `${ORIGIN}/agent-connect`,
+      resource: `${ORIGIN}/agent-connect/v1/responses`,
       tokenEndpoint: `${ORIGIN}/agent-connect/oauth/token`,
     });
     expect(requests.map(({ init }) => init?.redirect)).toEqual([
@@ -55,7 +55,7 @@ describe("OpenClaw delegated OAuth connection", () => {
         providerUrl: ORIGIN,
         experience: "https",
         fetch: async (input) =>
-          String(input).endsWith("oauth-authorization-server")
+          String(input).includes("oauth-authorization-server")
             ? Response.json({
                 ...authorizationMetadata(),
                 token_endpoint: "https://attacker.example/oauth/token",
@@ -103,7 +103,7 @@ describe("OpenClaw delegated OAuth connection", () => {
         experience: "https",
         fetch: async (input) =>
           String(input).includes("oauth-authorization-server")
-            ? Response.json(authorizationMetadata())
+            ? Response.json({ ...authorizationMetadata(), issuer: ORIGIN })
             : Response.json({
                 ...resourceMetadata(),
                 resource,
@@ -122,10 +122,10 @@ describe("OpenClaw delegated OAuth connection", () => {
       const form =
         init?.body instanceof URLSearchParams ? init.body : undefined;
       calls.push({ url, form });
-      if (url.endsWith("oauth-authorization-server")) {
+      if (url.includes("oauth-authorization-server")) {
         return Response.json(authorizationMetadata());
       }
-      if (url.endsWith("oauth-protected-resource")) {
+      if (url.includes("oauth-protected-resource")) {
         return Response.json(resourceMetadata());
       }
       if (url.endsWith("/par")) {
@@ -157,7 +157,7 @@ describe("OpenClaw delegated OAuth connection", () => {
       redirect_uri: REDIRECT_URI,
       response_type: "code",
       scope: "responses",
-      resource: `${ORIGIN}/v1/responses`,
+      resource: `${ORIGIN}/agent-connect/v1/responses`,
       code_challenge_method: "S256",
     });
     expect(par?.has("bookId")).toBe(false);
@@ -194,7 +194,7 @@ describe("OpenClaw delegated OAuth connection", () => {
       provider,
       redirectUri: REDIRECT_URI,
       transaction: started.transaction,
-      callbackUrl: `${REDIRECT_URI}?code=code-one&state=${started.transaction.state}&iss=${encodeURIComponent(ORIGIN)}`,
+      callbackUrl: `${REDIRECT_URI}?code=code-one&state=${started.transaction.state}&iss=${encodeURIComponent(`${ORIGIN}/agent-connect`)}`,
       fetch,
     });
     const exchange = calls.at(-1)?.form;
@@ -204,10 +204,10 @@ describe("OpenClaw delegated OAuth connection", () => {
       code_verifier: started.transaction.codeVerifier,
       client_id: APP_ORIGIN,
       redirect_uri: REDIRECT_URI,
-      resource: `${ORIGIN}/v1/responses`,
+      resource: `${ORIGIN}/agent-connect/v1/responses`,
     });
     expect(connection).toMatchObject({
-      endpoint: `${ORIGIN}/v1/responses`,
+      endpoint: `${ORIGIN}/agent-connect/v1/responses`,
       model: "openclaw/default",
       accessToken: "access-one",
       refreshToken: "refresh-one",
@@ -236,7 +236,7 @@ describe("OpenClaw delegated OAuth connection", () => {
         provider,
         redirectUri: REDIRECT_URI,
         transaction: started.transaction,
-        callbackUrl: `${REDIRECT_URI}?error=access_denied&state=${started.transaction.state}&iss=${encodeURIComponent(ORIGIN)}`,
+        callbackUrl: `${REDIRECT_URI}?error=access_denied&state=${started.transaction.state}&iss=${encodeURIComponent(`${ORIGIN}/agent-connect`)}`,
         fetch,
       }),
     ).rejects.toMatchObject({ code: "authorization_denied" });
@@ -287,7 +287,7 @@ describe("OpenClaw delegated OAuth connection", () => {
       grant_type: "refresh_token",
       refresh_token: "refresh-one",
       client_id: APP_ORIGIN,
-      resource: `${ORIGIN}/v1/responses`,
+      resource: `${ORIGIN}/agent-connect/v1/responses`,
     });
 
     stored = connection({ expiresAt: "2026-09-06T11:59:00.000Z" });
@@ -383,7 +383,7 @@ describe("OpenClaw delegated OAuth connection", () => {
 
 function authorizationMetadata(): Record<string, unknown> {
   return {
-    issuer: ORIGIN,
+    issuer: `${ORIGIN}/agent-connect`,
     authorization_endpoint: `${ORIGIN}/agent-connect/oauth/authorize`,
     token_endpoint: `${ORIGIN}/agent-connect/oauth/token`,
     revocation_endpoint: `${ORIGIN}/agent-connect/oauth/revoke`,
@@ -401,8 +401,8 @@ function authorizationMetadata(): Record<string, unknown> {
 
 function resourceMetadata(): Record<string, unknown> {
   return {
-    resource: `${ORIGIN}/v1/responses`,
-    authorization_servers: [ORIGIN],
+    resource: `${ORIGIN}/agent-connect/v1/responses`,
+    authorization_servers: [`${ORIGIN}/agent-connect`],
     scopes_supported: ["responses"],
     bearer_methods_supported: ["header"],
     authorization_details_types_supported: ["agent_connect"],
@@ -438,10 +438,10 @@ function tool(): ApplicationTool {
 function oauthFixture(): typeof globalThis.fetch {
   return vi.fn(async (input) => {
     const url = String(input);
-    if (url.endsWith("oauth-authorization-server")) {
+    if (url.includes("oauth-authorization-server")) {
       return Response.json(authorizationMetadata());
     }
-    if (url.endsWith("oauth-protected-resource")) {
+    if (url.includes("oauth-protected-resource")) {
       return Response.json(resourceMetadata());
     }
     if (url.endsWith("/par")) {
@@ -463,7 +463,7 @@ function connection(
   return {
     version: 1,
     providerOrigin: ORIGIN,
-    endpoint: `${ORIGIN}/v1/responses`,
+    endpoint: `${ORIGIN}/agent-connect/v1/responses`,
     clientId: APP_ORIGIN,
     accessToken: "access-one",
     refreshToken: "refresh-one",

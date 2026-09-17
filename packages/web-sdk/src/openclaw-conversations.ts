@@ -73,9 +73,7 @@ export function createOpenClawConversationClient(
   options: CreateOpenClawConversationClientOptions,
 ): OpenClawConversationClient {
   const providerUrl = getOpenClawConnectionProviderUrl(options.connection);
-  const baseUrl = providerUrl.endsWith("/agent-connect")
-    ? `${providerUrl}/v1/conversations`
-    : `${providerUrl}/v1/agent-connect/conversations`;
+  const baseUrl = `${providerUrl}/v1/conversations`;
   const fetchImplementation = options.fetch ?? globalThis.fetch;
   if (typeof fetchImplementation !== "function") {
     throw new OpenClawConnectionError(

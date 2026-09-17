@@ -6,18 +6,12 @@ const TOKEN_PATH = "/agent-connect/oauth/token";
 const REVOCATION_PATH = "/agent-connect/oauth/revoke";
 const PAR_PATH = "/agent-connect/oauth/par";
 interface ProviderEndpointLayout {
-  readonly issuerPath: "" | "/agent-connect";
+  readonly issuerPath: "/agent-connect";
   readonly authorizationServerMetadataPath: string;
   readonly protectedResourceMetadataPath: string;
-  readonly resourcePath: "/v1/responses" | "/agent-connect/v1/responses";
+  readonly resourcePath: "/agent-connect/v1/responses";
 }
 
-const STANDALONE_LAYOUT: ProviderEndpointLayout = Object.freeze({
-  issuerPath: "",
-  authorizationServerMetadataPath: "/.well-known/oauth-authorization-server",
-  protectedResourceMetadataPath: "/.well-known/oauth-protected-resource",
-  resourcePath: "/v1/responses",
-});
 const STOCK_PLUGIN_LAYOUT: ProviderEndpointLayout = Object.freeze({
   issuerPath: "/agent-connect",
   authorizationServerMetadataPath:
@@ -630,10 +624,7 @@ export function getOpenClawConnectionProviderUrl(
   connection: OpenClawConnection,
 ): string {
   const validated = validateConnection(connection);
-  const origin = validated.providerOrigin;
-  return validated.endpoint === `${origin}${STOCK_PLUGIN_LAYOUT.resourcePath}`
-    ? `${origin}${STOCK_PLUGIN_LAYOUT.issuerPath}`
-    : origin;
+  return `${validated.providerOrigin}${STOCK_PLUGIN_LAYOUT.issuerPath}`;
 }
 
 export function normalizeOpenClawProviderUrl(value: string): string {
@@ -851,9 +842,7 @@ function validateConnection(value: OpenClawConnection): OpenClawConnection {
   }
   const origin = canonicalHttpsOrigin(value.providerOrigin);
   if (
-    ![STANDALONE_LAYOUT, STOCK_PLUGIN_LAYOUT].some(
-      (layout) => value.endpoint === `${origin}${layout.resourcePath}`,
-    ) ||
+    value.endpoint !== `${origin}${STOCK_PLUGIN_LAYOUT.resourcePath}` ||
     canonicalHttpsOrigin(value.clientId) !== value.clientId ||
     value.model !== DEFAULT_MODEL ||
     !isBoundedString(value.accessToken) ||
@@ -1178,32 +1167,22 @@ function canonicalProviderUrl(value: string): {
   ) {
     throw invalidInput("OpenClaw provider must be a canonical HTTPS URL");
   }
-  const layout =
-    url.pathname === "/"
-      ? STANDALONE_LAYOUT
-      : url.pathname === STOCK_PLUGIN_LAYOUT.issuerPath
-        ? STOCK_PLUGIN_LAYOUT
-        : undefined;
-  if (!layout) {
+  if (url.pathname !== "/" && url.pathname !== STOCK_PLUGIN_LAYOUT.issuerPath) {
     throw invalidInput(
       "OpenClaw provider must be an HTTPS origin or its /agent-connect issuer",
     );
   }
-  const issuer = `${url.origin}${layout.issuerPath}`;
-  if (
-    value !== (layout.issuerPath ? issuer : url.origin) &&
-    !(layout.issuerPath === "" && value === `${url.origin}/`)
-  ) {
+  const issuer = `${url.origin}${STOCK_PLUGIN_LAYOUT.issuerPath}`;
+  if (value !== issuer && value !== url.origin && value !== `${url.origin}/`) {
     throw invalidInput("OpenClaw provider URL is not canonical");
   }
-  return { origin: url.origin, issuer, layout };
+  return { origin: url.origin, issuer, layout: STOCK_PLUGIN_LAYOUT };
 }
 
 function layoutForIssuer(
   origin: string,
   issuer: string,
 ): ProviderEndpointLayout {
-  if (issuer === origin) return STANDALONE_LAYOUT;
   if (issuer === `${origin}${STOCK_PLUGIN_LAYOUT.issuerPath}`) {
     return STOCK_PLUGIN_LAYOUT;
   }

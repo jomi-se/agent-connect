@@ -14,42 +14,35 @@ const APP_ORIGIN = "https://books.example";
 const NOW = Date.parse("2026-09-08T12:00:00.000Z");
 
 describe("saved OpenClaw connections", () => {
-  it.each([
-    {
-      endpoint: `${ORIGIN}/v1/responses`,
-      providerUrl: ORIGIN,
-    },
-    {
-      endpoint: `${ORIGIN}/agent-connect/v1/responses`,
-      providerUrl: `${ORIGIN}/agent-connect`,
-    },
-  ])(
-    "round trips the $providerUrl layout",
-    async ({ endpoint, providerUrl }) => {
-      const original = await connection({ endpoint });
-      const parsed = await parseOpenClawConnection(JSON.stringify(original), {
+  it("round trips the stock-plugin layout", async () => {
+    const original = await connection();
+    const parsed = await parseOpenClawConnection(JSON.stringify(original), {
+      clientId: APP_ORIGIN,
+      now: NOW,
+    });
+
+    expect(parsed).toEqual(original);
+    expect(parsed).not.toBe(original);
+    expect(Object.isFrozen(parsed)).toBe(true);
+    expect(Object.isFrozen(parsed.applicationTools[0]?.inputSchema)).toBe(true);
+    expect(getOpenClawConnectionProviderUrl(parsed)).toBe(
+      `${ORIGIN}/agent-connect`,
+    );
+    expect(
+      await parseOpenClawConnection(serializeOpenClawConnection(parsed), {
         clientId: APP_ORIGIN,
         now: NOW,
-      });
-
-      expect(parsed).toEqual(original);
-      expect(parsed).not.toBe(original);
-      expect(Object.isFrozen(parsed)).toBe(true);
-      expect(Object.isFrozen(parsed.applicationTools[0]?.inputSchema)).toBe(
-        true,
-      );
-      expect(getOpenClawConnectionProviderUrl(parsed)).toBe(providerUrl);
-      expect(
-        await parseOpenClawConnection(serializeOpenClawConnection(parsed), {
-          clientId: APP_ORIGIN,
-          now: NOW,
-        }),
-      ).toEqual(parsed);
-    },
-  );
+      }),
+    ).toEqual(parsed);
+  });
 
   it("normalizes only the two supported provider address layouts", () => {
-    expect(normalizeOpenClawProviderUrl(`${ORIGIN}/`)).toBe(ORIGIN);
+    expect(normalizeOpenClawProviderUrl(ORIGIN)).toBe(
+      `${ORIGIN}/agent-connect`,
+    );
+    expect(normalizeOpenClawProviderUrl(`${ORIGIN}/`)).toBe(
+      `${ORIGIN}/agent-connect`,
+    );
     expect(normalizeOpenClawProviderUrl(`${ORIGIN}/agent-connect`)).toBe(
       `${ORIGIN}/agent-connect`,
     );
@@ -153,7 +146,7 @@ async function connection(
   return {
     version: 1,
     providerOrigin: ORIGIN,
-    endpoint: `${ORIGIN}/v1/responses`,
+    endpoint: `${ORIGIN}/agent-connect/v1/responses`,
     clientId: APP_ORIGIN,
     accessToken: "access-one",
     refreshToken: "refresh-one",
