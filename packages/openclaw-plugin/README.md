@@ -70,6 +70,13 @@ no-auth gateway mode through published OpenClaw resolution APIs. These native
 host credentials are never application credentials; `/agent-connect` always
 requires its own Origin-bound delegated grant.
 
+The plugin pins only its managed restricted agent to OpenClaw's built-in agent
+runtime, which implements caller-supplied Responses tools. Runtime selections
+for every other agent on the host are preserved. Native tools remain
+denied for the managed agent; only the application tools in the active delegated
+grant are admitted. Runtime selection does not replace the selected model's
+OpenClaw authentication profile, including an agent-local OpenAI OAuth profile.
+
 Forward each public HTTPS origin only to its configured application listener
 (single-entry default `127.0.0.1:18790`), never the native OpenClaw port. These
 listeners have no native UI, terminal, RPC, `/v1/responses`, CONNECT or

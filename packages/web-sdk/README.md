@@ -8,7 +8,7 @@ implementations.
 Install the published package in the web application:
 
 ```sh
-npm install @open-agent-connect/web@0.0.8
+npm install @open-agent-connect/web@0.0.9
 ```
 
 The package provides:
@@ -154,6 +154,9 @@ The OpenClaw-specific factory derives both the namespaced provider URL and the
 required model alias from the validated connection. Do not pass
 `connection.endpoint` into the low-level `ResponsesProvider`: that class appends
 `/v1/responses` itself and requires an explicit model for non-OpenClaw gateways.
+The provider repeats the session's fixed, owner-approved tool snapshot on every
+initial, conversational-continuation, and function-output request. Applications
+should not construct those continuation payloads themselves.
 
 ## Headless conversations
 

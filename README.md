@@ -93,7 +93,7 @@ how to install it in another application, authorize a gateway, send a prompt,
 and handle live tool calls.
 
 ```sh
-npm install @open-agent-connect/web@0.0.8
+npm install @open-agent-connect/web@0.0.9
 ```
 
 The application-facing shape is meant to be agent- and harness-neutral:

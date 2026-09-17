@@ -483,7 +483,7 @@ export function restrictedAgentConfig(
       },
     },
     sandbox: { mode: "off", workspaceAccess: "none" },
-    // The Codex harness filters caller-supplied Responses tools through the
+    // The OpenClaw runtime filters caller-supplied Responses tools through the
     // positive runtime allowlist before applying native-tool denial. Admit
     // arbitrary grant-approved client names, then deny every native tool.
     tools: {
@@ -492,7 +492,16 @@ export function restrictedAgentConfig(
       deny: ["*"],
       elevated: { enabled: false },
     },
-    ...(model === undefined ? {} : { model: { primary: model } }),
+    ...(model === undefined
+      ? {}
+      : {
+          model: { primary: model },
+          // Agent Connect depends on OpenClaw's caller-supplied Responses
+          // tools. External harness runtimes may expose their own dynamic-tool
+          // systems without accepting that clientTools surface, so keep this
+          // restricted agent on the runtime that implements the contract.
+          models: { [model]: { agentRuntime: { id: "openclaw" } } },
+        }),
   };
 }
 
@@ -518,12 +527,14 @@ function previousManagedRecipes(
 ): Record<string, unknown>[] {
   const model = typeof primary === "string" ? primary : undefined;
   const current = restrictedAgentConfig(stateDir, model);
+  const { models: _models, ...version007 } = current;
   const tools = record(current.tools)!;
   const { allow: _allow, ...version006Tools } = tools;
   const { profile: _profile, ...pre006Tools } = version006Tools;
   return [
-    { ...current, tools: version006Tools },
-    { ...current, tools: pre006Tools },
+    version007,
+    { ...version007, tools: version006Tools },
+    { ...version007, tools: pre006Tools },
   ];
 }
 

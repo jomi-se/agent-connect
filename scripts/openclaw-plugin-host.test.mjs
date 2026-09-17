@@ -109,6 +109,8 @@ test(
               publicOrigin,
               "--listen-port",
               String(pluginPort),
+              "--model",
+              "fixture/fixture",
               "--apply",
             ],
             { cwd: directory, env, encoding: "utf8", timeout: 120_000 },
@@ -201,6 +203,12 @@ test(
       assert.equal(
         sourceConfig.agents.entries["agent-connect-app"].tools.allow[0],
         "*",
+      );
+      assert.equal(
+        sourceConfig.agents.entries["agent-connect-app"].models[
+          "fixture/fixture"
+        ].agentRuntime.id,
+        "openclaw",
       );
 
       await waitForStatus(runtime.pluginBaseUrl, "/agent-connect/healthz", 200);
@@ -546,6 +554,11 @@ for (const authCase of [
                   elevated: { enabled: false },
                 },
                 model: { primary: "fixture/fixture" },
+                models: {
+                  "fixture/fixture": {
+                    agentRuntime: { id: "openclaw" },
+                  },
+                },
               },
             };
             config.plugins = {
@@ -587,6 +600,8 @@ for (const authCase of [
                 publicOrigin,
                 "--listen-port",
                 String(pluginPort),
+                "--model",
+                "fixture/fixture",
                 "--apply",
               ],
               { cwd: directory, env, encoding: "utf8", timeout: 120_000 },

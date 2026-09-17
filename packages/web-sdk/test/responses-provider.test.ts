@@ -241,12 +241,21 @@ describe("ResponsesProvider", () => {
           type: "function",
           name: "get_nonce",
           description: "Return a nonce for a prefix",
+          parameters: tool.inputSchema,
         },
       ],
     });
     expect(harness.bodies[1]).toMatchObject({
       model: "test/default",
       previous_response_id: "resp_1",
+      tools: [
+        {
+          type: "function",
+          name: "get_nonce",
+          description: "Return a nonce for a prefix",
+          parameters: tool.inputSchema,
+        },
+      ],
       input: [
         {
           type: "function_call_output",
@@ -255,7 +264,6 @@ describe("ResponsesProvider", () => {
         },
       ],
     });
-    expect(harness.bodies[1]).not.toHaveProperty("tools");
   });
 
   it("completes a text-only task in one segment", async () => {
@@ -291,6 +299,14 @@ describe("ResponsesProvider", () => {
       stream: true,
       input: "make it shorter",
       previous_response_id: "resp_1",
+      tools: [
+        {
+          type: "function",
+          name: "get_nonce",
+          description: "Return a nonce for a prefix",
+          parameters: tool.inputSchema,
+        },
+      ],
     });
   });
 

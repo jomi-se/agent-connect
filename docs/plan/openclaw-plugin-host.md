@@ -228,8 +228,11 @@ owner identity or unsupported host configuration; unsupported apply returns
 before mutation or identity creation. Token, environment-backed password and
 explicit no-auth OpenClaw paths pass through the packed OpenClaw host;
 no-auth keeps application grants mandatory while warning that native endpoints
-are outside that protection. No model/runtime fingerprint change is included in
-this bounded checker follow-up.
+are outside that protection. The managed restricted agent now pins its selected
+model to OpenClaw's built-in runtime: real deployment evidence showed the Codex
+harness does not accept caller-supplied Responses tools, while the built-in
+runtime preserves the approved client-tool snapshot. The pin is limited to the
+Agent Connect agent and is covered by managed-recipe upgrade checks.
 
 Update this ledger at meaningful checkpoints and before any pause. Record failed
 approaches and exact blockers briefly so another provider can resume without

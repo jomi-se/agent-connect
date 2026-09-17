@@ -80,6 +80,14 @@ describe("Agent Connect plugin for OpenClaw configuration", () => {
     });
   });
 
+  it("pins the restricted agent to the runtime that accepts Responses client tools", () => {
+    expect(
+      restrictedAgentConfig(stateDir, "openai/gpt-5.6-sol").models,
+    ).toEqual({
+      "openai/gpt-5.6-sol": { agentRuntime: { id: "openclaw" } },
+    });
+  });
+
   it("adds only the namespaced agent, Responses flag, and plugin config", () => {
     const config = representativeConfig();
     const beforePersonal = structuredClone({
@@ -437,6 +445,7 @@ describe("Agent Connect plugin for OpenClaw configuration", () => {
   });
 
   it.each([
+    ["0.0.7", []],
     ["0.0.6", ["allow"]],
     ["pre-0.0.6", ["allow", "profile"]],
   ])(
@@ -444,6 +453,7 @@ describe("Agent Connect plugin for OpenClaw configuration", () => {
     (_version, removedToolKeys) => {
       const config = representativeConfig();
       const legacy = restrictedAgentConfig(stateDir, "openai/gpt-5.6-sol");
+      delete legacy.models;
       for (const key of removedToolKeys) {
         delete (legacy.tools as Record<string, unknown>)[key];
       }

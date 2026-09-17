@@ -2,7 +2,7 @@
 
 Agent Connect publishes two exact package tarballs together:
 
-- `@open-agent-connect/web@0.0.8`
+- `@open-agent-connect/web@0.0.9`
 - `@open-agent-connect/openclaw-plugin@0.0.7`
 
 `npm run release:prepare` builds, packs, inspects, and records SHA-256 digests in

@@ -127,20 +127,24 @@ export class ResponsesProvider implements AgentProvider {
     this.pendingOutput = undefined;
 
     try {
+      // Agent Connect grants approve an exact tool snapshot. Repeat that
+      // snapshot on every Responses segment so both ordinary conversation
+      // continuations and function-output continuations remain bound to the
+      // same owner-approved authority.
+      const tools = request.tools.map((tool) => ({
+        type: "function",
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema,
+      }));
       let body: Record<string, unknown> = {
         model: this.model,
         stream: true,
         input: request.prompt,
+        tools,
         ...(request.continuationToken
           ? { previous_response_id: request.continuationToken }
-          : {
-              tools: request.tools.map((tool) => ({
-                type: "function",
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.inputSchema,
-              })),
-            }),
+          : {}),
       };
       for (;;) {
         const segment = yield* this.streamSegment(body, controller);
@@ -173,6 +177,7 @@ export class ResponsesProvider implements AgentProvider {
           model: this.model,
           stream: true,
           previous_response_id: segment.responseId,
+          tools,
           input: [
             {
               type: "function_call_output",
