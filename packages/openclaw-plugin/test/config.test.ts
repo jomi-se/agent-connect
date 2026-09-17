@@ -74,6 +74,7 @@ describe("Agent Connect plugin for OpenClaw configuration", () => {
   it("overrides inherited profiles while denying every native tool", () => {
     expect(restrictedAgentConfig(stateDir).tools).toEqual({
       profile: "full",
+      allow: ["*"],
       deny: ["*"],
       elevated: { enabled: false },
     });
@@ -435,28 +436,36 @@ describe("Agent Connect plugin for OpenClaw configuration", () => {
     );
   });
 
-  it("upgrades the exact earlier managed recipe without claiming operator agents", () => {
-    const config = representativeConfig();
-    const legacy = restrictedAgentConfig(stateDir, "openai/gpt-5.6-sol");
-    delete (legacy.tools as Record<string, unknown>).profile;
-    const entries = (config.agents as Record<string, unknown>)
-      .entries as Record<string, unknown>;
-    entries[requested.agentId] = legacy;
-    const withModel = { ...requested, model: "openai/gpt-5.6-sol" };
+  it.each([
+    ["0.0.6", ["allow"]],
+    ["pre-0.0.6", ["allow", "profile"]],
+  ])(
+    "upgrades the exact %s managed recipe without claiming operator agents",
+    (_version, removedToolKeys) => {
+      const config = representativeConfig();
+      const legacy = restrictedAgentConfig(stateDir, "openai/gpt-5.6-sol");
+      for (const key of removedToolKeys) {
+        delete (legacy.tools as Record<string, unknown>)[key];
+      }
+      const entries = (config.agents as Record<string, unknown>)
+        .entries as Record<string, unknown>;
+      entries[requested.agentId] = legacy;
+      const withModel = { ...requested, model: "openai/gpt-5.6-sol" };
 
-    expect(inspectSetup(config, withModel, inspectionOptions)).toMatchObject({
-      supported: true,
-      changes: [
-        "enable gateway.http.endpoints.responses",
-        "update managed restricted agent agent-connect-app",
-        "set plugins.entries.agent-connect.config",
-      ],
-      errors: [],
-    });
+      expect(inspectSetup(config, withModel, inspectionOptions)).toMatchObject({
+        supported: true,
+        changes: [
+          "enable gateway.http.endpoints.responses",
+          "update managed restricted agent agent-connect-app",
+          "set plugins.entries.agent-connect.config",
+        ],
+        errors: [],
+      });
 
-    applySetupMutation(config, withModel, stateDir, resolveGatewayAuth);
-    expect(entries[requested.agentId]).toEqual(
-      restrictedAgentConfig(stateDir, withModel.model),
-    );
-  });
+      applySetupMutation(config, withModel, stateDir, resolveGatewayAuth);
+      expect(entries[requested.agentId]).toEqual(
+        restrictedAgentConfig(stateDir, withModel.model),
+      );
+    },
+  );
 });

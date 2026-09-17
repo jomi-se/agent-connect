@@ -67,13 +67,14 @@ Media denial, `strict` and description rules, fixed client-tool comparison,
 capability labels, and the accepted dedicated-agent recipe are plugin policy rather
 than exported core API.
 
-The application-tools-only agent policy must use the host's real deny-all shape,
-`tools.deny: ["*"]`; an empty `tools.allow` is permissive in OpenClaw and is not a
-closed policy. Capability-bearing policies use the host-verified exact native
-allowlist (`web_search`, or sandboxed `exec` and `process`) and reject additional
-agent/global/provider/sender policy layers that could broaden it. Application
-function definitions travel through Open Responses' separate client-tool path, so
-the native deny-all rule does not remove the fixed owner-approved application tools.
+The application-tools-only agent policy uses `tools.allow: ["*"]` to admit
+arbitrary owner-approved client-tool names through the Codex harness and
+`tools.deny: ["*"]` to remove every native OpenClaw tool. The plugin's fixed
+OAuth grant snapshot remains the client-tool allowlist. Capability-bearing
+policies use the host-verified exact native allowlist (`web_search`, or sandboxed
+`exec` and `process`) and reject additional agent/global/provider/sender policy
+layers that could broaden it. Application function definitions travel through
+Open Responses' separate client-tool path.
 
 The standalone build bundles the grant and OAuth implementation into
 `dist/openclaw-plugin/index.mjs`; only the two narrow patched OpenClaw host SDK

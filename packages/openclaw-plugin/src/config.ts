@@ -483,11 +483,12 @@ export function restrictedAgentConfig(
       },
     },
     sandbox: { mode: "off", workspaceAccess: "none" },
-    // A per-agent full profile neutralizes any inherited positive allowlist.
-    // Native tools are still denied, while caller-supplied Responses tools
-    // remain available through OpenClaw's separate client-tool path.
+    // The Codex harness filters caller-supplied Responses tools through the
+    // positive runtime allowlist before applying native-tool denial. Admit
+    // arbitrary grant-approved client names, then deny every native tool.
     tools: {
       profile: "full",
+      allow: ["*"],
       deny: ["*"],
       elevated: { enabled: false },
     },
@@ -504,23 +505,26 @@ function isManagedRestrictedAgent(value: unknown, stateDir: string): boolean {
   ) {
     return true;
   }
-  // Upgrade the exact pre-0.0.6 managed recipe. Do not treat a merely similar
+  // Upgrade the exact earlier managed recipes. Do not treat a merely similar
   // operator-owned agent as ours to rewrite.
-  if (sameJson(value, legacyRestrictedAgentConfig(stateDir))) return true;
-  return (
-    typeof primary === "string" &&
-    sameJson(value, legacyRestrictedAgentConfig(stateDir, primary))
+  return previousManagedRecipes(stateDir, primary).some((recipe) =>
+    sameJson(value, recipe),
   );
 }
 
-function legacyRestrictedAgentConfig(
+function previousManagedRecipes(
   stateDir: string,
-  model?: string,
-): Record<string, unknown> {
+  primary: unknown,
+): Record<string, unknown>[] {
+  const model = typeof primary === "string" ? primary : undefined;
   const current = restrictedAgentConfig(stateDir, model);
   const tools = record(current.tools)!;
-  const { profile: _profile, ...legacyTools } = tools;
-  return { ...current, tools: legacyTools };
+  const { allow: _allow, ...version006Tools } = tools;
+  const { profile: _profile, ...pre006Tools } = version006Tools;
+  return [
+    { ...current, tools: version006Tools },
+    { ...current, tools: pre006Tools },
+  ];
 }
 
 function relevantPolicyConfig(

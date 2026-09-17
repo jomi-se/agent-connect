@@ -132,9 +132,10 @@ snapshot through native preparation.
 
 The Agent Connect plugin separately accepts only its deliberately narrow recipe:
 
-- application-tools-only uses an exact agent `tools.deny: ["*"]`; an empty
-  `tools.allow` is not a deny-all policy in OpenClaw and is rejected without the
-  wildcard deny;
+- application-tools-only uses exact agent `tools.allow: ["*"]` plus
+  `tools.deny: ["*"]`: the positive runtime allowlist admits arbitrary
+  owner-approved client-tool names through the Codex harness, while the deny
+  rule removes every native OpenClaw tool;
 - a native capability uses the exact agent allowlist mapped by the plugin
   (`web_search` for public web search, or `exec` and `process` for sandbox code),
   while provider-, profile-, sender-, and `alsoAllow` widening is rejected;
@@ -253,9 +254,10 @@ tokens into Agent Connect:
 3. Configure a dedicated application role with `sessions.others: none`, the
    dedicated agent id, and no admin scope. Configure that agent with an explicit
    isolated workspace, `contextInjection: never`, the existing
-   subscription-backed model reference, and `tools.deny: ["*"]` for the
-   application-tools-only policy. Add only the exact host capability allowlist
-   for a separately consented web or sandbox-code policy.
+   subscription-backed model reference, and `tools.allow: ["*"]` plus
+   `tools.deny: ["*"]` for the application-tools-only policy. Add only the exact
+   host capability allowlist for a separately consented web or sandbox-code
+   policy.
 4. Configure the compiled plugin path, its durable grant-state path, exact HTTPS
    issuer/resource, the recorded `ownerProfileIds`, and the role/agent policy.
    Restart the patched host in managed Serve mode. The public client still sends

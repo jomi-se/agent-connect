@@ -137,7 +137,9 @@ no speculative compatibility matrix or upper version bound.
 
 The managed agent has its own private workspace, `contextInjection: never`, an
 empty skills list, disabled cross-conversation memory/search, no sandbox or
-elevation, and exact native-tool deny-all. These per-agent controls mean setup
+elevation, wildcard client-tool admission, and exact native-tool deny-all. The
+wildcard lets grant-approved application tool names pass through the Codex
+harness; it does not restore native tools. These per-agent controls mean setup
 does not turn off the owner's global tools or memory. Setup never overwrites a
 conflicting agent id.
 

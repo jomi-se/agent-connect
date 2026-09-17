@@ -198,6 +198,10 @@ test(
         sourceConfig.agents.entries["agent-connect-app"].tools.deny[0],
         "*",
       );
+      assert.equal(
+        sourceConfig.agents.entries["agent-connect-app"].tools.allow[0],
+        "*",
+      );
 
       await waitForStatus(runtime.pluginBaseUrl, "/agent-connect/healthz", 200);
       const liveDoctor = spawnSync(
@@ -537,6 +541,7 @@ for (const authCase of [
                 sandbox: { mode: "off", workspaceAccess: "none" },
                 tools: {
                   profile: "full",
+                  allow: ["*"],
                   deny: ["*"],
                   elevated: { enabled: false },
                 },

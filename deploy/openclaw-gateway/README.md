@@ -11,7 +11,7 @@ version bound. Install the reviewed public package through OpenClaw's managed
 plugin path and explicitly accept its declared host capabilities:
 
 ```sh
-openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.6 --pin --accept-capabilities
+openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.7 --pin --accept-capabilities
 ```
 
 Operational installs must use the published package. `npm-pack:` is reserved
