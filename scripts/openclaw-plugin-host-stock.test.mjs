@@ -602,6 +602,11 @@ for (const authCase of [
             undefined,
           );
         }
+        await waitForStatus(
+          runtime.pluginBaseUrl,
+          "/agent-connect/healthz",
+          200,
+        );
         if (authCase.warns) {
           assert.match(
             setupOutput.warnings.join(" "),
@@ -614,11 +619,6 @@ for (const authCase of [
         } else {
           assert.deepEqual(setupOutput.warnings, []);
         }
-        await waitForStatus(
-          runtime.pluginBaseUrl,
-          "/agent-connect/healthz",
-          200,
-        );
 
         const unauthenticatedApp = await fetch(
           `${runtime.pluginBaseUrl}/agent-connect/v1/responses`,
