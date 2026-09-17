@@ -97,11 +97,8 @@ export function createAiSdkOpenResponsesPrepareStep<
   Tools extends ToolSet = ToolSet,
 >(previousResponseId?: string): PrepareStepFunction<Tools> {
   if (
-    (
-      openResponses as unknown as {
-        AGENT_CONNECT_CONTINUATION_PATCH?: unknown;
-      }
-    ).AGENT_CONNECT_CONTINUATION_PATCH !== "2.0.39.1"
+    Reflect.get(openResponses, "AGENT_CONNECT_CONTINUATION_PATCH") !==
+    "2.0.39.1"
   ) {
     throw new Error(
       "Open Responses continuation requires the reviewed Agent Connect dependency patch",
