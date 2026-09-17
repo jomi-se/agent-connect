@@ -41,7 +41,7 @@ OpenClaw's supported package flow and explicitly accept its declared host
 capabilities:
 
 ```sh
-openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.5 --pin --accept-capabilities
+openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.6 --pin --accept-capabilities
 openclaw agent-connect setup
 # Restart the gateway, then:
 openclaw agent-connect doctor
@@ -249,7 +249,7 @@ compatibility tests, and selected subscription-runtime composition smoke tests.
 
 This is an early `0.x` system, not a claim of a hardened general-purpose agent
 sandbox. The Agent Connect plugin for OpenClaw is the sole installation target. SDK `0.0.8` and
-plugin `0.0.5` ship through the reviewed main-branch workflow with npm
+plugin `0.0.6` ship through the reviewed main-branch workflow with npm
 provenance. The reference deployment pins that exact plugin version and registry
 integrity fail closed.
 The owner has reported the complete Bookhand vertical slice working, but that

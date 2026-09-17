@@ -193,7 +193,7 @@ export function inspectSetup(
     changes.push(`add restricted agent ${requested.agentId}`);
   } else if (!sameJson(existingAgent, expectedAgent)) {
     if (isManagedRestrictedAgent(existingAgent, options.stateDir)) {
-      changes.push(`update restricted agent ${requested.agentId} model`);
+      changes.push(`update managed restricted agent ${requested.agentId}`);
     } else {
       errors.push(
         `agents.entries.${requested.agentId} already exists and is not the Agent Connect restricted recipe`,
@@ -483,7 +483,14 @@ export function restrictedAgentConfig(
       },
     },
     sandbox: { mode: "off", workspaceAccess: "none" },
-    tools: { deny: ["*"], elevated: { enabled: false } },
+    // A per-agent full profile neutralizes any inherited positive allowlist.
+    // Native tools are still denied, while caller-supplied Responses tools
+    // remain available through OpenClaw's separate client-tool path.
+    tools: {
+      profile: "full",
+      deny: ["*"],
+      elevated: { enabled: false },
+    },
     ...(model === undefined ? {} : { model: { primary: model } }),
   };
 }
@@ -491,10 +498,29 @@ export function restrictedAgentConfig(
 function isManagedRestrictedAgent(value: unknown, stateDir: string): boolean {
   if (sameJson(value, restrictedAgentConfig(stateDir))) return true;
   const primary = record(record(value)?.model)?.primary;
-  return (
+  if (
     typeof primary === "string" &&
     sameJson(value, restrictedAgentConfig(stateDir, primary))
+  ) {
+    return true;
+  }
+  // Upgrade the exact pre-0.0.6 managed recipe. Do not treat a merely similar
+  // operator-owned agent as ours to rewrite.
+  if (sameJson(value, legacyRestrictedAgentConfig(stateDir))) return true;
+  return (
+    typeof primary === "string" &&
+    sameJson(value, legacyRestrictedAgentConfig(stateDir, primary))
   );
+}
+
+function legacyRestrictedAgentConfig(
+  stateDir: string,
+  model?: string,
+): Record<string, unknown> {
+  const current = restrictedAgentConfig(stateDir, model);
+  const tools = record(current.tools)!;
+  const { profile: _profile, ...legacyTools } = tools;
+  return { ...current, tools: legacyTools };
 }
 
 function relevantPolicyConfig(

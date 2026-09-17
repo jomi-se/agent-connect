@@ -71,6 +71,14 @@ function representativeConfig(): Record<string, unknown> {
 }
 
 describe("Agent Connect plugin for OpenClaw configuration", () => {
+  it("overrides inherited profiles while denying every native tool", () => {
+    expect(restrictedAgentConfig(stateDir).tools).toEqual({
+      profile: "full",
+      deny: ["*"],
+      elevated: { enabled: false },
+    });
+  });
+
   it("adds only the namespaced agent, Responses flag, and plugin config", () => {
     const config = representativeConfig();
     const beforePersonal = structuredClone({
@@ -414,7 +422,7 @@ describe("Agent Connect plugin for OpenClaw configuration", () => {
     expect(inspectSetup(config, withModel, inspectionOptions)).toMatchObject({
       supported: true,
       changes: [
-        "update restricted agent agent-connect-app model",
+        "update managed restricted agent agent-connect-app",
         "set plugins.entries.agent-connect.config",
       ],
       errors: [],
@@ -422,6 +430,31 @@ describe("Agent Connect plugin for OpenClaw configuration", () => {
     applySetupMutation(config, withModel, stateDir, resolveGatewayAuth);
     const entries = (config.agents as Record<string, unknown>)
       .entries as Record<string, unknown>;
+    expect(entries[requested.agentId]).toEqual(
+      restrictedAgentConfig(stateDir, withModel.model),
+    );
+  });
+
+  it("upgrades the exact earlier managed recipe without claiming operator agents", () => {
+    const config = representativeConfig();
+    const legacy = restrictedAgentConfig(stateDir, "openai/gpt-5.6-sol");
+    delete (legacy.tools as Record<string, unknown>).profile;
+    const entries = (config.agents as Record<string, unknown>)
+      .entries as Record<string, unknown>;
+    entries[requested.agentId] = legacy;
+    const withModel = { ...requested, model: "openai/gpt-5.6-sol" };
+
+    expect(inspectSetup(config, withModel, inspectionOptions)).toMatchObject({
+      supported: true,
+      changes: [
+        "enable gateway.http.endpoints.responses",
+        "update managed restricted agent agent-connect-app",
+        "set plugins.entries.agent-connect.config",
+      ],
+      errors: [],
+    });
+
+    applySetupMutation(config, withModel, stateDir, resolveGatewayAuth);
     expect(entries[requested.agentId]).toEqual(
       restrictedAgentConfig(stateDir, withModel.model),
     );

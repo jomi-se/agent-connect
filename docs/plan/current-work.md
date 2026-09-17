@@ -20,7 +20,7 @@ application routes remain under `/agent-connect`.
 The published packages are:
 
 - `@open-agent-connect/web@0.0.8`;
-- `@open-agent-connect/openclaw-plugin@0.0.5`.
+- `@open-agent-connect/openclaw-plugin@0.0.6`.
 
 The reference deployment pins the published plugin and its integrity, records
 `listenPort: 18790`, and has passing smoke/fresh-target installation evidence.
@@ -35,10 +35,11 @@ or refresh tokens from an older deployment.
 ## Acceptance and evidence
 
 Deterministic installed-package tests cover the namespaced OAuth/Responses flow,
-approved application tools, continuation/history projection, refresh/revoke,
-native-tool denial, disable/re-enable cleanup, unsafe-policy refusal, listener
-separation, and native-owner coexistence. They use deterministic inference and
-are not subscription-allowance evidence.
+approved application tools under an inherited global tool profile,
+continuation/history projection, refresh/revoke, native-tool denial,
+disable/re-enable cleanup, unsafe-policy refusal, listener separation, and
+native-owner coexistence. They use deterministic inference and are not
+subscription-allowance evidence.
 
 On 2026-09-09 the owner reported that the complete Bookhand vertical slice works
 through the selected OpenClaw subscription runtime. This is owner-reported live

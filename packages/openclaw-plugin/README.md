@@ -14,7 +14,7 @@ and verification evidence.
 Installation requires explicit host-capability consent:
 
 ```sh
-openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.5 --pin --accept-capabilities
+openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.6 --pin --accept-capabilities
 ```
 
 The plugin keeps the public namespace `/agent-connect`. Run

@@ -49,6 +49,10 @@ test(
     let unattendedBeforeSetup;
     const runtime = await startOpenClawTestRuntime({
       configure(config, { directory }) {
+        // Local OpenClaw onboarding sets this global profile. The managed
+        // Agent Connect agent must override it or client application tools are
+        // filtered out before the model sees them.
+        config.tools = { profile: "coding", allow: ["web_search"] };
         config.agents.entries = {
           personal: {
             name: "Personal agent",
@@ -531,7 +535,11 @@ for (const authCase of [
                   },
                 },
                 sandbox: { mode: "off", workspaceAccess: "none" },
-                tools: { deny: ["*"], elevated: { enabled: false } },
+                tools: {
+                  profile: "full",
+                  deny: ["*"],
+                  elevated: { enabled: false },
+                },
                 model: { primary: "fixture/fixture" },
               },
             };

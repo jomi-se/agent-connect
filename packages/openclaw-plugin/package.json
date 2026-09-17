@@ -1,6 +1,6 @@
 {
   "name": "@open-agent-connect/openclaw-plugin",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Agent Connect plugin for OpenClaw",
   "license": "MIT",
   "repository": {
