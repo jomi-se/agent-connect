@@ -74,7 +74,11 @@ export type {
   WebMcpToolSnapshot,
   WebMcpToolSnapshotOptions,
 } from "./webmcp.js";
-export { ResponsesProvider } from "./responses-provider.js";
+export {
+  ResponsesProvider,
+  createOpenClawResponsesProvider,
+} from "./responses-provider.js";
+export type { CreateOpenClawResponsesProviderOptions } from "./responses-provider.js";
 export {
   McpOverAcpError,
   SingleMcpServer,

@@ -2,7 +2,7 @@
 
 Agent Connect publishes two exact package tarballs together:
 
-- `@open-agent-connect/web@0.0.6`
+- `@open-agent-connect/web@0.0.7`
 - `@open-agent-connect/openclaw-plugin@0.0.5`
 
 `npm run release:prepare` builds, packs, inspects, and records SHA-256 digests in
@@ -37,7 +37,7 @@ approval.
    - workflow filename: `ci.yml` (filename only)
    - environment: `npm-publish`
    - allowed action: direct `npm publish`
-3. SDK `0.0.6` and plugin `0.0.5` are the 2026-09-17 release pair. Publication
+3. SDK `0.0.7` and plugin `0.0.5` are the 2026-09-17 release pair. Publication
    belongs to successful main CI with npm provenance. The earlier first-plugin
    manual bootstrap is complete and must not be repeated. Future releases must
    use the same gate.

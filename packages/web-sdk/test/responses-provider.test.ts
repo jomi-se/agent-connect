@@ -4,9 +4,11 @@ import {
   AgentConnectError,
   AgentSession,
   ResponsesProvider,
+  createOpenClawResponsesProvider,
   defineTool,
 } from "../src/index.js";
 import type { AgentTaskEvent } from "../src/types.js";
+import type { OpenClawConnection } from "../src/openclaw-connection.js";
 
 const encoder = new TextEncoder();
 
@@ -107,6 +109,45 @@ function provider(responses: readonly (() => Response)[]): {
 }
 
 describe("ResponsesProvider", () => {
+  it("rejects a full Responses endpoint where a base URL is required", () => {
+    expect(
+      () =>
+        new ResponsesProvider({
+          baseUrl: "https://gateway.example/agent-connect/v1/responses",
+        }),
+    ).toThrow("createOpenClawResponsesProvider");
+  });
+
+  it("derives the OpenClaw provider URL and applies bearer authentication", async () => {
+    const requests: Array<{ url: string; authorization: string | null }> = [];
+    const fetchImplementation = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({
+          url: String(input),
+          authorization: new Headers(init?.headers).get("Authorization"),
+        });
+        return segment("resp_safe", completed("resp_safe"));
+      },
+    );
+    const session = new AgentSession({
+      provider: createOpenClawResponsesProvider({
+        connection: openClawConnection(),
+        getAccessToken: async () => "current-access-token",
+        fetch: fetchImplementation as unknown as typeof globalThis.fetch,
+      }),
+      tools: [tool],
+    });
+
+    await session.runTask("safe path");
+
+    expect(requests).toEqual([
+      {
+        url: "https://gateway.example/agent-connect/v1/responses",
+        authorization: "Bearer current-access-token",
+      },
+    ]);
+  });
+
   it("invalidates checkpoints on admission before text and ambiguous transport failure", async () => {
     for (const fail of [
       () => segment("resp_2"),
@@ -488,3 +529,19 @@ describe("ResponsesProvider", () => {
     );
   });
 });
+
+function openClawConnection(): OpenClawConnection {
+  return {
+    version: 1,
+    providerOrigin: "https://gateway.example",
+    endpoint: "https://gateway.example/agent-connect/v1/responses",
+    clientId: "https://app.example",
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+    expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+    model: "openclaw/default",
+    applicationTools: [],
+    applicationToolsHash: "h".repeat(43),
+  };
+}

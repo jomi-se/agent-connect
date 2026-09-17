@@ -1,4 +1,8 @@
 import { AgentConnectError } from "./agent-session.js";
+import {
+  getOpenClawConnectionProviderUrl,
+  type OpenClawConnection,
+} from "./openclaw-connection.js";
 import type {
   AgentConnectErrorCode,
   AgentProvider,
@@ -12,6 +16,53 @@ const MODEL = "agent-connect/default";
 interface PendingOutput {
   readonly callId: string;
   readonly output: string;
+}
+
+export interface CreateOpenClawResponsesProviderOptions {
+  /** Validated delegated connection returned by the OpenClaw OAuth flow. */
+  readonly connection: OpenClawConnection;
+  /** Resolve on every request so refreshed access tokens are used immediately. */
+  readonly getAccessToken: (signal?: AbortSignal) => string | Promise<string>;
+  readonly fetch?: typeof globalThis.fetch;
+}
+
+/**
+ * Create an authenticated provider from an OpenClaw connection.
+ *
+ * This is the safe application-facing path: it derives the provider base URL
+ * from the validated connection, so callers cannot accidentally pass the full
+ * `/v1/responses` endpoint to `ResponsesProvider` and duplicate the path.
+ */
+export function createOpenClawResponsesProvider(
+  options: CreateOpenClawResponsesProviderOptions,
+): ResponsesProvider {
+  const baseUrl = getOpenClawConnectionProviderUrl(options.connection);
+  const fetchImplementation =
+    options.fetch ?? globalThis.fetch.bind(globalThis);
+  const authenticatedFetch: typeof globalThis.fetch = async (input, init) => {
+    const signal = init?.signal ?? undefined;
+    signal?.throwIfAborted();
+    const accessToken = await options.getAccessToken(signal);
+    signal?.throwIfAborted();
+    if (!accessToken.trim()) {
+      throw new TypeError(
+        "OpenClaw access token getter returned an empty token",
+      );
+    }
+    const headers = new Headers(init?.headers);
+    headers.set("Authorization", `Bearer ${accessToken}`);
+    return fetchImplementation(input, {
+      ...init,
+      headers,
+      credentials: "omit",
+      redirect: "error",
+    });
+  };
+  return new ResponsesProvider({
+    baseUrl,
+    fetch: authenticatedFetch,
+    credentials: "omit",
+  });
 }
 
 /**
@@ -38,6 +89,12 @@ export class ResponsesProvider implements AgentProvider {
       throw new TypeError("Agent Connect baseUrl must not be empty");
     }
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
+    if (this.baseUrl.endsWith("/v1/responses")) {
+      throw new TypeError(
+        "Agent Connect baseUrl must be the gateway base before /v1/responses; " +
+          "OpenClaw integrations should use createOpenClawResponsesProvider",
+      );
+    }
     this.fetchImplementation =
       options.fetch ?? globalThis.fetch.bind(globalThis);
     this.headers = options.headers ?? {};

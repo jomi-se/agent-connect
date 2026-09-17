@@ -132,6 +132,12 @@ export interface AgentSessionOptions {
 }
 
 export interface ResponsesProviderOptions {
+  /**
+   * Gateway base URL before `/v1/responses`.
+   *
+   * OpenClaw integrations should use `createOpenClawResponsesProvider` instead
+   * of constructing this low-level provider directly.
+   */
   readonly baseUrl: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: Readonly<Record<string, string>>;

@@ -8,7 +8,7 @@ implementations.
 Install the published package in the web application:
 
 ```sh
-npm install @open-agent-connect/web@0.0.6
+npm install @open-agent-connect/web@0.0.7
 ```
 
 The package provides:
@@ -93,9 +93,9 @@ the application owns storage and compare-and-swap of the updated connection.
 ```ts
 import {
   AgentSession,
-  ResponsesProvider,
   beginOpenClawAuthorization,
   createOpenClawAccessTokenGetter,
+  createOpenClawResponsesProvider,
   defineTool,
   discoverOpenClawProvider,
 } from "@open-agent-connect/web";
@@ -131,19 +131,10 @@ const getAccessToken = createOpenClawAccessTokenGetter({
   getConnection: () => connection,
   saveConnection: (updated, expected) => saveIfCurrent(updated, expected),
 });
-const authenticatedFetch = async (
-  input: RequestInfo | URL,
-  init?: RequestInit,
-) => {
-  const headers = new Headers(init?.headers);
-  headers.set("Authorization", `Bearer ${await getAccessToken(init?.signal)}`);
-  return fetch(input, { ...init, headers, credentials: "omit" });
-};
 const session = new AgentSession({
-  provider: new ResponsesProvider({
-    baseUrl: connection.resource,
-    fetch: authenticatedFetch,
-    credentials: "omit",
+  provider: createOpenClawResponsesProvider({
+    connection,
+    getAccessToken,
   }),
   tools,
 });
