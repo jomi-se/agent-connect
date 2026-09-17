@@ -1,181 +1,416 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-18T08:26:41Z",
+  "generatedAt": "2026-09-17T06:25:12Z",
   "title": "Design System: Agent Connect Canvas",
   "extensions": {
     "colorMeta": {
-      "app-coral": {
+      "workbench-ink": {
         "role": "primary",
-        "displayName": "Application Coral",
-        "canonical": "oklch(0.56 0.16 32.1)",
+        "displayName": "Workbench Ink",
+        "canonical": "#09172b",
         "tonalRamp": [
-          "oklch(0.2 0.08 32.1)",
-          "oklch(0.3 0.11 32.1)",
-          "oklch(0.42 0.14 32.1)",
-          "oklch(0.56 0.16 32.1)",
-          "oklch(0.68 0.13 32.1)",
-          "oklch(0.78 0.09 32.1)",
-          "oklch(0.88 0.05 32.1)",
-          "oklch(0.96 0.02 32.1)"
+          "#050c16",
+          "#09172b",
+          "#17243a",
+          "#2d394c",
+          "#515b69",
+          "#818791",
+          "#b8bbc1",
+          "#eef0f2"
         ]
       },
-      "connector-teal": {
-        "role": "secondary",
-        "displayName": "Connector Teal",
-        "canonical": "oklch(0.43 0.09 190)",
+      "muted-ink": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "#606878",
         "tonalRamp": [
-          "oklch(0.18 0.04 190)",
-          "oklch(0.28 0.06 190)",
-          "oklch(0.38 0.08 190)",
-          "oklch(0.48 0.09 190)",
-          "oklch(0.6 0.08 190)",
-          "oklch(0.72 0.06 190)",
-          "oklch(0.84 0.04 190)",
-          "oklch(0.95 0.015 190)"
+          "#181a1e",
+          "#30343c",
+          "#484e5a",
+          "#606878",
+          "#808691",
+          "#a0a4ab",
+          "#c7c9ce",
+          "#efeff1"
+        ]
+      },
+      "structural-line": {
+        "role": "neutral",
+        "displayName": "Structural Line",
+        "canonical": "#dde1e8",
+        "tonalRamp": [
+          "#303237",
+          "#55585e",
+          "#797c82",
+          "#9da0a7",
+          "#b7bac0",
+          "#ced1d7",
+          "#dde1e8",
+          "#f4f5f7"
+        ]
+      },
+      "studio-ground": {
+        "role": "neutral",
+        "displayName": "Studio Ground",
+        "canonical": "#f7f7f8",
+        "tonalRamp": [
+          "#303031",
+          "#555556",
+          "#7b7b7c",
+          "#a1a1a2",
+          "#c0c0c1",
+          "#ddddde",
+          "#eeeeef",
+          "#f7f7f8"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#262626",
+          "#4d4d4d",
+          "#737373",
+          "#999999",
+          "#bfbfbf",
+          "#d9d9d9",
+          "#ededed",
+          "#ffffff"
+        ]
+      },
+      "application-coral": {
+        "role": "primary",
+        "displayName": "Application Coral",
+        "canonical": "#f46864",
+        "tonalRamp": [
+          "#4b201f",
+          "#783330",
+          "#aa4946",
+          "#d35a56",
+          "#f46864",
+          "#f78f8c",
+          "#fab9b7",
+          "#fde7e6"
+        ]
+      },
+      "demo-action-coral": {
+        "role": "primary",
+        "displayName": "Demo Action Coral",
+        "canonical": "#c94b48",
+        "tonalRamp": [
+          "#3e1716",
+          "#642523",
+          "#8d3532",
+          "#ad3937",
+          "#c94b48",
+          "#d97976",
+          "#e8adaa",
+          "#f8e3e2"
+        ]
+      },
+      "gateway-teal": {
+        "role": "secondary",
+        "displayName": "Gateway Teal",
+        "canonical": "#18a6b8",
+        "tonalRamp": [
+          "#073237",
+          "#0c535c",
+          "#117481",
+          "#168f9f",
+          "#18a6b8",
+          "#55bfcb",
+          "#91d7df",
+          "#d9f1f3"
+        ]
+      },
+      "gateway-action-teal": {
+        "role": "secondary",
+        "displayName": "Gateway Action Teal",
+        "canonical": "#087b88",
+        "tonalRamp": [
+          "#022529",
+          "#043e44",
+          "#06565f",
+          "#08707c",
+          "#087b88",
+          "#4aa0a9",
+          "#8bc4ca",
+          "#d5e9eb"
+        ]
+      },
+      "interface-blue": {
+        "role": "secondary",
+        "displayName": "Interface Blue",
+        "canonical": "#417af4",
+        "tonalRamp": [
+          "#14254b",
+          "#203d7a",
+          "#2d55aa",
+          "#386bd6",
+          "#417af4",
+          "#78a0f7",
+          "#aec5fa",
+          "#e4ecfe"
         ]
       },
       "agent-periwinkle": {
         "role": "secondary",
         "displayName": "Agent Periwinkle",
-        "canonical": "oklch(0.52 0.15 275)",
+        "canonical": "#7464f2",
         "tonalRamp": [
-          "oklch(0.18 0.06 275)",
-          "oklch(0.28 0.09 275)",
-          "oklch(0.4 0.13 275)",
-          "oklch(0.52 0.15 275)",
-          "oklch(0.64 0.12 275)",
-          "oklch(0.75 0.09 275)",
-          "oklch(0.86 0.05 275)",
-          "oklch(0.96 0.018 275)"
+          "#231e49",
+          "#3a3279",
+          "#5146a9",
+          "#6557d4",
+          "#7464f2",
+          "#9a8ff6",
+          "#c0bafa",
+          "#e8e5fe"
+        ]
+      },
+      "agent-action-periwinkle": {
+        "role": "secondary",
+        "displayName": "Agent Action Periwinkle",
+        "canonical": "#5948d7",
+        "tonalRamp": [
+          "#1b1642",
+          "#2c246c",
+          "#3e3297",
+          "#4d3eba",
+          "#5948d7",
+          "#8679e3",
+          "#b2aaee",
+          "#e3e0f9"
         ]
       },
       "signal-amber": {
         "role": "tertiary",
         "displayName": "Signal Amber",
-        "canonical": "oklch(0.79 0.14 83)",
+        "canonical": "#ffb617",
         "tonalRamp": [
-          "oklch(0.18 0.05 83)",
-          "oklch(0.3 0.08 83)",
-          "oklch(0.44 0.11 83)",
-          "oklch(0.58 0.14 83)",
-          "oklch(0.7 0.15 83)",
-          "oklch(0.79 0.14 83)",
-          "oklch(0.88 0.08 83)",
-          "oklch(0.96 0.025 83)"
+          "#4d3707",
+          "#805b0c",
+          "#b37f10",
+          "#dfa013",
+          "#ffb617",
+          "#ffcb55",
+          "#ffdf91",
+          "#fff3d6"
+        ]
+      },
+      "success-green": {
+        "role": "tertiary",
+        "displayName": "Success Green",
+        "canonical": "#28a66f",
+        "tonalRamp": [
+          "#0c3222",
+          "#145338",
+          "#1c744e",
+          "#239160",
+          "#28a66f",
+          "#62bd94",
+          "#9bd5b9",
+          "#dcefe7"
         ]
       }
     },
     "typographyMeta": {
-      "headline": {
-        "displayName": "Headline",
-        "purpose": "The central product claim only."
+      "title": {
+        "displayName": "Application Title",
+        "purpose": "The active third-party application's primary object."
+      },
+      "section-title": {
+        "displayName": "Section Title",
+        "purpose": "Entry paths and embedded application brands."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Product explanation and guidance."
+        "purpose": "Compact instructions and product explanation."
       },
-      "code": {
+      "label": {
+        "displayName": "Label",
+        "purpose": "Controls, tabs, table headings, and metadata."
+      },
+      "evidence": {
         "displayName": "Evidence",
-        "purpose": "Code, commands, identifiers, and event payloads."
+        "purpose": "Correlated event details and machine-originated values only."
       }
     },
     "shadows": [
       {
         "name": "workbench-lift",
-        "value": "0 6px 8px oklch(0.2 0.018 250 / 0.08)",
-        "purpose": "Maximum resting elevation for the live workbench."
+        "value": "0 16px 36px rgb(18 28 48 / 8%)",
+        "purpose": "Major application and entry surfaces."
+      },
+      {
+        "name": "quiet-panel-lift",
+        "value": "0 8px 24px rgb(18 28 48 / 4%)",
+        "purpose": "The activity trace."
+      },
+      {
+        "name": "transient-lift",
+        "value": "0 16px 42px rgb(9 23 43 / 18%)",
+        "purpose": "The desktop connected-task drawer."
       }
     ],
     "motion": [
       {
-        "name": "state-change",
-        "value": "200ms cubic-bezier(0.22, 1, 0.36, 1)",
-        "purpose": "Flow-stage and control feedback."
+        "name": "tool-flight-in",
+        "value": "300ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "A correlated tool request entering the selected application."
+      },
+      {
+        "name": "task-drawer",
+        "value": "320ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The connected desktop task drawer entering and leaving."
+      },
+      {
+        "name": "mutation-pulse",
+        "value": "600ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Briefly identifies the application object affected by a tool."
       }
     ],
     "breakpoints": [
-      { "name": "compact", "value": "780px" },
-      { "name": "wide", "value": "1080px" }
+      {
+        "name": "compact-workbench",
+        "value": "1100px"
+      },
+      {
+        "name": "mobile-sequence",
+        "value": "760px"
+      }
     ]
   },
   "components": [
     {
-      "name": "Primary Button",
-      "kind": "button",
-      "refersTo": "button-primary",
-      "description": "The single dominant action in a working region.",
-      "html": "<button class=\"ds-button-primary\">Run with connected agent</button>",
-      "css": ".ds-button-primary { min-height: 48px; border: 0; border-radius: 10px; padding: 14px 18px; background: oklch(0.2 0.018 250); color: white; font: 650 13px/1.3 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background 200ms cubic-bezier(0.22,1,0.36,1); } .ds-button-primary:hover { background: oklch(0.28 0.025 250); } .ds-button-primary:focus-visible { outline: 2px solid oklch(0.52 0.15 275); outline-offset: 3px; }"
+      "name": "Workbench Header",
+      "kind": "nav",
+      "description": "Compact product chrome with the original three-circle Agent Connect mark.",
+      "html": "<nav class=\"ds-header\" aria-label=\"Agent Connect\"><a class=\"ds-wordmark\" href=\"#\"><span class=\"ds-mark\" aria-hidden=\"true\"><i></i><i></i><i></i></span><strong>Agent Connect</strong></a><span class=\"ds-tagline\">Connect agents to the tools people already use.</span><span class=\"ds-links\"><a href=\"#\">Docs</a><a href=\"#\">Examples</a></span></nav>",
+      "css": ".ds-header { display:flex; min-height:72px; align-items:center; gap:24px; padding:0 30px; border-bottom:1px solid #dde1e8; background:#fff; color:#09172b; font-family:'Figtree Variable',Figtree,sans-serif; } .ds-wordmark { display:inline-flex; align-items:center; gap:16px; color:inherit; text-decoration:none; } .ds-wordmark strong { font-size:18px; letter-spacing:-.02em; } .ds-mark { display:inline-flex; width:66px; align-items:center; } .ds-mark i { width:23px; height:23px; border-radius:50%; box-shadow:inset 0 -2px 4px rgb(9 23 43 / 12%); } .ds-mark i:nth-child(1) { background:#f46864; } .ds-mark i:nth-child(2) { margin-left:-7px; background:#18a6b8; } .ds-mark i:nth-child(3) { margin-left:-7px; background:#7464f2; } .ds-tagline { padding-left:24px; border-left:1px solid #dde1e8; color:#4d5667; font-size:14px; } .ds-links { display:flex; gap:24px; margin-left:auto; } .ds-links a { color:#263247; font-size:13px; text-decoration:none; } .ds-links a:hover { color:#417af4; } .ds-header a:focus-visible { outline:3px solid rgb(65 122 244 / 42%); outline-offset:3px; }"
     },
     {
-      "name": "Secondary Button",
+      "name": "Simulated Demo Action",
       "kind": "button",
-      "refersTo": "button-secondary",
-      "description": "A reversible or supporting action.",
-      "html": "<button class=\"ds-button-secondary\">Disconnect</button>",
-      "css": ".ds-button-secondary { min-height: 48px; border: 1px solid oklch(0.85 0.012 250); border-radius: 10px; padding: 13px 18px; background: white; color: oklch(0.2 0.018 250); font: 650 13px/1.3 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; cursor: pointer; } .ds-button-secondary:hover { background: oklch(0.972 0.006 250); } .ds-button-secondary:focus-visible { outline: 2px solid oklch(0.52 0.15 275); outline-offset: 3px; }"
+      "refersTo": "button-demo",
+      "description": "The explicitly simulated, no-account entry path.",
+      "html": "<button class=\"ds-demo-button\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m9 7 8 5-8 5V7Z\"/></svg>Try the demo</button>",
+      "css": ".ds-demo-button { display:flex; width:100%; min-height:45px; align-items:center; justify-content:center; gap:10px; border:0; border-radius:7px; padding:0 18px; color:#fff; background:#c94b48; box-shadow:0 8px 18px rgb(244 104 100 / 20%); font:700 13px/1.45 'Figtree Variable',Figtree,sans-serif; cursor:pointer; } .ds-demo-button svg { width:17px; height:17px; fill:currentColor; } .ds-demo-button:hover { background:#ad3937; } .ds-demo-button:active { background:#9d302f; } .ds-demo-button:focus-visible { outline:3px solid rgb(65 122 244 / 42%); outline-offset:3px; }"
     },
     {
-      "name": "Runtime Field",
+      "name": "Gateway Address Field",
       "kind": "input",
-      "refersTo": "field",
-      "description": "A clear multiline field for runtime cards and tasks.",
-      "html": "<label class=\"ds-field-label\">Runtime card<textarea class=\"ds-field\" placeholder=\"Paste the public runtime card\"></textarea></label>",
-      "css": ".ds-field-label { display: grid; gap: 8px; color: oklch(0.2 0.018 250); font: 650 13px/1.3 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; } .ds-field { min-height: 96px; border: 1px solid oklch(0.85 0.012 250); border-radius: 10px; padding: 12px 14px; background: white; color: oklch(0.2 0.018 250); font: 450 15px/1.5 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; } .ds-field:focus-visible { outline: 2px solid oklch(0.52 0.15 275); outline-offset: 2px; }"
+      "refersTo": "gateway-field",
+      "description": "The live HTTPS OAuth path with a compact inline arrow action.",
+      "html": "<label class=\"ds-gateway-label\">Gateway address<span class=\"ds-gateway-field\"><input type=\"url\" placeholder=\"https://gateway.example\"/><button aria-label=\"Connect with OAuth\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h13M13 7l5 5-5 5\"/></svg></button></span></label>",
+      "css": ".ds-gateway-label { display:grid; gap:8px; color:#09172b; font:700 12px/1.35 'Figtree Variable',Figtree,sans-serif; } .ds-gateway-field { position:relative; display:block; } .ds-gateway-field input { width:100%; height:46px; padding:0 52px 0 11px; border:1px solid #cbd1db; border-radius:6px; color:#09172b; background:#fff; font:400 13px/1.45 'Figtree Variable',Figtree,sans-serif; } .ds-gateway-field button { position:absolute; top:1px; right:1px; display:grid; width:44px; height:44px; place-items:center; border:0; border-radius:7px; color:#344054; background:transparent; cursor:pointer; } .ds-gateway-field button:hover { background:#eef0fb; } .ds-gateway-field svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; } .ds-gateway-field input:focus-visible,.ds-gateway-field button:focus-visible { outline:3px solid rgb(65 122 244 / 42%); outline-offset:3px; }"
     },
     {
-      "name": "Actor Chip",
-      "kind": "chip",
-      "description": "A stable identity marker for one system actor.",
-      "html": "<span class=\"ds-actor-chip\"><span class=\"ds-actor-dot\"></span>Connector</span>",
-      "css": ".ds-actor-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; border-radius: 999px; padding: 6px 10px; background: oklch(0.95 0.015 190); color: oklch(0.32 0.07 190); font: 650 13px/1.3 'Figtree Variable', ui-sans-serif, system-ui, sans-serif; } .ds-actor-dot { width: 8px; height: 8px; border-radius: 999px; background: oklch(0.43 0.09 190); }"
+      "name": "Scenario Selector",
+      "kind": "button",
+      "description": "A compact application choice with a slim active rule.",
+      "html": "<button class=\"ds-scenario\" aria-selected=\"true\"><span class=\"ds-scenario-icon\" aria-hidden=\"true\"></span><span><strong>Project board</strong><small>Agents work with a real task board in Northstar.</small></span></button>",
+      "css": ".ds-scenario { position:relative; display:grid; width:204px; min-height:84px; grid-template-columns:27px 1fr; gap:10px; padding:16px 12px; border:0; border-radius:8px; color:#09172b; background:#eef3ff; text-align:left; font-family:'Figtree Variable',Figtree,sans-serif; cursor:pointer; } .ds-scenario::before { position:absolute; inset:0 auto 0 0; width:3px; border-radius:3px; background:#417af4; content:''; } .ds-scenario-icon { width:19px; height:16px; border:2px solid currentColor; border-radius:3px; } .ds-scenario strong { display:block; margin-bottom:5px; font-size:13px; } .ds-scenario small { display:block; color:#586173; font-size:11.5px; line-height:1.42; } .ds-scenario:hover { background:#e7edfb; } .ds-scenario:focus-visible { outline:3px solid rgb(65 122 244 / 42%); outline-offset:3px; }"
     },
     {
-      "name": "Code Panel",
+      "name": "Connected Task Action",
+      "kind": "button",
+      "refersTo": "button-connected",
+      "description": "Submits work through an already connected user-owned agent.",
+      "html": "<button class=\"ds-connected-action\">Run with connected agent</button>",
+      "css": ".ds-connected-action { min-height:43px; padding:0 16px; border:0; border-radius:7px; color:#fff; background:#09172b; font:700 13px/1.45 'Figtree Variable',Figtree,sans-serif; cursor:pointer; } .ds-connected-action:hover { background:#17243a; } .ds-connected-action:active { background:#050c16; } .ds-connected-action:focus-visible { outline:3px solid rgb(65 122 244 / 42%); outline-offset:3px; }"
+    },
+    {
+      "name": "Activity Trace Row",
       "kind": "custom",
-      "refersTo": "code-panel",
-      "description": "Implementation evidence with copyable code.",
-      "html": "<pre class=\"ds-code\"><code>defineTool({ name: 'set_page_message' })</code></pre>",
-      "css": ".ds-code { overflow: auto; border-radius: 14px; padding: 24px; background: oklch(0.2 0.018 250); color: white; font: 450 13px/1.6 'IBM Plex Mono', ui-monospace, monospace; }"
+      "description": "A compact correlated event record with stable actor identity.",
+      "html": "<div class=\"ds-trace-row\"><time>10:24:06</time><span class=\"ds-actor\"><i></i>Agent Connect</span><span>Response delivered</span><code>Task created successfully</code></div>",
+      "css": ".ds-trace-row { display:grid; min-height:31px; grid-template-columns:90px 1.5fr 1.8fr 3fr; align-items:center; gap:10px; border-bottom:1px solid #edf0f4; color:#09172b; font:400 11px/1.35 'Figtree Variable',Figtree,sans-serif; } .ds-trace-row time { color:#697284; font-variant-numeric:tabular-nums; } .ds-actor { display:flex; align-items:center; gap:8px; } .ds-actor i { width:18px; height:18px; border-radius:50%; background:#18a6b8; } .ds-trace-row code { overflow:hidden; color:#5f6878; font:400 11px/1.4 'IBM Plex Mono',monospace; text-overflow:ellipsis; white-space:nowrap; }"
+    },
+    {
+      "name": "Tool Flight",
+      "kind": "chip",
+      "description": "The single transient correlated tool request over the active application.",
+      "html": "<span class=\"ds-tool-flight\">Application tool requested</span>",
+      "css": ".ds-tool-flight { display:inline-flex; gap:8px; padding:8px 11px; border-radius:7px; color:#fff; background:#5948d7; box-shadow:0 8px 20px rgb(78 66 183 / 25%); font:400 11px/1.35 'Figtree Variable',Figtree,sans-serif; transition:background 180ms ease; } .ds-tool-flight:hover { background:#4d3eba; } .ds-tool-flight:focus-visible { outline:3px solid rgb(65 122 244 / 42%); outline-offset:3px; }"
     }
   ],
   "narrative": {
     "northStar": "The Open Workbench",
-    "overview": "Agent Connect Canvas is a precise workbench in a bright studio: the useful machinery is visible, every handoff is marked, and nothing important is hidden behind decorative spectacle. The neutral foundation keeps the application calm while a functional palette identifies the web app, connector, agent, in-flight work, and outcome.",
+    "overview": "Agent Connect Canvas is a bright, product-neutral workbench whose first view is already the working product. A compact header, scenario rail, independently branded application, two honest entry paths, and correlated activity trace make the handoff visible without a marketing hero or decorative architecture prelude.\n\nThe interface is dense but calm: white and cool-gray surfaces carry most of the screen, thin rules establish structure, and saturated color identifies ownership or state. The deterministic in-browser demo and the live HTTPS OAuth gateway path remain visibly separate. Agent Connect supplies connection controls and evidence; each third-party application retains its own name, chrome, palette, content model, and tools.",
     "keyCharacteristics": [
-      "Neutral-first product surfaces with color reserved for actors and state.",
-      "A real execution trace, not a decorative architecture illustration.",
-      "Familiar controls and code artifacts that make the integration credible.",
-      "Crisp structure, compact radii, and purposeful state motion.",
-      "Desktop clarity with a complete touch-first mobile path."
+      "Open Workbench in the first viewport; working proof is the lead.",
+      "Independent third-party application ownership inside neutral Agent Connect chrome.",
+      "Explicit simulated-demo and live-OAuth entry paths.",
+      "Original overlapping three-circle Agent Connect mark in coral, teal, and periwinkle.",
+      "Compact Figtree UI with IBM Plex Mono reserved for event evidence.",
+      "Thin dividers, 12px major surfaces, and mostly 7px controls.",
+      "One authored inline-SVG action-icon family with rounded strokes and simple geometry.",
+      "Darker action fills preserve contrast while actor colors remain available as identity signals."
     ],
     "rules": [
       {
         "name": "The Actor Color Rule",
-        "body": "Coral means app, teal means connector, and periwinkle means agent everywhere. Never reuse them as generic decoration.",
+        "body": "Coral means application, teal means gateway, and periwinkle means user-owned agent in Agent Connect-owned explanations and traces. Embedded apps may use their own palettes because they are separate products.",
+        "section": "colors"
+      },
+      {
+        "name": "The Contrast Fill Rule",
+        "body": "Identity swatches may stay vivid, but controls with white text use the implemented darker coral, teal, periwinkle, or ink fills.",
+        "section": "colors"
+      },
+      {
+        "name": "The Neutral Majority Rule",
+        "body": "White and cool gray occupy most of every viewport. Color clarifies ownership and state; it does not become ambient decoration.",
         "section": "colors"
       },
       {
         "name": "The Evidence Voice Rule",
-        "body": "Prose explains; monospace proves. Never use monospace to make ordinary marketing copy look technical.",
+        "body": "Prose explains in Figtree; event details prove in IBM Plex Mono. Do not use monospace as decorative tech styling.",
         "section": "typography"
       },
       {
+        "name": "The Compact Hierarchy Rule",
+        "body": "Hierarchy comes from weight, grouping, and ownership chrome rather than oversized type. This surface has no display-scale marketing headline.",
+        "section": "typography"
+      },
+      {
+        "name": "The Working-First Rule",
+        "body": "Do not place a marketing hero, runtime-card intake, or explanatory animation ahead of the workbench.",
+        "section": "layout"
+      },
+      {
+        "name": "The Ownership Layout Rule",
+        "body": "The application occupies the central working area and keeps its own internal navigation; Agent Connect controls frame it without masquerading as part of that application.",
+        "section": "layout"
+      },
+      {
         "name": "The Structural-First Rule",
-        "body": "Use spacing, dividers, and surface contrast before adding shadow. Never pair a decorative wide shadow with a decorative border.",
+        "body": "Use spacing, dividers, and tonal contrast before shadow. Resting surfaces use one restrained lift, not stacked decorative effects.",
         "section": "elevation"
+      },
+      {
+        "name": "The Major-and-Control Rule",
+        "body": "Default to 12px for principal containers and 7px for controls; use another radius only when the implemented component has a distinct functional reason.",
+        "section": "shapes"
       }
     ],
     "dos": [
-      "Do lead with the working interaction and let architecture unfold from real events.",
-      "Do keep actor colors stable across diagrams, status messages, and code annotations.",
-      "Do show runtime cards, scopes, tool schemas, and event payloads as real evidence behind progressive disclosure."
+      "Do open on the working product and keep both entry paths visible and honestly labeled.",
+      "Do preserve each third-party application's visual ownership and app-native controls.",
+      "Do keep the original three-circle mark and the coral/app, teal/gateway, periwinkle/agent mapping in Agent Connect-owned evidence.",
+      "Do use Figtree for interface language and IBM Plex Mono only for machine evidence.",
+      "Do use darker accessible fills when white text sits on an action or transient status surface.",
+      "Do keep the connected task form in normal flow on mobile and maintain clear keyboard focus and touch targets."
     ],
     "donts": [
-      "Don't create a futuristic science-fiction AI interface.",
-      "Don't create a generic gradient-heavy AI startup landing page.",
-      "Don't turn the experience into a terminal-first hacker demo that excludes web developers.",
-      "Don't create a dense enterprise-security dashboard that makes the integration feel intimidating."
+      "Don't restore the runtime-card field, pre-workbench hero micro-flow, or animated setup terminal; the shipped workbench does not promise them.",
+      "Don't merge the deterministic simulated demo with the live HTTPS OAuth gateway path.",
+      "Don't make Agent Connect chrome look like it owns Northstar, Fieldnotes, or Everyday.",
+      "Don't replace the inline SVG action family with emoji, mixed icon libraries, or inconsistent stroke weights.",
+      "Don't use gradients, glassmorphism, oversized radii, decorative grid backgrounds, or sci-fi styling.",
+      "Don't turn the page into a terminal-first setup guide or a dense enterprise-security dashboard."
     ]
   }
 }

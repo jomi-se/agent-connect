@@ -59,8 +59,9 @@ gates or accepted architecture. Work them in this order:
    Next, investigate a tasteful OpenClaw-native persistence boundary before
    adding owner-managed restricted profile editing.
 2. [Firebase Canvas stock-plugin migration](../future/firebase-canvas-plugin-migration.md):
-   turn the historical Canvas into both a polished public demonstration and a
-   readable reference application using the current address-based OAuth flow.
+   the polished workbench, deterministic three-scenario demo, and current
+   address-based OAuth entry are implemented. Complete controlled live-plugin
+   composition and the conversation/recovery acceptance matrix next.
 3. [Provider-owned conversation recovery and library](../future/provider-owned-conversation-recovery.md):
    preserve enough provider provenance for applications to restore a valid
    conversation as it was presented, then expose an application-owned picker
@@ -72,10 +73,10 @@ gates or accepted architecture. Work them in this order:
 
 ### Legacy implementation cleanup (owned separately)
 
-Canvas/runtime-card migration and removal of the older gateway implementation
-remain pending, not plugin-release gates. The Canvas migration now has a
-[focused brief](../future/firebase-canvas-plugin-migration.md); do not remove
-shared modules or the older gateway while it still consumes them.
+Canvas no longer consumes the runtime-card surface, but controlled live-plugin
+acceptance remains pending and is not a plugin-release gate. The migration has
+a [focused brief](../future/firebase-canvas-plugin-migration.md); inventory all
+remaining consumers before removing shared modules or the older gateway.
 Retain shared modules and existing consumers until their replacements land.
 The native OpenClaw patch experiment and its obsolete build/probe wiring also
 remain cleanup targets; do not confuse them with the separately required AI SDK

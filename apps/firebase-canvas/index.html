@@ -7,961 +7,485 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta name="color-scheme" content="light" />
-    <!-- Inline so the page never asks for /favicon.ico, whose 404 was the only
-         console noise in the Milestone 4 browser evidence. -->
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b1120'/%3E%3Cpath d='M9 22V10h3.4l3.6 7.2L19.6 10H23v12h-2.6v-7.4L17 22h-2l-3.4-7.4V22z' fill='%2360a5fa'/%3E%3C/svg%3E"
-    />
     <meta
       name="description"
-      content="Connect a web app to a user-owned agent and lend it live application tools."
+      content="See how an application works with a user-owned agent through Agent Connect."
     />
-    <title>Agent Connect</title>
+    <title>Agent Connect — Open Workbench</title>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
-  <body data-demo="idle">
-    <div id="app"></div>
+  <body data-mode="idle">
+    <a class="skip-link" href="#workbench">Skip to workbench</a>
+    <header class="site-header">
+      <a class="wordmark" href="#workbench" aria-label="Agent Connect home"
+        ><span class="wordmark-mark" aria-hidden="true"
+          ><i></i><i></i><i></i></span
+        ><strong>Agent Connect</strong></a
+      >
+      <p>Connect agents to the tools people already use.</p>
+      <nav aria-label="Primary navigation">
+        <a href="#integration">Docs</a><a href="#workbench">Examples</a
+        ><a href="#workbench">Community</a>
+      </nav>
+      <span class="avatar" aria-label="Demo visitor">AC</span>
+    </header>
 
-    <template id="desktop-layout">
-      <a class="skip-link" href="#demo">Skip to demo</a>
-      <header class="site-header desktop-header">
-        <a class="wordmark" href="#top" aria-label="Agent Connect home">
-          <span class="wordmark-mark" aria-hidden="true"
-            ><span></span><span></span><span></span
-          ></span>
-          Agent Connect
-        </a>
-        <nav aria-label="Primary navigation">
-          <a href="#demo">Demo</a>
-          <a href="#how">How it works</a>
-          <a href="#code">Code</a>
-        </nav>
-      </header>
-
-      <main id="top" class="desktop-page">
-        <section class="desktop-intro" aria-labelledby="desktop-title">
-          <div>
-            <h1 id="desktop-title">Agent Connect</h1>
-            <p>
-              Expose app-native tools to Codex, Claude Code, or another coding
-              agent running remotely.
-            </p>
-          </div>
-          <div class="micro-flow" data-micro-flow>
-            <svg
-              viewBox="-16 0 672 108"
-              role="img"
-              aria-label="A web app connects through the user's Agent Connect gateway to their coding agent. Tool calls and results travel back and forth."
-            >
-              <path
-                class="micro-flow-bracket"
-                d="M286 18h-6v44h6M632 18h6v44h-6"
-              />
-              <text class="micro-flow-territory" x="459" y="12">
-                RUNS WHERE YOU RUN — LAPTOP · VM · CLOUD
-              </text>
-              <line class="micro-flow-track" x1="54" y1="40" x2="586" y2="40" />
-
-              <circle
-                class="micro-flow-mover micro-flow-mover-signal"
-                data-micro-mover="task"
-                r="3.5"
-              />
-              <circle
-                class="micro-flow-mover micro-flow-mover-signal"
-                data-micro-mover="call-1"
-                r="3.5"
-              />
-              <circle
-                class="micro-flow-mover micro-flow-mover-result"
-                data-micro-mover="result-1"
-                r="3.5"
-              />
-              <circle
-                class="micro-flow-mover micro-flow-mover-signal"
-                data-micro-mover="call-2"
-                r="3.5"
-              />
-              <circle
-                class="micro-flow-mover micro-flow-mover-result"
-                data-micro-mover="result-2"
-                r="3.5"
-              />
-
-              <g class="micro-flow-node micro-flow-node-app">
-                <circle data-micro-ring="app" cx="40" cy="40" r="9" />
-                <circle class="micro-flow-dot" cx="40" cy="40" r="5" />
-                <text class="micro-flow-label" x="40" y="78">Web app</text>
-                <text class="micro-flow-sublabel" x="40" y="94">
-                  runs the tools
-                </text>
-              </g>
-              <g class="micro-flow-node micro-flow-node-connector">
-                <circle data-micro-ring="connector" cx="320" cy="40" r="9" />
-                <circle class="micro-flow-dot" cx="320" cy="40" r="5" />
-                <text class="micro-flow-label" x="320" y="78">
-                  Agent Connect
-                </text>
-                <text class="micro-flow-sublabel" x="320" y="94">
-                  your gateway
-                </text>
-              </g>
-              <g class="micro-flow-node micro-flow-node-agent">
-                <circle data-micro-ring="agent" cx="600" cy="40" r="9" />
-                <circle class="micro-flow-dot" cx="600" cy="40" r="5" />
-                <text class="micro-flow-label" x="600" y="78">
-                  Coding agent
-                </text>
-                <text class="micro-flow-sublabel" x="600" y="94">
-                  yours too
-                </text>
-              </g>
-            </svg>
-          </div>
-        </section>
-
-        <section id="demo" class="desktop-demo" aria-labelledby="demo-title">
-          <div class="connection-panel">
-            <div class="connection-copy">
-              <h2 id="demo-title">Connect a coding agent</h2>
-              <p>Authorize once. Run a task, then refine it in context.</p>
-            </div>
-            <form id="connect-form" class="connect-form">
-              <label for="runtime-card">Runtime card</label>
-              <textarea
-                id="runtime-card"
-                required
-                spellcheck="false"
-                autocomplete="off"
-                placeholder="Paste the public runtime card"
-              ></textarea>
-              <div class="runtime-summary" id="runtime-summary" hidden>
-                <strong id="runtime-profile">Runtime</strong
-                ><span id="runtime-endpoint">Endpoint</span>
-              </div>
-              <div class="form-actions">
-                <div class="connection-status">
-                  <span>Runtime</span
-                  ><strong id="connection-state">Not connected</strong>
-                </div>
-                <div class="action-buttons">
-                  <button
-                    id="connect"
-                    class="button button-primary"
-                    type="submit"
-                  >
-                    <span class="connect-button-label">Connect runtime</span
-                    ><span class="button-progress" aria-hidden="true"></span>
-                  </button>
-                  <button
-                    id="disconnect"
-                    class="button button-secondary"
-                    type="button"
-                    hidden
-                  >
-                    Disconnect &amp; revoke
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-
-          <div class="scenario-controls">
-            <div class="scenario-heading">
-              <h2>Example demo apps</h2>
-              <button class="tool-info-button" id="show-tools" type="button">
-                View app tools
-              </button>
-            </div>
-            <div
-              class="scenario-tabs"
-              role="tablist"
-              aria-label="Demo applications"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected="true"
-                data-scenario-tab="project-board"
-              >
-                Project board
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected="false"
-                data-scenario-tab="document-review"
-              >
-                Document review
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected="false"
-                data-scenario-tab="product-research"
-              >
-                Product research
-              </button>
-            </div>
-            <form id="task-form" class="scenario-prompt">
-              <textarea id="prompt" aria-label="Prompt" required></textarea>
-              <div class="form-actions">
-                <button id="run" class="button button-primary" type="submit">
-                  <span class="button-label">Send prompt</span
-                  ><span class="button-progress" aria-hidden="true"></span>
-                </button>
-              </div>
-            </form>
-            <output id="status" class="status-line" aria-live="polite"></output>
-          </div>
-
-          <div class="scenario-stage">
-            <section
-              id="scenario-project-board"
-              class="scenario-surface board-surface"
-              data-scenario-panel="project-board"
-            >
-              <header class="third-party-header">
-                <div class="third-party-brand">
-                  <span class="third-party-logo" aria-hidden="true">N</span>
-                  <div>
-                    <strong>Northstar</strong>
-                    <small>Product workspace</small>
-                  </div>
-                </div>
-                <nav aria-label="Northstar sections">
-                  <span>Overview</span><strong>Board</strong
-                  ><span>Timeline</span>
-                </nav>
-                <span class="integration-badge">Agent Connect · 4 tools</span>
-              </header>
-              <div class="third-party-context">
-                <div>
-                  <span>Launch plan</span>
-                  <h3>Q3 launch</h3>
-                </div>
-                <button type="button" disabled>New task</button>
-              </div>
-              <div class="board-columns">
-                <section>
-                  <h4>Backlog</h4>
-                  <ul id="task-list-backlog">
-                    <li data-task-id="pricing">
-                      <span data-task-title>Decide launch pricing</span
-                      ><small data-task-priority="medium">medium</small>
-                    </li>
-                    <li data-task-id="docs">
-                      <span data-task-title>Write docs sometime</span
-                      ><small data-task-priority="low">low</small>
-                    </li>
-                  </ul>
-                </section>
-                <section>
-                  <h4>Doing</h4>
-                  <ul id="task-list-doing">
-                    <li data-task-id="checkout">
-                      <span data-task-title>Fix checkout edge cases</span
-                      ><small data-task-priority="high">high</small>
-                    </li>
-                  </ul>
-                </section>
-                <section>
-                  <h4>Done</h4>
-                  <ul id="task-list-done">
-                    <li data-task-id="domain">
-                      <span data-task-title>Buy launch domain</span
-                      ><small data-task-priority="low">low</small>
-                    </li>
-                  </ul>
-                </section>
-              </div>
-            </section>
-
-            <section
-              id="scenario-document-review"
-              class="scenario-surface editor-surface"
-              data-scenario-panel="document-review"
-              hidden
-            >
-              <header class="third-party-header">
-                <div class="third-party-brand">
-                  <span class="third-party-logo" aria-hidden="true">F</span>
-                  <div>
-                    <strong>Fieldnotes</strong>
-                    <small>Editorial workspace</small>
-                  </div>
-                </div>
-                <nav aria-label="Fieldnotes sections">
-                  <span>Drafts</span><strong>Review</strong><span>Publish</span>
-                </nav>
-                <span class="integration-badge">Agent Connect · 4 tools</span>
-              </header>
-              <div class="third-party-context">
-                <div>
-                  <span>Product announcement</span>
-                  <h3>A quieter way to work</h3>
-                </div>
-                <span class="document-state">Editing</span>
-              </div>
-              <div class="editor-layout">
-                <article class="document-page">
-                  <p id="document-block-intro" data-format="paragraph">
-                    <span data-review-quote
-                      >Our new workspace makes every team exactly twice as
-                      productive.</span
-                    >
-                    It brings tasks, decisions, and notes into a single place.
-                  </p>
-                  <p id="document-block-history" data-format="paragraph">
-                    <span data-review-quote
-                      >The first graphical web browser was released in
-                      1989.</span
-                    >
-                    Since then, software has steadily become more collaborative.
-                  </p>
-                  <p id="document-block-close" data-format="paragraph">
-                    <span data-review-quote
-                      >Basically, we really think this is perhaps the best way
-                      for everyone to work better.</span
-                    >
-                  </p>
-                </article>
-                <aside>
-                  <h4>Review</h4>
-                  <ul id="review-comments">
-                    <li class="empty-review">No comments yet.</li>
-                  </ul>
-                </aside>
-              </div>
-            </section>
-
-            <section
-              id="scenario-product-research"
-              class="scenario-surface product-surface"
-              data-scenario-panel="product-research"
-              hidden
-            >
-              <header class="third-party-header">
-                <div class="third-party-brand">
-                  <span class="third-party-logo" aria-hidden="true">E</span>
-                  <div>
-                    <strong>Everyday</strong>
-                    <small>Online market</small>
-                  </div>
-                </div>
-                <div class="market-search" aria-hidden="true">
-                  Search products
-                </div>
-                <span class="integration-badge">Agent Connect · 4 tools</span>
-              </header>
-              <div class="third-party-context product-context">
-                <div>
-                  <span>Audio › Headphones</span>
-                  <h3>Sony WH-CH720N wireless headphones</h3>
-                </div>
-              </div>
-              <div class="product-layout">
-                <div class="product-visual" aria-hidden="true">
-                  <span></span>
-                </div>
-                <div class="product-details">
-                  <div class="rating">4.3 ★ <span>1,284 reviews</span></div>
-                  <p class="product-price" id="product-listed-price">€129</p>
-                  <p>
-                    Over-ear Bluetooth headphones · 35-hour battery · active
-                    noise cancellation.
-                  </p>
-                  <button type="button" disabled>Add to basket</button>
-                </div>
-                <aside id="product-research-results" hidden>
-                  <div class="research-heading">
-                    <span>Recorded research</span
-                    ><strong id="product-kid-fit">mixed</strong>
-                  </div>
-                  <p id="product-verdict"></p>
-                  <h4>Watch for</h4>
-                  <ul id="product-concerns"></ul>
-                  <div class="price-check">
-                    <span>Fair price range</span
-                    ><strong id="product-price-range"></strong>
-                    <p id="product-price-note"></p>
-                  </div>
-                  <h4>Alternatives</h4>
-                  <ul id="product-alternatives"></ul>
-                </aside>
-              </div>
-            </section>
-          </div>
-
-          <section
-            class="trace-panel activity-panel"
-            aria-labelledby="trace-title"
-          >
-            <div class="trace-heading">
-              <h3 id="trace-title">Session activity</h3>
-              <span id="trace-summary">No events yet</span>
-            </div>
-            <ol
-              id="activity-feed"
-              class="activity-feed"
-              aria-live="polite"
-            ></ol>
-            <details class="event-details">
-              <summary>Raw events</summary>
-              <pre
-                id="events"
-                tabindex="0"
-                aria-label="Raw session events"
-              ></pre>
-            </details>
-          </section>
-        </section>
-
-        <section
-          id="how"
-          class="desktop-explanation"
-          aria-labelledby="how-title"
-        >
-          <div class="explanation-copy">
-            <h2 id="how-title">Two sides with two target users.</h2>
-            <p>
-              App developers integrate the Agent Connect SDK while users run the
-              Agent Connect Gateway inside their own VM, laptop, or other
-              environment.
-            </p>
-          </div>
-          <div class="responsibility-list persona-list">
-            <article>
-              <span class="persona-label">For app developers</span>
-              <h3>Agent Connect SDK</h3>
-              <p>Define scoped, app-native actions in the browser.</p>
-              <strong>Tools execute in the app.</strong>
-            </article>
-            <article>
-              <span class="persona-label">For agent owners</span>
-              <h3>Agent Connect Gateway</h3>
-              <p>
-                Run it beside Codex or another coding agent on a laptop, VM, or
-                isolated runner. It owns identity, consent, grants, and provider
-                adapters.
-              </p>
-              <strong>The agent stays user-owned.</strong>
-            </article>
-          </div>
-          <div class="security-note">
-            <strong>Consent is not a trust guarantee.</strong>
-            <span
-              >The gateway shows the exact app origin and requested tools so the
-              user can decide—and revoke access later.</span
-            >
-          </div>
-        </section>
-
-        <section id="code" class="desktop-code" aria-labelledby="code-title">
-          <div class="code-intro">
-            <h2 id="code-title">The browser side</h2>
-            <p>
-              Define your app tools, connect them to their handlers, and plug in
-              the Agent Connect authentication flow.
-            </p>
-          </div>
-          <article class="code-example">
-            <div class="code-heading">
-              <span>app.ts</span>
-              <button
-                class="copy-button"
-                type="button"
-                data-copy-target="sdk-snippet"
-              >
-                Copy
-              </button>
-            </div>
-            <pre
-              id="sdk-snippet"
-            ><code data-language="typescript">const moveTasks = defineTool({
-  name: "move_project_tasks",
-  inputSchema: moveTasksSchema,
-  execute: ({ moves }) =&gt; {
-    board.moveAll(moves)
-  }
-})
-
-const connection = await connectAgent({
-  baseUrl: runtimeCard.endpoint,
-  tools: [createTasks, updateTasks, moveTasks],
-  accessToken
-})
-
-for await (const event of connection.session.streamTask(prompt)) {
-  render(event)
-}</code></pre>
-          </article>
-        </section>
-
-        <section class="gateway-setup" aria-labelledby="gateway-setup-title">
-          <div class="gateway-setup-copy">
-            <h2 id="gateway-setup-title">Run the gateway beside your agent.</h2>
-            <p>
-              The user runs this part on infrastructure they control. It keeps
-              OpenClaw, model credentials, and the public transport behind one
-              gateway-owned boundary.
-            </p>
-            <span
-              >Replacement setup · Node 24 LTS · upstream configured
-              separately</span
-            >
-          </div>
-          <div data-gateway-terminal></div>
-        </section>
-
-        <section data-architecture-story data-story-layout="desktop"></section>
-      </main>
-
-      <footer class="site-footer">
-        <span>Agent Connect</span>
-        <span>Application tools for user-owned agents.</span>
-        <a href="https://github.com/jomi-se/agent-connect">Source</a>
-      </footer>
-    </template>
-
-    <template id="mobile-layout">
-      <a class="skip-link" href="#mobile-demo">Skip to demo</a>
-      <header class="mobile-header">
-        <a class="wordmark" href="#mobile-top" aria-label="Agent Connect home">
-          <span class="wordmark-mark" aria-hidden="true"
-            ><span></span><span></span><span></span
-          ></span>
-          Agent Connect
-        </a>
-        <a class="source-link" href="https://github.com/jomi-se/agent-connect"
-          >Source</a
-        >
-      </header>
-
-      <main id="mobile-top" class="mobile-page">
-        <section class="mobile-intro" aria-labelledby="mobile-title">
-          <h1 id="mobile-title">Agent Connect</h1>
-          <p>
-            Expose app-native tools to Codex, Claude Code, or another coding
-            agent running remotely.
-          </p>
-        </section>
-
-        <section
-          id="mobile-demo"
-          class="mobile-demo"
-          aria-labelledby="mobile-demo-title"
-        >
-          <div class="mobile-connection">
-            <div>
-              <h2 id="mobile-demo-title">Connect a coding agent</h2>
-              <p>Authorize the app once.</p>
-            </div>
-            <form id="connect-form" class="mobile-form">
-              <div class="mobile-field">
-                <label for="runtime-card">Runtime card</label>
-                <textarea
-                  id="runtime-card"
-                  required
-                  spellcheck="false"
-                  autocomplete="off"
-                  placeholder="Public runtime card"
-                ></textarea>
-                <div class="runtime-summary" id="runtime-summary" hidden>
-                  <strong id="runtime-profile">Runtime</strong>
-                  <span id="runtime-endpoint">Endpoint</span>
-                </div>
-              </div>
-              <div class="form-actions">
-                <div class="action-buttons">
-                  <button
-                    id="connect"
-                    class="button button-primary"
-                    type="submit"
-                  >
-                    <span class="connect-button-label">Connect runtime</span
-                    ><span class="button-progress" aria-hidden="true"></span>
-                  </button>
-                  <button
-                    id="disconnect"
-                    class="button button-secondary"
-                    type="button"
-                    hidden
-                  >
-                    Disconnect &amp; revoke
-                  </button>
-                </div>
-              </div>
-            </form>
-            <div class="mobile-connection-row">
-              <span>Runtime</span
-              ><strong class="connection-state" id="connection-state"
-                >Not connected</strong
-              >
-            </div>
-          </div>
-
-          <div class="mobile-scenarios">
-            <div class="mobile-scenario-heading">
-              <h2>Example demo apps</h2>
-              <button class="tool-info-button" id="show-tools" type="button">
-                View tools
-              </button>
-            </div>
-            <div
-              class="scenario-tabs"
-              role="tablist"
-              aria-label="Demo applications"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected="true"
-                data-scenario-tab="project-board"
-              >
-                Board
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected="false"
-                data-scenario-tab="document-review"
-              >
-                Review
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected="false"
-                data-scenario-tab="product-research"
-              >
-                Research
-              </button>
-            </div>
-            <form id="task-form" class="mobile-form scenario-prompt">
-              <div class="mobile-field">
-                <textarea id="prompt" aria-label="Prompt" required></textarea>
-              </div>
-              <div class="form-actions">
-                <button id="run" class="button button-primary" type="submit">
-                  <span class="button-label">Send prompt</span
-                  ><span class="button-progress" aria-hidden="true"></span>
-                </button>
-              </div>
-            </form>
-            <output id="status" class="status-line" aria-live="polite"></output>
-          </div>
-
-          <div class="scenario-stage">
-            <section
-              id="scenario-project-board"
-              class="scenario-surface board-surface"
-              data-scenario-panel="project-board"
-            >
-              <header class="third-party-header">
-                <div class="third-party-brand">
-                  <span class="third-party-logo" aria-hidden="true">N</span>
-                  <div>
-                    <strong>Northstar</strong>
-                    <small>Product workspace</small>
-                  </div>
-                </div>
-                <nav aria-label="Northstar sections">
-                  <strong>Board</strong><span>Timeline</span>
-                </nav>
-                <span class="integration-badge">Agent Connect</span>
-              </header>
-              <div class="third-party-context">
-                <div>
-                  <span>Launch plan</span>
-                  <h3>Q3 launch</h3>
-                </div>
-                <button type="button" disabled>New task</button>
-              </div>
-              <div class="board-columns">
-                <section>
-                  <h4>Backlog</h4>
-                  <ul id="task-list-backlog">
-                    <li data-task-id="pricing">
-                      <span data-task-title>Decide launch pricing</span
-                      ><small data-task-priority="medium">medium</small>
-                    </li>
-                    <li data-task-id="docs">
-                      <span data-task-title>Write docs sometime</span
-                      ><small data-task-priority="low">low</small>
-                    </li>
-                  </ul>
-                </section>
-                <section>
-                  <h4>Doing</h4>
-                  <ul id="task-list-doing">
-                    <li data-task-id="checkout">
-                      <span data-task-title>Fix checkout edge cases</span
-                      ><small data-task-priority="high">high</small>
-                    </li>
-                  </ul>
-                </section>
-                <section>
-                  <h4>Done</h4>
-                  <ul id="task-list-done">
-                    <li data-task-id="domain">
-                      <span data-task-title>Buy launch domain</span
-                      ><small data-task-priority="low">low</small>
-                    </li>
-                  </ul>
-                </section>
-              </div>
-            </section>
-            <section
-              id="scenario-document-review"
-              class="scenario-surface editor-surface"
-              data-scenario-panel="document-review"
-              hidden
-            >
-              <header class="third-party-header">
-                <div class="third-party-brand">
-                  <span class="third-party-logo" aria-hidden="true">F</span>
-                  <div>
-                    <strong>Fieldnotes</strong
-                    ><small>Editorial workspace</small>
-                  </div>
-                </div>
-                <nav aria-label="Fieldnotes sections">
-                  <strong>Review</strong><span>Publish</span>
-                </nav>
-                <span class="integration-badge">Agent Connect</span>
-              </header>
-              <div class="third-party-context">
-                <div>
-                  <span>Product announcement</span>
-                  <h3>A quieter way to work</h3>
-                </div>
-                <span class="document-state">Editing</span>
-              </div>
-              <div class="editor-layout">
-                <article class="document-page">
-                  <p id="document-block-intro" data-format="paragraph">
-                    <span data-review-quote
-                      >Our new workspace makes every team exactly twice as
-                      productive.</span
-                    >
-                    It brings tasks, decisions, and notes into a single place.
-                  </p>
-                  <p id="document-block-history" data-format="paragraph">
-                    <span data-review-quote
-                      >The first graphical web browser was released in
-                      1989.</span
-                    >
-                    Since then, software has steadily become more collaborative.
-                  </p>
-                  <p id="document-block-close" data-format="paragraph">
-                    <span data-review-quote
-                      >Basically, we really think this is perhaps the best way
-                      for everyone to work better.</span
-                    >
-                  </p>
-                </article>
-                <aside>
-                  <h4>Review</h4>
-                  <ul id="review-comments">
-                    <li class="empty-review">No comments yet.</li>
-                  </ul>
-                </aside>
-              </div>
-            </section>
-            <section
-              id="scenario-product-research"
-              class="scenario-surface product-surface"
-              data-scenario-panel="product-research"
-              hidden
-            >
-              <header class="third-party-header">
-                <div class="third-party-brand">
-                  <span class="third-party-logo" aria-hidden="true">E</span>
-                  <div>
-                    <strong>Everyday</strong><small>Online market</small>
-                  </div>
-                </div>
-                <div class="market-search" aria-hidden="true">
-                  Search products
-                </div>
-                <span class="integration-badge">Agent Connect</span>
-              </header>
-              <div class="third-party-context product-context">
-                <div>
-                  <span>Audio › Headphones</span>
-                  <h3>Sony WH-CH720N wireless headphones</h3>
-                </div>
-              </div>
-              <div class="product-layout">
-                <div class="product-visual" aria-hidden="true">
-                  <span></span>
-                </div>
-                <div class="product-details">
-                  <div class="rating">4.3 ★ <span>1,284 reviews</span></div>
-                  <p class="product-price" id="product-listed-price">€129</p>
-                  <p>
-                    Over-ear Bluetooth headphones · 35-hour battery · active
-                    noise cancellation.
-                  </p>
-                  <button type="button" disabled>Add to basket</button>
-                </div>
-                <aside id="product-research-results" hidden>
-                  <div class="research-heading">
-                    <span>Recorded research</span
-                    ><strong id="product-kid-fit">mixed</strong>
-                  </div>
-                  <p id="product-verdict"></p>
-                  <h4>Watch for</h4>
-                  <ul id="product-concerns"></ul>
-                  <div class="price-check">
-                    <span>Fair price range</span
-                    ><strong id="product-price-range"></strong>
-                    <p id="product-price-note"></p>
-                  </div>
-                  <h4>Alternatives</h4>
-                  <ul id="product-alternatives"></ul>
-                </aside>
-              </div>
-            </section>
-          </div>
-
-          <section
-            class="mobile-trace activity-panel"
-            aria-labelledby="mobile-trace-title"
-          >
-            <div class="trace-heading">
-              <h2 id="mobile-trace-title">Session activity</h2>
-              <span id="trace-summary">No events yet</span>
-            </div>
-            <ol
-              id="activity-feed"
-              class="activity-feed"
-              aria-live="polite"
-            ></ol>
-            <details class="event-details">
-              <summary>Raw events</summary>
-              <pre
-                id="events"
-                tabindex="0"
-                aria-label="Raw session events"
-              ></pre>
-            </details>
-          </section>
-        </section>
-
-        <section class="mobile-explanation" aria-labelledby="mobile-how-title">
-          <h2 id="mobile-how-title">Two sides with two target users</h2>
-          <div class="mobile-boundaries">
-            <p>
-              <strong>SDK</strong
-              ><span>App developers define and run browser tools.</span>
-            </p>
-            <p>
-              <strong>Gateway</strong
-              ><span
-                >Agent owners connect their coding runtime and approve
-                apps.</span
-              >
-            </p>
-          </div>
-
-          <details>
-            <summary>Why the gateway exists</summary>
-            <p>
-              It keeps OpenClaw and model-provider details behind one browser
-              API. Users approve or revoke each app from the gateway.
-            </p>
-          </details>
-          <details>
-            <summary>What the user is trusting</summary>
-            <p>
-              Approval lets this app send tasks and expose the listed tools. The
-              gateway shows the real origin before access is granted.
-            </p>
-          </details>
-        </section>
-
-        <section
-          class="mobile-implementation mobile-browser-code"
-          aria-labelledby="mobile-browser-code-title"
-        >
-          <h2 id="mobile-browser-code-title">The browser side</h2>
-          <p>
-            Define your app tools, connect them to their handlers, and plug in
-            the Agent Connect authentication flow.
-          </p>
-          <article class="code-example">
-            <div class="code-heading">
-              <span>app.ts</span>
-              <button
-                class="copy-button"
-                type="button"
-                data-copy-target="sdk-snippet"
-              >
-                Copy
-              </button>
-            </div>
-            <pre
-              id="sdk-snippet"
-            ><code data-language="typescript">const moveTasks = defineTool({
-  name: "move_project_tasks",
-  inputSchema: moveTasksSchema,
-  execute: ({ moves }) =&gt; {
-    board.moveAll(moves)
-  }
-})
-
-const connection = await connectAgent({
-  baseUrl: runtimeCard.endpoint,
-  tools: [createTasks, updateTasks, moveTasks],
-  accessToken
-})</code></pre>
-          </article>
-        </section>
-
-        <section
-          class="mobile-implementation mobile-gateway-setup"
-          aria-labelledby="mobile-gateway-setup-title"
-        >
-          <h2 id="mobile-gateway-setup-title">
-            Run the gateway beside your agent.
-          </h2>
-          <p>
-            This runs on infrastructure the user controls, with a separately
-            configured private OpenClaw service and host tools disabled.
-          </p>
-          <div data-gateway-terminal></div>
-        </section>
-
-        <section data-architecture-story data-story-layout="mobile"></section>
-      </main>
-    </template>
-
-    <dialog
-      id="tool-dialog"
-      class="tool-dialog"
-      aria-labelledby="tool-dialog-title"
-    >
-      <div class="tool-dialog-heading">
-        <div>
-          <span>Declared by the web app</span>
-          <h2 id="tool-dialog-title">Project board tools</h2>
+    <main id="workbench" class="workbench">
+      <aside class="scenario-rail" aria-labelledby="scenario-title">
+        <div class="scenario-intro">
+          <h1 id="scenario-title">Scenarios</h1>
+          <p>Try a demo or connect your own agent.</p>
         </div>
-        <form method="dialog">
-          <button type="submit" aria-label="Close tool definitions">
-            Close
+        <div
+          class="scenario-tabs"
+          role="tablist"
+          aria-label="Demo applications"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected="true"
+            data-scenario-tab="project-board"
+          >
+            <span class="scenario-icon board-icon" aria-hidden="true"></span
+            ><span
+              ><strong>Project board</strong
+              ><small
+                >Agents work with a real task board in Northstar.</small
+              ></span
+            >
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected="false"
+            data-scenario-tab="document-review"
+          >
+            <span class="scenario-icon document-icon" aria-hidden="true"></span
+            ><span
+              ><strong>Document review</strong
+              ><small
+                >Summarize and extract insights from documents.</small
+              ></span
+            >
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected="false"
+            data-scenario-tab="product-research"
+          >
+            <span class="scenario-icon search-icon" aria-hidden="true"></span
+            ><span
+              ><strong>Product research</strong
+              ><small
+                >Agents find and organize information from the web.</small
+              ></span
+            >
+          </button>
+        </div>
+      </aside>
+
+      <section class="app-stage" aria-label="Independent demo application">
+        <section
+          id="scenario-project-board"
+          class="scenario-surface board-surface"
+          data-scenario-panel="project-board"
+        >
+          <header class="third-party-header northstar-header">
+            <div class="third-party-brand">
+              <span class="northstar-mark" aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path
+                    d="m12 2 1.9 7.1L21 12l-7.1 2.9L12 22l-1.9-7.1L3 12l7.1-2.9L12 2Z"
+                  /></svg></span
+              ><strong>Northstar</strong>
+            </div>
+            <nav aria-label="Northstar sections">
+              <span>Projects</span><strong>Board</strong><span>Calendar</span
+              ><span>Reports</span><span>People</span>
+            </nav>
+            <div class="app-account">
+              <span class="app-search">Search tasks, projects…</span
+              ><span class="app-avatar">SL</span
+              ><small>Sarah Lee<br />Acme Studios</small
+              ><span class="account-chevron" aria-hidden="true"></span>
+            </div>
+          </header>
+          <div class="third-party-context">
+            <div>
+              <span>Projects&nbsp; / &nbsp;Website Redesign</span>
+              <h2>Website Redesign</h2>
+              <p>A faster, simpler, more delightful experience.</p>
+            </div>
+            <div class="context-actions">
+              <button type="button">Share</button
+              ><button type="button" aria-label="More project actions">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="5" cy="12" r="1.5" />
+                  <circle cx="12" cy="12" r="1.5" />
+                  <circle cx="19" cy="12" r="1.5" />
+                </svg></button
+              ><button type="button" class="add-task">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                <span>Add task</span>
+              </button>
+            </div>
+          </div>
+          <div class="app-tabs" aria-label="Project views">
+            <strong>Board</strong><span>List</span><span>Timeline</span
+            ><span>Files</span>
+          </div>
+          <div class="board-columns">
+            <section>
+              <h3><i class="dot slate"></i>To do <small>5</small></h3>
+              <ul id="task-list-backlog">
+                <li data-task-id="pricing">
+                  <span data-task-title>Finalize homepage copy</span>
+                  <div>
+                    <em>Content</em
+                    ><small data-task-priority="high">High</small>
+                  </div>
+                  <footer><b>JM</b> Apr 22</footer>
+                </li>
+                <li data-task-id="docs">
+                  <span data-task-title>Design system updates</span>
+                  <div>
+                    <em>Design</em
+                    ><small data-task-priority="medium">Medium</small>
+                  </div>
+                  <footer><b>KL</b> Apr 24</footer>
+                </li>
+                <li>
+                  <span>Set up analytics events</span>
+                  <div><em>Engineering</em><small>Medium</small></div>
+                  <footer><b>DP</b> Apr 25</footer>
+                </li>
+              </ul>
+              <button type="button" class="column-add">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Add a task
+              </button>
+            </section>
+            <section>
+              <h3><i class="dot blue"></i>In progress <small>3</small></h3>
+              <ul id="task-list-doing">
+                <li data-task-id="checkout">
+                  <span data-task-title>Build new landing page</span>
+                  <div>
+                    <em>Engineering</em
+                    ><small data-task-priority="high">High</small>
+                  </div>
+                  <footer><b>DP</b> Apr 18</footer>
+                </li>
+                <li>
+                  <span>Mobile responsiveness</span>
+                  <div><em>Design</em><small>High</small></div>
+                  <footer><b>KL</b> Apr 19</footer>
+                </li>
+                <li>
+                  <span>Update product screenshots</span>
+                  <div><em>Content</em><small>Medium</small></div>
+                  <footer><b>JM</b> Apr 20</footer>
+                </li>
+              </ul>
+              <button type="button" class="column-add">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Add a task
+              </button>
+            </section>
+            <section>
+              <h3><i class="dot amber"></i>Review <small>2</small></h3>
+              <ul>
+                <li>
+                  <span>Navigation usability test</span>
+                  <div><em>Research</em><small>Medium</small></div>
+                  <footer><b>TS</b> Apr 17</footer>
+                </li>
+                <li>
+                  <span>Accessibility audit</span>
+                  <div><em>Engineering</em><small>Medium</small></div>
+                  <footer><b>DP</b> Apr 18</footer>
+                </li>
+              </ul>
+              <button type="button" class="column-add">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Add a task
+              </button>
+            </section>
+            <section>
+              <h3><i class="dot green"></i>Done <small>4</small></h3>
+              <ul id="task-list-done">
+                <li data-task-id="domain">
+                  <span data-task-title>Project kickoff</span>
+                  <div>
+                    <em>Operations</em
+                    ><small data-task-priority="low">Low</small>
+                  </div>
+                  <footer><b>SL</b> Apr 10</footer>
+                </li>
+                <li>
+                  <span>Competitor analysis</span>
+                  <div><em>Research</em><small>Low</small></div>
+                  <footer><b>TS</b> Apr 12</footer>
+                </li>
+                <li>
+                  <span>Information architecture</span>
+                  <div><em>Design</em><small>Low</small></div>
+                  <footer><b>KL</b> Apr 14</footer>
+                </li>
+              </ul>
+            </section>
+          </div>
+        </section>
+
+        <section
+          id="scenario-document-review"
+          class="scenario-surface editor-surface"
+          data-scenario-panel="document-review"
+          hidden
+        >
+          <header class="third-party-header fieldnotes-header">
+            <div class="third-party-brand">
+              <span class="fieldnotes-mark">F</span><strong>Fieldnotes</strong>
+            </div>
+            <nav>
+              <span>Drafts</span><strong>Review</strong><span>Publish</span>
+            </nav>
+            <span class="integration-badge">Agent Connect · 4 tools</span>
+          </header>
+          <div class="third-party-context">
+            <div>
+              <span>Product announcement</span>
+              <h2>A quieter way to work</h2>
+              <p>Draft review · last edited today</p>
+            </div>
+            <span class="document-state">Editing</span>
+          </div>
+          <div class="editor-layout">
+            <article class="document-page">
+              <p id="document-block-intro" data-format="paragraph">
+                <span data-review-quote
+                  >Our new workspace makes every team exactly twice as
+                  productive.</span
+                >
+                It brings tasks, decisions, and notes into a single place.
+              </p>
+              <p id="document-block-history" data-format="paragraph">
+                <span data-review-quote
+                  >The first graphical web browser was released in 1989.</span
+                >
+                Since then, software has steadily become more collaborative.
+              </p>
+              <p id="document-block-close" data-format="paragraph">
+                <span data-review-quote
+                  >Basically, we really think this is perhaps the best way for
+                  everyone to work better.</span
+                >
+              </p>
+            </article>
+            <aside>
+              <h3>Review</h3>
+              <ul id="review-comments">
+                <li class="empty-review">No comments yet.</li>
+              </ul>
+            </aside>
+          </div>
+        </section>
+
+        <section
+          id="scenario-product-research"
+          class="scenario-surface product-surface"
+          data-scenario-panel="product-research"
+          hidden
+        >
+          <header class="third-party-header everyday-header">
+            <div class="third-party-brand">
+              <span class="everyday-mark">E</span><strong>Everyday</strong>
+            </div>
+            <div class="market-search">Search products</div>
+            <span class="integration-badge">Agent Connect · 4 tools</span>
+          </header>
+          <div class="third-party-context product-context">
+            <div>
+              <span>Audio › Headphones</span>
+              <h3>Sony WH-CH720N wireless headphones</h3>
+              <p>Product comparison workspace</p>
+            </div>
+          </div>
+          <div class="product-layout">
+            <div
+              class="product-visual"
+              aria-label="Headphones product illustration"
+            >
+              <span></span>
+            </div>
+            <div class="product-details">
+              <div class="rating">4.3 ★ <span>1,284 reviews</span></div>
+              <p class="product-price" id="product-listed-price">€129</p>
+              <p>
+                Over-ear Bluetooth headphones · 35-hour battery · active noise
+                cancellation.
+              </p>
+              <button type="button" disabled>Add to basket</button>
+            </div>
+            <aside id="product-research-results" hidden>
+              <div class="research-heading">
+                <span>Recorded research</span
+                ><strong id="product-kid-fit">mixed</strong>
+              </div>
+              <p id="product-verdict"></p>
+              <h3>Watch for</h3>
+              <ul id="product-concerns"></ul>
+              <div class="price-check">
+                <span>Fair price range</span
+                ><strong id="product-price-range"></strong>
+                <p id="product-price-note"></p>
+              </div>
+              <h3>Alternatives</h3>
+              <ul id="product-alternatives"></ul>
+            </aside>
+          </div>
+        </section>
+      </section>
+
+      <section class="task-drawer" aria-labelledby="task-title">
+        <form id="task-form">
+          <div>
+            <label for="prompt" id="task-title">What should the agent do?</label
+            ><textarea id="prompt" required></textarea>
+          </div>
+          <button id="run" type="submit">
+            <span class="button-label">Run with connected agent</span>
           </button>
         </form>
-      </div>
-      <p id="tool-dialog-copy">
-        These three tools belong to this example. For one-time consent, the
-        public demo authorizes all nine together.
-      </p>
-      <div id="tool-list" class="tool-definition-list"></div>
-    </dialog>
+      </section>
 
+      <aside class="entry-rail" aria-label="Choose how to use the workbench">
+        <section class="entry-panel demo-entry">
+          <h2>
+            <span class="entry-icon play" aria-hidden="true"
+              ><svg viewBox="0 0 24 24"><path d="m9 7 8 5-8 5V7Z" /></svg
+            ></span>
+            Try the demo
+          </h2>
+          <p>
+            Explore how an agent can work with the selected application in a
+            real task flow.
+          </p>
+          <button id="try-demo" class="primary-action" type="button">
+            <svg class="icon play-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m9 7 8 5-8 5V7Z" />
+            </svg>
+            <span class="demo-button-label">Try the demo</span></button
+          ><small>Simulated · no account or model usage</small>
+        </section>
+        <section class="entry-panel connect-entry" id="integration">
+          <h2>
+            <span class="entry-icon link" aria-hidden="true"
+              ><svg viewBox="0 0 24 24">
+                <path
+                  d="M9.5 14.5 14.5 9M7.8 17H6a3 3 0 0 1-3-3v-4a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v1.8M16.2 7H18a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3h-4a3 3 0 0 1-3-3v-1.8"
+                /></svg></span
+            >Connect your agent
+          </h2>
+          <p>
+            Use your own agent to access the selected application through Agent
+            Connect.
+          </p>
+          <form id="connect-form">
+            <label for="gateway-address">Gateway address</label
+            ><input
+              id="gateway-address"
+              name="gateway"
+              type="url"
+              inputmode="url"
+              required
+              autocomplete="url"
+              placeholder="https://gateway.example"
+            /><small class="gateway-help"
+              >Use this HTTPS endpoint in your agent configuration.</small
+            ><button id="connect" class="secondary-action" type="submit">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h13M13 7l5 5-5 5" />
+              </svg>
+              <span class="connect-button-label">Connect with OAuth</span>
+            </button>
+          </form>
+          <a class="setup-action" href="#integration"
+            >View setup guide
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 5h10v10M19 5 5 19" /></svg></a
+          ><button id="disconnect" class="text-action" type="button" hidden>
+            Disconnect &amp; revoke access
+          </button>
+          <div class="auth-note">
+            <strong>Authentication</strong>
+            <p>
+              Uses OAuth 2.0 Authorization Code Flow. You’ll be prompted to sign
+              in on your gateway during the connection process.
+            </p>
+          </div>
+          <output id="status" class="status-line" aria-live="polite"></output>
+        </section>
+      </aside>
+
+      <section class="activity-panel" aria-labelledby="trace-title">
+        <header>
+          <div>
+            <span class="activity-mark" aria-hidden="true"
+              ><svg viewBox="0 0 24 24">
+                <path d="M3 12h4l2.5-6 5 12 2.5-6h4" /></svg
+            ></span>
+            <h2 id="trace-title">Live activity trace</h2>
+            <p>
+              See how the request flows from the application, through Agent
+              Connect, to your agent and back.
+            </p>
+          </div>
+          <div class="trace-controls">
+            <span id="connection-state"><i></i>Ready to demonstrate</span
+            ><button id="clear-trace" type="button">Clear</button>
+          </div>
+        </header>
+        <div
+          class="activity-table"
+          role="table"
+          aria-label="Live request activity"
+        >
+          <div class="activity-row activity-head" role="row">
+            <span>Time</span><span>Actor</span><span>Event</span
+            ><span>Details</span>
+          </div>
+          <ol id="activity-feed" class="activity-feed" aria-live="polite"></ol>
+        </div>
+        <span id="trace-summary" class="sr-only">No events yet</span>
+        <pre id="events" class="sr-only" aria-label="Raw events"></pre>
+      </section>
+    </main>
+
+    <dialog id="tool-dialog">
+      <form method="dialog">
+        <button class="dialog-close" aria-label="Close">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
+      </form>
+      <h2 id="tool-dialog-title">Application tools</h2>
+      <div id="tool-list"></div>
+    </dialog>
+    <button id="show-tools" class="floating-tools" type="button">
+      View app tools
+    </button>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1,0 +1,593 @@
+{
+  "tool": "comp-spec",
+  "version": 1,
+  "createdAt": "2026-09-17T05:56:28.160Z",
+  "comp": ".impeccable/mocks/decision/workbench-first.webp",
+  "warnings": [
+    "region page-header: \"container\": true set in the regions file (the region-size refusal is overridden: one undivided element)",
+    "region scenario-list: \"container\": true set in the regions file (the region-size refusal is overridden: one undivided element)",
+    "region app-workspace: \"container\": true set in the regions file (the region-size refusal is overridden: one undivided element)",
+    "region try-panel: \"container\": true set in the regions file (the region-size refusal is overridden: one undivided element)",
+    "region connect-panel: \"container\": true set in the regions file (the region-size refusal is overridden: one undivided element)",
+    "region activity-header: \"container\": true set in the regions file (the region-size refusal is overridden: one undivided element)",
+    "region activity-table: \"container\": true set in the regions file (the region-size refusal is overridden: one undivided element)"
+  ],
+  "uncoveredInkCells": [],
+  "compSize": {
+    "width": 1505,
+    "height": 1045
+  },
+  "aspect": 1.4402,
+  "orientation": "landscape",
+  "palette": [
+    {
+      "hex": "#f7f7f8",
+      "coverage": 0.9343
+    },
+    {
+      "hex": "#09172b",
+      "coverage": 0.0334
+    },
+    {
+      "hex": "#82848f",
+      "coverage": 0.0133
+    },
+    {
+      "hex": "#b7bbc3",
+      "coverage": 0.0125
+    },
+    {
+      "hex": "#f46864",
+      "coverage": 0.0065
+    }
+  ],
+  "bands": [
+    {
+      "y": 0.0337,
+      "strength": 0.3498
+    },
+    {
+      "y": 0.0787,
+      "strength": 1
+    },
+    {
+      "y": 0.1348,
+      "strength": 1
+    },
+    {
+      "y": 0.1798,
+      "strength": 0.3946
+    },
+    {
+      "y": 0.2247,
+      "strength": 0.2163
+    },
+    {
+      "y": 0.7303,
+      "strength": 0.329
+    },
+    {
+      "y": 0.7865,
+      "strength": 0.2284
+    },
+    {
+      "y": 0.8539,
+      "strength": 0.2095
+    }
+  ],
+  "regions": [
+    {
+      "id": "page-header",
+      "kind": "chrome",
+      "note": "complete white Agent Connect product header with wordmark tagline navigation and avatar",
+      "grid": "A0:J0",
+      "container": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 0.1
+      },
+      "px": {
+        "x": 0,
+        "y": 0,
+        "w": 1505,
+        "h": 105
+      },
+      "aspect": 14.3333,
+      "palette": [
+        {
+          "hex": "#f7f8f8",
+          "coverage": 0.8413
+        },
+        {
+          "hex": "#09192c",
+          "coverage": 0.1464
+        },
+        {
+          "hex": "#c3c3cf",
+          "coverage": 0.005
+        },
+        {
+          "hex": "#848492",
+          "coverage": 0.0047
+        },
+        {
+          "hex": "#595969",
+          "coverage": 0.0026
+        }
+      ],
+      "detail": {
+        "energy": 33.214
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "scenario-intro",
+      "kind": "chrome",
+      "note": "Scenarios heading and entry-path helper copy",
+      "grid": "A1:A1",
+      "box": {
+        "x": 0,
+        "y": 0.1,
+        "w": 0.1,
+        "h": 0.1
+      },
+      "px": {
+        "x": 0,
+        "y": 105,
+        "w": 151,
+        "h": 105
+      },
+      "aspect": 1.4381,
+      "palette": [
+        {
+          "hex": "#f2f6f8",
+          "coverage": 0.8896
+        },
+        {
+          "hex": "#737784",
+          "coverage": 0.0443
+        },
+        {
+          "hex": "#a5a9b2",
+          "coverage": 0.0328
+        },
+        {
+          "hex": "#ced1dd",
+          "coverage": 0.0224
+        },
+        {
+          "hex": "#a6bff7",
+          "coverage": 0.0109
+        }
+      ],
+      "detail": {
+        "energy": 21.3422
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "scenario-list",
+      "kind": "chrome",
+      "note": "scenario rail containing three vertically stacked selectors with project board selected",
+      "grid": "A1:A6",
+      "container": true,
+      "box": {
+        "x": 0,
+        "y": 0.1,
+        "w": 0.1,
+        "h": 0.6
+      },
+      "px": {
+        "x": 0,
+        "y": 105,
+        "w": 151,
+        "h": 627
+      },
+      "aspect": 0.2408,
+      "palette": [
+        {
+          "hex": "#f6f8f8",
+          "coverage": 0.9515
+        },
+        {
+          "hex": "#7f8190",
+          "coverage": 0.0183
+        },
+        {
+          "hex": "#cdd0dc",
+          "coverage": 0.0179
+        },
+        {
+          "hex": "#a6aaae",
+          "coverage": 0.0081
+        },
+        {
+          "hex": "#0d0d1b",
+          "coverage": 0.0042
+        }
+      ],
+      "detail": {
+        "energy": 9.4988
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "app-toolbar",
+      "kind": "chrome",
+      "note": "independently branded Northstar navy navigation bar and project toolbar",
+      "grid": "B1:H1",
+      "box": {
+        "x": 0.1,
+        "y": 0.1,
+        "w": 0.7,
+        "h": 0.1
+      },
+      "px": {
+        "x": 151,
+        "y": 105,
+        "w": 1054,
+        "h": 105
+      },
+      "aspect": 10.0381,
+      "palette": [
+        {
+          "hex": "#f7f8f8",
+          "coverage": 0.6952
+        },
+        {
+          "hex": "#09172b",
+          "coverage": 0.2645
+        },
+        {
+          "hex": "#4377f8",
+          "coverage": 0.0176
+        },
+        {
+          "hex": "#787f93",
+          "coverage": 0.0139
+        },
+        {
+          "hex": "#b9bfcc",
+          "coverage": 0.0088
+        }
+      ],
+      "detail": {
+        "energy": 37.2231
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "app-workspace",
+      "kind": "chrome",
+      "note": "complete Northstar Website Redesign project header tabs and four-column task board",
+      "grid": "B1:H6",
+      "container": true,
+      "box": {
+        "x": 0.1,
+        "y": 0.1,
+        "w": 0.7,
+        "h": 0.6
+      },
+      "px": {
+        "x": 151,
+        "y": 105,
+        "w": 1054,
+        "h": 627
+      },
+      "aspect": 1.681,
+      "palette": [
+        {
+          "hex": "#f7f7f8",
+          "coverage": 0.9315
+        },
+        {
+          "hex": "#09172b",
+          "coverage": 0.0441
+        },
+        {
+          "hex": "#f1f7df",
+          "coverage": 0.0092
+        },
+        {
+          "hex": "#bbc1cb",
+          "coverage": 0.0086
+        },
+        {
+          "hex": "#838392",
+          "coverage": 0.0066
+        }
+      ],
+      "detail": {
+        "energy": 17.4438
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "try-panel",
+      "kind": "chrome",
+      "note": "complete simulation entry panel with heading explanation coral action and no-usage label",
+      "grid": "I1:J2",
+      "container": true,
+      "box": {
+        "x": 0.8,
+        "y": 0.1,
+        "w": 0.2,
+        "h": 0.2
+      },
+      "px": {
+        "x": 1204,
+        "y": 105,
+        "w": 301,
+        "h": 209
+      },
+      "aspect": 1.4402,
+      "palette": [
+        {
+          "hex": "#f7f7f7",
+          "coverage": 0.8029
+        },
+        {
+          "hex": "#f36764",
+          "coverage": 0.1631
+        },
+        {
+          "hex": "#7d808a",
+          "coverage": 0.0158
+        },
+        {
+          "hex": "#babcc4",
+          "coverage": 0.011
+        },
+        {
+          "hex": "#f8bab7",
+          "coverage": 0.0072
+        }
+      ],
+      "detail": {
+        "energy": 19.0087
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "connect-panel",
+      "kind": "chrome",
+      "note": "complete real Agent Connect HTTPS address setup action and OAuth explanation panel",
+      "grid": "I3:J6",
+      "container": true,
+      "box": {
+        "x": 0.8,
+        "y": 0.3,
+        "w": 0.2,
+        "h": 0.4
+      },
+      "px": {
+        "x": 1204,
+        "y": 314,
+        "w": 301,
+        "h": 418
+      },
+      "aspect": 0.7201,
+      "palette": [
+        {
+          "hex": "#f6f6f8",
+          "coverage": 0.9284
+        },
+        {
+          "hex": "#7c7f89",
+          "coverage": 0.0324
+        },
+        {
+          "hex": "#bdbfca",
+          "coverage": 0.0281
+        },
+        {
+          "hex": "#4b4d5d",
+          "coverage": 0.0069
+        },
+        {
+          "hex": "#151523",
+          "coverage": 0.0042
+        }
+      ],
+      "detail": {
+        "energy": 22.7317
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "activity-header",
+      "kind": "chrome",
+      "note": "complete live activity trace heading row with state and clear action",
+      "grid": "A7:J7",
+      "container": true,
+      "box": {
+        "x": 0,
+        "y": 0.7,
+        "w": 1,
+        "h": 0.1
+      },
+      "px": {
+        "x": 0,
+        "y": 732,
+        "w": 1505,
+        "h": 105
+      },
+      "aspect": 14.3333,
+      "palette": [
+        {
+          "hex": "#f8f8f8",
+          "coverage": 0.9574
+        },
+        {
+          "hex": "#9395a0",
+          "coverage": 0.0194
+        },
+        {
+          "hex": "#c6c8d0",
+          "coverage": 0.0191
+        },
+        {
+          "hex": "#656875",
+          "coverage": 0.0031
+        },
+        {
+          "hex": "#101020",
+          "coverage": 0.0012
+        }
+      ],
+      "detail": {
+        "energy": 14.7315
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "activity-title",
+      "kind": "text",
+      "note": "Live activity trace title and request-flow explanation",
+      "grid": "A7:D7",
+      "coverBox": {
+        "x": 0,
+        "y": 0.7,
+        "w": 0.4,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.0199,
+        "y": 0.7062,
+        "w": 0.3801,
+        "h": 0.0344
+      },
+      "px": {
+        "x": 30,
+        "y": 738,
+        "w": 572,
+        "h": 36
+      },
+      "aspect": 15.8889,
+      "palette": [
+        {
+          "hex": "#f8f8f8",
+          "coverage": 0.8532
+        },
+        {
+          "hex": "#a4a5af",
+          "coverage": 0.0687
+        },
+        {
+          "hex": "#d3d4dd",
+          "coverage": 0.0559
+        },
+        {
+          "hex": "#0d0e19",
+          "coverage": 0.0133
+        },
+        {
+          "hex": "#363743",
+          "coverage": 0.0089
+        }
+      ],
+      "detail": {
+        "energy": 32.9288
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": {
+          "lines": 1,
+          "glyphs": 68,
+          "capHeightPx": 14.2,
+          "inkIsDark": true,
+          "allCaps": false,
+          "advance": 0.3874,
+          "advTall": 0.2113,
+          "advX": 0.3874,
+          "gap": 0.0704,
+          "xRatio": 0.477,
+          "stemW": 0.1155,
+          "contrast": 0.8852,
+          "serif": 0.8803,
+          "densTall": 0.8494,
+          "densX": 0.5527,
+          "weight": 0.8494
+        },
+        "widthClass": "compressed",
+        "weightClass": "black",
+        "chosen": {
+          "family": "Just Me Again Down Here",
+          "weight": 400,
+          "fontSizePx": 20,
+          "source": "catalog",
+          "estimatedSize": true,
+          "stamp": "ff91a527d3bc"
+        }
+      }
+    },
+    {
+      "id": "activity-table",
+      "kind": "chrome",
+      "note": "complete correlated time actor event and details table using actor-colored dots",
+      "grid": "A8:J9",
+      "container": true,
+      "box": {
+        "x": 0,
+        "y": 0.8,
+        "w": 1,
+        "h": 0.2
+      },
+      "px": {
+        "x": 0,
+        "y": 836,
+        "w": 1505,
+        "h": 209
+      },
+      "aspect": 7.201,
+      "palette": [
+        {
+          "hex": "#f7f8f8",
+          "coverage": 0.9617
+        },
+        {
+          "hex": "#838590",
+          "coverage": 0.0183
+        },
+        {
+          "hex": "#b8bbc3",
+          "coverage": 0.0177
+        },
+        {
+          "hex": "#525262",
+          "coverage": 0.0014
+        },
+        {
+          "hex": "#18a8b8",
+          "coverage": 0.0009
+        }
+      ],
+      "detail": {
+        "energy": 16.3932
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    }
+  ]
+}

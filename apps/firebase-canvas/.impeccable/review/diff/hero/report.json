@@ -1,0 +1,437 @@
+{
+  "tool": "comp-diff",
+  "version": 1,
+  "createdAt": "2026-09-17T05:56:41.129Z",
+  "label": "hero",
+  "comp": ".impeccable/mocks/decision/workbench-first.webp",
+  "build": ".impeccable/review/hero-repro.png",
+  "spec": ".impeccable/build/spec.json",
+  "compSize": "1505x1045",
+  "buildSize": "1505x1045",
+  "align": "top",
+  "overall": 0.7791,
+  "verdict": "drift",
+  "scores": {
+    "overall": 0.7791,
+    "structure": 0.7465,
+    "color": 0.9679,
+    "colorIntersection": 0.9477,
+    "paletteMatch": 0.9788,
+    "detail": 0.7069,
+    "detailRaw": 0.7121,
+    "detailAdded": 0.0104,
+    "bands": 0.6611
+  },
+  "palette": {
+    "comp": [
+      {
+        "hex": "#f7f7f8",
+        "coverage": 0.9294
+      },
+      {
+        "hex": "#09172b",
+        "coverage": 0.0332
+      },
+      {
+        "hex": "#82848f",
+        "coverage": 0.0132
+      },
+      {
+        "hex": "#b7bbc3",
+        "coverage": 0.0124
+      },
+      {
+        "hex": "#f46864",
+        "coverage": 0.0065
+      },
+      {
+        "hex": "#eef8e3",
+        "coverage": 0.0052
+      }
+    ],
+    "build": [
+      {
+        "hex": "#f7f7f8",
+        "coverage": 0.9495
+      },
+      {
+        "hex": "#091929",
+        "coverage": 0.038
+      },
+      {
+        "hex": "#f86868",
+        "coverage": 0.0069
+      },
+      {
+        "hex": "#9999a9",
+        "coverage": 0.0022
+      },
+      {
+        "hex": "#4878f8",
+        "coverage": 0.0018
+      },
+      {
+        "hex": "#2e3e4e",
+        "coverage": 0.0016
+      }
+    ]
+  },
+  "regions": [
+    {
+      "id": "page-header",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 0.1,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.5994,
+        "structure": 0.8133,
+        "color": 0.8942,
+        "colorIntersection": 0.7789,
+        "paletteMatch": 0.9562,
+        "detail": 0.235,
+        "detailRaw": 0.3756,
+        "detailAdded": 0.2813,
+        "bands": 0.2167
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 23,
+          "y": 13,
+          "w": 1443,
+          "h": 92
+        },
+        "build": {
+          "x": 22,
+          "y": 0,
+          "w": 1446,
+          "h": 105
+        }
+      }
+    },
+    {
+      "id": "scenario-intro",
+      "x": 0,
+      "y": 0.1,
+      "w": 0.1,
+      "h": 0.1,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.6974,
+        "structure": 0.6898,
+        "color": 0.8106,
+        "colorIntersection": 0.6597,
+        "paletteMatch": 0.8919,
+        "detail": 0.4898,
+        "detailRaw": 0.5783,
+        "detailAdded": 0.1771,
+        "bands": 0.8727
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 16,
+          "y": 0,
+          "w": 135,
+          "h": 104
+        },
+        "build": {
+          "x": 8,
+          "y": 0,
+          "w": 143,
+          "h": 104
+        }
+      }
+    },
+    {
+      "id": "scenario-list",
+      "x": 0,
+      "y": 0.1,
+      "w": 0.1,
+      "h": 0.6,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.8416,
+        "structure": 0.8295,
+        "color": 0.9432,
+        "colorIntersection": 0.9023,
+        "paletteMatch": 0.9651,
+        "detail": 0.6989,
+        "detailRaw": 0.7562,
+        "detailAdded": 0.1146,
+        "bands": 0.9385
+      },
+      "verdict": "match",
+      "inkBox": {
+        "comp": {
+          "x": 16,
+          "y": 0,
+          "w": 135,
+          "h": 294
+        },
+        "build": {
+          "x": 8,
+          "y": 0,
+          "w": 143,
+          "h": 325
+        }
+      }
+    },
+    {
+      "id": "app-toolbar",
+      "x": 0.1,
+      "y": 0.1,
+      "w": 0.7,
+      "h": 0.1,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.6523,
+        "structure": 0.849,
+        "color": 0.9007,
+        "colorIntersection": 0.8096,
+        "paletteMatch": 0.9498,
+        "detail": 0.297,
+        "detailRaw": 0.396,
+        "detailAdded": 0.1979,
+        "bands": 0.3714
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 0,
+          "y": 0,
+          "w": 1021,
+          "h": 104
+        },
+        "build": {
+          "x": 0,
+          "y": 0,
+          "w": 1041,
+          "h": 104
+        }
+      }
+    },
+    {
+      "id": "app-workspace",
+      "x": 0.1,
+      "y": 0.1,
+      "w": 0.7,
+      "h": 0.6,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.8141,
+        "structure": 0.7087,
+        "color": 0.9516,
+        "colorIntersection": 0.9057,
+        "paletteMatch": 0.9763,
+        "detail": 0.7126,
+        "detailRaw": 0.7126,
+        "detailAdded": 0,
+        "bands": 1
+      },
+      "verdict": "match",
+      "inkBox": {
+        "comp": {
+          "x": 0,
+          "y": 0,
+          "w": 1021,
+          "h": 592
+        },
+        "build": {
+          "x": 0,
+          "y": 0,
+          "w": 1041,
+          "h": 558
+        }
+      }
+    },
+    {
+      "id": "try-panel",
+      "x": 0.8,
+      "y": 0.1,
+      "w": 0.2,
+      "h": 0.2,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.7289,
+        "structure": 0.7122,
+        "color": 0.8986,
+        "colorIntersection": 0.8122,
+        "paletteMatch": 0.9452,
+        "detail": 0.4743,
+        "detailRaw": 0.542,
+        "detailAdded": 0.1354,
+        "bands": 0.9091
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 6,
+          "y": 0,
+          "w": 262,
+          "h": 209
+        },
+        "build": {
+          "x": 26,
+          "y": 0,
+          "w": 240,
+          "h": 209
+        }
+      }
+    },
+    {
+      "id": "connect-panel",
+      "x": 0.8,
+      "y": 0.3,
+      "w": 0.2,
+      "h": 0.4,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.7553,
+        "structure": 0.6703,
+        "color": 0.9027,
+        "colorIntersection": 0.8345,
+        "paletteMatch": 0.9394,
+        "detail": 0.6256,
+        "detailRaw": 0.6464,
+        "detailAdded": 0.0417,
+        "bands": 0.924
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 6,
+          "y": 0,
+          "w": 260,
+          "h": 351
+        },
+        "build": {
+          "x": 26,
+          "y": 0,
+          "w": 235,
+          "h": 342
+        }
+      }
+    },
+    {
+      "id": "activity-header",
+      "x": 0,
+      "y": 0.7,
+      "w": 1,
+      "h": 0.1,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.7361,
+        "structure": 0.936,
+        "color": 0.9798,
+        "colorIntersection": 0.9644,
+        "paletteMatch": 0.9881,
+        "detail": 0.462,
+        "detailRaw": 0.5662,
+        "detailAdded": 0.2083,
+        "bands": 0.32
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 37,
+          "y": 13,
+          "w": 1422,
+          "h": 91
+        },
+        "build": {
+          "x": 33,
+          "y": 9,
+          "w": 1419,
+          "h": 95
+        }
+      }
+    },
+    {
+      "id": "activity-title",
+      "x": 0.0199,
+      "y": 0.7062,
+      "w": 0.3801,
+      "h": 0.0344,
+      "kind": "text",
+      "score": {
+        "overall": 0.6724,
+        "structure": 0.7648,
+        "color": 0.9597,
+        "colorIntersection": 0.9207,
+        "paletteMatch": 0.9806,
+        "detail": 0.1453,
+        "detailRaw": 0.2964,
+        "detailAdded": 0.3021,
+        "bands": 0.2833
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 7,
+          "y": 13,
+          "w": 565,
+          "h": 22
+        },
+        "build": {
+          "x": 9,
+          "y": 9,
+          "w": 563,
+          "h": 17
+        }
+      }
+    },
+    {
+      "id": "activity-table",
+      "x": 0,
+      "y": 0.8,
+      "w": 1,
+      "h": 0.2,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.6134,
+        "structure": 0.8883,
+        "color": 0.9731,
+        "colorIntersection": 0.9533,
+        "paletteMatch": 0.9838,
+        "detail": 0.2368,
+        "detailRaw": 0.2681,
+        "detailAdded": 0.0625,
+        "bands": 0
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 38,
+          "y": 10,
+          "w": 1173,
+          "h": 161
+        },
+        "build": {
+          "x": 32,
+          "y": 0,
+          "w": 1079,
+          "h": 151
+        }
+      }
+    }
+  ],
+  "files": {
+    "sideBySide": ".impeccable/review/diff/hero/side-by-side.png",
+    "heatmap": ".impeccable/review/diff/hero/heatmap.png",
+    "regionFiles": [
+      ".impeccable/review/diff/hero/regions/page-header.png",
+      ".impeccable/review/diff/hero/regions/scenario-intro.png",
+      ".impeccable/review/diff/hero/regions/scenario-list.png",
+      ".impeccable/review/diff/hero/regions/app-toolbar.png",
+      ".impeccable/review/diff/hero/regions/app-workspace.png",
+      ".impeccable/review/diff/hero/regions/try-panel.png",
+      ".impeccable/review/diff/hero/regions/connect-panel.png",
+      ".impeccable/review/diff/hero/regions/activity-header.png",
+      ".impeccable/review/diff/hero/regions/activity-title.png",
+      ".impeccable/review/diff/hero/regions/activity-table.png"
+    ]
+  }
+}

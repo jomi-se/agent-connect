@@ -1,0 +1,58 @@
+{
+  "title": "Choose the rebuilt Canvas structure",
+  "question": "All three keep the Open Workbench identity, the three sample apps, and two honest entry paths. Which composition should carry the demo?",
+  "options": [
+    {
+      "id": "workbench-first",
+      "label": "Workbench at first sight",
+      "kicker": "THE ROLL",
+      "thesis": "The first viewport is already the product: choose a path, run a task, and watch the handoff happen beside the app.",
+      "palette": ["#ffffff", "#171d2d", "#d65c47", "#2c766f", "#7470c9"],
+      "materials": [
+        "bright studio surface",
+        "precise actor-colored signals",
+        "independent app chrome"
+      ],
+      "viewport": "A compact product header sits above a wide live workbench: scenario rail at left, the selected app in the center, and an honest Try demo / Connect your agent control rail at right; the activity trace begins within the same viewport.",
+      "risk": "The integration story must stay legible without crowding the real app surface.",
+      "comp": ".impeccable/mocks/decision/workbench-first.webp"
+    },
+    {
+      "id": "proof-corridor",
+      "label": "The proof corridor",
+      "thesis": "A visitor advances through one visible chain from request to agent to browser action, with the selected app changing at each proof point.",
+      "palette": ["#ffffff", "#171d2d", "#d65c47", "#2c766f", "#7470c9"],
+      "materials": [
+        "open editorial bands",
+        "connected execution trace",
+        "full-width product moments"
+      ],
+      "viewport": "A concise promise and two entry actions lead directly into a horizontal request-to-result path, while a large application viewport below shows the exact object the simulated or real agent changes.",
+      "risk": "A staged sequence can feel scripted unless simulation labels and live event states are unmistakable.",
+      "comp": ".impeccable/mocks/decision/proof-corridor.webp"
+    },
+    {
+      "id": "guided-runbook",
+      "label": "The guided runbook",
+      "thesis": "The page teaches the complete product loop as a short guided run whose steps remain real controls, not a slideshow.",
+      "palette": ["#ffffff", "#171d2d", "#d65c47", "#2c766f", "#7470c9"],
+      "materials": [
+        "numbered workbench steps",
+        "progressive disclosure",
+        "developer evidence drawer"
+      ],
+      "viewport": "A two-path start occupies the left half and a numbered four-step run occupies the right; choosing Try demo opens the first scenario in place, while Connect your agent reveals the HTTPS address field and OAuth explanation.",
+      "risk": "Guidance can slow repeat visitors unless completed steps collapse cleanly.",
+      "comp": ".impeccable/mocks/decision/guided-runbook.webp"
+    }
+  ],
+  "reroll": {
+    "registers": ["safer", "bolder"]
+  },
+  "buildPath": {
+    "value": "comp",
+    "toggle": true
+  },
+  "canon": false,
+  "steer": true
+}

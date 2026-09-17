@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Scaffold reference: workbench-first.webp</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Just+Me+Again+Down+Here:wght@400&display=swap"
+    />
+    <link rel="stylesheet" href="layout.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+      }
+      body {
+        background: #f7f7f8;
+      }
+      .region {
+        box-sizing: border-box;
+      }
+      .region.text p {
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Reference only. Every region sits at its measured box inside a comp-aspect frame. Take the boxes (layout.css), keep your own semantic structure. -->
+    <main class="comp-frame" style="max-width: 1505px">
+      <div class="r-page-header region chrome" data-region="page-header">
+        <!-- complete white Agent Connect product header with wordmark tagline navigation and avatar -->
+      </div>
+      <div class="r-scenario-intro region chrome" data-region="scenario-intro">
+        <!-- Scenarios heading and entry-path helper copy -->
+      </div>
+      <div class="r-scenario-list region chrome" data-region="scenario-list">
+        <!-- scenario rail containing three vertically stacked selectors with project board selected -->
+      </div>
+      <div class="r-app-toolbar region chrome" data-region="app-toolbar">
+        <!-- independently branded Northstar navy navigation bar and project toolbar -->
+      </div>
+      <div class="r-app-workspace region chrome" data-region="app-workspace">
+        <!-- complete Northstar Website Redesign project header tabs and four-column task board -->
+      </div>
+      <div class="r-try-panel region chrome" data-region="try-panel">
+        <!-- complete simulation entry panel with heading explanation coral action and no-usage label -->
+      </div>
+      <div class="r-connect-panel region chrome" data-region="connect-panel">
+        <!-- complete real Agent Connect HTTPS address setup action and OAuth explanation panel -->
+      </div>
+      <div
+        class="r-activity-header region chrome"
+        data-region="activity-header"
+      >
+        <!-- complete live activity trace heading row with state and clear action -->
+      </div>
+      <div class="r-activity-title region text" data-region="activity-title">
+        <!-- Live activity trace title and request-flow explanation -->
+        <p
+          style="
+            font-size: var(--r-activity-title-font);
+            font-family: var(--r-activity-title-family), sans-serif;
+            font-weight: var(--r-activity-title-weight);
+            line-height: 1.05;
+            margin: 0;
+          "
+        >
+          activity-title
+        </p>
+      </div>
+      <div class="r-activity-table region chrome" data-region="activity-table">
+        <!-- complete correlated time actor event and details table using actor-colored dots -->
+      </div>
+    </main>
+  </body>
+</html>

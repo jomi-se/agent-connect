@@ -1,0 +1,71 @@
+{
+  "regions": [
+    {
+      "id": "page-header",
+      "kind": "chrome",
+      "grid": "A0:J0",
+      "container": true,
+      "note": "complete white Agent Connect product header with wordmark tagline navigation and avatar"
+    },
+    {
+      "id": "scenario-intro",
+      "kind": "chrome",
+      "grid": "A1:A1",
+      "note": "Scenarios heading and entry-path helper copy"
+    },
+    {
+      "id": "scenario-list",
+      "kind": "chrome",
+      "grid": "A1:A6",
+      "container": true,
+      "note": "scenario rail containing three vertically stacked selectors with project board selected"
+    },
+    {
+      "id": "app-toolbar",
+      "kind": "chrome",
+      "grid": "B1:H1",
+      "note": "independently branded Northstar navy navigation bar and project toolbar"
+    },
+    {
+      "id": "app-workspace",
+      "kind": "chrome",
+      "grid": "B1:H6",
+      "container": true,
+      "note": "complete Northstar Website Redesign project header tabs and four-column task board"
+    },
+    {
+      "id": "try-panel",
+      "kind": "chrome",
+      "grid": "I1:J2",
+      "container": true,
+      "note": "complete simulation entry panel with heading explanation coral action and no-usage label"
+    },
+    {
+      "id": "connect-panel",
+      "kind": "chrome",
+      "grid": "I3:J6",
+      "container": true,
+      "note": "complete real Agent Connect HTTPS address setup action and OAuth explanation panel"
+    },
+    {
+      "id": "activity-header",
+      "kind": "chrome",
+      "grid": "A7:J7",
+      "container": true,
+      "note": "complete live activity trace heading row with state and clear action"
+    },
+    {
+      "id": "activity-title",
+      "kind": "text",
+      "grid": "A7:D7",
+      "note": "Live activity trace title and request-flow explanation"
+    },
+    {
+      "id": "activity-table",
+      "kind": "chrome",
+      "grid": "A8:J9",
+      "container": true,
+      "note": "complete correlated time actor event and details table using actor-colored dots"
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 # Future feature: migrate Firebase Canvas to the stock plugin
 
-Status: proposed, not started. Product intent captured 2026-09-09.
+Status: implementation in progress. Product intent captured 2026-09-09;
+workbench, deterministic scenarios, and address-based OAuth entry implemented
+2026-09-17.
 
 ## Goal
 
@@ -31,6 +33,13 @@ The simulated and real paths should share presentation components where useful,
 but the real integration must remain easy for a developer to locate and read.
 
 ## Migration behavior
+
+The first implemented slice removes the runtime-card surface, adds the two
+honest entry paths, runs all three deterministic scenarios through the real
+page-owned tool handlers, and starts the current stock-plugin OAuth flow from a
+compatible HTTPS address. Controlled live-plugin composition and the full
+conversation/recovery matrix below remain acceptance work rather than claims
+of this slice.
 
 - Replace runtime-card parsing, storage, paste UI, setup animation, and legacy
   environment instructions with the current address-based connection contract.

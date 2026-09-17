@@ -11,5 +11,8 @@ export default defineConfig({
     command: "npm run dev -- --port 4174",
     url: "http://127.0.0.1:4174",
     reuseExistingServer: !process.env["CI"],
+    env: {
+      VITE_AGENT_CONNECT_REDIRECT_ORIGIN: "https://canvas.example",
+    },
   },
 });

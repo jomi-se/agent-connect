@@ -1,0 +1,230 @@
+{
+  "tool": "build-phase",
+  "version": 2,
+  "startedAt": "2026-09-17T05:56:28.092Z",
+  "comp": ".impeccable/mocks/decision/workbench-first.webp",
+  "direction": null,
+  "breakpoint": "1505x1045",
+  "artifact": null,
+  "phase": "review",
+  "phases": {
+    "comps": {
+      "status": "skipped",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [
+        {
+          "at": "2026-09-17T05:56:28.092Z",
+          "text": "started with an approved comp; the comp round happened before this state (surface round or manual)"
+        }
+      ],
+      "gate": null,
+      "forced": null
+    },
+    "spec": {
+      "status": "closed",
+      "openedAt": "2026-09-17T05:56:28.092Z",
+      "closedAt": "2026-09-17T05:56:28.276Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "10 regions, 0 plates, 1 text regions measured",
+        "at": "2026-09-17T05:56:28.276Z"
+      },
+      "forced": null
+    },
+    "plates": {
+      "status": "closed",
+      "openedAt": "2026-09-17T05:56:28.276Z",
+      "closedAt": "2026-09-17T05:56:28.282Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "no plates owed",
+        "at": "2026-09-17T05:56:28.282Z"
+      },
+      "forced": null
+    },
+    "hero": {
+      "status": "closed",
+      "openedAt": "2026-09-17T05:56:28.282Z",
+      "closedAt": "2026-09-17T05:56:41.264Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "hero 78% (drift)",
+        "score": 0.7791,
+        "verdict": "drift",
+        "report": ".impeccable/review/diff/hero/report.json",
+        "sideBySide": ".impeccable/review/diff/hero/side-by-side.png",
+        "worst": [
+          "page-header drift 60%",
+          "activity-table drift 61%",
+          "app-toolbar drift 65%"
+        ],
+        "worstIds": ["page-header", "activity-table", "app-toolbar"],
+        "worstCrops": [
+          {
+            "id": "page-header",
+            "verdict": "drift",
+            "score": {
+              "overall": 0.5994,
+              "structure": 0.8133,
+              "color": 0.8942,
+              "colorIntersection": 0.7789,
+              "paletteMatch": 0.9562,
+              "detail": 0.235,
+              "detailRaw": 0.3756,
+              "detailAdded": 0.2813,
+              "bands": 0.2167
+            },
+            "file": ".impeccable/review/diff/hero/regions/page-header.png"
+          },
+          {
+            "id": "activity-table",
+            "verdict": "drift",
+            "score": {
+              "overall": 0.6134,
+              "structure": 0.8883,
+              "color": 0.9731,
+              "colorIntersection": 0.9533,
+              "paletteMatch": 0.9838,
+              "detail": 0.2368,
+              "detailRaw": 0.2681,
+              "detailAdded": 0.0625,
+              "bands": 0
+            },
+            "file": ".impeccable/review/diff/hero/regions/activity-table.png"
+          },
+          {
+            "id": "app-toolbar",
+            "verdict": "drift",
+            "score": {
+              "overall": 0.6523,
+              "structure": 0.849,
+              "color": 0.9007,
+              "colorIntersection": 0.8096,
+              "paletteMatch": 0.9498,
+              "detail": 0.297,
+              "detailRaw": 0.396,
+              "detailAdded": 0.1979,
+              "bands": 0.3714
+            },
+            "file": ".impeccable/review/diff/hero/regions/app-toolbar.png"
+          }
+        ],
+        "advisories": [
+          "(advisory, above the 72% bar; fix in the polish pass before responsive) 3 readings:",
+          "  text activity-title: cap height 7.7px in the build, 14.2px in the comp (-46%); set font-size so the cap height renders at 14.2px (font-match ranked Just Me Again Down Here 400 at 20px)",
+          "  chrome page-header: its rule sits 78px into the box in the comp and 41px in the build (-37px), so the strip is shorter than the comp's; match the height, not only the position",
+          "  chrome app-toolbar: its rule sits 31px into the box in the comp and 12px in the build (-19px), so the strip is shorter than the comp's; match the height, not only the position"
+        ],
+        "regionVerdicts": {
+          "page-header": "drift",
+          "scenario-intro": "drift",
+          "scenario-list": "match",
+          "app-toolbar": "drift",
+          "app-workspace": "match",
+          "try-panel": "drift",
+          "connect-panel": "drift",
+          "activity-header": "drift",
+          "activity-title": "drift",
+          "activity-table": "drift"
+        },
+        "at": "2026-09-17T05:56:41.264Z"
+      },
+      "forced": null,
+      "readingsSeen": {
+        "text activity-title: cap height 7.7px in the build, 14.2px in the comp (-46%); set font-size so the cap height renders at 14.2px (font-match ranked Just Me Again Down Here 400 at 20px)": 1,
+        "chrome page-header: its rule sits 78px into the box in the comp and 41px in the build (-37px), so the strip is shorter than the comp's; match the height, not only the position": 1,
+        "chrome app-toolbar: its rule sits 31px into the box in the comp and 12px in the build (-19px), so the strip is shorter than the comp's; match the height, not only the position": 1
+      },
+      "history": [
+        {
+          "at": "2026-09-17T05:56:41.264Z",
+          "score": 0.7791,
+          "worstIds": ["page-header", "activity-table", "app-toolbar"],
+          "regionVerdicts": {
+            "page-header": "drift",
+            "scenario-intro": "drift",
+            "scenario-list": "match",
+            "app-toolbar": "drift",
+            "app-workspace": "match",
+            "try-panel": "drift",
+            "connect-panel": "drift",
+            "activity-header": "drift",
+            "activity-title": "drift",
+            "activity-table": "drift"
+          },
+          "artifactHash": "9a55b8075d32"
+        }
+      ]
+    },
+    "sections": {
+      "status": "closed",
+      "openedAt": "2026-09-17T05:56:41.264Z",
+      "closedAt": "2026-09-17T05:56:46.925Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "no mechanical gate",
+        "at": "2026-09-17T05:56:46.925Z"
+      },
+      "forced": null
+    },
+    "motion": {
+      "status": "closed",
+      "openedAt": "2026-09-17T05:56:46.925Z",
+      "closedAt": "2026-09-17T05:56:50.546Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "no mechanical gate",
+        "at": "2026-09-17T05:56:50.546Z"
+      },
+      "forced": null
+    },
+    "responsive": {
+      "status": "closed",
+      "openedAt": "2026-09-17T05:56:50.546Z",
+      "closedAt": "2026-09-17T05:57:30.907Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "desktop 76% (drift)",
+        "score": 0.7605,
+        "sideBySide": ".impeccable/review/diff/desktop/side-by-side.png",
+        "at": "2026-09-17T05:57:30.907Z"
+      },
+      "forced": null
+    },
+    "review": {
+      "status": "closed",
+      "openedAt": "2026-09-17T05:57:30.907Z",
+      "closedAt": "2026-09-17T06:29:33.957Z",
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    }
+  },
+  "finish": {
+    "disposition": "ship",
+    "at": "2026-09-17T06:29:33.957Z",
+    "phaseAtFinish": "review"
+  },
+  "plates": {}
+}
