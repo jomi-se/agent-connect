@@ -17,7 +17,7 @@ application-only listener on `127.0.0.1:18790` by default; native OpenClaw stays
 on its own listener (the reference profile uses `127.0.0.1:18789`). Public
 application routes remain under `/agent-connect`.
 
-The prepared release package versions are:
+The published package versions are:
 
 - `@open-agent-connect/web@0.0.9`;
 - `@open-agent-connect/openclaw-plugin@0.0.7`.
