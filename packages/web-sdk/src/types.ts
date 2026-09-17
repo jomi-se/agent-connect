@@ -139,6 +139,8 @@ export interface ResponsesProviderOptions {
    * of constructing this low-level provider directly.
    */
   readonly baseUrl: string;
+  /** Logical model/profile required by the selected gateway. */
+  readonly model: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly headers?: Readonly<Record<string, string>>;
   readonly credentials?: RequestCredentials;

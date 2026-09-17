@@ -8,7 +8,7 @@ implementations.
 Install the published package in the web application:
 
 ```sh
-npm install @open-agent-connect/web@0.0.7
+npm install @open-agent-connect/web@0.0.8
 ```
 
 The package provides:
@@ -149,6 +149,11 @@ for await (const event of session.streamContinuation(
   renderAgentEvent(event);
 }
 ```
+
+The OpenClaw-specific factory derives both the namespaced provider URL and the
+required model alias from the validated connection. Do not pass
+`connection.endpoint` into the low-level `ResponsesProvider`: that class appends
+`/v1/responses` itself and requires an explicit model for non-OpenClaw gateways.
 
 ## Headless conversations
 

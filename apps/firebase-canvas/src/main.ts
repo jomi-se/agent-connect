@@ -1,10 +1,10 @@
 import {
   AgentSession,
   OpenClawConnectionError,
-  ResponsesProvider,
   beginOpenClawAuthorization,
   completeOpenClawAuthorization,
   createOpenClawAccessTokenGetter,
+  createOpenClawResponsesProvider,
   discoverOpenClawProvider,
   normalizeOpenClawProviderUrl,
   parseOpenClawAuthorizationTransaction,
@@ -212,17 +212,10 @@ function createSession(initial: OpenClawConnection): AgentSession {
       return true;
     },
   });
-  const authenticatedFetch: typeof globalThis.fetch = async (input, init) => {
-    const token = await getAccessToken(init?.signal ?? undefined);
-    const headers = new Headers(init?.headers);
-    headers.set("Authorization", `Bearer ${token}`);
-    return fetch(input, { ...init, headers, credentials: "omit" });
-  };
   return new AgentSession({
-    provider: new ResponsesProvider({
-      baseUrl: initial.endpoint,
-      fetch: authenticatedFetch,
-      credentials: "omit",
+    provider: createOpenClawResponsesProvider({
+      connection: initial,
+      getAccessToken,
     }),
     tools,
   });

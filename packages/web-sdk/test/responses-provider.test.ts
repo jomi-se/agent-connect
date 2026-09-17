@@ -100,6 +100,7 @@ function provider(responses: readonly (() => Response)[]): {
   return {
     provider: new ResponsesProvider({
       baseUrl: "https://runtime.example",
+      model: "test/default",
       fetch: fetchImplementation as unknown as typeof globalThis.fetch,
       headers: { Authorization: "Bearer capability" },
     }),
@@ -114,6 +115,7 @@ describe("ResponsesProvider", () => {
       () =>
         new ResponsesProvider({
           baseUrl: "https://gateway.example/agent-connect/v1/responses",
+          model: "openclaw/default",
         }),
     ).toThrow("createOpenClawResponsesProvider");
   });
@@ -146,6 +148,9 @@ describe("ResponsesProvider", () => {
         authorization: "Bearer current-access-token",
       },
     ]);
+    expect(fetchImplementation.mock.calls[0]?.[1]?.body).toContain(
+      '"model":"openclaw/default"',
+    );
   });
 
   it("invalidates checkpoints on admission before text and ambiguous transport failure", async () => {
@@ -228,7 +233,7 @@ describe("ResponsesProvider", () => {
       "https://runtime.example/v1/responses",
     ]);
     expect(harness.bodies[0]).toMatchObject({
-      model: "agent-connect/default",
+      model: "test/default",
       stream: true,
       input: "do the thing",
       tools: [
@@ -240,7 +245,7 @@ describe("ResponsesProvider", () => {
       ],
     });
     expect(harness.bodies[1]).toMatchObject({
-      model: "agent-connect/default",
+      model: "test/default",
       previous_response_id: "resp_1",
       input: [
         {
@@ -282,7 +287,7 @@ describe("ResponsesProvider", () => {
       text: "revised",
     });
     expect(harness.bodies[1]).toEqual({
-      model: "agent-connect/default",
+      model: "test/default",
       stream: true,
       input: "make it shorter",
       previous_response_id: "resp_1",
@@ -324,6 +329,7 @@ describe("ResponsesProvider", () => {
     const session = new AgentSession({
       provider: new ResponsesProvider({
         baseUrl: "https://runtime.example",
+        model: "test/default",
         fetch,
       }),
       tools: [tool],

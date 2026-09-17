@@ -19,7 +19,7 @@ application routes remain under `/agent-connect`.
 
 The published packages are:
 
-- `@open-agent-connect/web@0.0.7`;
+- `@open-agent-connect/web@0.0.8`;
 - `@open-agent-connect/openclaw-plugin@0.0.5`.
 
 The reference deployment pins the published plugin and its integrity, records

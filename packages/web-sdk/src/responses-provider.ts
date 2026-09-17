@@ -11,8 +11,6 @@ import type {
   ResponsesProviderOptions,
 } from "./types.js";
 
-const MODEL = "agent-connect/default";
-
 interface PendingOutput {
   readonly callId: string;
   readonly output: string;
@@ -30,8 +28,8 @@ export interface CreateOpenClawResponsesProviderOptions {
  * Create an authenticated provider from an OpenClaw connection.
  *
  * This is the safe application-facing path: it derives the provider base URL
- * from the validated connection, so callers cannot accidentally pass the full
- * `/v1/responses` endpoint to `ResponsesProvider` and duplicate the path.
+ * and model from the validated connection, so callers cannot accidentally
+ * duplicate the `/v1/responses` path or send a stale model alias.
  */
 export function createOpenClawResponsesProvider(
   options: CreateOpenClawResponsesProviderOptions,
@@ -60,6 +58,7 @@ export function createOpenClawResponsesProvider(
   };
   return new ResponsesProvider({
     baseUrl,
+    model: options.connection.model,
     fetch: authenticatedFetch,
     credentials: "omit",
   });
@@ -74,6 +73,7 @@ export function createOpenClawResponsesProvider(
  */
 export class ResponsesProvider implements AgentProvider {
   private readonly baseUrl: string;
+  private readonly model: string;
   private readonly fetchImplementation: typeof globalThis.fetch;
   private readonly headers: Readonly<Record<string, string>>;
   private readonly credentials: RequestCredentials;
@@ -95,6 +95,10 @@ export class ResponsesProvider implements AgentProvider {
           "OpenClaw integrations should use createOpenClawResponsesProvider",
       );
     }
+    if (!options.model.trim()) {
+      throw new TypeError("Agent Connect model must not be empty");
+    }
+    this.model = options.model;
     this.fetchImplementation =
       options.fetch ?? globalThis.fetch.bind(globalThis);
     this.headers = options.headers ?? {};
@@ -124,7 +128,7 @@ export class ResponsesProvider implements AgentProvider {
 
     try {
       let body: Record<string, unknown> = {
-        model: MODEL,
+        model: this.model,
         stream: true,
         input: request.prompt,
         ...(request.continuationToken
@@ -166,7 +170,7 @@ export class ResponsesProvider implements AgentProvider {
           return;
         }
         body = {
-          model: MODEL,
+          model: this.model,
           stream: true,
           previous_response_id: segment.responseId,
           input: [

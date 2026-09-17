@@ -93,7 +93,7 @@ how to install it in another application, authorize a gateway, send a prompt,
 and handle live tool calls.
 
 ```sh
-npm install @open-agent-connect/web@0.0.7
+npm install @open-agent-connect/web@0.0.8
 ```
 
 The application-facing shape is meant to be agent- and harness-neutral:
@@ -248,7 +248,7 @@ compatibility tests, and selected subscription-runtime composition smoke tests.
 ## Project status
 
 This is an early `0.x` system, not a claim of a hardened general-purpose agent
-sandbox. The Agent Connect plugin for OpenClaw is the sole installation target. SDK `0.0.7` and
+sandbox. The Agent Connect plugin for OpenClaw is the sole installation target. SDK `0.0.8` and
 plugin `0.0.5` ship through the reviewed main-branch workflow with npm
 provenance. The reference deployment pins that exact plugin version and registry
 integrity fail closed.

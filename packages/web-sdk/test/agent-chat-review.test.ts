@@ -174,6 +174,7 @@ it("independent probe: a delayed Responses cancel response never aborts a newer 
   let count = 0;
   const provider = new ResponsesProvider({
     baseUrl: "https://gateway.test",
+    model: "test/default",
     fetch: async (input, init) => {
       if (String(input).endsWith("/cancel")) {
         cancelEntered.resolve();
