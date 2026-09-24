@@ -49,3 +49,8 @@ the current sources of truth.
 Historical test and review records retain the exact date and dependency context
 under which they were produced. They do not become proof of current provider,
 subscription, ingress, or mobile behavior merely by remaining in the tree.
+
+## Early project documents
+
+- [Implementation brief](implementation-brief.md): the original implementation brief.
+- [Hackathon handoff](hackathon-handoff.md): the handoff written for the hackathon submission.

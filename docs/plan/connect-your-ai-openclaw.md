@@ -104,7 +104,7 @@ Resume from the lane artifacts and current diff, not the earlier separate-gatewa
 demo's success claims. Compatibility providers remain deferred.
 
 This records the owner's refinements to the
-[implementation brief](../../agent-connect-implementation-brief.md) and
+[implementation brief](../archive/implementation-brief.md) and
 [north star](../vision.md). Where their implementation ordering differs, this
 plan takes precedence. No push, live runtime change or deployment is authorized
 by documenting this plan.
