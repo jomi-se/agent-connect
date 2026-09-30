@@ -78,11 +78,38 @@ function decide({ tools, history }) {
       return { call: { ...read, args: { chapter: 1 } } };
     const highlighted = resultFor("highlight");
     if (highlighted === undefined) {
-      return { call: { ...highlight, args: { text: passage.slice(0, 40) } } };
+      return {
+        call: {
+          ...highlight,
+          args: {
+            text: (
+              passage.match(/Chapter \d+:[^"\n\\]*/)?.[0] ?? passage
+            ).slice(0, 40),
+          },
+        },
+      };
     }
     return {
       text: `DONE read=${JSON.stringify(passage.slice(0, 60))} highlight=${JSON.stringify(highlighted)}`,
     };
+  }
+  if (lastUser.includes("SPIKE-SHELL")) {
+    // A harness-native action: Codex exec_command or Claude Code Bash.
+    const codexShell = findTool(tools, "exec_command");
+    const claudeShell = findTool(tools, "Bash");
+    const shell = codexShell ?? claudeShell;
+    if (!shell) return { text: "MISSING-TOOLS shell" };
+    const output = resultFor(shell.name);
+    if (output === undefined) {
+      const args = codexShell
+        ? { cmd: "echo native-$((6*7)) && pwd" }
+        : {
+            command: "echo native-$((6*7)) && pwd",
+            description: "Spike native action",
+          };
+      return { call: { ...shell, args } };
+    }
+    return { text: `DONE shell=${JSON.stringify(output.slice(0, 160))}` };
   }
   if (lastUser.includes("SPIKE-ASK")) {
     const ask = findTool(tools, "ask_reader");

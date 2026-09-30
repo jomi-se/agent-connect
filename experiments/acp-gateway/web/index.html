@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ACP gateway spike reader</title>
+    <style>
+      body {
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+        margin: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        padding: 16px;
+      }
+      @media (max-width: 720px) {
+        body {
+          grid-template-columns: 1fr;
+        }
+      }
+      article p {
+        max-width: 60ch;
+      }
+      mark {
+        background: #ffe066;
+      }
+      #events {
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+        white-space: pre-wrap;
+        background: #f4f4f4;
+        padding: 8px;
+        max-height: 60vh;
+        overflow: auto;
+      }
+      #ask {
+        display: none;
+        border: 2px solid #333;
+        padding: 8px;
+        margin: 8px 0;
+      }
+      #ask.open {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <article id="book">
+      <h1>Deep Learning, spike edition</h1>
+      <section data-chapter="1">
+        <h2>Chapter 1</h2>
+        <p>
+          Chapter 1: The validation set is not the test set. You tune on one and
+          report on the other.
+        </p>
+      </section>
+      <section data-chapter="2">
+        <h2>Chapter 2</h2>
+        <p>
+          Chapter 2: Overfitting shows up as a gap between training and
+          validation loss.
+        </p>
+      </section>
+    </article>
+    <aside>
+      <button id="run-tools">Run tool turn</button>
+      <button id="run-ask">Run ask turn</button>
+      <button id="run-resume">Resume last session</button>
+      <div id="ask">
+        <p id="ask-question"></p>
+        <button id="ask-answer">Chapter 3, please.</button>
+      </div>
+      <p>Status: <strong id="status">idle</strong></p>
+      <p>Answer: <span id="answer"></span></p>
+      <div id="events"></div>
+    </aside>
+    <script type="module" src="dist/app.js"></script>
+  </body>
+</html>
