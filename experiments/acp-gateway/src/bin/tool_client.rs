@@ -7,7 +7,9 @@
 use std::time::{Duration, Instant};
 
 use acp_gateway_spike::policy::{PermissionProfile, PolicyConfig, PolicyProxy, SpyProxy};
-use acp_gateway_spike::{Harness, SpikePaths, app_tools, boxed_harness, mock_harness};
+use acp_gateway_spike::{
+    Harness, SpikePaths, app_tools, boxed_harness, live_harness, mock_harness,
+};
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::schema::v1::{
     InitializeRequest, NewSessionRequest, RequestPermissionOutcome, RequestPermissionRequest,
@@ -45,6 +47,9 @@ struct Cli {
     /// Run the adapter and polyfill in a per-session container (Phase 6).
     #[arg(long)]
     boxed: bool,
+    /// Use the owner's real harness login in place, on the host (Phase 7).
+    #[arg(long)]
+    live: bool,
 }
 
 #[tokio::main]
@@ -59,7 +64,9 @@ async fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(&workspace)?;
 
     let session_label = format!("{}", std::process::id());
-    let agent = if cli.boxed {
+    let agent = if cli.live {
+        live_harness(&paths, cli.harness, &cli.codex_mode)
+    } else if cli.boxed {
         boxed_harness(cli.harness, &session_label, &cli.codex_mode)
     } else {
         mock_harness(&paths, cli.harness, &cli.mock_url, &cli.codex_mode)

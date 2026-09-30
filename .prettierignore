@@ -9,3 +9,5 @@ package-lock.json
 .playwright-mcp
 Architecture Story - Desktop.html
 contract/open-responses/openapi.json
+experiments/acp-gateway/target
+experiments/acp-gateway/.run

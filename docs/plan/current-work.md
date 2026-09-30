@@ -96,6 +96,21 @@ Rewriting shared history or force-pushing requires separate explicit owner
 approval; this documentation pass does neither. Previously cleaned unpublished
 commits do not establish that shared ancestors, cached views, or forks are clean.
 
+### Proposed direction: ACP application boundary
+
+The current release gives applications a model loop, not the owner's harness:
+caller-supplied tools work only on OpenClaw's built-in runtime, and native
+tools are denied. The 2026-09-30
+[ACP gateway spike](../experiments/acp-gateway.md) showed that a browser can
+drive unmodified Codex and Claude Code adapters over ACP. It offered its own
+tools through MCP-over-ACP, with a Rust consent-enforcing proxy and a
+disposable container per session.
+
+[ADR 0016](../decisions/0016-acp-application-boundary.md) records the proposed
+direction. It is **not accepted**, and nothing in the current release changes.
+Its prerequisites, starting with the credential boundary for per-session
+harness configuration, are the next candidate work.
+
 ### Bookhand/provider defects
 
 These are known follow-up defects; they do not reopen the plugin migration and

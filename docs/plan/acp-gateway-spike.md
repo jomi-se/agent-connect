@@ -1,9 +1,10 @@
 # ACP gateway spike
 
-Status: active spike plan, 2026-09-30. Experimental; not an accepted decision.
+Status: completed spike plan, 2026-09-30. Experimental; not an accepted decision.
 Owner: gateway.
 Code: [`experiments/acp-gateway/`](../../experiments/acp-gateway/).
-Results: `docs/experiments/acp-gateway.md` (written at the end of the spike).
+Results: [`docs/experiments/acp-gateway.md`](../experiments/acp-gateway.md).
+Proposed decision: [ADR 0016](../decisions/0016-acp-application-boundary.md).
 
 ## Why this spike exists
 
