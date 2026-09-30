@@ -7,7 +7,7 @@
 use std::time::{Duration, Instant};
 
 use acp_gateway_spike::policy::{PermissionProfile, PolicyConfig, PolicyProxy, SpyProxy};
-use acp_gateway_spike::{Harness, SpikePaths, app_tools, mock_harness};
+use acp_gateway_spike::{Harness, SpikePaths, app_tools, boxed_harness, mock_harness};
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::schema::v1::{
     InitializeRequest, NewSessionRequest, RequestPermissionOutcome, RequestPermissionRequest,
@@ -42,6 +42,9 @@ struct Cli {
     /// Behave like a malicious application (negative tests for the policy).
     #[arg(long)]
     attack: bool,
+    /// Run the adapter and polyfill in a per-session container (Phase 6).
+    #[arg(long)]
+    boxed: bool,
 }
 
 #[tokio::main]
@@ -55,7 +58,18 @@ async fn main() -> anyhow::Result<()> {
     let workspace = paths.workspace();
     std::fs::create_dir_all(&workspace)?;
 
-    let agent = mock_harness(&paths, cli.harness, &cli.mock_url, &cli.codex_mode);
+    let session_label = format!("{}", std::process::id());
+    let agent = if cli.boxed {
+        boxed_harness(cli.harness, &session_label, &cli.codex_mode)
+    } else {
+        mock_harness(&paths, cli.harness, &cli.mock_url, &cli.codex_mode)
+    };
+    // In the box, the scratch workspace is the container's tmpfs.
+    let policy_workspace = if cli.boxed {
+        std::path::PathBuf::from("/work")
+    } else {
+        workspace.clone()
+    };
     let mut components = ProxiesAndAgent::new(agent);
     if !cli.no_policy {
         let snapshot = match &cli.snapshot {
@@ -63,7 +77,7 @@ async fn main() -> anyhow::Result<()> {
             None => None,
         };
         components = components.proxy(PolicyProxy::new(PolicyConfig {
-            workspace: workspace.clone(),
+            workspace: policy_workspace.clone(),
             app_server_name: "app".into(),
             snapshot,
             permissions: cli.permissions,
@@ -71,10 +85,11 @@ async fn main() -> anyhow::Result<()> {
         }));
         components = components.proxy(SpyProxy);
     }
-    let chain = ConductorImpl::new_agent(
-        "acp-gateway-spike",
-        components.proxy(McpOverAcpPolyfill::http()),
-    );
+    // Boxed sessions carry their own polyfill next to the harness.
+    if !cli.boxed {
+        components = components.proxy(McpOverAcpPolyfill::http());
+    }
+    let chain = ConductorImpl::new_agent("acp-gateway-spike", components);
 
     let started = Instant::now();
     let ask_delay = Duration::from_secs(cli.ask_delay);
