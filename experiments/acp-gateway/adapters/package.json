@@ -1,0 +1,9 @@
+{
+  "name": "acp-gateway-spike-adapters",
+  "private": true,
+  "description": "Pinned ACP harness adapters for the ACP gateway spike. Not an npm workspace member.",
+  "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.84.0",
+    "@agentclientprotocol/codex-acp": "2.0.1"
+  }
+}
