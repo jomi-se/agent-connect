@@ -240,3 +240,28 @@ pub fn boxed_harness(harness: Harness, session: &str, codex_mode: &str) -> AcpAg
     ]);
     AcpAgent::from_args(args).expect("valid docker command")
 }
+
+/// Phase 7 live smoke: an unmodified adapter on the host using the owner's
+/// existing harness login in place (default configuration directories under
+/// `HOME`, nothing copied). This is not a security boundary: it exists to prove
+/// real-model composition. The adapter starts from an empty environment plus an
+/// explicit allowlist, so no variables from the calling session (for example a
+/// parent Claude Code session's messaging socket) leak into the harness.
+pub fn live_harness(paths: &SpikePaths, harness: Harness, codex_mode: &str) -> AcpAgent {
+    let bin = match harness {
+        Harness::Codex => paths.bin("codex-acp"),
+        Harness::Claude => paths.bin("claude-agent-acp"),
+    };
+    let keep = |name: &str| format!("{name}={}", std::env::var(name).unwrap_or_default());
+    AcpAgent::from_args([
+        "env".into(),
+        "-i".into(),
+        keep("PATH"),
+        keep("HOME"),
+        keep("USER"),
+        "LANG=C.UTF-8".into(),
+        format!("INITIAL_AGENT_MODE={codex_mode}"),
+        path(&bin),
+    ])
+    .expect("valid adapter command")
+}
