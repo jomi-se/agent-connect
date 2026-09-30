@@ -54,7 +54,11 @@ pub fn mock_harness(
     let (env, bin): (Vec<(String, String)>, PathBuf) = match harness {
         Harness::Codex => (
             vec![
-                ("CODEX_HOME".into(), path(&run.join("codex-home"))),
+                (
+                    "CODEX_HOME".into(),
+                    std::env::var("SPIKE_CODEX_HOME")
+                        .unwrap_or_else(|_| path(&run.join("codex-home"))),
+                ),
                 ("INITIAL_AGENT_MODE".into(), codex_mode.into()),
             ],
             paths.bin("codex-acp"),

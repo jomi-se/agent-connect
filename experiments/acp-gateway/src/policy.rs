@@ -37,7 +37,14 @@ pub struct PolicyConfig {
     /// in record mode, which admits and prints whatever the app lists.
     pub snapshot: Option<BTreeMap<String, Value>>,
     pub permissions: PermissionProfile,
+    /// Sessions created under this grant (session id -> workspace), shared by
+    /// every connection that presents the same grant. `session/load` and
+    /// `session/resume` are admitted only for these ids, pinned to their
+    /// original workspace because harnesses key stored sessions by `cwd`.
+    pub grant_sessions: GrantSessions,
 }
+
+pub type GrantSessions = Arc<Mutex<BTreeMap<String, PathBuf>>>;
 
 #[derive(Default, Debug)]
 struct PolicyState {
@@ -134,9 +141,48 @@ impl PolicyHandler {
                         .forward_response_to(responder)?;
                     Ok(Handled::Yes)
                 }
-                "session/new" | "session/load" | "session/resume" => {
+                "session/new" => {
+                    self.admit_session_setup(
+                        &mut request.params,
+                        "session/new",
+                        &self.config.workspace.clone(),
+                    );
+                    let sessions = self.config.grant_sessions.clone();
+                    let workspace = self.config.workspace.clone();
+                    cx.send_request_to(Agent, request)
+                        .forward_cancellation_from(responder.cancellation())
+                        .on_receiving_result(async move |result| {
+                            if let Some(id) = result
+                                .as_ref()
+                                .ok()
+                                .and_then(|r| r.get("sessionId"))
+                                .and_then(Value::as_str)
+                            {
+                                sessions.lock().unwrap().insert(id.to_string(), workspace);
+                            }
+                            responder.respond_with_result(result)
+                        })?;
+                    Ok(Handled::Yes)
+                }
+                "session/load" | "session/resume" => {
                     let method = request.method.clone();
-                    self.admit_session_setup(&mut request.params, &method);
+                    let id = request
+                        .params
+                        .get("sessionId")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    let Some(workspace) =
+                        self.config.grant_sessions.lock().unwrap().get(&id).cloned()
+                    else {
+                        return deny(
+                            responder,
+                            agent_client_protocol::Error::invalid_params()
+                                .data(json!({"sessionId": id})),
+                            &format!("{method} of a session this grant does not own"),
+                        );
+                    };
+                    self.admit_session_setup(&mut request.params, &method, &workspace);
                     cx.send_request_to(Agent, request)
                         .forward_cancellation_from(responder.cancellation())
                         .forward_response_to(responder)?;
@@ -171,11 +217,11 @@ impl PolicyHandler {
         }
     }
 
-    fn admit_session_setup(&self, params: &mut Value, method: &str) {
+    fn admit_session_setup(&self, params: &mut Value, method: &str, workspace: &PathBuf) {
         let Some(obj) = params.as_object_mut() else {
             return;
         };
-        obj.insert("cwd".into(), json!(self.config.workspace));
+        obj.insert("cwd".into(), json!(workspace));
         obj.remove("additionalDirectories");
         let requested = obj
             .remove("mcpServers")

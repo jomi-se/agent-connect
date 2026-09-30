@@ -1,7 +1,8 @@
 # ACP gateway spike: results
 
-Status: in progress. Phases 0–3 of the [spike plan](../plan/acp-gateway-spike.md)
-are complete. Experimental evidence, not an accepted decision.
+Status: in progress. Phases 0–5 of the [spike plan](../plan/acp-gateway-spike.md)
+are complete; Q8 is partly answered. Experimental evidence, not an accepted
+decision.
 Code: [`experiments/acp-gateway/`](../../experiments/acp-gateway/).
 
 ## Setup (as run on 2026-09-30)
@@ -107,8 +108,83 @@ inspects harness-specific events.
    `_auth/status_update` notifications, which the proxy drops. Nothing
    application-facing depended on them.
 
+### Q5: a real browser connects, survives a reload and resumes. **Pass.**
+
+`src/bin/gateway.rs` serves ACP over WebSocket on `/acp`. `web/` is a small
+reader page bundled with esbuild on top of `@agentclientprotocol/sdk` 1.5.1.
+`web/drive.mjs` drives it in Playwright Chromium at phone size.
+
+- **Authentication.** The page offers the subprotocols `acp.v1` and
+  `bearer.<token>`. The gateway checks the exact `Origin` and the token,
+  selects `acp.v1`, and only then spawns anything. A non-allowlisted origin and
+  a wrong token were both rejected at upgrade (403 and 401), with no adapter
+  process started.
+- **Application tools in the page.** The TS SDK's generic
+  `client().onRequest("mcp/message", …)` registration is enough to serve MCP
+  from the page. There is no SDK MCP-server helper; the page implements
+  `initialize`, `ping`, `tools/list` and `tools/call` in about 40 lines.
+  `highlight` really wraps text in a `<mark>` in the DOM.
+- **Tool turn through the browser.** Codex took 0.8 s and Claude Code 3.9 s,
+  from connect to `end_turn`.
+- **Human in the loop.** `ask_reader` waits for a click. A 5-second human
+  answer completed on both harnesses.
+- **Reload during a pending call.** The socket closes, the gateway tears down
+  that connection's chain and adapter process, and nothing is replayed. A new
+  turn after the reload works. No adapter processes leaked.
+- **Resume.** After a reload, the page reconnects and sends `session/load` for
+  its earlier session ID. The new adapter process restores the conversation:
+  it replays the earlier user message, and the model's next request contained
+  the earlier tool results. Then the page prompts again. This worked on both
+  harnesses.
+- **Session ownership.** The policy keeps a per-grant registry of session IDs
+  and their workspaces. It admits `session/load` and `session/resume` only for
+  those IDs, pinned to the original workspace. Loading any other ID was refused
+  with `Invalid params`.
+
+### Q4: holding an application tool call open. **Pass up to 130 s so far.**
+
+`ask_reader` held its MCP call open for the given time before answering. Both
+harnesses waited and completed:
+
+| Harness     | 50 s | 70 s | 130 s | 330 s   |
+| ----------- | ---- | ---- | ----- | ------- |
+| Codex       | ok   | ok   | ok    | pending |
+| Claude Code | —    | ok   | ok    | pending |
+
+Disconnect behavior is covered under Q5: the pending call dies with the adapter
+process and is never replayed.
+
+### Q8: what an application sees (partial)
+
+Application tool calls arrive as ordinary `session/update` `tool_call` and
+`tool_call_update` items. Codex titles them `mcp.app.<tool>`; Claude Code
+titles them `mcp__app__<tool>`. Harness-native actions arrive the same way:
+
+- Codex: a `tool_call` whose title is the shell command itself.
+- Claude Code: a `Terminal` tool call, then an update carrying the command.
+
+An application can render progress from these generic items without knowing
+which harness it is talking to. Both harnesses also emit `usage_update`,
+`session_info_update` and `available_commands_update`, which a page can ignore.
+
+## More findings
+
+6. **A harness does not confine itself to the session `cwd`.** The policy
+   rewrites `cwd` to a per-session scratch directory, and both harnesses
+   reported that directory to the model. Claude Code ran a native shell command
+   there. Codex ran the same command, issued without the optional `workdir`
+   argument, in the adapter's process directory instead. Confinement must come
+   from the sandbox boundary (Phase 6), not from `cwd`.
+7. **Claude Code auto-allows read-only shell commands.** `echo … && pwd` ran
+   without a permission prompt. Only the gateway profile and sandbox, not
+   prompts, can be relied on to bound native actions.
+8. **Browser connection errors are opaque.** A rejected upgrade surfaces in the
+   TS SDK as `[object Event]`. Browsers hide the HTTP status of a failed
+   WebSocket upgrade, so an application cannot tell "wrong token" from
+   "gateway down". A production gateway should accept the upgrade and close
+   with an application close code and reason instead.
+
 ## Still to answer
 
-Q4 (holding calls open and disconnects), Q5 (browser and reconnect), Q6 and Q7
-(container per session and network policy), Q8 (event traces), and the optional
-live smoke.
+Q4's 330 s cases, Q6 and Q7 (container per session and network policy), and
+the optional live smoke.

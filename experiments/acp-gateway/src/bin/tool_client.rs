@@ -67,6 +67,7 @@ async fn main() -> anyhow::Result<()> {
             app_server_name: "app".into(),
             snapshot,
             permissions: cli.permissions,
+            grant_sessions: Default::default(),
         }));
         components = components.proxy(SpyProxy);
     }
@@ -115,7 +116,7 @@ async fn main() -> anyhow::Result<()> {
                 "[init] {:?} agent={:?} mcp={}",
                 started.elapsed(),
                 init.agent_info.as_ref().map(|i| &i.name),
-                serde_json::to_string(&init.agent_capabilities.mcp_capabilities).unwrap_or_default()
+                serde_json::to_string(&init.agent_capabilities).unwrap_or_default()
             );
             let session = if cli.attack {
                 let hostile: NewSessionRequest = serde_json::from_value(serde_json::json!({
