@@ -1,8 +1,8 @@
 # ACP gateway spike: results
 
-Status: in progress. Phases 0–5 of the [spike plan](../plan/acp-gateway-spike.md)
-are complete; Q8 is partly answered. Experimental evidence, not an accepted
-decision.
+Status: in progress. Phases 0–6 of the [spike plan](../plan/acp-gateway-spike.md)
+are complete; the live smoke (phase 7) and write-up remain. Experimental
+evidence, not an accepted decision.
 Code: [`experiments/acp-gateway/`](../../experiments/acp-gateway/).
 
 ## Setup (as run on 2026-09-30)
@@ -141,15 +141,30 @@ reader page bundled with esbuild on top of `@agentclientprotocol/sdk` 1.5.1.
   those IDs, pinned to the original workspace. Loading any other ID was refused
   with `Invalid params`.
 
-### Q4: holding an application tool call open. **Pass up to 130 s so far.**
+### Q4: holding an application tool call open. **Pass, with a 300 s default ceiling.**
 
-`ask_reader` held its MCP call open for the given time before answering. Both
-harnesses waited and completed:
+`ask_reader` held its MCP call open for the given time before answering:
 
-| Harness     | 50 s | 70 s | 130 s | 330 s   |
-| ----------- | ---- | ---- | ----- | ------- |
-| Codex       | ok   | ok   | ok    | pending |
-| Claude Code | —    | ok   | ok    | pending |
+| Harness     | 50 s | 70 s | 130 s | 330 s                        |
+| ----------- | ---- | ---- | ----- | ---------------------------- |
+| Codex       | ok   | ok   | ok    | failed at 300 s              |
+| Claude Code | —    | ok   | ok    | failed at 300 s (idle limit) |
+
+The two limits differ in kind:
+
+- **Codex** reports `timed out awaiting tools/call after 300s`: a hard
+  per-call limit. `codex-acp` builds each session's MCP server configuration
+  from the ACP declaration (URL and headers only), so neither an application
+  nor the gateway can raise it per session without adapter support.
+- **Claude Code** reports `sent no response or progress for 300s; aborting`
+  and names `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT`: an idle limit. MCP
+  `notifications/progress` from the application's server resets it, and the
+  policy already admits those notifications from the application.
+
+Design consequence: application tools that wait on a person should return
+within about five minutes. For longer waits, return a receipt and deliver the
+answer as a later prompt. Human-in-the-loop tools in the SDK should send
+progress while they wait.
 
 Disconnect behavior is covered under Q5: the pending call dies with the adapter
 process and is never replayed.
@@ -169,22 +184,82 @@ which harness it is talking to. Both harnesses also emit `usage_update`,
 
 ## More findings
 
-6. **A harness does not confine itself to the session `cwd`.** The policy
-   rewrites `cwd` to a per-session scratch directory, and both harnesses
-   reported that directory to the model. Claude Code ran a native shell command
-   there. Codex ran the same command, issued without the optional `workdir`
-   argument, in the adapter's process directory instead. Confinement must come
-   from the sandbox boundary (Phase 6), not from `cwd`.
-7. **Claude Code auto-allows read-only shell commands.** `echo … && pwd` ran
-   without a permission prompt. Only the gateway profile and sandbox, not
-   prompts, can be relied on to bound native actions.
-8. **Browser connection errors are opaque.** A rejected upgrade surfaces in the
-   TS SDK as `[object Event]`. Browsers hide the HTTP status of a failed
-   WebSocket upgrade, so an application cannot tell "wrong token" from
-   "gateway down". A production gateway should accept the upgrade and close
-   with an application close code and reason instead.
+9. **Permission prompts do not bound native actions.** Under a profile that
+   rejects every prompt not attributable to an application tool, both
+   harnesses still ran a native shell command with no prompt at all. Codex in
+   `workspace-write` runs sandboxed commands without asking. Claude Code
+   auto-allows commands it classifies as read-only. Only a sandbox bounds what
+   a harness does natively.
+
+10. **A harness does not confine itself to the session `cwd`.** The policy
+    rewrites `cwd` to a per-session scratch directory, and both harnesses
+    reported that directory to the model. Claude Code ran a native shell command
+    there. Codex ran the same command, issued without the optional `workdir`
+    argument, in the adapter's process directory instead. Confinement must come
+    from the sandbox boundary (Phase 6), not from `cwd`.
+11. **Claude Code auto-allows read-only shell commands.** `echo … && pwd` ran
+    without a permission prompt. Only the gateway profile and sandbox, not
+    prompts, can be relied on to bound native actions.
+12. **Browser connection errors are opaque.** A rejected upgrade surfaces in the
+    TS SDK as `[object Event]`. Browsers hide the HTTP status of a failed
+    WebSocket upgrade, so an application cannot tell "wrong token" from
+    "gateway down". A production gateway should accept the upgrade and close
+    with an application close code and reason instead.
+
+### Q6: a container per session is practical. **Pass.**
+
+`sandbox/` builds one image (`node:24-bookworm-slim`, both pinned adapters,
+and a Rust `session_runner`). Each session runs:
+
+```text
+docker run -i --rm --network acp-internal --read-only \
+  --tmpfs /work --tmpfs /home/node --tmpfs /tmp \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --memory 1536m --cpus 2 --pids-limit 512 \
+  -e HTTPS_PROXY=http://egress:3128 ... acp-spike-session:dev --harness codex
+```
+
+Inside the box, `session_runner` owns the polyfill and the adapter and speaks
+ACP on stdio. The host keeps only the policy proxy, so the gateway's "agent" is
+simply that `docker run` command. The polyfill's loopback MCP bridge never
+leaves the box. Codex runs in `agent-full-access` and Claude Code with every
+prompt allowed: the box, not the harness, is the boundary.
+
+| Boxed harness | Ready to prompt | Tool turn done | Memory mid-call |
+| ------------- | --------------- | -------------- | --------------- |
+| Codex         | 0.6–1.1 s       | 0.8–1.3 s      | ~83 MiB         |
+| Claude Code   | 1.3–1.5 s       | 1.8–2.0 s      | ~188 MiB        |
+
+These use mock inference; real inference adds model latency and some memory.
+The image is 2.09 GB unpacked, mostly the two harness binaries and Node. Browser
+sessions through a boxed gateway pass the same tool and shell scenarios. The
+native shell command now reports `/work` on both harnesses, and every container
+is removed when its connection closes.
+
+### Q7: the network policy holds. **Pass, 16 of 16 probes.**
+
+Session containers join an internal Docker network with no route out. An
+egress proxy (`sandbox/egress-proxy.mjs`) sits on both that network and an
+ordinary bridge. It resolves each destination, refuses the request if any
+answer is private or reserved, and connects to the exact address it checked.
+`sandbox/probe.sh` runs from a session-shaped container:
+
+| Probe                                                                       | Result   |
+| --------------------------------------------------------------------------- | -------- |
+| Public HTTPS through the proxy                                              | 200      |
+| Public HTTPS bypassing the proxy                                            | no route |
+| Mock model on the internal network, direct                                  | 200      |
+| Cloud metadata, RFC1918 (two), tailnet MagicDNS, the host's tailnet address | 403      |
+| Loopback IPv4 and IPv6 through the proxy                                    | 403      |
+| Host through the internal, egress and default bridge gateways, via proxy    | 403      |
+| Host through the internal and default bridge gateways, direct               | no route |
+| A public DNS name that resolves to loopback                                 | 403      |
+
+Open design point: all sessions currently share one internal network, so
+session boxes can reach each other's addresses. Nothing listens there (the
+polyfill binds loopback), but a production gateway should give each session its
+own internal network, with the egress proxy attached.
 
 ## Still to answer
 
-Q4's 330 s cases, Q6 and Q7 (container per session and network policy), and
-the optional live smoke.
+The live smoke with real subscriptions (phase 7) and the final write-up.

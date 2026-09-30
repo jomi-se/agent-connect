@@ -25,6 +25,12 @@ pub enum PermissionProfile {
     Sandboxed,
     /// Deny every prompt.
     DenyAll,
+    /// Allow only prompts attributable to a granted application tool; deny
+    /// every harness-native action. Attribution uses the adapters' tool-call
+    /// titles (`mcp.app.*` for codex-acp, `mcp__app__*` for claude-agent-acp),
+    /// which is harness-specific: acceptable for a host-run smoke test, not as
+    /// a production boundary.
+    AppToolsOnly,
 }
 
 #[derive(Debug)]
@@ -50,6 +56,9 @@ pub type GrantSessions = Arc<Mutex<BTreeMap<String, PathBuf>>>;
 struct PolicyState {
     /// `serverId`s the application declared in admitted session setup.
     declared_servers: HashSet<String>,
+    /// toolCallId -> latest title seen in `session/update`, for attributing
+    /// permission prompts whose own title is empty (codex-acp MCP prompts).
+    tool_titles: BTreeMap<String, String>,
 }
 
 pub struct PolicyProxy {
@@ -282,7 +291,23 @@ impl PolicyHandler {
                 }
             },
             Dispatch::Notification(notification) => match notification.method() {
-                "session/update" => pass(Dispatch::Notification(notification)),
+                "session/update" => {
+                    let update = &notification.params["update"];
+                    if let (Some(id), Some(title)) = (
+                        update.get("toolCallId").and_then(Value::as_str),
+                        update
+                            .get("title")
+                            .and_then(Value::as_str)
+                            .filter(|t| !t.is_empty()),
+                    ) {
+                        self.state
+                            .lock()
+                            .unwrap()
+                            .tool_titles
+                            .insert(id.to_string(), title.to_string());
+                    }
+                    pass(Dispatch::Notification(notification))
+                }
                 "$/cancel_request" => pass(Dispatch::Notification(notification)),
                 "mcp/message"
                     if inner_method_in(&notification.params, MCP_NOTIFICATIONS_TO_APP) =>
@@ -357,10 +382,30 @@ impl PolicyHandler {
     }
 
     fn answer_permission(&self, params: &Value, responder: Responder) -> Outcome {
+        const ALLOW: [&str; 2] = ["allow_once", "allow_always"];
+        const REJECT: [&str; 2] = ["reject_once", "reject_always"];
+        let own_title = params
+            .pointer("/toolCall/title")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let seen_title = params
+            .pointer("/toolCall/toolCallId")
+            .and_then(Value::as_str)
+            .and_then(|id| self.state.lock().unwrap().tool_titles.get(id).cloned())
+            .unwrap_or_default();
+        let app = &self.config.app_server_name;
+        let is_app_tool = [own_title, seen_title.as_str()].iter().any(|t| {
+            t.starts_with(&format!("mcp.{app}.")) || t.starts_with(&format!("mcp__{app}__"))
+        });
         let wanted = match self.config.permissions {
-            PermissionProfile::Sandboxed => ["allow_once", "allow_always"],
-            PermissionProfile::DenyAll => ["reject_once", "reject_always"],
+            PermissionProfile::Sandboxed => ALLOW,
+            PermissionProfile::DenyAll => REJECT,
+            PermissionProfile::AppToolsOnly if is_app_tool => ALLOW,
+            PermissionProfile::AppToolsOnly => REJECT,
         };
+        eprintln!(
+            "[policy] permission prompt title={own_title:?} seen={seen_title:?} app_tool={is_app_tool}"
+        );
         let options = params
             .get("options")
             .and_then(Value::as_array)

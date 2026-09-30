@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use acp_gateway_spike::policy::{GrantSessions, PermissionProfile, PolicyConfig, PolicyProxy};
-use acp_gateway_spike::{Harness, SpikePaths, mock_harness};
+use acp_gateway_spike::{Harness, SpikePaths, boxed_harness, mock_harness};
 use agent_client_protocol::{ConnectTo, Lines};
 use agent_client_protocol_conductor::{ConductorImpl, ProxiesAndAgent};
 use agent_client_protocol_polyfill::mcp_over_acp::McpOverAcpPolyfill;
@@ -55,6 +55,9 @@ struct Cli {
     codex_mode: String,
     #[arg(long, value_enum, default_value = "sandboxed")]
     permissions: PermissionProfile,
+    /// Run each connection's adapter and polyfill in its own container.
+    #[arg(long)]
+    boxed: bool,
 }
 
 struct Gateway {
@@ -171,25 +174,33 @@ async fn serve_connection(
     });
     let transport = Lines::new(Box::pin(outgoing), Box::pin(incoming));
 
-    let agent = mock_harness(
-        &gateway.paths,
-        gateway.cli.harness,
-        &gateway.cli.mock_url,
-        &gateway.cli.codex_mode,
-    );
+    let boxed = gateway.cli.boxed;
+    let label = session_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let agent = if boxed {
+        boxed_harness(gateway.cli.harness, &label, &gateway.cli.codex_mode)
+    } else {
+        mock_harness(
+            &gateway.paths,
+            gateway.cli.harness,
+            &gateway.cli.mock_url,
+            &gateway.cli.codex_mode,
+        )
+    };
     let policy = PolicyProxy::new(PolicyConfig {
-        workspace: session_dir,
+        workspace: if boxed { "/work".into() } else { session_dir },
         app_server_name: "app".into(),
         snapshot: Some(gateway.snapshot.clone()),
         permissions: gateway.cli.permissions,
         grant_sessions: gateway.grant_sessions.clone(),
     });
-    let chain = ConductorImpl::new_agent(
-        "agent-connect-gateway",
-        ProxiesAndAgent::new(agent)
-            .proxy(policy)
-            .proxy(McpOverAcpPolyfill::http()),
-    );
+    let mut components = ProxiesAndAgent::new(agent).proxy(policy);
+    if !boxed {
+        components = components.proxy(McpOverAcpPolyfill::http());
+    }
+    let chain = ConductorImpl::new_agent("agent-connect-gateway", components);
     let result = chain.connect_to(transport).await;
     eprintln!(
         "[gateway] {peer} disconnected after {:?}: {:?}",

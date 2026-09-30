@@ -174,3 +174,69 @@ where
         )
         .build()
 }
+
+/// Launch recipe for a per-session container (Phase 6). The box holds the
+/// polyfill and the adapter; its only network exit is the egress proxy.
+/// `codex_mode` defaults to full access inside the box: the box, not the
+/// harness, is the boundary.
+pub fn boxed_harness(harness: Harness, session: &str, codex_mode: &str) -> AcpAgent {
+    let name = match harness {
+        Harness::Codex => "codex",
+        Harness::Claude => "claude",
+    };
+    let proxy = "http://egress:3128";
+    let no_proxy = "mock,localhost,127.0.0.1";
+    let mut args: Vec<String> = [
+        "docker",
+        "run",
+        "-i",
+        "--rm",
+        "--name",
+        &format!("acp-sess-{session}"),
+        "--network",
+        "acp-internal",
+        "--read-only",
+        "--tmpfs",
+        "/work:rw,exec,size=512m,uid=1000,gid=1000",
+        "--tmpfs",
+        "/home/node:rw,exec,size=512m,uid=1000,gid=1000",
+        "--tmpfs",
+        "/tmp:rw,exec,size=256m",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "--memory",
+        "1536m",
+        "--cpus",
+        "2",
+        "--pids-limit",
+        "512",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    for (k, v) in [
+        ("HTTPS_PROXY", proxy),
+        ("HTTP_PROXY", proxy),
+        ("NO_PROXY", no_proxy),
+        ("https_proxy", proxy),
+        ("http_proxy", proxy),
+        ("no_proxy", no_proxy),
+        ("NODE_USE_ENV_PROXY", "1"),
+        ("INITIAL_AGENT_MODE", codex_mode),
+        ("ANTHROPIC_BASE_URL", "http://mock:18931"),
+        ("ANTHROPIC_API_KEY", "sk-spike-dummy"),
+        ("DISABLE_TELEMETRY", "1"),
+        ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
+    ] {
+        args.push("-e".into());
+        args.push(format!("{k}={v}"));
+    }
+    args.extend([
+        "acp-spike-session:dev".into(),
+        "--harness".into(),
+        name.into(),
+    ]);
+    AcpAgent::from_args(args).expect("valid docker command")
+}
