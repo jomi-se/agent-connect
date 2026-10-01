@@ -73,8 +73,15 @@ gained what a web application needs:
    `session/load`, and interrupted turns are not re-sent. This extension is not
    an ACP standard. It should retire once ACP v2 defines stream resumption.
    Plain `acp.v1` clients keep per-socket sessions.
-6. **Implementation.** The gateway is Rust, on the official ACP Rust SDK. The
+6. **Implementation and distribution.** The gateway is Rust, on the official
+   ACP Rust SDK. It ships as a prebuilt binary for a small target matrix,
+   primarily through npm, because the adapters already require Node. The
    browser SDK stays TypeScript, on `@agentclientprotocol/sdk`.
+   `@open-agent-connect/web` adds the connection, grant, resumable transport,
+   tool server and chat state that the ACP SDK lacks. It integrates with the
+   AI SDK at the UI layer (a `useChat` `ChatTransport`), not as a
+   `LanguageModel`, because a harness runs its own loop. See the
+   [release plan](../plan/acp-gateway-release.md).
 7. **Unchanged principles.** Owner consent with OAuth/PKCE, revocable grants,
    immutable tool snapshots, stable action IDs, no automatic replay of
    ambiguous effects, and no claim of exactly-once execution.
@@ -91,7 +98,9 @@ Gains:
 
 Costs and risks:
 
-- Applications lose drop-in Open Responses and AI SDK compatibility.
+- Applications lose drop-in Open Responses compatibility and the AI SDK
+  `LanguageModel` path (`streamText` running the tool loop in the browser).
+  AI SDK UI applications keep `useChat` through an ACP `ChatTransport`.
   Direct-provider paths, such as Bookhand's direct Open Responses connection,
   remain separate.
 - The product depends on an unstable MCP-over-ACP RFD, and on MCP protocol
@@ -112,7 +121,9 @@ Costs and risks:
   to the harness's shell, and without breaking refresh-token rotation for the
   owner's other sessions.
 - **Hosting and installation.** What the owner installs and runs, and how it
-  relates to OpenClaw, which could remain one optional host.
+  relates to OpenClaw, which could remain one optional host. The
+  [release plan](../plan/acp-gateway-release.md) proposes a prebuilt binary
+  through npm and GitHub Releases, and deprecating the OpenClaw plugin package.
 - **Consent code.** Port the OAuth/PKCE consent, grant and revocation code, or
   keep it as a separate component.
 - **Session isolation.** A per-session internal network. Decide on durable
@@ -120,9 +131,10 @@ Costs and risks:
   is gone (spike M8), but lets a grant's sessions read each other's
   transcripts.
 - **Mobile.** One manual iOS Safari check of the resumable transport.
-- **Migration.** A plan for Bookhand and Firebase Canvas, and an SDK
-  MCP-server helper that answers unknown methods with method-not-found and
-  sends progress while it waits.
+- **Migration.** Bookhand and Firebase Canvas move to `createAgentChat` or
+  `useChat` over the SDK's ACP provider ([release
+  plan](../plan/acp-gateway-release.md)). The SDK's MCP server answers unknown
+  methods with method-not-found and sends progress while it waits.
 
 ## Alternatives considered
 

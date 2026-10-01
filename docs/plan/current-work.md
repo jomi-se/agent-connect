@@ -111,7 +111,9 @@ calls alive across phone-style backgrounding and socket loss.
 [ADR 0016](../decisions/0016-acp-application-boundary.md) records the proposed
 direction. It is **not accepted**, and nothing in the current release changes.
 Its prerequisites, starting with the credential boundary for per-session
-harness configuration, are the next candidate work.
+harness configuration, are the next candidate work. The proposed [release
+plan](acp-gateway-release.md) covers packaging, the browser SDK over ACP, and
+retiring the OpenClaw plugin.
 
 ### Bookhand/provider defects
 
