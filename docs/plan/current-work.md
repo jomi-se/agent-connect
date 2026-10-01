@@ -104,7 +104,9 @@ tools are denied. The 2026-09-30
 [ACP gateway spike](../experiments/acp-gateway.md) showed that a browser can
 drive unmodified Codex and Claude Code adapters over ACP. It offered its own
 tools through MCP-over-ACP, with a Rust consent-enforcing proxy and a
-disposable container per session.
+disposable container per session. A 2026-10-01
+[follow-up](acp-gateway-mobile-resume.md) kept turns and application tool
+calls alive across phone-style backgrounding and socket loss.
 
 [ADR 0016](../decisions/0016-acp-application-boundary.md) records the proposed
 direction. It is **not accepted**, and nothing in the current release changes.

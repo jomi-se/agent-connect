@@ -63,9 +63,19 @@ gained what a web application needs:
    refuses private, reserved, metadata and tailnet destinations. Inside the
    box the harness may use its native tools freely: the box, not permission
    prompts, bounds native actions.
-5. **Implementation.** The gateway is Rust, on the official ACP Rust SDK. The
+5. **Sessions outlive sockets.** Each chain runs in a gateway-owned session
+   host. A client that opts into Agent Connect's `agent-connect.resume.v1`
+   WebSocket subprotocol can reattach after a dropped socket, within a bounded
+   grace period. It must present the same grant, origin and resume token.
+   Sequence-acknowledged frames are resent in both directions, so an in-flight
+   turn and its application tool calls survive a phone backgrounding the page.
+   Past the grace or retention bound, clients fall back to ACP v1
+   `session/load`, and interrupted turns are not re-sent. This extension is not
+   an ACP standard. It should retire once ACP v2 defines stream resumption.
+   Plain `acp.v1` clients keep per-socket sessions.
+6. **Implementation.** The gateway is Rust, on the official ACP Rust SDK. The
    browser SDK stays TypeScript, on `@agentclientprotocol/sdk`.
-6. **Unchanged principles.** Owner consent with OAuth/PKCE, revocable grants,
+7. **Unchanged principles.** Owner consent with OAuth/PKCE, revocable grants,
    immutable tool snapshots, stable action IDs, no automatic replay of
    ambiguous effects, and no claim of exactly-once execution.
 
@@ -88,6 +98,8 @@ Costs and risks:
   generations interoperating (spike finding 3).
 - OpenClaw leaves the execution path. The installation and hosting story, and
   AGENTS.md's "no separate process" rule, need a separate decision.
+- Agent Connect owns a small non-standard transport extension for mobile
+  resilience until ACP v2 stream resumption exists.
 - Harness tool calls have a default ceiling of about 300 s. Long human waits
   need progress notifications or a receipt-and-follow-up pattern.
 - Per-session images are large (about 2 GB unpacked), although runtime cost is
@@ -103,8 +115,11 @@ Costs and risks:
   relates to OpenClaw, which could remain one optional host.
 - **Consent code.** Port the OAuth/PKCE consent, grant and revocation code, or
   keep it as a separate component.
-- **Session isolation.** A per-session internal network, and durable session
-  storage so boxed sessions can resume.
+- **Session isolation.** A per-session internal network. Decide on durable
+  boxed storage: a per-grant home volume restores conversations after the box
+  is gone (spike M8), but lets a grant's sessions read each other's
+  transcripts.
+- **Mobile.** One manual iOS Safari check of the resumable transport.
 - **Migration.** A plan for Bookhand and Firebase Canvas, and an SDK
   MCP-server helper that answers unknown methods with method-not-found and
   sends progress while it waits.

@@ -67,7 +67,7 @@ async fn main() -> anyhow::Result<()> {
     let agent = if cli.live {
         live_harness(&paths, cli.harness, &cli.codex_mode)
     } else if cli.boxed {
-        boxed_harness(cli.harness, &session_label, &cli.codex_mode)
+        boxed_harness(cli.harness, &session_label, &cli.codex_mode, None)
     } else {
         mock_harness(&paths, cli.harness, &cli.mock_url, &cli.codex_mode)
     };

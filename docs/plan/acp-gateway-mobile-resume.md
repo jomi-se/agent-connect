@@ -1,6 +1,7 @@
 # Plan: mobile-resilient sessions for the ACP gateway
 
-Status: in progress (2026-10-01). Follows the
+Status: complete (2026-10-01): M1–M8 pass on both harnesses; the iOS Safari
+check is not done. Follows the
 [ACP gateway spike](acp-gateway-spike.md); results go to
 [`docs/experiments/acp-gateway.md`](../experiments/acp-gateway.md).
 
@@ -65,7 +66,7 @@ Separate the session from the socket, at the transport layer, below ACP.
 
 1. **Session host.** The gateway owns each chain (policy proxy, polyfill,
    adapter or box) in a host object that outlives its WebSocket. A socket is
-   only an *attachment*.
+   only an _attachment_.
 2. **Resumable transport, opt-in.** A client that offers the WebSocket
    subprotocol `agent-connect.resume.v1` (with the bearer token) gets
    enveloped frames. A client that offers only `acp.v1` gets today's

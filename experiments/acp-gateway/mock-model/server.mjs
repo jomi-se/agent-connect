@@ -9,6 +9,8 @@
 // Script, keyed on the latest user text:
 //   contains "SPIKE-TOOLS": call read_passage -> call highlight -> final text
 //   contains "SPIKE-ASK":   call ask_reader  -> final text
+//   contains "SPIKE-SLOW":  stream 30 numbered chunks, one every 300 ms
+//   contains "SPIKE-LATEASK": wait 6 s, call ask_reader -> final text
 //   anything else:          plain text reply
 import { createServer } from "node:http";
 import { appendFileSync } from "node:fs";
@@ -111,6 +113,25 @@ function decide({ tools, history }) {
     }
     return { text: `DONE shell=${JSON.stringify(output.slice(0, 160))}` };
   }
+  if (lastUser.includes("SPIKE-SLOW")) {
+    const chunks = Array.from(
+      { length: 30 },
+      (_, i) => `w${String(i + 1).padStart(2, "0")} `,
+    );
+    chunks.push("DONE-SLOW");
+    return { text: chunks.join(""), chunks, chunkDelayMs: 300 };
+  }
+  if (lastUser.includes("SPIKE-LATEASK")) {
+    const ask = findTool(tools, "ask_reader");
+    if (!ask) return { text: "MISSING-TOOLS ask_reader" };
+    const answer = resultFor("ask_reader");
+    if (answer === undefined)
+      return {
+        delayMs: 6000,
+        call: { ...ask, args: { question: "Which chapter should we study?" } },
+      };
+    return { text: `DONE answer=${JSON.stringify(answer)}` };
+  }
   if (lastUser.includes("SPIKE-ASK")) {
     const ask = findTool(tools, "ask_reader");
     if (!ask) return { text: "MISSING-TOOLS ask_reader" };
@@ -123,6 +144,8 @@ function decide({ tools, history }) {
   }
   return { text: "mock reply" };
 }
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const textOf = (content) =>
   typeof content === "string"
@@ -159,11 +182,12 @@ function responsesHistory(body) {
   return history;
 }
 
-function handleResponses(body, res) {
+async function handleResponses(body, res) {
   const decision = decide({
     tools: body.tools,
     history: responsesHistory(body),
   });
+  if (decision.delayMs) await sleep(decision.delayMs);
   const responseId = nextId("resp");
   const send = (event) =>
     res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
@@ -231,13 +255,16 @@ function handleResponses(body, res) {
       content_index: 0,
       part: { type: "output_text", text: "", annotations: [] },
     });
-    send({
-      type: "response.output_text.delta",
-      output_index: 0,
-      item_id: item.id,
-      content_index: 0,
-      delta: decision.text,
-    });
+    for (const [i, delta] of (decision.chunks ?? [decision.text]).entries()) {
+      if (i > 0 && decision.chunkDelayMs) await sleep(decision.chunkDelayMs);
+      send({
+        type: "response.output_text.delta",
+        output_index: 0,
+        item_id: item.id,
+        content_index: 0,
+        delta,
+      });
+    }
     send({
       type: "response.output_text.done",
       output_index: 0,
@@ -298,11 +325,12 @@ function messagesHistory(body) {
   return history;
 }
 
-function handleMessages(body, res) {
+async function handleMessages(body, res) {
   const decision = decide({
     tools: body.tools,
     history: messagesHistory(body),
   });
+  if (decision.delayMs) await sleep(decision.delayMs);
   const messageId = nextId("msg");
   const usage = {
     input_tokens: 10,
@@ -377,11 +405,14 @@ function handleMessages(body, res) {
       index: 0,
       content_block: { type: "text", text: "" },
     });
-    send({
-      type: "content_block_delta",
-      index: 0,
-      delta: { type: "text_delta", text: decision.text },
-    });
+    for (const [i, text] of (decision.chunks ?? [decision.text]).entries()) {
+      if (i > 0 && decision.chunkDelayMs) await sleep(decision.chunkDelayMs);
+      send({
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text },
+      });
+    }
   }
   send({ type: "content_block_stop", index: 0 });
   send({
@@ -402,7 +433,7 @@ function handleMessages(body, res) {
 createServer((req, res) => {
   let raw = "";
   req.on("data", (chunk) => (raw += chunk));
-  req.on("end", () => {
+  req.on("end", async () => {
     const url = new URL(req.url, "http://mock");
     let body = {};
     try {
@@ -414,7 +445,7 @@ createServer((req, res) => {
     let decision;
     try {
       if (req.method === "POST" && path.endsWith("/responses"))
-        decision = handleResponses(body, res);
+        decision = await handleResponses(body, res);
       else if (
         req.method === "POST" &&
         path.endsWith("/messages/count_tokens")
@@ -422,7 +453,7 @@ createServer((req, res) => {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ input_tokens: 10 }));
       } else if (req.method === "POST" && path.endsWith("/messages"))
-        decision = handleMessages(body, res);
+        decision = await handleMessages(body, res);
       else if (req.method === "GET" && path.endsWith("/models")) {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
