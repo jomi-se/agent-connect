@@ -116,10 +116,22 @@ Costs and risks:
 
 ## Prerequisites before acceptance
 
-- **Credential boundary.** Launch harnesses with purpose-built configuration
-  while using the owner's subscription login without copying it or exposing it
-  to the harness's shell, and without breaking refresh-token rotation for the
-  owner's other sessions.
+- **Provider terms.** Anthropic's Claude Code terms allow an end user to sign
+  in to unmodified Claude Code with their own subscription. They prohibit
+  third-party developers from routing requests through Free, Pro or Max
+  credentials on their users' behalf, and they point Agent SDK products to API
+  keys. Get Anthropic's answer on whether an application driving the owner's
+  own Claude Code through Agent Connect is permitted. Until then, label the
+  Claude Code harness as unconfirmed, or require an API key for it. OpenAI
+  publicly supports ChatGPT-plan use in third-party tools. See the [credentials
+  plan](../plan/acp-gateway-credentials.md).
+- **Credential boundary.** Use the owner's subscription without copying the
+  owner's personal login, and without breaking refresh-token rotation for the
+  owner's other sessions. The proposed direction is a dedicated Agent Connect
+  login per harness, made once through the provider's own flow, in a shared
+  home that every box mounts. Credential exposure to the harness's shell is
+  accepted and documented ([credentials
+  plan](../plan/acp-gateway-credentials.md)).
 - **Hosting and installation.** What the owner installs and runs, and how it
   relates to OpenClaw, which could remain one optional host. The
   [release plan](../plan/acp-gateway-release.md) proposes a prebuilt binary
