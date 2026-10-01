@@ -1,6 +1,7 @@
 # ACP gateway spike: results
 
-Status: complete, 2026-09-30. Experimental evidence for the
+Status: complete, 2026-09-30; mobile follow-up 2026-10-01
+([plan](../plan/acp-gateway-mobile-resume.md)). Experimental evidence for the
 [spike plan](../plan/acp-gateway-spike.md), not an accepted decision. The
 proposed decision is [ADR 0016](../decisions/0016-acp-application-boundary.md).
 Code: [`experiments/acp-gateway/`](../../experiments/acp-gateway/).
@@ -19,7 +20,10 @@ Both harnesses:
   turn;
 - use their own native tools (web search, shell) alongside the application
   tools;
-- resume a session after a browser reload.
+- resume a session after a browser reload;
+- keep a turn running while a phone-like page is frozen and its socket is cut,
+  then deliver everything it missed exactly once on reattach
+  ([mobile resilience](#mobile-resilience-2026-10-01)).
 
 Real-subscription runs of Codex and Claude Code each completed a reader-style
 turn: application tool, native web search, application tool, cited answer.
@@ -115,7 +119,13 @@ and the inner method of `mcp/message`, and nothing harness-specific.
 - **Disconnect:** a pending call dies with the adapter process and is never
   replayed (see Q5).
 
-### Q5: does a real browser connect, survive a reload and resume? Pass.
+### Q5: does a real browser connect, survive a reload and resume? Pass, on desktop Chromium.
+
+Correction (2026-10-01): this question covered a deliberate reload in desktop
+Chromium at a phone-sized viewport, not mobile lifecycle behavior. In this
+design every socket close ended the turn, and in the boxed variant the
+conversation too. [Mobile resilience](#mobile-resilience-2026-10-01) closes
+that gap.
 
 Covered in Playwright Chromium at phone size (`web/drive.mjs`):
 
@@ -203,6 +213,119 @@ Both highlighted exactly "Chapter 1: The validation set is not the test set."
 Codex asked the gateway to approve each application tool call, and the proxy
 allowed them as application tools. Claude Code asked nothing (finding 10).
 
+## Mobile resilience (2026-10-01)
+
+Mobile browsers freeze background tabs and drop their sockets, networks
+change, and resumed sockets can be half-open. ACP v1 leaves this to
+implementers: sessions should outlive connections and clients resume with
+`session/load`, but messages emitted while disconnected are not redelivered;
+stream resumption is deferred to v2. `session/load` during a running turn is
+also ill-defined (the v2 prompt-lifecycle RFD asks this question itself).
+
+Prior art used:
+
+- ACP UI's foreground reconnect (`visibilitychange` and `online` triggers,
+  `$/ping` heartbeat);
+- `@rebornix/stdio-to-ws --persist` (process kept alive, output buffered and
+  replayed to a returning client ID);
+- the offset-acknowledged log of Socket.IO connection-state recovery and MCP
+  `Last-Event-ID`.
+
+### Design
+
+- **Session host.** The gateway now owns each chain in a host that outlives
+  its socket. A socket is only an attachment (`src/resume.rs`).
+- **Opt-in transport extension.** A client that offers the
+  `agent-connect.resume.v1` subprotocol gets enveloped frames. Each ACP
+  message carries a per-direction sequence number; each side acknowledges and
+  retains what is unacknowledged, resends it after a reattach, and drops
+  duplicates by sequence. Plain `acp.v1` clients keep the old behavior. This is
+  Agent Connect's own extension below ACP, not an ACP standard.
+- **Reattach.** It needs the same grant's bearer token, an allowed `Origin`,
+  and the host's random resume token. The newest attachment wins, and the older
+  socket is closed with code 4409.
+- **Limits.** A detached host keeps running for a grace period (default
+  10 minutes) with bounded retained output. Past either limit, it is torn down
+  through the existing teardown path (its chain's input ends). A later reattach
+  gets code 4404, and the page falls back to ACP v1 `session/load`. The
+  interrupted turn is reported as interrupted and is never re-sent.
+- **Clean close.** A deliberate close sends `bye` and ends the host at once.
+- **Browser.** `web/resumable-stream.js` presents the SDK's stream shape, so
+  one ACP connection, and its pending `session/prompt` and tool calls, survives
+  socket swaps. It reconnects on close (with backoff while visible), and on
+  `visibilitychange`, `pageshow`, `online`, `focus` and Page Lifecycle
+  `resume`. On those events it probes an apparently open socket and replaces it
+  if no answer arrives within 2.5 s.
+- **Discarded tab.** A fresh page has no JSON-RPC state to reattach, so it uses
+  `session/load`. The gateway first ends any other live host of the grant that
+  holds that session and waits for it to finish, so two adapter processes
+  never drive one session.
+
+### Method
+
+Real Chromium at phone size (`web/drive-mobile.mjs`). The page reaches the
+gateway through a fault-injecting relay (`web/relay.mjs`) that can reset
+connections, refuse new ones, or blackhole open sockets (half-open).
+
+"Going away" means: hide the page, pause its JavaScript with the DevTools
+debugger, reset the socket, stay offline for 10–15 s, then resume. A real
+frozen tab behaves the same way: events queue and run on resume.
+`Page.setWebLifecycleState` "frozen" did not stop timers on a visible headless
+page, so it was not used.
+
+Mock scripts stream 30 numbered chunks (`SPIKE-SLOW`) or call `ask_reader`
+after 6 s (`SPIKE-LATEASK`), so any gap, duplicate or repeated tool execution
+is visible.
+
+### Results
+
+All on both harnesses, through unmodified adapters.
+
+| Question                                                 | Codex | Claude Code | Evidence                                                                                                                                |
+| -------------------------------------------------------- | ----- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| M1 turn survives freeze, cut and 10 s offline            | Pass  | Pass        | Same `session/prompt` resolved; 30 chunks exactly once, in order; 30 frames replayed                                                    |
+| M2a tool call pending before the cut                     | Pass  | Pass        | Answered after return; `ask_reader` ran once                                                                                            |
+| M2b tool call issued while the page was away             | Pass  | Pass        | Call held in the gateway log, delivered on reattach, answered once                                                                      |
+| M2c answer written into a half-open socket               | Pass  | Pass        | Resent after reattach; the gateway dropped the duplicate; the model saw one result                                                      |
+| M3 half-open socket during streaming                     | Pass  | Pass        | Foreground probe timed out, socket replaced, exact text                                                                                 |
+| M4 grace expiry (5 s)                                    | Pass  | Pass        | Host ended, reattach refused (4404), page recovered with `session/load`, turn reported as interrupted                                   |
+| M4 retained output bound (3 KB)                          | Pass  | Pass        | Host ended while detached, same recovery                                                                                                |
+| M5 wrong bearer, wrong origin, wrong resume token        | Pass  | Pass        | Refused (401, 403, 4404)                                                                                                                |
+| M5 takeover                                              | Pass  | Pass        | New attachment accepted; the first socket closed with 4409                                                                              |
+| M6 tab discarded mid-turn, then `session/load`           | Pass  | Pass        | Detached host evicted first, then load and a tool turn                                                                                  |
+| M7 boxed: M1, M2a–c                                      | Pass  | Pass        | Container kept alive while detached; none left afterward                                                                                |
+| M8 boxed: conversation survives its box (per-grant home) | Pass  | Pass        | Without the volume, load fails (Codex `Internal error`, Claude `Resource not found`); with it, the earlier turn reaches the model again |
+
+Plain `acp.v1` clients still pass the original browser scenarios. No adapter
+process or container was left behind, apart from hosts deliberately inside
+their grace period.
+
+### Mobile findings
+
+1. **Reattach must happen below ACP.** A v1 `session/load` cannot rejoin a
+   running turn, and a lost prompt response is ambiguous. Only a
+   transport-level reattach to the live chain keeps an in-flight turn and its
+   tool calls.
+2. **Acknowledge both directions.** `stdio-to-ws` buffers only agent output,
+   without sequence numbers. Frames written into a dying socket are then lost,
+   in either direction: M2c is exactly that case.
+3. **Bound retention only while detached.** A single `initialize` response was
+   about 10 KB, so a small bound applied while attached ended healthy hosts.
+   The bound now applies while detached, with an 8× cap while attached.
+4. **A deliberate close needs `bye`.** Otherwise every finished page leaves a
+   host in its grace period.
+5. **Harness tool ceilings still apply while away.** A page tool call held for
+   longer than about 300 s times out in the harness (Q4). For phones, long
+   human waits should return a receipt immediately rather than hold the call.
+6. **Durable homes trade isolation for continuity.** A per-grant home volume
+   lets a fresh box load the conversation, but every session of that grant can
+   read the others' transcripts, as on the owner's own machine. The workspace
+   stays on tmpfs and does not survive.
+7. **Not yet seen on a real phone.** All results use desktop Chromium with
+   emulated freezing and socket loss. iOS Safari's exact timing (how long
+   before sockets drop, whether `pageshow` or `visibilitychange` fires first)
+   still needs one manual check.
+
 ## Findings
 
 1. **The official polyfill is the missing piece, and it works unmodified.**
@@ -259,9 +382,15 @@ allowed them as application tools. Claude Code asked nothing (finding 10).
   action routed into the box. Both need their own spike.
 - **Per-session networks.** Boxes currently share one internal network. Give
   each session its own internal network, with the egress proxy attached.
-- **Durable boxed sessions.** tmpfs homes lose harness history when a box
-  exits, so `session/load` across reconnects works only on the host variant. A
-  per-grant session volume is the likely shape.
+- **Durable boxed sessions.** A per-grant home volume works (M8). Still open:
+  whether per-grant transcript visibility is acceptable, workspace
+  persistence, and volume lifecycle on revocation.
+- **Mobile.**
+  - One manual check in iOS Safari.
+  - Whether the gateway should keep held tool calls alive past the harness
+    ceiling with progress notifications.
+  - Proposing message IDs and stream resumption upstream, so the resume
+    extension can be retired for ACP v2.
 - **SDK ergonomics.** A small MCP-server helper for the browser SDK (tool
   registry, method-not-found for unknown methods, progress while waiting) and
   close-code errors instead of opaque events.

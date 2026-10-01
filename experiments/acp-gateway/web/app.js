@@ -3,10 +3,13 @@
 import { client, RequestError } from "@agentclientprotocol/sdk";
 import { createWebSocketStream } from "@agentclientprotocol/sdk/experimental/ws-client";
 import tools from "./tools.json";
+import { createResumableStream } from "./resumable-stream.js";
 
 const query = new URLSearchParams(location.search);
 const GATEWAY = query.get("gateway") ?? "ws://127.0.0.1:18940/acp";
 const TOKEN = query.get("token") ?? "spike-dev-token";
+// Resumable transport is on unless ?resume=0 (plain ACP over WebSocket).
+const RESUMABLE = query.get("resume") !== "0";
 
 const $ = (id) => document.getElementById(id);
 const t0 = performance.now();
@@ -26,6 +29,8 @@ const setStatus = (s) => {
 };
 
 // ---------------------------------------------------------- app tools ---
+
+const toolCounts = {};
 
 const toolHandlers = {
   read_passage({ chapter }) {
@@ -76,6 +81,7 @@ async function handleMcp({ method, params }) {
       const handler = toolHandlers[params?.name];
       if (!handler) throw RequestError.invalidParams({ tool: params?.name });
       log("tool", `${params.name} ${JSON.stringify(params.arguments ?? {})}`);
+      toolCounts[params.name] = (toolCounts[params.name] ?? 0) + 1;
       const text = await handler(params.arguments ?? {});
       log("tool-result", text);
       return { content: [{ type: "text", text }], isError: false };
@@ -101,17 +107,61 @@ function onUpdate({ update }) {
   log(`update:${kind}`, detail);
 }
 
+let transport = null;
+
 function connectApp() {
-  const stream = createWebSocketStream(GATEWAY, {
-    protocols: ["acp.v1", `bearer.${TOKEN}`],
+  if (!RESUMABLE) {
+    transport = null;
+    const stream = createWebSocketStream(GATEWAY, {
+      protocols: ["acp.v1", `bearer.${TOKEN}`],
+    });
+    return { stream, app: readerApp() };
+  }
+  transport = createResumableStream(GATEWAY, {
+    token: TOKEN,
+    onState: (state, why) => {
+      $("conn").textContent = state;
+      log("conn", why ? `${state} (${why})` : state);
+    },
+    log,
   });
-  return { stream, app: readerApp() };
+  return { stream: transport.stream, app: readerApp() };
+}
+
+// Foreground reconnect: mobile browsers freeze background tabs and drop their
+// sockets. On every sign of coming back, check the socket and replace it if
+// it is dead.
+for (const [target, type] of [
+  [document, "visibilitychange"],
+  [document, "resume"],
+  [window, "pageshow"],
+  [window, "online"],
+  [window, "focus"],
+]) {
+  target.addEventListener(type, () => {
+    if (document.visibilityState === "hidden") return;
+    transport?.checkLiveness(type);
+  });
+}
+
+// The resumable session ended for good (grace expired, buffer overflow).
+// Recover the conversation with ACP v1 session/load. The interrupted turn is
+// not re-sent: its effects are uncertain.
+async function recoverAfter(error) {
+  const sessionId = sessionStorage.getItem("spike-session");
+  const ended = transport?.stats().ended;
+  if (!ended || ended === "closed" || ended === "superseded") return false;
+  if (!sessionId) return false;
+  log("recover", `${ended} (${error?.message}); loading ${sessionId}`);
+  await resume(null, sessionId, "recovered:interrupted");
+  return true;
 }
 
 // Reconnect after a reload and continue a session this grant created earlier.
 async function resume(
   prompt,
   sessionId = sessionStorage.getItem("spike-session"),
+  finalStatus = null,
 ) {
   $("answer").textContent = "";
   setStatus("resuming");
@@ -131,6 +181,10 @@ async function resume(
         "loaded",
         `${sessionId} replayed=${events.filter((e) => e.kind.startsWith("update:user_message")).length}`,
       );
+      if (prompt === null) {
+        setStatus(finalStatus ?? "loaded");
+        return loaded;
+      }
       setStatus("prompting");
       const result = await ctx.request("session/prompt", {
         sessionId,
@@ -175,6 +229,7 @@ async function run(prompt) {
     });
   } catch (error) {
     setStatus(`error:${error?.message ?? error}`);
+    if (await recoverAfter(error).catch(() => false)) return;
     throw error;
   }
 }
@@ -212,4 +267,11 @@ $("run-tools").onclick = () => run("SPIKE-TOOLS read and highlight");
 $("run-ask").onclick = () => run("SPIKE-ASK please");
 window.runShell = () => run("SPIKE-SHELL run something");
 $("run-resume").onclick = () => resume("SPIKE-TOOLS again");
-window.spike = { run, resume, events };
+window.spike = {
+  run,
+  resume,
+  events,
+  toolCounts,
+  answer: () => $("answer").textContent,
+  transport: () => transport?.stats(),
+};

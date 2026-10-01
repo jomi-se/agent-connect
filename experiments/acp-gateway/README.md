@@ -13,12 +13,17 @@ Not part of the npm workspaces or any release.
   application tool fixture.
 - `src/bin/tool_client.rs`: plays the application without a browser: offers
   tools over MCP-over-ACP, with `--attack`, `--boxed` and `--live` modes.
-- `src/bin/gateway.rs`: browser-facing ACP-over-WebSocket gateway, one chain
-  per connection, with optional `--boxed`.
+- `src/bin/gateway.rs`: browser-facing ACP-over-WebSocket gateway, with
+  optional `--boxed` and `--durable-home`.
+- `src/resume.rs`: session hosts that outlive their socket, and the opt-in
+  `agent-connect.resume.v1` transport (sequence-acknowledged frames, reattach,
+  grace period, retention bound).
 - `src/bin/session_runner.rs`: runs inside a session container: polyfill and
   adapter on stdio.
-- `web/`: a reader page that serves its own tools in the page, plus a
-  Playwright driver (`drive.mjs`).
+- `web/`: a reader page that serves its own tools in the page
+  (`resumable-stream.js` is its mobile transport), Playwright drivers
+  (`drive.mjs`, and `drive-mobile.mjs` for mobile lifecycle), and a
+  fault-injecting relay (`relay.mjs`).
 - `sandbox/`: session image, egress proxy, setup (`up.sh`) and network probes
   (`probe.sh`).
 - `mock-model/server.mjs`: scripted Responses and Messages model server that
@@ -43,6 +48,11 @@ cargo run --bin tool_client -- --harness claude --snapshot .run/snapshot.json --
 python3 -m http.server 18941 --bind 127.0.0.1 -d web &
 cargo run --bin gateway -- --harness claude --listen 127.0.0.1:18943 &
 (cd web && PAGE_ORIGIN="http://127.0.0.1:18941/?gateway=ws://127.0.0.1:18943/acp" node drive.mjs tools)
+
+# Mobile lifecycle: the page goes through the relay; add ?resume=0 for plain ACP
+(cd web && node relay.mjs &)
+(cd web && PAGE_ORIGIN="http://127.0.0.1:18941/?gateway=ws://127.0.0.1:18946/acp" node drive-mobile.mjs slow-cut)
+# expire and overflow need --resume-grace-secs 5 and --resume-max-bytes 3000
 
 # Container per session
 ./sandbox/up.sh && ./sandbox/probe.sh

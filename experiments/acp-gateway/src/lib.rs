@@ -2,6 +2,7 @@
 //! application tool fixture that stands in for a browser page.
 
 pub mod policy;
+pub mod resume;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -179,7 +180,15 @@ where
 /// polyfill and the adapter; its only network exit is the egress proxy.
 /// `codex_mode` defaults to full access inside the box: the box, not the
 /// harness, is the boundary.
-pub fn boxed_harness(harness: Harness, session: &str, codex_mode: &str) -> AcpAgent {
+/// `home_volume`: a named Docker volume for the harness home (its config and
+/// conversation transcripts) instead of tmpfs, so `session/load` works after
+/// the box is gone. The workspace stays on tmpfs.
+pub fn boxed_harness(
+    harness: Harness,
+    session: &str,
+    codex_mode: &str,
+    home_volume: Option<&str>,
+) -> AcpAgent {
     let name = match harness {
         Harness::Codex => "codex",
         Harness::Claude => "claude",
@@ -199,8 +208,6 @@ pub fn boxed_harness(harness: Harness, session: &str, codex_mode: &str) -> AcpAg
         "--tmpfs",
         "/work:rw,exec,size=512m,uid=1000,gid=1000",
         "--tmpfs",
-        "/home/node:rw,exec,size=512m,uid=1000,gid=1000",
-        "--tmpfs",
         "/tmp:rw,exec,size=256m",
         "--cap-drop",
         "ALL",
@@ -216,6 +223,13 @@ pub fn boxed_harness(harness: Harness, session: &str, codex_mode: &str) -> AcpAg
     .iter()
     .map(|s| s.to_string())
     .collect();
+    match home_volume {
+        Some(volume) => args.extend(["-v".into(), format!("{volume}:/home/node")]),
+        None => args.extend([
+            "--tmpfs".into(),
+            "/home/node:rw,exec,size=512m,uid=1000,gid=1000".into(),
+        ]),
+    }
     for (k, v) in [
         ("HTTPS_PROXY", proxy),
         ("HTTP_PROXY", proxy),

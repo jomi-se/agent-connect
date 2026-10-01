@@ -9,26 +9,31 @@
 //! travels as a subprotocol (`bearer.<token>`) next to the ACP subprotocol,
 //! which the server selects. The Origin header is checked against an allowlist;
 //! WebSocket upgrades are not protected by CORS.
+//!
+//! A client that also offers `agent-connect.resume.v1` gets a session host
+//! that outlives its socket (see `resume.rs`); otherwise the chain ends with
+//! the socket, as before.
 
 use std::collections::BTreeMap;
-use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use acp_gateway_spike::policy::{GrantSessions, PermissionProfile, PolicyConfig, PolicyProxy};
+use acp_gateway_spike::resume::{
+    self, AttachError, Host, RESUME_SUBPROTOCOL, Registry, ResumeConfig, ToSocket, close,
+};
 use acp_gateway_spike::{Harness, SpikePaths, boxed_harness, mock_harness};
 use agent_client_protocol::{ConnectTo, Lines};
 use agent_client_protocol_conductor::{ConductorImpl, ProxiesAndAgent};
 use agent_client_protocol_polyfill::mcp_over_acp::McpOverAcpPolyfill;
 use axum::Router;
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use clap::Parser;
-use futures::{SinkExt, StreamExt, future};
 use serde_json::Value;
 
 const ACP_SUBPROTOCOL: &str = "acp.v1";
@@ -58,6 +63,16 @@ struct Cli {
     /// Run each connection's adapter and polyfill in its own container.
     #[arg(long)]
     boxed: bool,
+    /// How long a detached resumable host keeps running.
+    #[arg(long, default_value_t = 600)]
+    resume_grace_secs: u64,
+    /// Boxed only: keep each grant's harness home in a named Docker volume,
+    /// so conversations survive their boxes.
+    #[arg(long)]
+    durable_home: bool,
+    /// Unacknowledged output a resumable host may retain before it is ended.
+    #[arg(long, default_value_t = 8 * 1024 * 1024)]
+    resume_max_bytes: usize,
 }
 
 struct Gateway {
@@ -66,6 +81,7 @@ struct Gateway {
     grant_sessions: GrantSessions,
     snapshot: BTreeMap<String, Value>,
     paths: SpikePaths,
+    hosts: Arc<Registry>,
 }
 
 #[tokio::main]
@@ -88,7 +104,12 @@ async fn main() -> anyhow::Result<()> {
         })
         .collect();
     let listen = cli.listen;
+    let hosts = Registry::new(ResumeConfig {
+        grace: Duration::from_secs(cli.resume_grace_secs),
+        max_retained_bytes: cli.resume_max_bytes,
+    });
     let gateway = Arc::new(Gateway {
+        hosts,
         cli,
         snapshot,
         paths,
@@ -127,60 +148,169 @@ async fn upgrade(
         .filter_map(|v| v.to_str().ok())
         .flat_map(|v| v.split(',').map(str::trim))
         .collect();
-    let token_ok = offered.iter().any(|p| {
+    let grant = offered.iter().find_map(|p| {
         p.strip_prefix(BEARER_PREFIX)
-            .is_some_and(|t| constant_time_eq(t.as_bytes(), gateway.cli.token.as_bytes()))
+            .filter(|t| resume::constant_time_eq(t.as_bytes(), gateway.cli.token.as_bytes()))
     });
-    if !offered.contains(&ACP_SUBPROTOCOL) || !token_ok {
-        eprintln!("[gateway] reject {peer}: missing ACP subprotocol or bad bearer");
+    let Some(grant) = grant.map(str::to_string) else {
+        eprintln!("[gateway] reject {peer}: bad bearer");
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+    };
+    let resumable = offered.contains(&RESUME_SUBPROTOCOL);
+    if !resumable && !offered.contains(&ACP_SUBPROTOCOL) {
+        eprintln!("[gateway] reject {peer}: no supported subprotocol");
         return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
     }
-    ws.protocols([ACP_SUBPROTOCOL])
+    let selected = if resumable {
+        RESUME_SUBPROTOCOL
+    } else {
+        ACP_SUBPROTOCOL
+    };
+    ws.protocols([selected])
         .on_upgrade(move |socket| async move {
-            if let Err(e) = serve_connection(socket, gateway, peer).await {
+            if let Err(e) = serve_socket(socket, gateway, peer, grant, resumable).await {
                 eprintln!("[gateway] {peer} ended with error: {e}");
             }
         })
 }
 
-async fn serve_connection(
-    socket: WebSocket,
+/// One WebSocket: attach it to a new or existing host and pump frames until
+/// either side goes away.
+async fn serve_socket(
+    mut socket: WebSocket,
     gateway: Arc<Gateway>,
     peer: SocketAddr,
+    grant: String,
+    resumable: bool,
 ) -> anyhow::Result<()> {
-    let started = Instant::now();
-    let session_dir = gateway
-        .paths
-        .run_dir()
-        .join("sessions")
-        .join(uuid::Uuid::new_v4().to_string());
+    let (host, ack) = if resumable {
+        let first = tokio::time::timeout(Duration::from_secs(10), socket.recv()).await;
+        let Ok(Some(Ok(Message::Text(text)))) = first else {
+            return Ok(());
+        };
+        let attach: Value = serde_json::from_str(&text).unwrap_or_default();
+        if attach.get("t").and_then(Value::as_str) != Some("attach") {
+            close_with(&mut socket, close::BAD_FRAME, "expected attach").await;
+            return Ok(());
+        }
+        let ack = attach.get("ack").and_then(Value::as_u64).unwrap_or(0);
+        match attach.get("resume").and_then(Value::as_str) {
+            Some(token) => match gateway.hosts.find(token, &grant) {
+                Some(host) => (host, ack),
+                None => {
+                    eprintln!("[gateway] {peer} reattach refused: unknown or ended host");
+                    let _ = socket
+                        .send(Message::Text(r#"{"t":"expired"}"#.into()))
+                        .await;
+                    close_with(&mut socket, close::EXPIRED, "expired").await;
+                    return Ok(());
+                }
+            },
+            None => (start_host(&gateway, &grant, true, peer)?, 0),
+        }
+    } else {
+        (start_host(&gateway, &grant, false, peer)?, 0)
+    };
+
+    let (generation, mut outbound) = match host.attach(ack) {
+        Ok(attached) => attached,
+        Err(AttachError::Expired) => {
+            let _ = socket
+                .send(Message::Text(r#"{"t":"expired"}"#.into()))
+                .await;
+            close_with(&mut socket, close::EXPIRED, "expired").await;
+            return Ok(());
+        }
+    };
+
+    let mut ping = tokio::time::interval(Duration::from_secs(10));
+    let mut last_heard = Instant::now();
+    let mut replies = Vec::new();
+    let why = loop {
+        tokio::select! {
+            frame = socket.recv() => {
+                last_heard = Instant::now();
+                match frame {
+                    Some(Ok(Message::Text(text))) => {
+                        if let Err(code) = host.client_text(&gateway.hosts, &text, &mut replies).await {
+                            close_with(&mut socket, code, "bad frame").await;
+                            break "bad frame";
+                        }
+                        for reply in replies.drain(..) {
+                            if socket.send(Message::Text(reply.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break "socket closed",
+                    Some(Ok(_)) => {}
+                }
+            }
+            out = outbound.recv() => match out {
+                Some(ToSocket::Text(text)) => {
+                    if socket.send(Message::Text(text.into())).await.is_err() {
+                        break "send failed";
+                    }
+                }
+                Some(ToSocket::Close(code, reason)) => {
+                    close_with(&mut socket, code, reason).await;
+                    break reason;
+                }
+                None => break "host gone",
+            },
+            _ = ping.tick() => {
+                if last_heard.elapsed() > Duration::from_secs(25) {
+                    break "no pong";
+                }
+                if socket.send(Message::Ping(Vec::new().into())).await.is_err() {
+                    break "ping failed";
+                }
+            }
+        }
+    };
+    eprintln!(
+        "[gateway] {peer} attachment {generation} of host {} ended: {why}",
+        host.label
+    );
+    host.detach(generation);
+    Ok(())
+}
+
+async fn close_with(socket: &mut WebSocket, code: u16, reason: &'static str) {
+    let _ = socket
+        .send(Message::Close(Some(CloseFrame {
+            code,
+            reason: reason.into(),
+        })))
+        .await;
+}
+
+/// Creates a host and runs its chain in the background.
+fn start_host(
+    gateway: &Arc<Gateway>,
+    grant: &str,
+    resumable: bool,
+    peer: SocketAddr,
+) -> anyhow::Result<Arc<Host>> {
+    let label = uuid::Uuid::new_v4().to_string();
+    let session_dir = gateway.paths.run_dir().join("sessions").join(&label);
     std::fs::create_dir_all(&session_dir)?;
     eprintln!(
-        "[gateway] {peer} connected; workspace {}",
-        session_dir.display()
+        "[gateway] {peer} new {} host {label}; live hosts {}",
+        if resumable { "resumable" } else { "plain" },
+        gateway.hosts.live_hosts() + 1
     );
-
-    let (ws_tx, ws_rx) = socket.split();
-    let outgoing = ws_tx
-        .sink_map_err(io::Error::other)
-        .with(|line: String| future::ready(Ok::<_, io::Error>(Message::Text(line.into()))));
-    let incoming = ws_rx.filter_map(|frame| {
-        future::ready(match frame {
-            Ok(Message::Text(text)) => Some(Ok(text.to_string())),
-            Ok(Message::Close(_)) => None,
-            Ok(_) => None,
-            Err(e) => Some(Err(io::Error::other(e))),
-        })
-    });
-    let transport = Lines::new(Box::pin(outgoing), Box::pin(incoming));
+    let (host, io) = gateway.hosts.create(grant, resumable, label.clone());
 
     let boxed = gateway.cli.boxed;
-    let label = session_dir
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
     let agent = if boxed {
-        boxed_harness(gateway.cli.harness, &label, &gateway.cli.codex_mode)
+        let volume = gateway.cli.durable_home.then(|| home_volume(grant));
+        boxed_harness(
+            gateway.cli.harness,
+            &label,
+            &gateway.cli.codex_mode,
+            volume.as_deref(),
+        )
     } else {
         mock_harness(
             &gateway.paths,
@@ -201,15 +331,22 @@ async fn serve_connection(
         components = components.proxy(McpOverAcpPolyfill::http());
     }
     let chain = ConductorImpl::new_agent("agent-connect-gateway", components);
-    let result = chain.connect_to(transport).await;
-    eprintln!(
-        "[gateway] {peer} disconnected after {:?}: {:?}",
-        started.elapsed(),
-        result.as_ref().err()
-    );
-    Ok(())
+    tokio::spawn(async move {
+        let started = Instant::now();
+        let result = chain.connect_to(Lines::new(io.outgoing, io.incoming)).await;
+        eprintln!(
+            "[gateway] chain {label} ended after {:?}: {:?}",
+            started.elapsed(),
+            result.as_ref().err()
+        );
+    });
+    Ok(host)
 }
 
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+/// A volume name derived from the grant, never containing the token itself.
+fn home_volume(grant: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    grant.hash(&mut hasher);
+    format!("acp-home-{:016x}", hasher.finish())
 }
