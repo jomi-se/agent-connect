@@ -31,6 +31,13 @@ Ask the agent to read chapter 1 and highlight a phrase. The three fixed tools
 read a passage, mark exact text, and ask a question which waits for your answer.
 Stop cancels the active turn, including an unanswered reader question. Reloading
 the page requires a deliberate new connection; it does not replay a prompt.
+After cancellation or a terminal failure, choose **New connection** to send a
+new message with the same in-memory grant and approved tools. Previous messages
+stay visible but are never sent to the new harness session. Reloading still
+requires uploading the grant again.
+If the gateway reports full session capacity while the old box closes, wait
+a moment and choose **New connection** again. No message is sent until you
+submit it yourself.
 
 For deterministic clean-room testing, the scripted model recognizes
 `SPIKE-TOOLS`, `SPIKE-ASK`, and `SPIKE-SLOW`. These prompts are test-fixture

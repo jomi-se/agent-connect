@@ -515,3 +515,31 @@ The remaining owner gates are live dedicated-login/refresh/revoke checks,
 first actual release/account setup and ADR acceptance. No personal harness home,
 live login, subscription-backed turn, remote ref, registry publication or npm
 deprecation was performed. The previous OpenClaw plugin remains intact.
+
+## Clear-context product review (2026-10-02)
+
+An independent review of `6e9eb0b..775e996`, with selected underlying SDK
+paths from `893c1a7..6e9eb0b`, identified three P2 findings:
+
+- The standalone sample exposed no new-connection action after Stop or a
+  terminal failure required a fresh AgentSession. It now retains the visible
+  transcript and approved in-memory grant while allowing an explicit new
+  connection. Earlier messages and tool effects are never replayed.
+- A rejected `session/new` promise permanently poisoned later explicit
+  provider attempts. Definite RPC rejection now clears that promise; ambiguous
+  protocol/transport outcomes do not. Controlled regression tests cover both.
+- The documented local acceptance sequence implied macOS support, although
+  its container driver needs Linux temporary paths and platform artifacts.
+  The guide now scopes that sequence to Linux; native macOS composition stays
+  a first-release owner check.
+
+The packed-artifact browser gate now continues after cancellation: it explicitly
+connects again, retains the cancelled transcript, sends a new tool turn on a
+different harness session and verifies the cancelled question is not replayed.
+It uses one page with a one-host limit. Repeated scripted questions also exposed
+and corrected a fixture bug: tool results must belong to the latest user turn,
+rather than suppressing a new tool call because an earlier turn answered it.
+The strengthened clean-room rerun passes, including explicit connection retry
+when the single host slot is still closing and no duplicate archived transcript.
+This review and its deterministic tests do not establish live authentication,
+credential refresh, native macOS installation or gateway-only resource teardown.

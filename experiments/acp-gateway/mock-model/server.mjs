@@ -56,11 +56,12 @@ function findTool(tools, baseName) {
 
 // history: [{ kind: "call", id, name } | { kind: "result", id, text } | { kind: "user", text }]
 function decide({ tools, history }) {
-  const lastUser =
-    [...history].reverse().find((h) => h.kind === "user")?.text ?? "";
+  const turnStart = history.findLastIndex((h) => h.kind === "user");
+  const lastUser = history[turnStart]?.text ?? "";
   const results = new Map();
   const callNames = new Map();
-  for (const h of history) {
+  // Earlier turns must not satisfy this turn's scripted application tool calls.
+  for (const h of history.slice(turnStart + 1)) {
     if (h.kind === "call") callNames.set(h.id, h.name);
     if (h.kind === "result") results.set(callNames.get(h.id) ?? h.id, h.text);
   }

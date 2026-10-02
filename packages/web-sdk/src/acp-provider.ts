@@ -133,7 +133,7 @@ export class AcpProvider implements AgentProvider {
   private stopped = false;
   private recovery: Promise<AcpRecovery> | undefined;
   private lastError: Error | undefined;
-  private newSession?: Promise<string>;
+  private newSession: Promise<string> | undefined;
   private loadSupported = false;
   private server!: SingleMcpServer;
   private constructor(options: ConnectAgentOptions) {
@@ -338,6 +338,13 @@ export class AcpProvider implements AgentProvider {
       .then((result) => {
         this.setSession(result.sessionId);
         return result.sessionId;
+      })
+      .catch((error: unknown) => {
+        // A definite RPC rejection admits a new deliberate attempt. Malformed
+        // responses (-32600) and transport failures may have created a session.
+        if (error instanceof RequestError && error.code !== -32600)
+          this.newSession = undefined;
+        throw error;
       });
     return this.newSession;
   }

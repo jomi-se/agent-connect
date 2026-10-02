@@ -41,6 +41,12 @@ export class Peer {
     reply: (result: unknown) => void,
   ) => void;
   onCancel?: () => void;
+  onNewSession?: (
+    socket: Socket,
+    params: Record<string, unknown>,
+    reply: (result: unknown) => void,
+    fail: (code: number, message: string) => void,
+  ) => void;
   private states = new Map<
     Socket,
     {
@@ -97,7 +103,15 @@ export class Peer {
           });
           break;
         case "session/new":
-          reply({ sessionId: "owned-session" });
+          if (this.onNewSession)
+            this.onNewSession(socket, params, reply, (code, errorMessage) =>
+              this.send(socket, {
+                jsonrpc: "2.0",
+                id: message["id"],
+                error: { code, message: errorMessage },
+              } as AnyMessage),
+            );
+          else reply({ sessionId: "owned-session" });
           break;
         case "session/load":
           this.update(socket, {
