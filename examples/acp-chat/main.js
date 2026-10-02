@@ -192,7 +192,7 @@ element("chat-new").addEventListener("click", async () => {
   } catch (error) {
     element("error").textContent =
       error.code === "session_capacity"
-        ? "Gateway session capacity is full. Wait a moment, then choose New connection again."
+        ? "Gateway session capacity is full. Wait for box cleanup, then choose New connection again. If it persists, ask the gateway operator to inspect cleanup errors."
         : error.message;
     element("chat-new").disabled = false;
   }
@@ -215,7 +215,8 @@ element("ask-form").addEventListener("submit", (event) => {
   event.preventDefault();
   answerPending?.(element("ask-input").value);
 });
-window.addEventListener("pagehide", () => {
+window.addEventListener("pagehide", (event) => {
+  if (event.persisted) return;
   void chat?.dispose();
   provider?.close();
 });

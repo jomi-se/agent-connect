@@ -34,7 +34,10 @@ the page requires a deliberate new connection; it does not replay a prompt.
 After cancellation or a terminal failure, choose **New connection** to send a
 new message with the same in-memory grant and approved tools. Previous messages
 stay visible but are never sent to the new harness session. Reloading still
-requires uploading the grant again.
+requires uploading the grant again. A real browser back/forward-cache restoration
+keeps the same chat, in-memory grant and pending tool answer. The page's cleanup
+handler preserves these when `pagehide.persisted` is true; ordinary departure
+still closes them.
 If the gateway reports full session capacity while the old box closes, wait
 a moment and choose **New connection** again. No message is sent until you
 submit it yourself.

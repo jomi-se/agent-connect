@@ -24,7 +24,9 @@ const run = await mkdtemp(join(tmpdir(), "acp-clean-room-"));
 const suffix = run.split("-").at(-1).toLowerCase();
 const name = `acp-clean-room-${suffix}`;
 const image =
-  process.env.ACP_CLEAN_ROOM_IMAGE ?? "agent-connect-clean-room:0.1.0-alpha.1";
+  process.env.ACP_CLEAN_ROOM_IMAGE ??
+  `agent-connect-clean-room:0.1.0-alpha.1-${suffix}`;
+let createdImageId;
 const children = new Set();
 async function command(binary, args, options = {}) {
   const child = spawn(binary, args, {
@@ -102,6 +104,19 @@ function cleanup() {
       if (network === `acp-clean-model-${suffix}-base`)
         await command("docker", ["network", "rm", network]).catch(() => {});
     }
+    if (createdImageId && !process.env.ACP_CLEAN_ROOM_IMAGE) {
+      // Identical concurrent builds may share an ID under different run tags.
+      // Untag only this run, and leave a tag replaced by another image alone.
+      const taggedId = await command("docker", [
+        "image",
+        "inspect",
+        "--format",
+        "{{.Id}}",
+        image,
+      ]).catch(() => "");
+      if (taggedId.trim() === createdImageId)
+        await command("docker", ["image", "rm", image]).catch(() => {});
+    }
     for (const child of children) child.kill("SIGTERM");
   })());
 }
@@ -160,6 +175,10 @@ try {
     `agent-connect-session:${manifest.version}`;
   await command("docker", ["image", "inspect", sessionImage]);
   await command("docker", ["build", "-t", image, join(run, "context")]);
+  createdImageId = (
+    await command("docker", ["image", "inspect", "--format", "{{.Id}}", image])
+  ).trim();
+  assert.match(createdImageId, /^sha256:[0-9a-f]{64}$/);
   const socket = process.env.ACP_DOCKER_SOCKET ?? "/var/run/docker.sock";
   const socketGroup = String((await stat(socket)).gid);
   const uid = process.getuid();
@@ -194,7 +213,7 @@ try {
       `ACP_SESSION_IMAGE=${sessionImage}`,
       "-e",
       `HOME=${join(run, "work")}`,
-      image,
+      createdImageId,
     ],
     { inherit: true },
   );

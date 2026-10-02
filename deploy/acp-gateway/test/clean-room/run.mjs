@@ -417,9 +417,20 @@ try {
     },
   });
   await ready(`http://127.0.0.1:${controlPort}/stats`, relay);
-  browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+  browser = await chromium.launch({
+    headless: true,
+    channel: "chromium",
+    args: ["--no-sandbox"],
+    ignoreDefaultArgs: ["--disable-back-forward-cache"],
+  });
   async function connectPage(throughRelay = false) {
     const page = await browser.newPage();
+    await page.addInitScript(() => {
+      window.__pageRestorations = [];
+      window.addEventListener("pageshow", (event) =>
+        window.__pageRestorations.push(event.persisted),
+      );
+    });
     page.setDefaultTimeout(60000);
     page.on("pageerror", (error) => {
       report.pageErrors ??= [];
@@ -485,9 +496,72 @@ try {
   report.checks.push(
     "real Codex adapter reads a passage and highlights it once",
   );
+  const navigationSession = await toolsPage
+    .locator("#connection-status")
+    .getAttribute("data-session-id");
+  const lifecycle = await toolsPage.context().newCDPSession(toolsPage);
+  await lifecycle.send("Page.enable");
+  report.bfcacheMisses = [];
+  lifecycle.on("Page.backForwardCacheNotUsed", (event) =>
+    report.bfcacheMisses.push(event.notRestoredExplanations),
+  );
+  await toolsPage.goto(`${origin}/?away=1`);
+  await toolsPage.goBack({ waitUntil: "commit" });
+  await toolsPage.waitForFunction(
+    () => window.__pageRestorations.at(-1) === true,
+    null,
+    { timeout: 5000 },
+  );
+  report.bfcacheRestored = await toolsPage.evaluate(() =>
+    window.__pageRestorations.at(-1),
+  );
+  assert.equal(
+    await toolsPage.evaluate(() => window.__pageRestorations.at(-1)),
+    true,
+    "Browser actually restored the page from BFCache",
+  );
+  assert.ok(
+    await toolsPage.locator("#chat-input").isEnabled(),
+    "Restored chat remains usable",
+  );
+  assert.equal(
+    await toolsPage
+      .locator("#connection-status")
+      .getAttribute("data-session-id"),
+    navigationSession,
+  );
+  report.checks.push(
+    "genuine browser back-forward cache restoration retains its chat and session",
+  );
   const reconnectPage = toolsPage;
   await send(reconnectPage, "SPIKE-ASK");
   await reconnectPage.locator("#ask-form").waitFor({ state: "visible" });
+  const beforeCachedQuestion = (await modelRequests()).length;
+  await reconnectPage.goto(`${origin}/?away=1`);
+  await reconnectPage.goBack({ waitUntil: "commit" });
+  await reconnectPage.waitForFunction(
+    () => window.__pageRestorations.at(-1) === true,
+    null,
+    { timeout: 5000 },
+  );
+  assert.ok(
+    await reconnectPage.locator("#ask-form").isVisible(),
+    "Pending reader question survives real BFCache restoration",
+  );
+  assert.equal(
+    (await modelRequests()).length,
+    beforeCachedQuestion,
+    "Back navigation submits no model prompt or tool result",
+  );
+  assert.equal(
+    await reconnectPage
+      .locator("#book")
+      .evaluate((node) => Number(node.dataset.ask_readerCount)),
+    1,
+  );
+  report.checks.push(
+    "a pending app tool survives genuine BFCache restoration without replay",
+  );
   const beforeSession = await reconnectPage
     .locator("#connection-status")
     .getAttribute("data-session-id");
@@ -572,7 +646,7 @@ try {
     .getAttribute("data-session-id");
   // Box teardown is asynchronous. Each capacity rejection permits a fresh
   // deliberate connection click; no prompt is submitted during these retries.
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 20; attempt++) {
     await cancelPage.locator("#chat-new").click();
     await cancelPage.waitForFunction(
       () =>
