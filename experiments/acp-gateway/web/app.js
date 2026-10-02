@@ -1,9 +1,8 @@
 // Browser side of the ACP gateway spike: an application that speaks ACP over
 // WebSocket and serves its own tools as an MCP-over-ACP server, in the page.
-import { client, RequestError } from "@agentclientprotocol/sdk";
-import { createWebSocketStream } from "@agentclientprotocol/sdk/experimental/ws-client";
+// Application code uses the product SDK; this page remains a browser fixture.
+import { connectAgent, AgentSession } from "@open-agent-connect/web";
 import tools from "./tools.json";
-import { createResumableStream } from "./resumable-stream.js";
 
 const query = new URLSearchParams(location.search);
 const GATEWAY = query.get("gateway") ?? "ws://127.0.0.1:18940/acp";
@@ -51,10 +50,18 @@ const toolHandlers = {
     }
     return `Not found: ${text}`;
   },
-  ask_reader({ question }) {
+  ask_reader({ question }, context) {
     $("ask-question").textContent = question;
     $("ask").classList.add("open");
     return new Promise((resolve) => {
+      context?.signal?.addEventListener(
+        "abort",
+        () => {
+          $("ask").classList.remove("open");
+          resolve("Interrupted");
+        },
+        { once: true },
+      );
       $("ask-answer").onclick = () => {
         $("ask").classList.remove("open");
         resolve($("ask-answer").textContent);
@@ -63,38 +70,16 @@ const toolHandlers = {
   },
 };
 
-// Minimal MCP server over MCP-over-ACP. Unknown methods get method-not-found,
-// which lets modern MCP clients fall back from `server/discover`.
-async function handleMcp({ method, params }) {
-  switch (method) {
-    case "initialize":
-      return {
-        protocolVersion: params?.protocolVersion ?? "2025-06-18",
-        capabilities: { tools: {} },
-        serverInfo: { name: "spike-reader", version: "0.0.0" },
-      };
-    case "ping":
-      return {};
-    case "tools/list":
-      return { tools };
-    case "tools/call": {
-      const handler = toolHandlers[params?.name];
-      if (!handler) throw RequestError.invalidParams({ tool: params?.name });
-      log("tool", `${params.name} ${JSON.stringify(params.arguments ?? {})}`);
-      toolCounts[params.name] = (toolCounts[params.name] ?? 0) + 1;
-      const text = await handler(params.arguments ?? {});
-      log("tool-result", text);
-      return { content: [{ type: "text", text }], isError: false };
-    }
-    default:
-      log("mcp-unknown", method);
-      throw RequestError.methodNotFound(method);
-  }
-}
-
-// ------------------------------------------------------------ session ---
-
-let mcpConnections = 0;
+const applicationTools = tools.map((tool) => ({
+  ...tool,
+  async execute(args, context) {
+    log("tool", `${tool.name} ${JSON.stringify(args)}`);
+    toolCounts[tool.name] = (toolCounts[tool.name] ?? 0) + 1;
+    const text = await toolHandlers[tool.name](args, context);
+    log("tool-result", text);
+    return { content: [{ type: "text", text }], isError: false };
+  },
+}));
 
 function onUpdate({ update }) {
   const kind = update.sessionUpdate;
@@ -107,57 +92,48 @@ function onUpdate({ update }) {
   log(`update:${kind}`, detail);
 }
 
-let transport = null;
-
-function connectApp() {
-  if (!RESUMABLE) {
-    transport = null;
-    const stream = createWebSocketStream(GATEWAY, {
-      protocols: ["acp.v1", `bearer.${TOKEN}`],
-    });
-    return { stream, app: readerApp() };
-  }
-  transport = createResumableStream(GATEWAY, {
-    token: TOKEN,
-    onState: (state, why) => {
-      $("conn").textContent = state;
-      log("conn", why ? `${state} (${why})` : state);
+let provider = null;
+let activeSession = null;
+async function connect(sessionId) {
+  provider = await connectAgent({
+    grant: { gatewayUrl: GATEWAY, token: TOKEN },
+    tools,
+    ...(sessionId ? { sessionId } : {}),
+    transport: {
+      resumable: RESUMABLE,
+      onState: (state, why) => {
+        $("conn").textContent = state;
+        log("conn", why ? `${state} (${why})` : state);
+      },
     },
-    log,
+    onSession: (id) => {
+      sessionStorage.setItem("spike-session", id);
+      log("session", id);
+    },
+    onUpdate,
+    onRecovery: () =>
+      log("recover", "session/load; interrupted turn not re-sent"),
   });
-  return { stream: transport.stream, app: readerApp() };
+  return provider;
 }
-
-// Foreground reconnect: mobile browsers freeze background tabs and drop their
-// sockets. On every sign of coming back, check the socket and replace it if
-// it is dead.
-for (const [target, type] of [
-  [document, "visibilitychange"],
-  [document, "resume"],
-  [window, "pageshow"],
-  [window, "online"],
-  [window, "focus"],
-]) {
-  target.addEventListener(type, () => {
-    if (document.visibilityState === "hidden") return;
-    transport?.checkLiveness(type);
-  });
+async function promptWith(connection, prompt) {
+  const session = (activeSession = new AgentSession({
+    provider: connection,
+    tools: applicationTools,
+  }));
+  setStatus("prompting");
+  for await (const event of session.streamTask(prompt)) {
+    if (event.type === "task.failed") {
+      if (event.error.code === "task_interrupted") {
+        setStatus("recovered:interrupted");
+        return;
+      }
+      throw new Error(event.error.message);
+    }
+    if (event.type === "task.completed") setStatus("done:end_turn");
+    if (event.type === "task.cancelled") setStatus("done:cancelled");
+  }
 }
-
-// The resumable session ended for good (grace expired, buffer overflow).
-// Recover the conversation with ACP v1 session/load. The interrupted turn is
-// not re-sent: its effects are uncertain.
-async function recoverAfter(error) {
-  const sessionId = sessionStorage.getItem("spike-session");
-  const ended = transport?.stats().ended;
-  if (!ended || ended === "closed" || ended === "superseded") return false;
-  if (!sessionId) return false;
-  log("recover", `${ended} (${error?.message}); loading ${sessionId}`);
-  await resume(null, sessionId, "recovered:interrupted");
-  return true;
-}
-
-// Reconnect after a reload and continue a session this grant created earlier.
 async function resume(
   prompt,
   sessionId = sessionStorage.getItem("spike-session"),
@@ -165,104 +141,36 @@ async function resume(
 ) {
   $("answer").textContent = "";
   setStatus("resuming");
-  const { stream, app } = connectApp();
+  let connection;
   try {
-    return await app.connectWith(stream, async (ctx) => {
-      await ctx.request("initialize", {
-        protocolVersion: 1,
-        clientCapabilities: {},
-      });
-      const loaded = await ctx.request("session/load", {
-        sessionId,
-        cwd: "/the-app-does-not-choose-this",
-        mcpServers: [{ type: "acp", name: "app", serverId: "reader-tools" }],
-      });
-      log(
-        "loaded",
-        `${sessionId} replayed=${events.filter((e) => e.kind.startsWith("update:user_message")).length}`,
-      );
-      if (prompt === null) {
-        setStatus(finalStatus ?? "loaded");
-        return loaded;
-      }
-      setStatus("prompting");
-      const result = await ctx.request("session/prompt", {
-        sessionId,
-        prompt: [{ type: "text", text: prompt }],
-      });
-      setStatus(`done:${result.stopReason}`);
-      return loaded;
-    });
+    connection = await connect(sessionId);
+    log("loaded", sessionId);
+    if (prompt === null) {
+      setStatus(finalStatus ?? "loaded");
+      return;
+    }
+    await promptWith(connection, prompt);
   } catch (error) {
     setStatus(`error:${error?.message ?? error}`);
     throw error;
+  } finally {
+    connection?.close();
   }
 }
-
 async function run(prompt) {
   $("answer").textContent = "";
   setStatus("connecting");
-  const { stream, app } = connectApp();
+  let connection;
   try {
-    return await app.connectWith(stream, async (ctx) => {
-      const init = await ctx.request("initialize", {
-        protocolVersion: 1,
-        clientCapabilities: {
-          fs: { readTextFile: false, writeTextFile: false },
-          terminal: false,
-        },
-      });
-      log(
-        "initialized",
-        `${init.agentInfo?.name} acpMcp=${init.agentCapabilities?.mcpCapabilities?.acp} load=${init.agentCapabilities?.loadSession}`,
-      );
-      const session = await ctx
-        .buildSession("/the-app-does-not-choose-this")
-        .withMcpServer({ type: "acp", name: "app", serverId: "reader-tools" })
-        .start();
-      log("session", session.sessionId);
-      sessionStorage.setItem("spike-session", session.sessionId);
-      setStatus("prompting");
-      const result = await session.prompt(prompt);
-      setStatus(`done:${result.stopReason}`);
-      return result;
-    });
+    connection = await connect();
+    await promptWith(connection, prompt);
   } catch (error) {
     setStatus(`error:${error?.message ?? error}`);
-    if (await recoverAfter(error).catch(() => false)) return;
     throw error;
+  } finally {
+    connection?.close();
   }
 }
-
-function readerApp() {
-  return client({ name: "spike-reader" })
-    .onRequest(
-      "mcp/connect",
-      (p) => p,
-      () => ({ connectionId: `reader-mcp-${++mcpConnections}` }),
-    )
-    .onRequest(
-      "mcp/message",
-      (p) => p,
-      (ctx) => handleMcp(ctx.params),
-    )
-    .onRequest(
-      "mcp/disconnect",
-      (p) => p,
-      () => ({}),
-    )
-    .onNotification(
-      "mcp/message",
-      (p) => p,
-      (ctx) => log("mcp-notification", ctx.params?.method),
-    )
-    .onRequest("session/request_permission", () => {
-      log("permission", "unexpected: the gateway must answer prompts");
-      return { outcome: { outcome: "cancelled" } };
-    })
-    .onNotification("session/update", (ctx) => onUpdate(ctx.params));
-}
-
 $("run-tools").onclick = () => run("SPIKE-TOOLS read and highlight");
 $("run-ask").onclick = () => run("SPIKE-ASK please");
 window.runShell = () => run("SPIKE-SHELL run something");
@@ -270,8 +178,9 @@ $("run-resume").onclick = () => resume("SPIKE-TOOLS again");
 window.spike = {
   run,
   resume,
+  cancel: () => activeSession?.cancel(),
   events,
   toolCounts,
   answer: () => $("answer").textContent,
-  transport: () => transport?.stats(),
+  transport: () => provider?.transport.stats(),
 };

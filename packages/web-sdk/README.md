@@ -352,3 +352,50 @@ provider checkpoint returned by a completed task for an explicit follow-up, or
 use the scoped conversation client for recent execution-history projections.
 Those projections are not faithful human-chat transcripts and may become
 unavailable after restart or policy change.
+
+## Unreleased ACP provider (unstable)
+
+ACP, MCP-over-ACP and `agent-connect.resume.v1` exports are experimental. The
+OpenClaw provider and plugin remain supported. This API consumes an already
+issued grant; it does not implement grant issuance or consent.
+
+```ts
+import { connectAgent, AgentSession } from "@open-agent-connect/web";
+
+// `tools` is the application's fixed, approved ApplicationTool[] snapshot.
+const provider = await connectAgent({
+  grant: { gatewayUrl: "wss://gateway.example/acp", token: grantToken },
+  tools,
+  onSession: (id) => saveSessionId(id),
+});
+const session = new AgentSession({ provider, tools });
+for await (const event of session.streamTask("Read the selected passage")) {
+  renderEvent(event);
+}
+// Explicit follow-ups use session.streamContinuation(...).
+// Dispose the provider when the application relinquishes the connection.
+provider.close();
+```
+
+A provider creates one ACP session and permits one active prompt. It maps text,
+thoughts, plans and native-tool progress separately from application tool
+requests. Application handlers run through AgentSession with stable action IDs
+and cooperative cancellation. They remain responsible for idempotency and
+side effects. Held MCP calls send progress when the peer supplies a progress
+token; this does not promise to override every harness timeout.
+
+Page Lifecycle listeners probe or reattach the same acknowledged transport.
+The grant and opaque reattach token stay in memory. If retention expires or
+output overflows, the provider initializes a new transport and calls
+`session/load`. It reports `task_interrupted`, discards held tool-result
+resolvers, and never re-sends an uncertain prompt or application result.
+Replayed history reaches `onUpdate(notification, true)`, not new task deltas.
+Cooperative application handlers must observe their AbortSignal. After an
+interrupted AgentSession, create a new AgentSession over the recovered provider
+before a deliberate follow-up. A saved `sessionId` may be passed to connectAgent
+for a page reload; it is useful only while the gateway still recognizes the
+same grant's ownership. Gateway restart recovery is not promised.
+
+Close codes are typed: 4401 invalid grant, 4403 denied origin, 4404/4410/4413
+unavailable session, 4409 superseded attachment, 4418 capacity, and 4500 launch
+failure. Authorization errors and takeover do not trigger session/load.

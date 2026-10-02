@@ -235,7 +235,16 @@ impl PolicyHandler {
                 }
             },
             Dispatch::Notification(notification) => match notification.method() {
-                "session/cancel" | "$/cancel_request" => pass(Dispatch::Notification(notification)),
+                "session/cancel" => {
+                    let state = self.state.lock().unwrap();
+                    let id = notification.params.get("sessionId").and_then(Value::as_str);
+                    if id.is_some() && id == state.session_id.as_deref() {
+                        pass(Dispatch::Notification(notification))
+                    } else {
+                        Ok(Handled::Yes)
+                    }
+                }
+                "$/cancel_request" => pass(Dispatch::Notification(notification)),
                 "mcp/message"
                     if inner_method_in(&notification.params, MCP_NOTIFICATIONS_FROM_APP) =>
                 {

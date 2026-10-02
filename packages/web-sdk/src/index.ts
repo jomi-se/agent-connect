@@ -67,6 +67,9 @@ export type {
   AgentChatPart,
   AgentChatTextPart,
   AgentChatToolPart,
+  AgentChatThoughtPart,
+  AgentChatPlanPart,
+  AgentChatProgressPart,
   AgentChatError,
 } from "./agent-chat.js";
 export { createWebMcpToolSnapshot } from "./webmcp.js";
@@ -106,3 +109,20 @@ export type {
   McpContent,
   SingleMcpServerOptions,
 } from "./types.js";
+
+export { connectAgent, AcpProvider } from "./acp-provider.js";
+export type {
+  AcpGrant,
+  ConnectAgentOptions,
+  AcpRecovery,
+} from "./acp-provider.js";
+export {
+  createResumableAcpStream,
+  AcpTransportError,
+} from "./resumable-acp-stream.js";
+export type {
+  ResumableAcpStreamOptions,
+  ResumableAcpStream,
+  AcpTransportSnapshot,
+} from "./resumable-acp-stream.js";
+export type { AcpPlanEntry, AcpToolUpdate } from "./types.js";

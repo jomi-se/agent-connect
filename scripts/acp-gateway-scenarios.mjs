@@ -155,7 +155,19 @@ try {
     "index.html",
   ])
     await copyFile(join(spike, "web", file), join(run, "web", file));
-  await command("npm", ["run", "build"], { cwd: join(run, "web") });
+  await command("npm", [
+    "run",
+    "build",
+    "--workspace",
+    "@open-agent-connect/web",
+  ]);
+  await command(join(run, "web/node_modules/.bin/esbuild"), [
+    join(spike, "web/app.js"),
+    "--bundle",
+    "--format=esm",
+    "--platform=browser",
+    `--outfile=${join(run, "web/dist/app.js")}`,
+  ]);
   await mkdir(join(run, ".run/codex-home"), { recursive: true });
   await mkdir(join(run, ".run/claude-config"), { recursive: true });
   await mkdir(join(run, ".run/browser"), { recursive: true });
@@ -236,6 +248,7 @@ try {
       [false, "tools"],
       [false, "shell"],
       [false, "ask"],
+      [false, "cancel"],
       [false, "resume"],
       [false, "load-foreign"],
       [false, "bad-token"],
@@ -353,6 +366,7 @@ try {
           /^done:/,
           `${label}: ${JSON.stringify(report)}\n${gateway.tail()}`,
         );
+      if (scenario === "cancel") assert.equal(report.status, "done:cancelled");
       if (scenario === "shell") {
         assert.match(report.answer, /native-42/);
         if (boxed) assert.match(report.answer, /work/);

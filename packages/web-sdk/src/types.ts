@@ -50,12 +50,33 @@ export interface AgentProviderTaskRequest {
   readonly continuationToken?: string;
 }
 
+/** @experimental ACP progress additions are unstable. */
+export interface AcpPlanEntry {
+  readonly content: string;
+  readonly priority: "high" | "medium" | "low";
+  readonly status: "pending" | "in_progress" | "completed";
+}
+/** @experimental ACP native-tool progress; distinct from application execution. */
+export interface AcpToolUpdate {
+  readonly type: "tool.updated";
+  readonly toolCallId: string;
+  readonly title?: string;
+  readonly status?: "pending" | "in_progress" | "completed" | "failed";
+  readonly input?: unknown;
+  readonly output?: unknown;
+  readonly content?: readonly unknown[];
+}
 export type AgentProviderEvent =
   | { readonly type: "task.admitted" }
   | { readonly type: "text.delta"; readonly delta: string }
+  | { readonly type: "thought.delta"; readonly delta: string }
+  | { readonly type: "plan.updated"; readonly entries: readonly AcpPlanEntry[] }
+  | AcpToolUpdate
   | {
       readonly type: "tool.requested";
       readonly requestToken: string;
+      /** Cooperative interruption of a held application handler. */
+      readonly signal?: AbortSignal;
       readonly actionId: string;
       readonly name: string;
       readonly arguments: unknown;
@@ -86,6 +107,8 @@ export type AgentConnectErrorCode =
   | "invalid_app_grant"
   | "session_capacity"
   | "session_expired"
+  | "session_superseded"
+  | "task_interrupted"
   | "unknown_tool"
   | "invalid_tool_arguments"
   | "tool_execution_failed"
@@ -104,6 +127,9 @@ export interface AgentTaskError {
 export type AgentTaskEvent =
   | { readonly type: "task.started" }
   | { readonly type: "text.delta"; readonly delta: string }
+  | { readonly type: "thought.delta"; readonly delta: string }
+  | { readonly type: "plan.updated"; readonly entries: readonly AcpPlanEntry[] }
+  | AcpToolUpdate
   | {
       readonly type: "tool.requested";
       readonly actionId: string;
@@ -170,6 +196,7 @@ export interface ApplicationTool<Arguments extends JsonObject = JsonObject> {
     | Promise<ApplicationToolResult | string | void>;
 }
 
+/** @experimental Unstable MCP-over-ACP server configuration. */
 export interface SingleMcpServerOptions {
   readonly serverId: string;
   readonly name: string;
@@ -179,9 +206,11 @@ export interface SingleMcpServerOptions {
   readonly createConnectionId?: () => string;
 }
 
+/** @experimental Unstable ACP WebSocket stream options. */
 export interface BrowserAcpStreamOptions {
   readonly protocols?: readonly string[];
   readonly cookies?: "include" | "omit";
 }
 
+/** @experimental Unstable ACP stream alias. */
 export type BrowserAcpStream = Stream;
