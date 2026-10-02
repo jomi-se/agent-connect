@@ -26,7 +26,7 @@ use agent_client_protocol_polyfill::mcp_over_acp::McpOverAcpPolyfill;
 use agent_connect_gateway::config::{
     self, DEFAULT_SESSION_IMAGE, InitCli, ServeCli, ServeOptions, UsageError,
 };
-use agent_connect_gateway::credentials::{HarnessHome, login_args};
+use agent_connect_gateway::credentials::{HarnessHome, default_home, login_args, select_harness};
 use agent_connect_gateway::policy::{GrantSessions, PolicyConfig, PolicyProxy};
 use agent_connect_gateway::resume::{
     self, AttachError, Host, RESUME_SUBPROTOCOL, Registry, ResumeConfig, ToSocket, close,
@@ -48,9 +48,10 @@ const BEARER_PREFIX: &str = "bearer.";
 
 #[derive(Parser)]
 #[command(
+    name = "agent-connect",
     version,
     about = "Unreleased, unstable ACP application gateway",
-    after_help = "Example:\n  agent-connect-gateway init --directory ./runtime --harness codex --allow-origin https://app.example --tools ./tools.json\n  agent-connect-gateway serve --config ./runtime/config.json\n\nExit codes: 0 success; 1 runtime failure; 2 invalid arguments or configuration."
+    after_help = "Example:\n  agent-connect login\n  agent-connect init --directory ./runtime --harness codex --allow-origin https://app.example --tools ./tools.json\n  agent-connect serve --config ./runtime/config.json\n\nExit codes: 0 success; 1 runtime failure; 2 invalid arguments or configuration."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -71,12 +72,17 @@ enum Command {
 }
 #[derive(Args)]
 struct LoginCli {
+    /// Skip the interactive selector and choose this harness.
     #[arg(long, value_enum)]
-    harness: Harness,
-    #[arg(long)]
-    harness_home: std::path::PathBuf,
-    #[arg(long, env = "AGENT_CONNECT_SESSION_IMAGE", default_value = DEFAULT_SESSION_IMAGE)]
-    session_image: String,
+    harness: Option<Harness>,
+    /// Dedicated whole home; defaults to the platform's Agent Connect state directory.
+    #[arg(long, env = "AGENT_CONNECT_HARNESS_HOME", hide_env_values = true)]
+    harness_home: Option<std::path::PathBuf>,
+    /// Use the harness home and image from an existing private runtime config.
+    #[arg(long, env = "AGENT_CONNECT_CONFIG", hide_env_values = true)]
+    config: Option<std::path::PathBuf>,
+    #[arg(long, env = "AGENT_CONNECT_SESSION_IMAGE")]
+    session_image: Option<String>,
 }
 
 #[derive(Args)]
@@ -171,16 +177,53 @@ async fn run() -> anyhow::Result<()> {
             return Ok(());
         }
         Command::Login(cli) => {
-            let home = HarnessHome::prepare(&cli.harness_home)?;
-            if matches!(cli.harness, Harness::Claude) {
+            use std::io::IsTerminal;
+            let configured = cli.config.as_deref().map(config::read_config).transpose()?;
+            let harness = if let Some(harness) = cli.harness {
+                harness
+            } else {
+                if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
+                    return Err(UsageError("login needs a terminal for its selector; pass --harness codex or --harness claude to choose explicitly".into()).into());
+                }
+                let Some(harness) = select_harness(
+                    &mut std::io::stdin().lock(),
+                    &mut std::io::stderr().lock(),
+                    configured
+                        .as_ref()
+                        .and_then(|c| c.harness)
+                        .unwrap_or(Harness::Codex),
+                )?
+                else {
+                    return Ok(());
+                };
+                harness
+            };
+            if let Some(configured_harness) = configured.as_ref().and_then(|c| c.harness) {
+                if configured_harness != harness {
+                    return Err(UsageError("selected harness does not match --config; use its configured harness or omit --config".into()).into());
+                }
+            }
+            let path = cli
+                .harness_home
+                .or_else(|| configured.as_ref().and_then(|c| c.harness_home.clone()))
+                .map(Ok)
+                .unwrap_or_else(|| default_home(harness))?;
+            let home = HarnessHome::prepare(&path)?;
+            let image = cli
+                .session_image
+                .or_else(|| configured.and_then(|c| c.session_image))
+                .unwrap_or_else(|| DEFAULT_SESSION_IMAGE.into());
+            eprintln!("Dedicated harness home: {}", home.path.display());
+            if matches!(harness, Harness::Claude) {
                 eprintln!(
                     "Claude Code usage through Agent Connect is unconfirmed against Anthropic terms."
                 );
             }
             let status = std::process::Command::new("docker")
-                .args(login_args(&home, &cli.session_image, cli.harness))
+                .args(login_args(&home, &image, harness))
                 .status()?;
             anyhow::ensure!(status.success(), "provider login helper failed");
+            eprintln!("Login complete. This dedicated home is ready for boxed sessions.");
             return Ok(());
         }
     };

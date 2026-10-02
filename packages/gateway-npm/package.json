@@ -14,6 +14,7 @@
   },
   "type": "module",
   "bin": {
+    "agent-connect": "bin/gateway.mjs",
     "agent-connect-gateway": "bin/gateway.mjs"
   },
   "files": [

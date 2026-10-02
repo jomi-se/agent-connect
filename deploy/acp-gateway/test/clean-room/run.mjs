@@ -268,10 +268,10 @@ try {
     ],
     { cwd: install },
   );
-  const gateway = join(install, "node_modules/.bin/agent-connect-gateway");
+  const gateway = join(install, "node_modules/.bin/agent-connect");
   assert.equal(
     (await command(gateway, ["--version"])).trim(),
-    `agent-connect-gateway ${release.version}`,
+    `agent-connect ${release.version}`,
   );
   await command("tar", [
     "-xzf",
@@ -344,7 +344,11 @@ try {
   ]);
   for (const file of ["config.json", "grant.json", "tools.json"])
     assert.equal((await stat(join(runtime, file))).mode & 0o077, 0);
-  assert.equal((await stat(join(runtime, "home"))).mode & 0o077, 0);
+  const operatorConfig = JSON.parse(
+    await readFile(join(runtime, "config.json"), "utf8"),
+  );
+  assert.ok(operatorConfig.harness_home.startsWith(work + "/"));
+  assert.equal((await stat(operatorConfig.harness_home)).mode & 0o077, 0);
   const grant = JSON.parse(await readFile(join(runtime, "grant.json"), "utf8"));
   assert.equal(grant.gatewayUrl, `ws://127.0.0.1:${gatewayPort}/acp`);
   assert.ok(grant.token.length >= 32);
