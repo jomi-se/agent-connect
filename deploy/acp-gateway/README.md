@@ -1,19 +1,22 @@
-# ACP gateway packaging dry run
+# ACP gateway builds and deterministic tests
 
-Unreleased implementation of proposed ADR 0016. The OpenClaw plugin remains the
-current release. ACP, MCP-over-ACP and the resume extension are unstable.
+Unreleased implementation of proposed ADR 0016. The previous OpenClaw package
+remains available. ACP, MCP-over-ACP and the resume extension are unstable.
+Operators start with the [artifact install guide](../../docs/install/README.md);
+this page is for source-build/test tooling.
 
 `dist-workspace.toml` pins cargo-dist 0.33.0 and the three initial targets.
 The cargo-dist configuration follows its [official reference](https://axodotdev.github.io/cargo-dist/book/reference/config.html).
-CI publishing is deliberately unconfigured. Do not create release tags, publish
-packages or push images as part of these local checks.
+Release automation is described in the [release guide](../../docs/install/release.md).
+Do not create release tags, publish packages or push images during local checks.
 
 The npm wrapper uses per-platform optional packages: one installed executable
 for the host, with exact adapter and CLI versions in its manifest. Produce each
 local platform package with `node scripts/package-acp-gateway.mjs <target> <binary>`;
-`npm pack` can inspect it without publishing. A local override supports launcher
-smokes before registry artifacts exist. Release installation and macOS validation
-remain approval gates.
+`npm pack` can inspect it without publishing. The wrapper records adapter pins;
+adapters run in the matching image. A local executable override supports launcher
+smokes. Registry publication and the first complete platform-matrix run require
+owner approval.
 
 Build both Linux static session runners and a multi-architecture OCI archive:
 
@@ -45,7 +48,7 @@ validated before connecting; reset clients cannot terminate the proxy.
 
 `npm run verify` requires Node 24, Rust on PATH, the pinned OpenClaw fixture,
 Chromium installed for Playwright, Docker and the locally built
-`agent-connect-session:0.1.0` image. Build the image with the command above
+`agent-connect-session:0.1.0-alpha.1` image. Build the image with the command above
 before the boxed gate. The runners create and remove only their own named
 containers and networks, with private temporary homes and a deterministic model.
 No credential/login or subscription-backed model is used. Run `cargo test

@@ -1,87 +1,106 @@
 # Agent Connect
 
-Let any web app use **your own AI agent** instead of shipping its own chatbot.
+Let a web app borrow **your own AI agent**. The app declares a small set of
+approved tools; your gateway runs the harness, and those tools execute in the app.
 
-Today every app bolts on its own assistant, with its own model, its own subscription and no memory of you.
-Agent Connect flips that: the app declares a few tools ("add items to this list", "edit this document"),
-and your agent, running on a gateway you control, does the work using your existing AI subscription.
+**ACP prerelease candidate: 0.1.0-alpha.1.** ACP, MCP-over-ACP and resumable
+transport APIs are unstable. Artifacts are validated locally and remain
+unpublished until the owner approves the first release. ADR 0016 remains proposed.
+The previous OpenClaw plugin remains in this repository and on npm.
 
-> **Status: early, experimental prototype (0.0.x).** Largely AI-assisted ("vibe-coded"). It works end to end
-> in the demo, but it is not a hardened sandbox. Only connect it to a gateway you run yourself. Use at your own risk.
+## Install and try the ACP gateway
 
-## How it works
+Requires Node 24 LTS (>=24.15, <25) and Docker. Supports Apple Silicon macOS,
+Linux x64 and Linux ARM64; Windows is not yet supported. After publication:
+
+```sh
+npm install --global @open-agent-connect/gateway@0.1.0-alpha.1
+agent-connect-gateway --help
+```
+
+For current local candidates, install the launcher and matching platform tarballs.
+The [install guide](docs/install/README.md) is the complete path from release
+artifacts to a chat turn: install, run the standalone sample using the packed SDK,
+approve its tools, create a private grant/config, perform one dedicated Codex
+login, then start the Docker egress proxy and gateway. No checkout or compiler
+is required. The guide also covers upgrades, revocation and uninstalling.
 
 ```text
-Web app  (@open-agent-connect/web + the app's own tools)
-   │  OAuth consent, then Open Responses over HTTP/SSE
+Web app (@open-agent-connect/web/acp + approved application tools)
+   │ grant-authorized ACP WebSocket / resumable transport
    ▼
-Your gateway  (Agent Connect plugin inside OpenClaw)
-   │  checks the grant: which app, which tools
+Your Rust gateway (agent-connect-gateway)
+   │ filters browser authority; one container per session
    ▼
-Your agent and model  (configured by you in OpenClaw)
+Pinned adapter + unmodified Codex or Claude Code CLI
+   │ dedicated shared login/home; constrained network egress
+   ▼
+Your provider
 ```
 
-- The app never sees your model credentials.
-- On first connection you approve the exact app, scopes and tools. The grant is bound to them and can be revoked.
-- The agent the app talks to is a dedicated, restricted one. Native OpenClaw tools are off by default.
+The current ACP grant is operator-issued for an exact browser origin and tool
+snapshot; there is no OAuth pairing portal on this path. A dedicated shared home
+holds credentials, configuration and transcripts. A consented application could
+induce the harness to disclose that dedicated credential through an allowed tool,
+or read another app's transcripts. Read the [accepted risks](docs/plan/acp-gateway-credentials.md)
+before logging in. Claude Code subscription use is unconfirmed against Anthropic
+terms. API-key variables are never forwarded into boxes.
 
-## Try the demo
-
-[`apps/firebase-canvas`](apps/firebase-canvas/) has three small example apps (a project board, a document editor,
-a shopping list). It runs as a browser-only simulation, or against your own gateway.
-
-## Run a gateway
-
-Needs Node 24 (>=24.15, <25) and OpenClaw 2026.9.1 or newer.
+## Integrate a web app
 
 ```sh
-openclaw plugins install @open-agent-connect/openclaw-plugin@0.0.7 --pin --accept-capabilities
-openclaw agent-connect setup     # asks for your public HTTPS origin and a local port
-# restart the gateway, then:
-openclaw agent-connect doctor
-```
-
-Setup prints a one-time owner passphrase: save it in your password manager. Expose only the plugin's port over
-HTTPS, never OpenClaw's own port. Details: [gateway guide](deploy/openclaw-gateway/README.md).
-
-## Add it to a web app
-
-```sh
-npm install @open-agent-connect/web
+npm install @open-agent-connect/web@0.1.0-alpha.1
 ```
 
 ```ts
+import {
+  connectAgent,
+  defineTool,
+  AgentSession,
+} from "@open-agent-connect/web/acp";
+
 const tools = [
   defineTool({
-    name: "add_list_items",
-    description: "Add several items to the current shopping list",
-    inputSchema: {
-      type: "object",
-      properties: { items: { type: "array", items: { type: "string" } } },
-      required: ["items"],
-    },
-    execute: ({ items }) => shoppingList.addAll(items),
+    name: "read_selection",
+    description: "Read the current selection",
+    inputSchema: { type: "object", additionalProperties: false },
+    execute: () => window.getSelection()?.toString() ?? "",
   }),
 ];
+// grant is supplied by the operator, not hard-coded or stored in a URL.
+const provider = await connectAgent({ grant, tools });
+const session = new AgentSession({ provider, tools });
+const result = await session.runTask("Explain the selected text");
+provider.close();
 ```
 
-Then discover the user's gateway, run the OAuth flow, and stream responses. The
-[integration guide](docs/guides/web-app-integration.md) walks through it.
+See the [SDK quickstart](packages/web-sdk/README.md) for tools, typed errors,
+reconnect/recovery and the AI SDK `createAcpChatTransport`/`useChat` integration.
+Recovery never automatically re-sends interrupted prompts or uncertain effects.
+The [standalone sample](examples/acp-chat/) consumes only public packed exports.
 
-## Security, in short
+## Previous OpenClaw installation
 
-Treat every connected app as untrusted. The gateway enforces which app can call which tools, but the machine's
-security is on you: keep the app agent's host tools disabled. More in [architecture](docs/architecture/) and the
-[threat model](docs/research/2026-07-14-malicious-application-runtime-threat-model.md).
+The published `@open-agent-connect/openclaw-plugin@0.0.7` remains available, with
+its [installation guide](deploy/openclaw-gateway/README.md) and Canvas demo in
+[apps/firebase-canvas](apps/firebase-canvas/). Its OAuth/Open Responses SDK
+exports are retained and marked deprecated for new integrations, not removed.
+There is no automatic grant/history migration. ADR acceptance and any future
+plugin retirement remain separate owner decisions.
 
-## Develop
+## Develop and validate
 
 ```sh
 npm install
-npm run verify   # needs the pinned OpenClaw binary on PATH (see config/openclaw-test-compat.json)
+npm run verify
+cargo test --locked
 ```
 
-See the [testing strategy](docs/architecture/testing-strategy.md) and the [docs index](docs/README.md).
+The [build/release guide](docs/install/release.md) lists Rust, cargo-dist, Zig,
+pinned OpenClaw, Playwright and Docker prerequisites, local artifact generation
+and the credential-free clean-room test. Verification exercises real pinned
+adapters against deterministic inference and never spends subscription allowance.
+The release workflows are written; running them and publishing remain owner actions.
 
 ## License
 
