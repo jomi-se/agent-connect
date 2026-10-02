@@ -543,3 +543,55 @@ The strengthened clean-room rerun passes, including explicit connection retry
 when the single host slot is still closing and no duplicate archived transcript.
 This review and its deterministic tests do not establish live authentication,
 credential refresh, native macOS installation or gateway-only resource teardown.
+
+## Browser lifecycle and boxed teardown hardening (2026-10-02)
+
+A genuine Chromium back/forward-cache restoration exposed a sample lifecycle
+bug: unconditional `pagehide` disposal destroyed the cached chat. The sample
+now preserves chat, provider and grant when `event.persisted` is true. The
+artifact-only browser gate verifies actual `pageshow.persisted`, the same session
+and a usable chat both after a completed tool turn and while a reader question
+waits. Model submissions and tool execution counts stay unchanged. A local
+negative-control artifact with the preservation guard removed restores from
+cache but cannot open the next reader question, confirming the gate catches
+this failure. Full reload still requires authorization again.
+
+The browser gate uses full Chromium's new headless mode; Playwright's default
+headless shell did not permit this cache transition. Navigation waits for commit,
+since cache restoration does not emit a new load event. These are test-driver
+corrections, not evidence of mobile Safari behavior. See
+[Playwright's browser modes](https://playwright.dev/docs/browsers#chromium-new-headless-mode)
+and [the pagehide reference](https://developer.mozilla.org/en-US/docs/Web/API/Window/pagehide_event).
+Default clean-room images now use per-run tags and captured immutable IDs to
+avoid concurrent test runs swapping the image being executed; the test removes
+only its own matching image tag after owned containers stop. An independent
+review caught that deletion by shared image ID would fail for identical concurrent
+builds; tag cleanup preserves the other run's reference.
+
+Independent real-Docker probes also confirmed a private-network leak after idle
+session disposal and during shutdown racing box allocation. Gateway teardown now
+owns immutable, labelled resource IDs, retries container/network removal within
+a bound, reconciles lost allocation responses, and tracks startup through rollback
+before graceful shutdown exits. Shared peers are disconnected, never removed.
+A failed cleanup retains its capacity slot for that process and reports owned
+resource IDs for operator inspection; it does not admit replacement boxes above
+the configured limit. SIGKILL remains outside graceful-cleanup guarantees.
+
+The new `test:integration:acp:teardown` gate covers 12 real boxed cases: idle and
+active bye, expiry and SIGTERM; cancel followed by bye; missing peer; rejected
+box creation; lost successful box and network create responses; and SIGTERM
+while Docker allocation is delayed. It asserts all owned resources are absent
+before fallback cleanup and shared peers remain running. All cases pass against
+the rebuilt gateway. Controlled Rust tests additionally cover retry races,
+immutable-ID replacement safety, client timeouts and capacity retention.
+
+These checks use deterministic inference and isolated temporary homes, with no
+live login, personal service changes, subscription allowance or publication.
+
+Final validation rebuilt both Linux release archives, shell installer and npm
+artifacts locally. `npm run verify` passes with the strengthened clean-room and
+12-case teardown gates; `cargo test --locked --workspace` and Rust formatting
+pass. The clean-room installs the newly rebuilt gateway and packed SDK/sample,
+with no checkout mounted. Independent final review reports no remaining
+confirmed finding. macOS/native release and live credential evidence remain
+owner gates, as listed in `docs/plan/current-work.md`.

@@ -188,7 +188,11 @@ The clean-room test installs the packed launcher/platform package and SDK in a
 fresh container without a checkout, builds the sample through public exports,
 and exercises a real pinned Codex adapter: read/highlight exactly once, reconnect
 during a held app tool on the same session without duplicate submission, and Stop
-without a follow-up model request. Release hashes are verified before installation.
+without a follow-up model request. It also restores the actual browser
+back/forward cache while idle and while an app tool waits, preserving the session
+without replay. A gateway-only teardown gate checks owned resource removal before
+fallback cleanup, including shutdown during allocation and uncertain Docker-create
+responses. Release hashes are verified before installation.
 It uses a deterministic model and temporary homes; it never logs in or spends
 subscription allowance. Both adapters also retain their host/boxed scenario gates.
 Native plan UI conversion is contract-tested; pinned fixtures expose no native
