@@ -5,6 +5,12 @@ installation, SDK example, supported platforms, and verification commands.
 
 ## Current sources of truth
 
+- [ACP artifact installation](install/README.md): checkout-free setup, dedicated
+  login, manual grant, Docker egress, sample chat and operator maintenance.
+- [ACP release process](install/release.md): local acceptance artifacts and
+  protected, owner-run OIDC/image publication.
+- [ACP SDK](../packages/web-sdk/README.md): unstable provider, recovery and useChat.
+
 - [Mission](mission.md): product promise, current strategy, acceptance boundary,
   and explicit non-goals.
 - [Scope inventory](scope-inventory.md): implemented, deferred, and unsupported
@@ -17,10 +23,10 @@ installation, SDK example, supported platforms, and verification commands.
   three evidence layers.
 - [Current work](plan/current-work.md): the small set of genuine unfinished work
   and explicit non-gates.
-- [Agent Connect plugin for OpenClaw setup](../deploy/openclaw-gateway/README.md): install the
+- [Previous OpenClaw plugin setup](../deploy/openclaw-gateway/README.md): install the
   published plugin, configure the dedicated listener, run doctor, and forward
   public HTTPS safely.
-- [Web application integration](guides/web-app-integration.md): install the
+- [Previous OpenClaw web application integration](guides/web-app-integration.md): install the
   published SDK, authorize a gateway, stream a task, handle browser-owned tools,
   and revoke access.
 - [npm publication and release verification](guides/npm-publication.md):

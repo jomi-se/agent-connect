@@ -1,8 +1,8 @@
 # Plan: shipping the ACP gateway and its browser SDK
 
-Status: proposed (2026-10-01). It depends on accepting
+Status: implemented release candidate 0.1.0-alpha.1 (2026-10-02). Publication depends on accepting
 [ADR 0016](../decisions/0016-acp-application-boundary.md). Nothing here is
-released, and the current release is unchanged. Evidence comes from the
+released; the previous published OpenClaw package remains available. Evidence comes from the
 [ACP gateway spike](../experiments/acp-gateway.md) and its
 [mobile follow-up](acp-gateway-mobile-resume.md).
 
@@ -85,13 +85,16 @@ MCP-over-ACP server) and `createBrowserAcpStream`.
 3. **Recovery.** When a resumable session has ended, the SDK reconnects with
    `session/load`, reports the interrupted turn as interrupted, and never
    re-sends it.
-4. **A grant client** that replaces the OpenClaw OAuth discovery. Its shape
-   depends on ADR 0016's consent prerequisite.
+4. **Operator grant setup.** `init` validates/copies the approved snapshot and
+   creates one private exact-origin bearer config plus `{gatewayUrl, token}`
+   for the app. The sample imports the grant with explicit tool consent. No
+   OAuth pairing portal or automatic OpenClaw-grant migration is implemented.
 
 **Retained for this implementation:** the OpenClaw plugin, connection and
 conversation clients, `ResponsesProvider`, and the Open Responses AI SDK model.
 Any future retirement requires a separately approved release and migration;
-this branch performs no deprecation or removal.
+legacy SDK declarations are marked `@deprecated`, but no export is removed
+and no npm package is deprecated.
 
 Every ACP-facing export is labeled unstable while MCP-over-ACP is an unstable
 RFD.
@@ -139,112 +142,67 @@ call and expose it as a turn-ending `function_call`. It brings back the
 turn-ending tool model that ADR 0016 leaves. It hides harness progress, and it
 adds a second application protocol for the gateway to own.
 
-## Packaging
+## Packaging and installation
 
-### What the owner installs
+The gateway, SDK, platform packages and session image share version
+`0.1.0-alpha.1`. Operators need only Node 24 and Docker, not a checkout or
+compiler. The [install guide](../install/README.md) covers npm, checksum-verified
+GitHub archives/shell installer, sample SDK tarball, private setup, dedicated
+login, egress, upgrade, revoke and uninstall.
 
-- The gateway: one Rust binary.
-- Node 24, for the adapters: both pinned adapters
-  (`@agentclientprotocol/codex-acp`, `@agentclientprotocol/claude-agent-acp`)
-  are Node packages.
-- The harness (Codex or Claude Code) and its login.
-- Docker, only for container-per-session mode.
+The primary npm package is a small launcher plus optional per-platform binaries.
+npm selects the matching executable and records integrity without a runtime or
+postinstall binary download. Adapter/native CLI versions are pinned in the
+launcher metadata and matching session-image manifest; they run inside Docker
+rather than being duplicated on the host. cargo-dist produces archives,
+SHA-256 checksums and a shell installer. Its generated npm installer was compared
+in the earlier dry run; wrapper tarball sizes were not a total disk-size comparison.
 
-### Channels
+Supported targets are `aarch64-apple-darwin`, `x86_64-unknown-linux-musl`, and
+`aarch64-unknown-linux-musl`. Windows is not yet supported. The session image
+builds for `linux/amd64` and `linux/arm64`; published gateway binaries embed its
+immutable registry digest. Local-only candidates embed the explicit local tag
+and cannot be promoted by the publish script.
 
-- **npm (primary): `@open-agent-connect/gateway`.** The owner already has
-  Node, so `npx @open-agent-connect/gateway` or a global install gives the
-  matching gateway binary and pins the adapter versions it was tested with.
-- **GitHub Releases:** archives and checksums per target, plus `curl | sh` and
-  PowerShell installers, for owners who manage adapters themselves.
-- **Homebrew tap:** later, if owners ask for it.
-- **Session image** for boxed mode: published multi-architecture
-  (`linux/amd64`, `linux/arm64`) to a container registry with
-  `docker buildx`. Each gateway release pins it by digest.
-- **crates.io:** not a consumer channel, because it distributes source only.
+The [protected manual release workflow](../../.github/workflows/acp-release.yml)
+uses cargo-dist's local/global split, trusted npm publishing with OIDC/provenance
+and an ephemeral GHCR job token. It defaults to no-write dry runs. Actual
+publication requires an accepted ADR, an already owner-pushed exact version tag
+and the protected environment. Ordinary PR/main CI never publishes. See the
+[release guide](../install/release.md) for setup and concrete artifact commands.
 
-### Build matrix
+## Completed implementation
 
-Rust produces one binary per OS and processor. CI builds every target from
-one approved tag, and three initial targets cover the expected owners:
+The first five phases implemented the product crate, dedicated homes/login,
+local packaging, resumable SDK/provider and AI SDK chat transport.
+The product-completion work then delivered, in order:
 
-| Target                       | Covers                                                      |
-| ---------------------------- | ----------------------------------------------------------- |
-| `aarch64-apple-darwin`       | Apple Silicon Macs                                          |
-| `x86_64-unknown-linux-musl`  | Linux PCs and servers (static, no glibc version constraint) |
-| `aarch64-unknown-linux-musl` | ARM servers and boards                                      |
-| `x86_64-pc-windows-msvc`     | later; boxed mode needs Docker Desktop                      |
+1. ACP-first SDK prerelease/exports/types/docs and retained deprecated legacy APIs;
+2. packaged gateway CLI, private config/init and owned egress management;
+3. installation/operator instructions using release artifacts;
+4. locally validated release/PR workflows, unified versions, checksums and image builds;
+5. artifact-only clean-room sample acceptance wired into `npm run verify`;
+6. reconciled product/status guidance with the previous OpenClaw path retained.
 
-### Tooling
+The clean-room test installs the packed launcher/platform package and SDK in a
+fresh container without a checkout, builds the sample through public exports,
+and exercises a real pinned Codex adapter: read/highlight exactly once, reconnect
+during a held app tool on the same session without duplicate submission, and Stop
+without a follow-up model request. Release hashes are verified before installation.
+It uses a deterministic model and temporary homes; it never logs in or spends
+subscription allowance. Both adapters also retain their host/boxed scenario gates.
+Native plan UI conversion is contract-tested; pinned fixtures expose no native
+plan tool. Results are recorded in [the experiment](../experiments/acp-gateway.md).
 
-- **cargo-dist** (`dist`, maintained; 0.33.0 shipped in 2026-09). `dist init`
-  generates the GitHub Actions release workflow. It builds the matrix,
-  uploads release archives, and generates the shell, PowerShell, npm and
-  Homebrew installers.
-- **npm wrapper shape** (compared locally in phase 3):
-  - cargo-dist's npm installer;
-  - the per-platform package pattern (one small launcher package, plus one
-    package per target, selected through `optionalDependencies`).
+## Owner gates and retained compatibility
 
-  The dry run chooses per-platform optional packages: a 1.6 KB launcher tarball
-  and only the selected platform binary (about 4.4 MB for Linux ARM64), without
-  runtime downloads. cargo-dist's generated npm tarball is about 7.2 KB and uses
-  a download during installation; these are different wrapper sizes, not an
-  equal comparison of total installed disk usage. Exact adapter/CLI pins stay
-  in the wrapper manifest. No package has been published.
+Only [current-work.md](current-work.md)'s owner gates remain: live dedicated login
+checks, the first approved real release/account setup, and ADR acceptance. The
+initial binary name is `agent-connect-gateway`; current grant issuance is the
+explicit operator snapshot/bearer handoff, not a deferred product implementation.
 
-- **Provenance:** publish from CI with npm trusted publishing (OIDC) and
-  provenance, never from a workstation token. Releases attach checksums.
-- **One version** for the gateway, its npm package and the session image.
-
-### Retiring the OpenClaw plugin
-
-After the gateway's first release, and with the owner's approval:
-
-- run `npm deprecate @open-agent-connect/openclaw-plugin "<pointer to the
-gateway>"`, and never unpublish;
-- remove the plugin source from `main`; it stays in git history;
-- replace the OpenClaw installation guidance in `AGENTS.md` and
-  `docs/plan/current-work.md`.
-
-Deprecation is outward-facing, so it is a separate, explicitly approved step.
-
-## Phases
-
-1. **Product crate.** Promote the gateway into the root Cargo workspace at
-   `crates/gateway`. Gate pinned real adapters with deterministic inference.
-2. **Credentials.** Implement the dedicated shared harness home, UID/mode
-   checks and owner-run login helper. Live credential checks remain separate.
-3. **Packaging dry run.** Configure cargo-dist and compare local npm wrapper
-   shapes. Build Linux artifacts and a multi-architecture session image locally.
-   macOS installation and release approval remain gates; create no release tag.
-4. **SDK core.** Add `connectAgent`, typed resume, `AcpProvider` and session/load
-   recovery. Port the spike page and test it against the real gateway/adapters.
-5. **AI SDK transport.** Add `createAcpChatTransport`, a `useChat` example and
-   tests. Downstream application migrations are separate work.
-6. **Approved release.** Publish only after ADR 0016 is accepted and its
-   prerequisites pass. Plugin retirement and removal of OpenClaw SDK exports
-   require separate approval; this implementation keeps both intact.
-
-The current implementation covers phases 1–5 on an unpublished feature branch.
-No local dry run authorizes a tag, push, registry publication or live login.
-
-## Open questions
-
-- The binary name (`agent-connect-gateway` is the working name).
-- Whether Windows is a supported owner platform for the first release.
-- How a grant is issued: pairing in the gateway, or the ported OAuth consent
-  code (an ADR 0016 prerequisite).
-
-## Implementation evidence (2026-10-02, unreleased)
-
-Phases 1–5 are implemented; ADR 0016 remains proposed. See the
-[experiment results](../experiments/acp-gateway.md) and
-[local build instructions](../../deploy/acp-gateway/README.md).
-`npm run verify` includes host and boxed real-adapter scenarios with isolated
-homes and deterministic inference. The useChat example exercises thoughts,
-application tools, follow-ups and cancellation. Neither pinned fixture CLI
-advertises a native plan tool; typed plan-to-UI conversion is contract-tested
-and is not claimed as real-harness plan evidence. Grant issuance, live
-credentials, desktop/mobile owner-platform checks and release approval remain
-unfinished. Existing OpenClaw product tests and exports remain intact.
+The OpenClaw plugin stays in the repository and on npm as the previous published
+install target. Its SDK exports remain functional with `@deprecated` guidance.
+Retirement, npm deprecation, removal and downstream migrations require separate
+owner authorization; this plan does not schedule them. No local build authorizes
+push, tags, account changes, registry publication or interactive login.

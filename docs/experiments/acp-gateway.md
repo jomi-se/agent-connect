@@ -471,3 +471,47 @@ provider string interface. ACP keeps image content, structured data and isError;
 Responses keeps the same string wire output. Regression tests also verify that
 an unread UI stream can be disposed without admitting a prompt and without
 retaining its AbortSignal listener.
+
+## Product artifact qualification (2026-10-02)
+
+The ACP candidate is now version 0.1.0-alpha.1 across the SDK, Rust gateway,
+npm launcher/platform packages and session-image manifest. SDK tarball checks
+verify public ACP imports/types, retained deprecated legacy declarations, no
+tests/maps/local-path leaks and browser-safe output. The launcher no longer
+duplicates harness packages on the host: the exact adapter/CLI pins live in
+its metadata and the matching session image. A fresh npm consumer runs npx help
+and version through the packed platform executable.
+
+Operator init validates and copies the snapshot, generates a private random
+grant/config, and provides a dedicated shared home. Configuration supports
+CLI/environment/file precedence; egress helpers manage only owned containers.
+The artifact install guide covers the explicit manual grant handoff, login,
+maintenance and accepted credential/transcript/config risks. This does not add
+an OAuth portal or accept ADR 0016.
+
+Both Linux cargo-dist archives, the shell installer, local npm publication dry
+runs and the multiarch OCI/native session images build without publication.
+All workflow files pass actionlint. The protected release workflow is authored,
+with ADR/tag/reviewer gates, OIDC npm provenance and immutable image references;
+it has not run on GitHub. Ordinary main/PR CI no longer publishes automatically.
+macOS is a configured native release target, not locally executed evidence;
+Windows is unsupported.
+
+The clean-room gate receives only release tarballs and its deterministic fixture,
+not a checkout or SDK build directory. It verifies artifact hashes, installs the
+gateway/platform package, builds the standalone reader from the packed SDK's
+public ACP subpath, and uses a real boxed Codex adapter. Read/highlight execute
+once with visible effects; a held reader question reattaches on the same session
+without duplicate model submission; Stop cancels a held tool without a follow-up
+model request. Cleanup removes only that run's resources. The test-only trusted
+runner has Docker access; the browser and session boxes do not receive its socket.
+
+An initial driver assumption that adapter pins were launcher dependencies was
+corrected to the metadata field. The clean-room Docker CLI is pinned to match
+the current daemon API rather than using Debian's older client. These are
+installation-test corrections, not mock ACP/provider behavior.
+
+The remaining owner gates are live dedicated-login/refresh/revoke checks,
+first actual release/account setup and ADR acceptance. No personal harness home,
+live login, subscription-backed turn, remote ref, registry publication or npm
+deprecation was performed. The previous OpenClaw plugin remains intact.

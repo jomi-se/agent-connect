@@ -4,7 +4,7 @@ Browser SDK for lending a fixed set of application tools to a user-owned agent.
 Version `0.1.0-alpha.1` prepares an **experimental ACP release**. ACP,
 MCP-over-ACP and Agent Connect's `agent-connect.resume.v1` transport are unstable;
 the resume protocol is a custom gateway extension, not an ACP standard.
-This candidate does not accept proposed ADR 0016 or retire the current OpenClaw
+This candidate does not accept proposed ADR 0016 or retire the previous published OpenClaw
 plugin installation target. Publication is a separate release action.
 
 After this prerelease is published, install it with an explicit version:
