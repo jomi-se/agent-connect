@@ -1,0 +1,363 @@
+name: ACP release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Export local-only artifacts without registry login or publication
+        type: boolean
+        required: true
+        default: true
+      publish:
+        description: Publish after ADR acceptance, an owner-pushed tag, and environment approval
+        type: boolean
+        required: true
+        default: false
+      tag:
+        description: Existing v<version> tag; required for publication and must be the dispatch ref
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acp-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    name: Verify candidate and release authority
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.authority.outputs.version }}
+      tag: ${{ steps.authority.outputs.tag }}
+      commit: ${{ steps.authority.outputs.commit }}
+      image_registry: ${{ steps.authority.outputs.image_registry }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.15.0
+          cache: npm
+      - name: Require a safe dispatch, exact tag and protected environment
+        id: authority
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          PUBLISH: ${{ inputs.publish }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync, appendFileSync } from "node:fs";
+          import { execFileSync } from "node:child_process";
+          const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
+          const version = JSON.parse(readFileSync("packages/web-sdk/package.json", "utf8")).version;
+          if (!/^\d+\.\d+\.\d+-alpha\.\d+$/.test(version)) throw new Error("ACP release must be an explicit alpha version");
+          const publishing = process.env.PUBLISH === "true";
+          if (publishing === (process.env.DRY_RUN === "true")) throw new Error("Choose dry_run=true/publish=false or dry_run=false/publish=true");
+          const tag = `v${version}`;
+          const commit = git("rev-parse", "HEAD");
+          if (commit !== process.env.GITHUB_SHA) throw new Error("Checkout must equal the dispatched revision");
+          if (process.env.REQUESTED_TAG && process.env.REQUESTED_TAG !== tag) throw new Error("Tag must match every release package version");
+          if (publishing) {
+            const decision = readFileSync("docs/decisions/0016-acp-application-boundary.md", "utf8");
+            if (decision.match(/\bStatus:\s*(?:\*\*)?([a-z]+)/i)?.[1]?.toLowerCase() !== "accepted") throw new Error("ADR 0016 is not ACCEPTED; publication is blocked");
+            if (process.env.REQUESTED_TAG !== tag || process.env.GITHUB_REF !== `refs/tags/${tag}`) throw new Error("Dispatch publication from the exact already owner-pushed version tag");
+            const refs = git("ls-remote", "--tags", "origin", `refs/tags/${tag}`, `refs/tags/${tag}^{}`).split("\n").map(line => line.split(/\s+/));
+            const remoteCommit = refs.find(row => row[1]?.endsWith("^{}"))?.[0] ?? refs.find(row => row[1] === `refs/tags/${tag}`)?.[0];
+            if (remoteCommit !== commit) throw new Error("Owner-pushed remote tag does not match checkout");
+            const environment = JSON.parse(execFileSync("gh", ["api", `repos/${process.env.GITHUB_REPOSITORY}/environments/acp-first-release`], { encoding: "utf8" }));
+            const reviewers = environment.protection_rules?.find(rule => rule.type === "required_reviewers");
+            if (!reviewers?.reviewers?.length) throw new Error("acp-first-release must exist with required reviewers");
+          }
+          const owner = process.env.GITHUB_REPOSITORY_OWNER.toLowerCase();
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\ntag=${tag}\ncommit=${commit}\nimage_registry=ghcr.io/${owner}/agent-connect-session\n`);
+          JS
+      - run: npm ci
+      - name: Check shared versions and adapter pins
+        run: node scripts/acp-release.mjs check
+      - name: Install pinned build, provider and browser tools
+        run: |
+          ./scripts/install-acp-build-tools.sh
+          ./scripts/install-ci-test-tools.sh
+      - name: Prepare credential-free local candidate and clean-room artifacts
+        run: |
+          docker info
+          ./deploy/acp-gateway/session/build-local.sh --native-only
+          node scripts/build-acp-release-local.mjs
+      - name: Run credential-free product verification
+        run: npm run verify:full
+      - name: Check Rust, lint and dependency boundaries
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked --workspace
+          npm run lint
+          npm run analyze:dependencies
+      - name: Preserve the local candidate for environment reviewers
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: acp-verified-local-${{ steps.authority.outputs.version }}
+          path: dist/acp-release/
+          if-no-files-found: error
+          retention-days: 14
+
+  image-dry:
+    name: Export multiarch session image without publication
+    if: inputs.dry_run && !inputs.publish
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      ref: ${{ steps.reference.outputs.ref }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.checks.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.15.0
+          package-manager-cache: false
+      - run: ./scripts/install-acp-build-tools.sh
+      - name: Cross-build both static session runners locally
+        run: ./deploy/acp-gateway/session/build-local.sh --runners-only
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Export OCI image only
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deploy/acp-gateway/session/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: agent-connect-session:${{ needs.checks.outputs.version }}
+          outputs: type=oci,dest=${{ runner.temp }}/agent-connect-session.oci.tar
+      - name: Record the explicit local-only image reference
+        id: reference
+        env:
+          VERSION: ${{ needs.checks.outputs.version }}
+        run: printf 'ref=agent-connect-session:%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: acp-session-image-oci-${{ needs.checks.outputs.version }}
+          path: ${{ runner.temp }}/agent-connect-session.oci.tar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  image-publish:
+    name: Publish reviewed multiarch session image
+    if: inputs.publish && !inputs.dry_run
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: acp-first-release
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      ref: ${{ steps.reference.outputs.ref }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.checks.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.15.0
+          package-manager-cache: false
+      - run: ./scripts/install-acp-build-tools.sh
+      - run: ./deploy/acp-gateway/session/build-local.sh --runners-only
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Authenticate GHCR with the ephemeral job token
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push the reviewed image
+        id: image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deploy/acp-gateway/session/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ needs.checks.outputs.image_registry }}:${{ needs.checks.outputs.version }}
+          provenance: true
+      - name: Record immutable multiarch image digest
+        id: reference
+        env:
+          REGISTRY: ${{ needs.checks.outputs.image_registry }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          printf 'ref=%s@%s\n' "$REGISTRY" "$DIGEST" >> "$GITHUB_OUTPUT"
+
+  native:
+    name: Native gateway (${{ matrix.target }})
+    if: >-
+      ${{ always() && needs.checks.result == 'success' &&
+          (needs.image-dry.result == 'success' || needs.image-publish.result == 'success') }}
+    needs: [checks, image-dry, image-publish]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: aarch64-apple-darwin
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      AGENT_CONNECT_SESSION_IMAGE: ${{ needs.image-publish.outputs.ref || needs.image-dry.outputs.ref }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.checks.outputs.commit }}
+          persist-credentials: false
+      - run: ./scripts/install-acp-build-tools.sh
+      - name: Require the exact selected image for every binary
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          test -n "$AGENT_CONNECT_SESSION_IMAGE"
+          if [[ "$PUBLISH" == "true" ]]; then
+            [[ "$AGENT_CONNECT_SESSION_IMAGE" =~ ^ghcr\.io/[^@]+@sha256:[a-f0-9]{64}$ ]]
+          fi
+      - name: Build target archives and checksums with cargo-dist
+        env:
+          TARGET: ${{ matrix.target }}
+          TAG: ${{ needs.checks.outputs.tag }}
+        run: dist build --artifacts local --target "$TARGET" --tag "$TAG" --no-local-paths
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: acp-native-${{ matrix.target }}
+          path: |
+            target/distrib/*.tar.xz
+            target/distrib/*.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  package:
+    name: Collect installers and exact npm release tarballs
+    if: >-
+      ${{ always() && needs.checks.result == 'success' && needs.native.result == 'success' &&
+          (needs.image-dry.result == 'success' || needs.image-publish.result == 'success') }}
+    needs: [checks, image-dry, image-publish, native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      AGENT_CONNECT_SESSION_IMAGE: ${{ needs.image-publish.outputs.ref || needs.image-dry.outputs.ref }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.checks.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.15.0
+          cache: npm
+      - run: npm install --global npm@11.19.1
+      - run: npm ci
+      - run: ./scripts/install-acp-build-tools.sh
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: acp-native-*
+          path: target/distrib
+          merge-multiple: true
+      - name: Generate the global shell installer without rebuilding binaries
+        env:
+          TAG: ${{ needs.checks.outputs.tag }}
+        run: dist build --artifacts global --tag "$TAG" --no-local-paths
+      - name: Pack the SDK, launcher, three platform packages and clean-room sample
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          mkdir -p dist/acp-release
+          cp target/distrib/*.sha256 dist/acp-release/
+          options=()
+          if [[ "$DRY_RUN" == "true" ]]; then options+=(--local); fi
+          node scripts/acp-release.mjs pack --image "$AGENT_CONNECT_SESSION_IMAGE" "${options[@]}" --artifacts target/distrib --directory dist/acp-release
+      - name: Smoke-test the exact SDK tarball
+        env:
+          VERSION: ${{ needs.checks.outputs.version }}
+        run: node scripts/smoke-web-sdk-package.mjs "dist/acp-release/open-agent-connect-web-$VERSION.tgz"
+      - name: Preview npm publication without credentials or writes
+        run: node scripts/acp-release.mjs publish-dry-run --directory dist/acp-release
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: acp-release-${{ needs.checks.outputs.version }}
+          path: dist/acp-release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  publish:
+    name: Publish reviewed exact artifacts with OIDC
+    if: >-
+      ${{ always() && inputs.publish && !inputs.dry_run && needs.checks.result == 'success' &&
+          needs.image-publish.result == 'success' && needs.package.result == 'success' }}
+    needs: [checks, image-publish, package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: acp-first-release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.checks.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.15.0
+          package-manager-cache: false
+      - run: npm install --global npm@11.19.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: acp-release-${{ needs.checks.outputs.version }}
+          path: dist/acp-release
+      - name: Recheck remote tag and accepted decision immediately before publication
+        env:
+          TAG: ${{ needs.checks.outputs.tag }}
+          COMMIT: ${{ needs.checks.outputs.commit }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync } from "node:fs";
+          import { execFileSync } from "node:child_process";
+          const decision = readFileSync("docs/decisions/0016-acp-application-boundary.md", "utf8");
+          if (decision.match(/\bStatus:\s*(?:\*\*)?([a-z]+)/i)?.[1]?.toLowerCase() !== "accepted") throw new Error("ADR 0016 is not ACCEPTED");
+          const tag = process.env.TAG;
+          const refs = execFileSync("git", ["ls-remote", "--tags", "origin", `refs/tags/${tag}`, `refs/tags/${tag}^{}`], { encoding: "utf8" }).trim().split("\n").map(line => line.split(/\s+/));
+          const commit = refs.find(row => row[1]?.endsWith("^{}"))?.[0] ?? refs.find(row => row[1] === `refs/tags/${tag}`)?.[0];
+          if (commit !== process.env.COMMIT || process.env.GITHUB_REF !== `refs/tags/${tag}`) throw new Error("Remote tag or dispatch revision changed");
+          JS
+      - name: Publish exact tarballs with provenance on the next dist-tag
+        env:
+          AGENT_CONNECT_PUBLISH_APPROVED: ${{ needs.checks.outputs.version }}
+        run: node scripts/acp-release.mjs publish --directory dist/acp-release
+      - name: Create a prerelease for the existing owner-pushed tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.checks.outputs.tag }}
+          VERSION: ${{ needs.checks.outputs.version }}
+          IMAGE_REF: ${{ needs.image-publish.outputs.ref }}
+        run: |
+          printf 'Experimental ACP/MCP-over-ACP release. Session image: `%s`. Verify SHA256SUMS before installation.\n' "$IMAGE_REF" > "$RUNNER_TEMP/acp-release-notes.md"
+          gh release create "$TAG" dist/acp-release/* --verify-tag --prerelease --title "Agent Connect $VERSION" --notes-file "$RUNNER_TEMP/acp-release-notes.md"
