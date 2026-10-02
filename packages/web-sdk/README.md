@@ -1,33 +1,224 @@
 # `@open-agent-connect/web`
 
-Browser SDK for adding AI features backed by a user-owned agent. The current
-published provider path is the Agent Connect plugin for OpenClaw; the application talks to
-the gateway through the bounded Open Responses contract and keeps its own tool
-implementations.
+Browser SDK for lending a fixed set of application tools to a user-owned agent.
+Version `0.1.0-alpha.1` prepares an **experimental ACP release**. ACP,
+MCP-over-ACP and Agent Connect's `agent-connect.resume.v1` transport are unstable;
+the resume protocol is a custom gateway extension, not an ACP standard.
+This candidate does not accept proposed ADR 0016 or retire the current OpenClaw
+plugin installation target. Publication is a separate release action.
 
-Install the published package in the web application:
+After this prerelease is published, install it with an explicit version:
 
 ```sh
-npm install @open-agent-connect/web@0.0.9
+npm install @open-agent-connect/web@0.1.0-alpha.1
 ```
 
-The package provides:
+Use `@open-agent-connect/web/acp` for ACP integrations. The root entry point
+continues to export every OpenClaw, Responses and Open Responses AI SDK helper;
+those helpers are deprecated for new integrations and retained for compatibility.
+No existing import needs to change in this alpha.
 
-- Agent Connect plugin for OpenClaw discovery, OAuth authorization and token management;
-- Open Responses (`/v1/responses`) HTTP/SSE communication with multi-turn response continuation (`previous_response_id`);
-- Provider-neutral `AgentSession` and task event streaming;
-- JSON Schema validation before browser tool execution;
-- Correlated tool results returned to the same agent turn.
+## ACP quickstart (experimental)
 
-For the Agent Connect plugin for OpenClaw, pass the path-bound provider URL
-`https://<gateway-host>/agent-connect` to `discoverOpenClawProvider`. The SDK
-uses RFC well-known discovery for that issuer and returns the namespaced
-`/agent-connect/v1/responses` resource. A bare HTTPS origin is normalized to
-that path as an input convenience; it does not select a different gateway
-implementation. For a complete current setup and authorization example, see the
-[web application integration guide](../../docs/guides/web-app-integration.md).
+The gateway operator issues an application grant for an exact approved tool
+snapshot. Obtain that grant through your application's authorized flow before
+connecting; this SDK does not implement grant issuance or consent. Keep tokens
+in memory and use a secure WebSocket endpoint in production.
 
-## Saved connections and scoped history
+```ts
+import {
+  connectAgent,
+  defineTool,
+  AgentSession,
+  type AcpGrant,
+} from "@open-agent-connect/web/acp";
+
+const tools = [
+  defineTool({
+    name: "read_selection",
+    description: "Read the user's currently selected text",
+    inputSchema: { type: "object", additionalProperties: false },
+    execute: (_arguments, { signal }) => {
+      signal?.throwIfAborted();
+      return window.getSelection()?.toString() ?? "";
+    },
+  }),
+];
+
+// Supplied by your authorized application flow; never hard-code a real token.
+async function readWithAgent(grant: AcpGrant) {
+  const provider = await connectAgent({ grant, tools });
+  const session = new AgentSession({ provider, tools });
+  try {
+    for await (const event of session.streamTask("Explain the selected text")) {
+      if (event.type === "text.delta") console.log(event.delta);
+      if (event.type === "task.failed") console.error(event.error);
+    }
+    // A deliberate follow-up on a completed turn:
+    if (session.canContinueTask) {
+      await session.continueTask("Give me a shorter explanation");
+    }
+  } finally {
+    provider.close();
+  }
+}
+```
+
+The grant has `{ gatewayUrl: "wss://gateway.example/acp", token }`. The operator
+owns cwd, model, mode and the restricted agent profile; these are not browser
+options. One provider owns one ACP session and allows one active prompt.
+`AgentSession` validates arguments against CSP-safe JSON Schema before executing
+an approved handler. Its tool definitions must match the provider's fixed snapshot.
+
+Handlers may return text, no value, or `{ content, structuredContent?, isError? }`.
+The context provides `actionId`, `toolName`, `connectionId`, `meta` and a cooperative
+`AbortSignal`. For effects, use the stable action ID for application-owned
+deduplication or make the operation idempotent. There is no generic exactly-once
+execution guarantee. A handler remains responsible for its effects after cancel.
+Native harness tools, thoughts, plans and progress are presentation events; only
+approved application tools run in the page. Held MCP calls send progress when the
+peer supplies a progress token, without promising to defeat every harness timeout.
+
+`createAgentChat({ session })` provides in-memory messages, subscription, send,
+stop and Markdown export for headless UIs. Execution history and Markdown export
+are not resumable human-chat transcripts. Native WebMCP snapshots remain
+experimental and require a browser that exposes that API.
+
+## AI SDK `useChat` (experimental)
+
+ACP uses the harness's tool loop. Use a `ChatTransport`, rather than an AI SDK
+LanguageModel or another application `execute`/`onToolCall` loop. The transport
+supports AI SDK 7; the typechecked [React example](examples/acp-use-chat.tsx) uses
+`ai@7.0.93` and `@ai-sdk/react@4.0.96`.
+
+```tsx
+import { useMemo } from "react";
+import { useChat } from "@ai-sdk/react";
+import {
+  createAcpChatTransport,
+  type AcpProvider,
+  type ApplicationTool,
+} from "@open-agent-connect/web/acp";
+
+function AgentChat({
+  provider,
+  tools,
+}: {
+  provider: AcpProvider;
+  tools: readonly ApplicationTool[];
+}) {
+  const transport = useMemo(
+    () => createAcpChatTransport({ provider, tools }),
+    [provider, tools],
+  );
+  const { messages, sendMessage, stop, error } = useChat({
+    id: "application-chat",
+    transport,
+  });
+  return (
+    <section>
+      {messages.map((message) => (
+        <p key={message.id}>
+          {message.parts
+            .map((part) => (part.type === "text" ? part.text : ""))
+            .join("")}
+        </p>
+      ))}
+      <button
+        onClick={() => void sendMessage({ text: "Explain my selection" })}
+      >
+        Ask
+      </button>
+      <button onClick={() => void stop()}>Stop</button>
+      {error && <p role="alert">{error.message}</p>}
+    </section>
+  );
+}
+```
+
+One transport binds one chat ID to one provider-owned session. Only the last
+explicit user's text is sent; prior UI messages, system prompts, model settings
+and HTTP options are not forwarded. Files and regeneration are rejected.
+Thoughts become reasoning parts, plans become `data-acp-plan`, and native tool
+progress becomes dynamic tool parts with `providerExecuted: true`. Application
+handlers execute through `AgentSession`; adding an AI SDK handler for the same
+operation would duplicate effects. At least one application tool is required.
+
+Stop or AbortSignal sends `session/cancel`. The mounting application owns cleanup:
+call `await transport.close()` and `provider.close()` when relinquishing them.
+Preserve provider, tools and transport identity across renders.
+
+## Reconnect and recovery (experimental)
+
+Page Lifecycle listeners probe or reattach the same sequence-acknowledged
+transport. Grants and opaque reattach tokens stay in memory. Reattach within the
+retention window can continue an active stream without issuing another prompt.
+If retention expires or output overflows, the provider opens a new transport and
+uses `session/load`; gateway restart recovery is not promised.
+
+```ts
+const provider = await connectAgent({
+  grant,
+  tools,
+  // Optional saved opaque session ID from the same grant's ownership:
+  sessionId: savedSessionId,
+  onSession: (id) => saveSessionId(id),
+  onUpdate: (notification, replay) => renderUpdate(notification, { replay }),
+  onRecovery: (recovery) => showRecoveredSession(recovery.sessionId),
+});
+// For an idle known session, explicitly load history on a new transport:
+const recovery = await provider.recover(); // AcpRecovery
+```
+
+Replayed history reaches `onUpdate(notification, true)`, not new task deltas.
+Recovery reports `task_interrupted`, discards held result resolvers, and never
+resends an uncertain prompt or application result. Observe the handler's signal.
+After an interrupted `AgentSession`, construct a new session over the recovered
+provider before a deliberate follow-up. A saved session ID only helps while the
+gateway recognizes ownership under the same grant.
+
+AI SDK active-stream reconnect probes the same resumable connection. A locked UI
+stream cannot acquire a second reader. Cold reconnect loads history and returns
+`null`; it cannot safely reconstruct an interrupted UI stream. Let the user send
+a new message deliberately. Do not automatically resend, regenerate or retry
+uncertain application effects.
+
+## Error codes and alpha risks
+
+`AgentConnectError.code` is the public failure category.
+`AcpTransportError` additionally exposes `closeCode` and `reason`:
+
+| WebSocket close  | Error code               | Meaning / response                                                                  |
+| ---------------- | ------------------------ | ----------------------------------------------------------------------------------- |
+| 4400             | `protocol_error`         | Invalid frame; inspect client/gateway compatibility.                                |
+| 4401             | `invalid_app_grant`      | Obtain new authorized grant.                                                        |
+| 4403             | `authorization_denied`   | Origin denied; authorization must be resolved.                                      |
+| 4404, 4410, 4413 | `session_expired`        | Expired, ended or overflowed transport; history load may recover the known session. |
+| 4409             | `session_superseded`     | Another attachment took over; do not take it back automatically.                    |
+| 4418             | `session_capacity`       | Owner must release capacity.                                                        |
+| 4500             | `agent_execution_failed` | Gateway could not launch the adapter.                                               |
+
+`task_busy` rejects concurrent prompts, `continuation_unavailable` rejects invalid
+continuation/recovery, and `task_interrupted` means the turn was not safely
+completed. `unknown_tool`, `invalid_tool_arguments` and `tool_execution_failed`
+identify application tool failures. Authorization denial and takeover do not
+trigger history recovery.
+
+ACP/MCP-over-ACP support depends on the selected adapter, not merely its ACP
+label. This alpha requires the gateway's pinned compatible adapter and restricted
+profile; it does not claim general MCP-over-ACP interoperability. API shapes,
+resume framing and adapter support can change in later prereleases. Scope is one
+application conversation, one active request and a fixed approved tool snapshot.
+
+## OpenClaw / Responses compatibility (deprecated)
+
+The retained OpenClaw plugin path uses discovery, delegated authorization,
+Open Responses and scoped execution history. Existing exports and behavior remain
+available at `@open-agent-connect/web`. ACP consumes a separately issued grant;
+there is no automatic OAuth-to-ACP migration. See the
+[OpenClaw integration guide](../../docs/guides/web-app-integration.md).
+
+### Saved connections and scoped history
 
 Applications may store the delegated `OpenClawConnection` inside their own
 versioned, origin-local envelope. Restore the inner record through the SDK so
@@ -83,7 +274,7 @@ Communication with the gateway uses the standard Open Responses protocol profile
 Harness orchestrators like Omnigent remain internal backends behind the user's
 Agent Connect gateway and are never exposed directly to the browser.
 
-## Authorization and sessions
+## OpenClaw authorization and sessions (deprecated)
 
 Applications discover the Agent Connect plugin for OpenClaw, authorize their fixed page-owned tool
 snapshot, and then construct an `AgentSession` over the namespaced Responses
@@ -276,7 +467,7 @@ because the interpreter's numeric tolerance can accept invalid multiples. Use
 An application that already registers tools with `document.modelContext` can
 reuse those tools through Agent Connect. Pass the snapshot's tools to the
 Agent Connect plugin authorization and `AgentSession` flow above, or to
-`createAiSdkApplicationTools()` for the current AI SDK integration.
+`createAiSdkApplicationTools()` for the retained Open Responses AI SDK integration.
 
 ```ts
 import { createWebMcpToolSnapshot } from "@open-agent-connect/web";
@@ -336,7 +527,7 @@ See the repository's complete
 for callback handling, transaction storage, package installation, revocation,
 and the real gateway setup.
 
-## Current constraints
+## OpenClaw compatibility constraints
 
 - One active task per application session and a linear completed-turn history
 - A fixed tool snapshot per session
@@ -352,90 +543,3 @@ provider checkpoint returned by a completed task for an explicit follow-up, or
 use the scoped conversation client for recent execution-history projections.
 Those projections are not faithful human-chat transcripts and may become
 unavailable after restart or policy change.
-
-## Unreleased ACP provider (unstable)
-
-ACP, MCP-over-ACP and `agent-connect.resume.v1` exports are experimental. The
-OpenClaw provider and plugin remain supported. This API consumes an already
-issued grant; it does not implement grant issuance or consent.
-
-```ts
-import { connectAgent, AgentSession } from "@open-agent-connect/web";
-
-// `tools` is the application's fixed, approved ApplicationTool[] snapshot.
-const provider = await connectAgent({
-  grant: { gatewayUrl: "wss://gateway.example/acp", token: grantToken },
-  tools,
-  onSession: (id) => saveSessionId(id),
-});
-const session = new AgentSession({ provider, tools });
-for await (const event of session.streamTask("Read the selected passage")) {
-  renderEvent(event);
-}
-// Explicit follow-ups use session.streamContinuation(...).
-// Dispose the provider when the application relinquishes the connection.
-provider.close();
-```
-
-A provider creates one ACP session and permits one active prompt. It maps text,
-thoughts, plans and native-tool progress separately from application tool
-requests. Application handlers run through AgentSession with stable action IDs
-and cooperative cancellation. They remain responsible for idempotency and
-side effects. Held MCP calls send progress when the peer supplies a progress
-token; this does not promise to override every harness timeout.
-
-Page Lifecycle listeners probe or reattach the same acknowledged transport.
-The grant and opaque reattach token stay in memory. If retention expires or
-output overflows, the provider initializes a new transport and calls
-`session/load`. It reports `task_interrupted`, discards held tool-result
-resolvers, and never re-sends an uncertain prompt or application result.
-Replayed history reaches `onUpdate(notification, true)`, not new task deltas.
-Cooperative application handlers must observe their AbortSignal. After an
-interrupted AgentSession, create a new AgentSession over the recovered provider
-before a deliberate follow-up. A saved `sessionId` may be passed to connectAgent
-for a page reload; it is useful only while the gateway still recognizes the
-same grant's ownership. Gateway restart recovery is not promised.
-
-Close codes are typed: 4401 invalid grant, 4403 denied origin, 4404/4410/4413
-unavailable session, 4409 superseded attachment, 4418 capacity, and 4500 launch
-failure. Authorization errors and takeover do not trigger session/load.
-
-`createAcpChatTransport({ provider, tools })` implements AI SDK 7's
-[ChatTransport](https://ai-sdk.dev/docs/ai-sdk-ui/transport) for `useChat`.
-The runnable, typechecked [React example](examples/acp-use-chat.tsx) is exercised
-by the real-adapter browser gate (`?chat=1` on the reader fixture). Its development
-pin is `@ai-sdk/react@4.0.96`, matching `ai@7.0.93`.
-
-```tsx
-const transport = useMemo(
-  () => createAcpChatTransport({ provider, tools }),
-  [provider, tools],
-);
-const { messages, sendMessage, stop } = useChat({
-  id: "application-chat",
-  transport,
-});
-```
-
-One transport binds one UI chat ID to one provider-owned ACP session. Only the
-last explicit user message's text becomes a prompt; prior messages, model
-settings, system prompts and HTTP options are not forwarded. Files and
-regeneration are rejected. Thoughts become reasoning parts, plans become
-`data-acp-plan`, and native tool progress becomes dynamic tool parts marked
-`providerExecuted: true`. Approved application handlers run once through
-AgentSession. Do not install another AI SDK `execute` or `onToolCall` handler
-for those same operations.
-
-AbortSignal/Stop sends session/cancel. Active-stream reconnection probes the
-same resumable connection; an already locked UI stream cannot acquire another
-reader. Cold reconnect loads history and returns null, because no interrupted
-UI stream can safely be invented. A deliberate new user message can continue
-the recovered conversation. The mounting application owns provider disposal;
-call transport.close() and provider.close() when relinquishing it. The UI
-transport requires at least one application tool, matching AgentSession's
-existing tool-lending contract.
-
-AgentProvider's optional structured application result lets the ACP provider
-retain image content, structured data and isError while Responses providers
-continue using the existing string output. Manual submitToolResult calls may
-pass that original ApplicationToolResult as the third argument.

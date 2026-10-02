@@ -4,9 +4,9 @@ import {
   createAcpChatTransport,
   type AcpProvider,
   type ApplicationTool,
-} from "../src/index.js";
+} from "../src/acp.js";
 
-/** Unreleased ACP/MCP-over-ACP example. Connect an approved provider before mounting. */
+/** Experimental ACP/MCP-over-ACP alpha example. Connect an approved provider before mounting. */
 export function AcpChatExample({
   provider,
   tools,

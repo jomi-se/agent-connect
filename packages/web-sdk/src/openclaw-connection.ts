@@ -30,8 +30,10 @@ const MAX_STRING_LENGTH = 8 * 1024;
 const MAX_EXPIRY_SECONDS = 10 * 365 * 24 * 60 * 60;
 const DEFAULT_REFRESH_BEFORE_MS = 60_000;
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export type OpenClawConnectionExperience = "tailscale" | "https";
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export type OpenClawConnectionErrorCode =
   | "invalid_input"
   | "invalid_response"
@@ -46,6 +48,7 @@ export type OpenClawConnectionErrorCode =
   | "reauthorization_required"
   | "revocation_failed";
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export class OpenClawConnectionError extends Error {
   readonly code: OpenClawConnectionErrorCode;
   readonly status: number | undefined;
@@ -71,6 +74,7 @@ export class OpenClawConnectionError extends Error {
   }
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface OpenClawProvider {
   readonly version: 1;
   readonly experience: OpenClawConnectionExperience;
@@ -83,6 +87,7 @@ export interface OpenClawProvider {
   readonly pushedAuthorizationRequestEndpoint: string;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface DiscoverOpenClawProviderOptions {
   readonly providerUrl: string;
   readonly experience: OpenClawConnectionExperience;
@@ -90,6 +95,7 @@ export interface DiscoverOpenClawProviderOptions {
   readonly signal?: AbortSignal;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface BeginOpenClawAuthorizationOptions {
   readonly provider: OpenClawProvider;
   readonly redirectUri: string;
@@ -100,6 +106,7 @@ export interface BeginOpenClawAuthorizationOptions {
   readonly signal?: AbortSignal;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface OpenClawAuthorizationTransaction {
   readonly version: 1;
   readonly experience: OpenClawConnectionExperience;
@@ -118,12 +125,14 @@ export interface OpenClawAuthorizationTransaction {
   readonly callerContext?: JsonObject;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface OpenClawAuthorizationStart {
   readonly authorizationUrl: string;
   readonly expiresAt: string;
   readonly transaction: OpenClawAuthorizationTransaction;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface CompleteOpenClawAuthorizationOptions {
   readonly provider: OpenClawProvider;
   readonly redirectUri: string;
@@ -133,6 +142,7 @@ export interface CompleteOpenClawAuthorizationOptions {
   readonly signal?: AbortSignal;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface OpenClawConnection {
   readonly version: 1;
   readonly providerOrigin: string;
@@ -149,29 +159,34 @@ export interface OpenClawConnection {
   readonly applicationToolsHash: string;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface ParseOpenClawConnectionOptions {
   readonly clientId: string;
   readonly now?: number;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface OpenClawApplicationTool {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: JsonObject;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface RefreshOpenClawConnectionOptions {
   readonly connection: OpenClawConnection;
   readonly fetch?: typeof globalThis.fetch;
   readonly signal?: AbortSignal;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface RevokeOpenClawConnectionOptions {
   readonly connection: OpenClawConnection;
   readonly fetch?: typeof globalThis.fetch;
   readonly signal?: AbortSignal;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export interface CreateOpenClawAccessTokenGetterOptions {
   /** Read the caller-owned current connection. */
   readonly getConnection: () =>
@@ -224,6 +239,7 @@ interface TokenResponse {
   readonly scope: unknown;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export async function discoverOpenClawProvider(
   options: DiscoverOpenClawProviderOptions,
 ): Promise<OpenClawProvider> {
@@ -317,6 +333,7 @@ export async function discoverOpenClawProvider(
   });
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export async function beginOpenClawAuthorization(
   options: BeginOpenClawAuthorizationOptions,
 ): Promise<OpenClawAuthorizationStart> {
@@ -391,6 +408,7 @@ export async function beginOpenClawAuthorization(
   };
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export async function completeOpenClawAuthorization(
   options: CompleteOpenClawAuthorizationOptions,
 ): Promise<OpenClawConnection> {
@@ -479,6 +497,7 @@ export async function completeOpenClawAuthorization(
   );
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export async function refreshOpenClawConnection(
   options: RefreshOpenClawConnectionOptions,
 ): Promise<OpenClawConnection> {
@@ -523,6 +542,7 @@ export async function refreshOpenClawConnection(
   );
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export async function revokeOpenClawConnection(
   options: RevokeOpenClawConnectionOptions,
 ): Promise<void> {
@@ -544,12 +564,14 @@ export async function revokeOpenClawConnection(
   );
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export function serializeOpenClawAuthorizationTransaction(
   transaction: OpenClawAuthorizationTransaction,
 ): string {
   return JSON.stringify(validateTransaction(transaction));
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export function parseOpenClawAuthorizationTransaction(
   value: string,
 ): OpenClawAuthorizationTransaction {
@@ -567,6 +589,7 @@ export function parseOpenClawAuthorizationTransaction(
  * exact record shape, supported endpoint layout and approved tool hash without
  * contacting the gateway. An expired access token remains restorable while its
  * refresh authority is current.
+ * @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned.
  */
 export async function parseOpenClawConnection(
   serialized: string,
@@ -609,6 +632,7 @@ export async function parseOpenClawConnection(
   return connection;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export function serializeOpenClawConnection(
   connection: OpenClawConnection,
 ): string {
@@ -621,6 +645,7 @@ export function serializeOpenClawConnection(
   return serialized;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export function getOpenClawConnectionProviderUrl(
   connection: OpenClawConnection,
 ): string {
@@ -628,6 +653,7 @@ export function getOpenClawConnectionProviderUrl(
   return `${validated.providerOrigin}${AGENT_CONNECT_OPENCLAW_PLUGIN_LAYOUT.issuerPath}`;
 }
 
+/** @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned. */
 export function normalizeOpenClawProviderUrl(value: string): string {
   return canonicalProviderUrl(value).issuer;
 }
@@ -636,6 +662,7 @@ export function normalizeOpenClawProviderUrl(value: string): string {
  * Create a single-flight, proactive-refresh bearer getter for
  * createAiSdkOpenResponsesModel. A failed or ambiguously completed refresh is
  * never replayed: the application must authorize again, retaining any draft.
+ * @deprecated Retained for OpenClaw compatibility. For experimental ACP, use connectAgent and AcpGrant from @open-agent-connect/web/acp; grant issuance is operator-owned.
  */
 export function createOpenClawAccessTokenGetter(
   options: CreateOpenClawAccessTokenGetterOptions,

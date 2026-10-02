@@ -14,6 +14,7 @@ export interface JsonSchema extends JsonObject {
   readonly additionalProperties?: boolean | JsonSchema;
 }
 
+/** @experimental Unstable MCP content representation. */
 export type McpContent =
   | { readonly type: "text"; readonly text: string }
   | {
@@ -162,6 +163,7 @@ export interface AgentSessionOptions {
   readonly createSessionId?: () => string;
 }
 
+/** @deprecated Retained for Responses compatibility. For experimental ACP, use ConnectAgentOptions from @open-agent-connect/web/acp. */
 export interface ResponsesProviderOptions {
   /**
    * Gateway base URL before `/v1/responses`.

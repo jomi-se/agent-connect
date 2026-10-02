@@ -7,7 +7,7 @@ import type {
   JsonSchema,
 } from "./types.js";
 
-/** Experimental native Chromium WebMCP snapshot; not a browser polyfill. */
+/** @experimental Unstable native Chromium WebMCP snapshot; not a browser polyfill. */
 export interface WebMcpToolSnapshot {
   readonly tools: readonly ApplicationTool[];
   /** Aborted on toolchange, page exit, caller abort, or disposal. */
@@ -16,6 +16,7 @@ export interface WebMcpToolSnapshot {
   dispose(): void;
 }
 
+/** @experimental Unstable native WebMCP browser API. */
 export interface WebMcpToolSnapshotOptions {
   readonly document?: Document;
   /** Omit to include all tools owned by this document, excluding frames. */
@@ -49,6 +50,7 @@ interface ChromiumModelContext extends EventTarget {
  * in a second format, because the first call may already have side effects.
  * Any observed registry change invalidates this snapshot rather than expanding
  * authority. Native WebMCP does not guarantee immutable registration identity.
+ * @experimental Unstable native WebMCP browser API.
  */
 export async function createWebMcpToolSnapshot(
   options: WebMcpToolSnapshotOptions = {},

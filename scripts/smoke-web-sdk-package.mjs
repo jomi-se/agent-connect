@@ -10,6 +10,8 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { builtinModules } from "node:module";
+import ts from "typescript";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const smokeRoot = join(repoRoot, ".agent-connect", "web-sdk-package-smoke");
@@ -25,7 +27,6 @@ mkdirSync(consumerDir, { recursive: true });
 requireBrowserSafeSources();
 let tarball = preparedTarball;
 if (!tarball) {
-  run("npm", ["run", "build", "--workspace", "@open-agent-connect/web"]);
   const packed = run(
     "npm",
     [
@@ -61,7 +62,16 @@ writeFileSync(
 );
 writeFileSync(
   join(consumerDir, "check.mjs"),
-  `import { connectAgent, AcpProvider, createAcpChatTransport, createResumableAcpStream, AcpTransportError, defineTool, createWebMcpToolSnapshot, AgentSession, createAgentChat, exportAgentChatMarkdown, createOpenClawConversationClient, getOpenClawConnectionProviderUrl, normalizeOpenClawProviderUrl, parseOpenClawConnection, serializeOpenClawConnection } from "@open-agent-connect/web";
+  `import * as rootApi from "@open-agent-connect/web";
+import * as acpApi from "@open-agent-connect/web/acp";
+import { connectAgent, AcpProvider, createAcpChatTransport, createResumableAcpStream, AcpTransportError, defineTool, createWebMcpToolSnapshot, AgentSession, createAgentChat, exportAgentChatMarkdown, createOpenClawConversationClient, getOpenClawConnectionProviderUrl, normalizeOpenClawProviderUrl, parseOpenClawConnection, serializeOpenClawConnection } from "@open-agent-connect/web";
+
+for (const name of ["connectAgent", "AcpProvider", "createAcpChatTransport", "createResumableAcpStream", "AcpTransportError", "createBrowserAcpStream", "McpOverAcpError", "SingleMcpServer", "defineTool", "AgentConnectError", "AgentSession", "createAgentChat", "exportAgentChatMarkdown", "createWebMcpToolSnapshot"]) {
+  if (typeof acpApi[name] !== "function" || acpApi[name] !== rootApi[name]) throw new Error("Missing or divergent ACP subpath export: " + name);
+}
+for (const name of ["OpenClawConnectionError", "beginOpenClawAuthorization", "completeOpenClawAuthorization", "createOpenClawAccessTokenGetter", "discoverOpenClawProvider", "parseOpenClawAuthorizationTransaction", "parseOpenClawConnection", "refreshOpenClawConnection", "revokeOpenClawConnection", "getOpenClawConnectionProviderUrl", "normalizeOpenClawProviderUrl", "serializeOpenClawConnection", "serializeOpenClawAuthorizationTransaction", "OpenClawConversationUnavailableError", "createOpenClawConversationClient", "ResponsesProvider", "createOpenClawResponsesProvider", "createAiSdkApplicationTools", "createAiSdkOpenResponsesGenerationOptions", "createAiSdkOpenResponsesModel", "createAiSdkOpenResponsesPrepareStep", "selectAiSdkOpenResponsesCheckpoint"]) {
+  if (typeof rootApi[name] !== "function") throw new Error("Missing compatibility export: " + name);
+}
 
 for (const exported of [connectAgent, AcpProvider, createAcpChatTransport, createResumableAcpStream, AcpTransportError]) {
   if (typeof exported !== "function") throw new Error("Missing unstable ACP package export");
@@ -148,6 +158,74 @@ process.stdout.write("external-consumer-ok\\n");
 run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], false, {
   cwd: consumerDir,
 });
+writeFileSync(
+  join(consumerDir, "check.ts"),
+  `import {
+  connectAgent, AgentSession, createAcpChatTransport, createResumableAcpStream,
+  type AcpGrant, type ConnectAgentOptions, type AcpRecovery,
+  type ResumableAcpStream, type ResumableAcpStreamOptions,
+  type AcpTransportSnapshot, type BrowserAcpStream, type BrowserAcpStreamOptions,
+  type AcpChatTransport, type ApplicationTool, type AgentTaskEvent,
+} from "@open-agent-connect/web/acp";
+import {
+  type AcpRecovery as RootRecovery,
+  type OpenClawConnection, type ResponsesProviderOptions,
+  type AiSdkOpenResponsesModelOptions,
+} from "@open-agent-connect/web";
+
+const tools: ApplicationTool[] = [{
+  name: "read_selection", description: "Read selected text",
+  inputSchema: { type: "object" }, execute: () => "selected text",
+}];
+export async function connect(grant: AcpGrant) {
+  const options: ConnectAgentOptions = {
+    grant, tools, onRecovery: (recovery: AcpRecovery) => {
+      const root: RootRecovery = recovery;
+      console.log(root.sessionId, root.interrupted);
+    },
+  };
+  const provider = await connectAgent(options);
+  const session = new AgentSession({ provider, tools });
+  const transport: AcpChatTransport = createAcpChatTransport({ provider, tools });
+  const recovery: AcpRecovery = await provider.recover();
+  for await (const event of session.streamTask("Read")) {
+    const typed: AgentTaskEvent = event;
+    if (typed.type === "task.failed") console.log(typed.error.code);
+  }
+  await transport.close();
+  provider.close();
+  return recovery;
+}
+export function resume(url: string, options: ResumableAcpStreamOptions) {
+  const link: ResumableAcpStream = createResumableAcpStream(url, options);
+  const snapshot: AcpTransportSnapshot = link.stats();
+  return snapshot;
+}
+export type LegacyTypes = OpenClawConnection | ResponsesProviderOptions | AiSdkOpenResponsesModelOptions;
+export type BrowserTypes = BrowserAcpStream | BrowserAcpStreamOptions;
+`,
+);
+run(
+  process.execPath,
+  [
+    join(repoRoot, "node_modules", "typescript", "bin", "tsc"),
+    "--noEmit",
+    "--strict",
+    "--exactOptionalPropertyTypes",
+    "--skipLibCheck",
+    "--target",
+    "ES2023",
+    "--lib",
+    "ES2023,DOM,DOM.Iterable",
+    "--module",
+    "NodeNext",
+    "--moduleResolution",
+    "NodeNext",
+    "check.ts",
+  ],
+  false,
+  { cwd: consumerDir },
+);
 const result = run("node", ["check.mjs"], true, { cwd: consumerDir }).trim();
 if (result !== "external-consumer-ok") {
   throw new Error(`Unexpected consumer result: ${result}`);
@@ -171,6 +249,8 @@ const installedRoot = join(
   "@open-agent-connect",
   "web",
 );
+requirePackedFiles(installedRoot, installedPackage);
+requireDeclarationTags(installedRoot);
 const installedIndex = readFileSync(
   join(installedRoot, "dist", "index.js"),
   "utf8",
@@ -188,6 +268,9 @@ if (
   !installedPackage.sideEffects.includes("./dist/zod-jitless.js") ||
   !installedIndex.startsWith('import "./zod-jitless.js";') ||
   !installedAiSdk.startsWith('import "./zod-jitless.js";') ||
+  !/^import "\.\/zod-jitless\.js";$/m.test(
+    readFileSync(join(installedRoot, "dist", "acp.js"), "utf8"),
+  ) ||
   !installedBootstrap.includes("jitless: true")
 ) {
   throw new Error("Packed SDK omitted its CSP-safe Zod bootstrap");
@@ -232,7 +315,7 @@ function requireBrowserSafeSources() {
   })) {
     if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
     const path = join(entry.parentPath ?? sourceRoot, entry.name);
-    if (/\bfrom "node:/.test(readFileSync(path, "utf8"))) {
+    if (nodeImports(readFileSync(path, "utf8")).length > 0) {
       offenders.push(path);
     }
   }
@@ -240,5 +323,123 @@ function requireBrowserSafeSources() {
     throw new Error(
       `Browser SDK sources import Node built-ins: ${offenders.join(", ")}`,
     );
+  }
+}
+
+function nodeImports(source) {
+  const builtins = new Set(
+    builtinModules.map((name) => name.replace(/^node:/, "")),
+  );
+  return [
+    ...source.matchAll(
+      /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["']([^"']+)["']/g,
+    ),
+  ]
+    .map((match) => match[1])
+    .filter((name) => name.startsWith("node:") || builtins.has(name));
+}
+
+function requirePackedFiles(packageRoot, manifest) {
+  for (const entry of readdirSync(packageRoot, {
+    recursive: true,
+    withFileTypes: true,
+  })) {
+    if (!entry.isFile()) continue;
+    const path = join(entry.parentPath, entry.name);
+    const relative = path.slice(packageRoot.length + 1).replaceAll("\\", "/");
+    if (
+      !["package.json", "README.md", "LICENSE", "CHANGELOG.md"].includes(
+        relative,
+      ) &&
+      !/^dist\/[^/]+\.(?:js|d\.ts)$/.test(relative)
+    ) {
+      throw new Error(`Unexpected packed SDK file: ${relative}`);
+    }
+    if (!relative.startsWith("dist/")) continue;
+    const source = readFileSync(path, "utf8");
+    if (
+      /sourceMappingURL|\/home\/|\/Users\//.test(source) ||
+      nodeImports(source).length > 0
+    ) {
+      throw new Error(
+        `Packed browser SDK has source maps, local paths or Node imports: ${relative}`,
+      );
+    }
+  }
+  for (const name of [".", "./acp"]) {
+    const entry = manifest.exports?.[name];
+    if (!entry?.types || !entry.import)
+      throw new Error(`Missing packed entry point: ${name}`);
+    readFileSync(join(packageRoot, entry.types), "utf8");
+    readFileSync(join(packageRoot, entry.import), "utf8");
+  }
+}
+
+function requireDeclarationTags(packageRoot) {
+  const legacy = new Set([
+    "openclaw-connection",
+    "openclaw-conversations",
+    "responses-provider",
+    "ai-sdk",
+  ]);
+  const experimental = new Set([
+    "acp-provider",
+    "acp-chat-transport",
+    "resumable-acp-stream",
+    "transport",
+    "webmcp",
+  ]);
+  for (const name of [
+    ...legacy,
+    ...experimental,
+    "types",
+    "single-mcp-server",
+    "agent-chat",
+  ]) {
+    const path = join(packageRoot, "dist", `${name}.d.ts`);
+    const source = ts.createSourceFile(
+      path,
+      readFileSync(path, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    for (const declaration of source.statements) {
+      if (
+        !declaration.modifiers?.some(
+          (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+        )
+      )
+        continue;
+      const exportedName = declaration.name?.text;
+      const expected =
+        legacy.has(name) || exportedName === "ResponsesProviderOptions"
+          ? "deprecated"
+          : experimental.has(name) ||
+              [
+                "McpContent",
+                "SingleMcpServerOptions",
+                "BrowserAcpStreamOptions",
+                "BrowserAcpStream",
+                "AcpPlanEntry",
+                "AcpToolUpdate",
+                "McpOverAcpError",
+                "SingleMcpServer",
+                "AgentChatThoughtPart",
+                "AgentChatPlanPart",
+                "AgentChatProgressPart",
+              ].includes(exportedName)
+            ? "experimental"
+            : undefined;
+      if (
+        expected &&
+        !ts
+          .getJSDocTags(declaration)
+          .some((tag) => tag.tagName.text === expected)
+      ) {
+        throw new Error(
+          `Packed declaration omitted @${expected}: ${exportedName}`,
+        );
+      }
+    }
   }
 }

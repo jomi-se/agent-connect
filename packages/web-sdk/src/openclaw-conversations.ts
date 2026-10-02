@@ -15,6 +15,7 @@ const MAX_TOTAL_TEXT = 128 * 1024;
 const CONVERSATION_ID = /^[a-f0-9]{36}$/;
 const RESPONSE_ID = /^[A-Za-z0-9_.:-]{1,256}$/;
 
+/** @deprecated Retained for OpenClaw history compatibility. For experimental ACP history recovery, use AcpProvider.recover and ConnectAgentOptions.onUpdate from @open-agent-connect/web/acp. */
 export interface OpenClawConversationDescriptor {
   readonly conversationId: string;
   /** Provider expiry time in epoch milliseconds. */
@@ -23,27 +24,32 @@ export interface OpenClawConversationDescriptor {
   readonly previousResponseId?: string;
 }
 
+/** @deprecated Retained for OpenClaw history compatibility. For experimental ACP history recovery, use AcpProvider.recover and ConnectAgentOptions.onUpdate from @open-agent-connect/web/acp. */
 export interface OpenClawExecutionHistoryEntry {
   readonly kind: "input" | "assistant";
   readonly text: string;
 }
 
+/** @deprecated Retained for OpenClaw history compatibility. For experimental ACP history recovery, use AcpProvider.recover and ConnectAgentOptions.onUpdate from @open-agent-connect/web/acp. */
 export interface OpenClawExecutionHistory extends OpenClawConversationDescriptor {
   readonly projection: "execution-history";
   readonly entries: readonly OpenClawExecutionHistoryEntry[];
   readonly truncated: boolean;
 }
 
+/** @deprecated Retained for OpenClaw history compatibility. For experimental ACP history recovery, use AcpProvider.recover and ConnectAgentOptions.onUpdate from @open-agent-connect/web/acp. */
 export interface OpenClawConversationRequestOptions {
   readonly signal?: AbortSignal;
 }
 
+/** @deprecated Retained for OpenClaw history compatibility. For experimental ACP history recovery, use AcpProvider.recover and ConnectAgentOptions.onUpdate from @open-agent-connect/web/acp. */
 export interface CreateOpenClawConversationClientOptions {
   readonly connection: OpenClawConnection;
   readonly getAccessToken: (signal?: AbortSignal) => Promise<string>;
   readonly fetch?: typeof globalThis.fetch;
 }
 
+/** @deprecated Retained for OpenClaw history compatibility. For experimental ACP history recovery, use AcpProvider.recover and ConnectAgentOptions.onUpdate from @open-agent-connect/web/acp. */
 export interface OpenClawConversationClient {
   list(
     options?: OpenClawConversationRequestOptions,
@@ -54,9 +60,11 @@ export interface OpenClawConversationClient {
   ): Promise<OpenClawExecutionHistory>;
 }
 
+/** @deprecated Retained for OpenClaw history compatibility. For experimental ACP history recovery, use AcpProvider.recover and ConnectAgentOptions.onUpdate from @open-agent-connect/web/acp. */
 export type OpenClawConversationUnavailableCode =
   "conversation_unavailable" | "conversation_changed";
 
+/** @deprecated Retained for OpenClaw history compatibility. For experimental ACP history recovery, use AcpProvider.recover and ConnectAgentOptions.onUpdate from @open-agent-connect/web/acp. */
 export class OpenClawConversationUnavailableError extends Error {
   readonly code: OpenClawConversationUnavailableCode;
   readonly status: 404 | 409;
@@ -69,6 +77,7 @@ export class OpenClawConversationUnavailableError extends Error {
   }
 }
 
+/** @deprecated Retained for OpenClaw history compatibility. For experimental ACP history recovery, use AcpProvider.recover and ConnectAgentOptions.onUpdate from @open-agent-connect/web/acp. */
 export function createOpenClawConversationClient(
   options: CreateOpenClawConversationClientOptions,
 ): OpenClawConversationClient {
