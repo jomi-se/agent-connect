@@ -23,12 +23,15 @@ use agent_client_protocol::AcpAgent;
 use agent_client_protocol::{ConnectTo, Lines};
 use agent_client_protocol_conductor::{ConductorImpl, ProxiesAndAgent};
 use agent_client_protocol_polyfill::mcp_over_acp::McpOverAcpPolyfill;
+use agent_connect_gateway::config::{
+    self, DEFAULT_SESSION_IMAGE, InitCli, ServeCli, ServeOptions, UsageError,
+};
 use agent_connect_gateway::credentials::{HarnessHome, login_args};
-use agent_connect_gateway::policy::{GrantSessions, PermissionProfile, PolicyConfig, PolicyProxy};
+use agent_connect_gateway::policy::{GrantSessions, PolicyConfig, PolicyProxy};
 use agent_connect_gateway::resume::{
     self, AttachError, Host, RESUME_SUBPROTOCOL, Registry, ResumeConfig, ToSocket, close,
 };
-use agent_connect_gateway::sandbox::{SessionNetwork, box_args};
+use agent_connect_gateway::sandbox::{SessionNetwork, box_args, egress_start, egress_stop};
 use agent_connect_gateway::{Harness, SpikePaths, mock_harness};
 use axum::Router;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
@@ -43,15 +46,27 @@ const ACP_SUBPROTOCOL: &str = "acp.v1";
 const BEARER_PREFIX: &str = "bearer.";
 
 #[derive(Parser)]
-#[command(version, about = "Unreleased, unstable ACP application gateway")]
+#[command(
+    version,
+    about = "Unreleased, unstable ACP application gateway",
+    after_help = "Example:\n  agent-connect-gateway init --directory ./runtime --harness codex --allow-origin https://app.example --tools ./tools.json\n  agent-connect-gateway serve --config ./runtime/config.json\n\nExit codes: 0 success; 1 runtime failure; 2 invalid arguments or configuration."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
 }
 #[derive(Subcommand)]
 enum Command {
-    Serve(ServeCli),
+    /// Serve the unstable ACP WebSocket API with an exact-origin bearer grant.
+    Serve(ServeOptions),
+    /// Create a private runtime directory, tool snapshot and operator-issued grant.
+    Init(InitCli),
+    /// Sign in using the provider CLI in the dedicated harness home.
     Login(LoginCli),
+    /// Manage the gateway-owned egress proxy (Docker required).
+    Egress(EgressCli),
+    /// Print machine-readable release version and default session image.
+    ReleaseInfo,
 }
 #[derive(Args)]
 struct LoginCli {
@@ -59,61 +74,37 @@ struct LoginCli {
     harness: Harness,
     #[arg(long)]
     harness_home: std::path::PathBuf,
-    #[arg(long, default_value = "agent-connect-session:0.1.0")]
+    #[arg(long, env = "AGENT_CONNECT_SESSION_IMAGE", default_value = DEFAULT_SESSION_IMAGE)]
     session_image: String,
 }
-#[derive(Args, Clone)]
-struct ServeCli {
-    #[arg(long, value_enum)]
-    harness: Harness,
-    #[arg(long, default_value = "127.0.0.1:18940")]
-    listen: SocketAddr,
-    /// Exact browser origin allowed to connect.
-    #[arg(long)]
-    allow_origin: String,
-    /// Operator-issued grant bearer. OAuth grant issuance remains a release prerequisite.
-    #[arg(long)]
-    token: String,
-    /// Consented tool list (array of {name, inputSchema}); the snapshot.
-    #[arg(long)]
-    tools: std::path::PathBuf,
-    #[arg(long, default_value = "http://127.0.0.1:18931/v1")]
-    mock_url: String,
-    #[arg(long)]
-    codex_mode: Option<String>,
-    #[arg(long, value_enum, default_value = "sandboxed")]
-    permissions: PermissionProfile,
-    /// Dedicated shared home: credentials, configuration and transcripts together.
-    #[arg(long)]
-    harness_home: Option<std::path::PathBuf>,
-    #[arg(long, default_value = "agent-connect-session:0.1.0")]
-    session_image: String,
-    /// Container running the egress proxy; connected to each internal session network.
-    #[arg(long)]
-    egress_container: Option<String>,
-    /// Isolated deterministic fixture root. Host launches are never production isolation.
-    #[arg(long)]
-    mock_root: Option<std::path::PathBuf>,
-    /// Deterministic boxed fixtures only: model container, with no provider login.
-    #[arg(long)]
-    mock_container: Option<String>,
-    #[arg(long, default_value = ".agent-connect/gateway")]
-    state_dir: std::path::PathBuf,
-    #[arg(long, default_value_t = 32)]
-    max_sessions: usize,
-    /// Run each connection's adapter and polyfill in its own container.
-    #[arg(long)]
-    boxed: bool,
-    /// How long a detached resumable host keeps running.
-    #[arg(long, default_value_t = 600)]
-    resume_grace_secs: u64,
-    /// Boxed only: keep each grant's harness home in a named Docker volume,
-    /// so conversations survive their boxes.
-    #[arg(long)]
-    durable_home: bool,
-    /// Unacknowledged output a resumable host may retain before it is ended.
-    #[arg(long, default_value_t = 8 * 1024 * 1024)]
-    resume_max_bytes: usize,
+
+#[derive(Args)]
+struct EgressCli {
+    #[command(subcommand)]
+    command: EgressCommand,
+}
+#[derive(Subcommand)]
+enum EgressCommand {
+    /// Start an isolated proxy; no host port is published.
+    Start {
+        #[arg(
+            long,
+            env = "AGENT_CONNECT_EGRESS_CONTAINER",
+            default_value = "agent-connect-egress"
+        )]
+        name: String,
+        #[arg(long, env = "AGENT_CONNECT_SESSION_IMAGE", default_value = DEFAULT_SESSION_IMAGE)]
+        session_image: String,
+    },
+    /// Remove a proxy only after verifying the gateway ownership label.
+    Stop {
+        #[arg(
+            long,
+            env = "AGENT_CONNECT_EGRESS_CONTAINER",
+            default_value = "agent-connect-egress"
+        )]
+        name: String,
+    },
 }
 
 struct Gateway {
@@ -128,13 +119,54 @@ struct Gateway {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> std::process::ExitCode {
+    match run().await {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("error: {error:#}");
+            std::process::ExitCode::from(if error.downcast_ref::<UsageError>().is_some() {
+                2
+            } else {
+                1
+            })
+        }
+    }
+}
+
+async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
         .init();
     let mut cli = match Cli::parse().command {
-        Command::Serve(cli) => cli,
+        Command::Serve(cli) => cli.resolve()?,
+        Command::ReleaseInfo => {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "version": env!("CARGO_PKG_VERSION"),
+                    "sessionImage": DEFAULT_SESSION_IMAGE,
+                })
+            );
+            return Ok(());
+        }
+        Command::Init(cli) => return config::init(cli),
+        Command::Egress(cli) => {
+            match cli.command {
+                EgressCommand::Start {
+                    name,
+                    session_image,
+                } => {
+                    egress_start(&name, &session_image)?;
+                    println!("Egress proxy started: {name}");
+                }
+                EgressCommand::Stop { name } => {
+                    egress_stop(&name)?;
+                    println!("Egress proxy stopped: {name}");
+                }
+            }
+            return Ok(());
+        }
         Command::Login(cli) => {
             let home = HarnessHome::prepare(&cli.harness_home)?;
             if matches!(cli.harness, Harness::Claude) {
@@ -156,30 +188,7 @@ async fn main() -> anyhow::Result<()> {
             "workspace-write".into()
         }
     });
-    anyhow::ensure!(
-        cli.boxed || cli.mock_root.is_some(),
-        "production sessions require --boxed; host mode requires an isolated --mock-root"
-    );
-    anyhow::ensure!(
-        !cli.boxed || cli.egress_container.is_some(),
-        "--boxed requires --egress-container"
-    );
-    anyhow::ensure!(
-        cli.harness_home.is_none() || cli.boxed,
-        "--harness-home requires --boxed"
-    );
-    anyhow::ensure!(
-        cli.mock_container.is_none() || cli.mock_root.is_some(),
-        "--mock-container requires --mock-root"
-    );
-    anyhow::ensure!(
-        !cli.boxed || cli.mock_root.is_some() || cli.harness_home.is_some(),
-        "production boxes require a dedicated --harness-home"
-    );
-    anyhow::ensure!(
-        !cli.token.is_empty() && cli.max_sessions > 0,
-        "grant token and positive session capacity required"
-    );
+    let snapshot = config::load_snapshot(&cli.tools)?;
     let home = cli
         .harness_home
         .as_deref()
@@ -198,23 +207,6 @@ async fn main() -> anyhow::Result<()> {
             .clone()
             .unwrap_or_else(|| std::path::PathBuf::from(".")),
     };
-    let tools: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(&cli.tools)?)?;
-    let mut snapshot = BTreeMap::new();
-    for tool in tools {
-        let name = tool
-            .get("name")
-            .and_then(Value::as_str)
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| anyhow::anyhow!("snapshot tool name required"))?;
-        let schema = tool
-            .get("inputSchema")
-            .filter(|s| s.is_object())
-            .ok_or_else(|| anyhow::anyhow!("snapshot tool schema required"))?;
-        anyhow::ensure!(
-            snapshot.insert(name.to_string(), schema.clone()).is_none(),
-            "duplicate snapshot tool"
-        );
-    }
     let listen = cli.listen;
     let hosts = Registry::new(ResumeConfig {
         grace: Duration::from_secs(cli.resume_grace_secs),

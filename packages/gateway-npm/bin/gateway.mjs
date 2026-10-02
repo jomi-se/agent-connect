@@ -2,15 +2,19 @@
 // Unreleased ACP gateway launcher. No downloads or credential access at runtime.
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import process from "node:process";
 const require = createRequire(import.meta.url);
 const platform = `${process.platform}-${process.arch}`;
 const supported = new Set(["darwin-arm64", "linux-x64", "linux-arm64"]);
+function fail(message, code = 1) {
+  console.error(`agent-connect-gateway: ${message}`);
+  process.exit(code);
+}
 if (!supported.has(platform))
-  throw new Error(
-    `Unsupported gateway platform ${platform}; Windows is pending.`,
+  fail(
+    `Unsupported platform ${platform}. Supported: Apple Silicon, Linux x64/ARM64. Windows is not yet supported.`,
+    2,
   );
 let binary = process.env.AGENT_CONNECT_GATEWAY_BIN;
 if (!binary) {
@@ -19,24 +23,15 @@ if (!binary) {
       `@open-agent-connect/gateway-${platform}/bin/agent-connect-gateway`,
     );
   } catch {
-    throw new Error(
-      `Gateway binary for ${platform} is unavailable. This package is an unpublished dry run; install the matching platform artifact.`,
+    fail(
+      `Binary for ${platform} is unavailable. Reinstall with optional dependencies enabled, or install the matching release platform tarball.`,
     );
   }
 }
-if (!existsSync(binary)) throw new Error("Gateway executable does not exist.");
-const adapters = [
-  "@agentclientprotocol/codex-acp",
-  "@agentclientprotocol/claude-agent-acp",
-].map((name) => dirname(require.resolve(`${name}/package.json`)));
+if (!existsSync(binary)) fail("Gateway executable does not exist.");
 const child = spawn(binary, process.argv.slice(2), {
   stdio: "inherit",
-  env: {
-    ...process.env,
-    AGENT_CONNECT_ADAPTER_PATH: adapters
-      .map((path) => join(path, "..", "..", ".bin"))
-      .join(":"),
-  },
+  env: process.env,
 });
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => child.kill(signal));

@@ -1,6 +1,7 @@
 //! Agent Connect gateway launch recipes and deterministic compatibility fixtures.
 //! ACP and MCP-over-ACP APIs are unstable.
 
+pub mod config;
 pub mod credentials;
 pub mod policy;
 pub mod resume;
@@ -40,7 +41,8 @@ impl SpikePaths {
     }
 }
 
-#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+#[derive(Clone, Copy, Debug, clap::ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Harness {
     Codex,
     Claude,

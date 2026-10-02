@@ -30,16 +30,22 @@ await writeFile(
     {
       name: `@open-agent-connect/gateway-${os}-${cpu}`,
       version: manifest.version,
-      private: true,
       license: "MIT",
+      repository: manifest.repository,
+      publishConfig: { access: "public", tag: "next" },
       os: [os],
       cpu: [cpu],
-      files: ["bin"],
+      files: ["bin", "LICENSE", "README.md", "SHA256SUMS"],
       exports: { "./bin/agent-connect-gateway": "./bin/agent-connect-gateway" },
     },
     null,
     2,
   ),
+);
+await copyFile(join(repo, "LICENSE"), join(output, "LICENSE"));
+await writeFile(
+  join(output, "README.md"),
+  `# Agent Connect gateway ${os}/${cpu}\n\nPlatform executable for @open-agent-connect/gateway ${manifest.version}.\nACP/MCP-over-ACP are unstable. Install the launcher package for CLI usage.\n`,
 );
 await writeFile(
   join(output, "SHA256SUMS"),

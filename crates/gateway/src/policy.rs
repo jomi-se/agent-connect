@@ -18,7 +18,10 @@ use serde_json::{Value, json};
 
 /// How the gateway answers harness permission prompts. Prompts are never shown
 /// to the application: the application is not the approver for host authority.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
 pub enum PermissionProfile {
     /// Allow everything the harness asks for. Only safe when the harness runs
     /// inside a disposable sandbox with nothing valuable in it.
