@@ -1,0 +1,57 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #29372d;
+  background: #f6f3e9;
+}
+main {
+  max-width: 48rem;
+  margin: 2rem auto;
+  padding: 1rem;
+}
+form,
+section,
+details {
+  margin: 1rem 0;
+}
+label {
+  display: block;
+  margin: 0.75rem 0;
+}
+input:not([type="checkbox"]),
+button {
+  padding: 0.6rem;
+  font: inherit;
+}
+input:not([type="checkbox"]) {
+  display: block;
+  width: calc(100% - 1.4rem);
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+}
+article,
+#book {
+  border: 1px solid #c6cabf;
+  border-radius: 0.4rem;
+  padding: 1rem;
+  margin: 0.75rem 0;
+}
+article[data-role="user"] {
+  background: #e9ede0;
+}
+mark {
+  background: #ffdf82;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#error {
+  color: #982d25;
+}
+[hidden] {
+  display: none !important;
+}

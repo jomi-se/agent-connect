@@ -1,0 +1,48 @@
+[
+  {
+    "name": "read_passage",
+    "description": "Read the opening passage of a chapter of the open book.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chapter": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Chapter number, starting at 1."
+        }
+      },
+      "required": ["chapter"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "highlight",
+    "description": "Highlight exact passage text in the reader.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Exact passage text to highlight in the reader."
+        }
+      },
+      "required": ["text"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "ask_reader",
+    "description": "Ask the reader a question and wait for their answer.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "Question shown to the reader; the call waits for their answer."
+        }
+      },
+      "required": ["question"],
+      "additionalProperties": false
+    }
+  }
+]

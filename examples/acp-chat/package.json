@@ -1,0 +1,20 @@
+{
+  "name": "agent-connect-acp-chat-sample",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.15 <25"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5173 --strictPort"
+  },
+  "dependencies": {
+    "@open-agent-connect/web": "0.1.0-alpha.1"
+  },
+  "devDependencies": {
+    "vite": "7.3.6"
+  }
+}

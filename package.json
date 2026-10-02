@@ -38,14 +38,15 @@
     "test:integration:openclaw": "npm run test:openclaw:fixture && npm run test:openclaw:plugin-host && npm run test:integration:ai-sdk-openclaw",
     "pretypecheck": "npm run build --workspace @open-agent-connect/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "verify": "npm run format:check && npm run typecheck && npm test && npm run build && npm run test:integration:openclaw && npm run test:integration:acp && npm run test:integration:acp:boxed",
+    "verify": "npm run format:check && npm run typecheck && npm test && npm run build && npm run test:integration:openclaw && npm run test:integration:acp && npm run test:integration:acp:boxed && npm run test:integration:acp:clean-room",
     "verify:full": "npm run verify && npm run test:package:web && npm run test:release && npm run test:webmcp && npm run test:e2e --workspace @agent-connect/firebase-canvas",
     "test:integration:acp": "node scripts/acp-gateway-scenarios.mjs",
     "test:integration:acp:boxed": "ACP_BOXED=1 ACP_SCENARIOS=tools,use-chat,shell,cancel,resume,slow-cut,ask-cut,answer-halfopen,expire,discard node scripts/acp-gateway-scenarios.mjs",
     "release:acp:check": "node scripts/acp-release.mjs check",
     "release:acp:prepare-local": "node scripts/build-acp-release-local.mjs",
     "release:acp:dry-run": "node scripts/acp-release.mjs publish-dry-run",
-    "build:acp:session": "./deploy/acp-gateway/session/build-local.sh"
+    "build:acp:session": "./deploy/acp-gateway/session/build-local.sh",
+    "test:integration:acp:clean-room": "node scripts/acp-clean-room.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
