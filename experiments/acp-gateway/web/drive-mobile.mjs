@@ -29,7 +29,8 @@ const EXPECTED_SLOW =
     { length: 30 },
     (_, i) => `w${String(i + 1).padStart(2, "0")} `,
   ).join("") + "DONE-SLOW";
-mkdirSync("../.run/browser", { recursive: true });
+const reportDir = process.env.ACP_REPORT_DIR ?? "../.run/browser";
+mkdirSync(reportDir, { recursive: true });
 
 const browser = await chromium.launch();
 const context = await browser.newContext({
@@ -196,7 +197,7 @@ try {
     report.firstPage = await page.evaluate(() => window.spike.transport());
     report.status = await status();
     const foreign = await browser.newPage();
-    await foreign.goto(PAGE.replace("127.0.0.1:18941", "localhost:18941"));
+    await foreign.goto(PAGE.replace("127.0.0.1", "localhost"));
     report.wrongOrigin = await foreign.evaluate(
       ([url, resume]) =>
         new Promise((done) => {
@@ -238,7 +239,7 @@ try {
     .catch(() => []);
   report.console = consoleLines.slice(-20);
   writeFileSync(
-    `../.run/browser/mobile-${label}.json`,
+    `${reportDir}/mobile-${label}.json`,
     JSON.stringify(report, null, 2),
   );
   const { events, console: _c, ...brief } = report;

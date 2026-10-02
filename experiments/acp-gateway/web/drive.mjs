@@ -12,7 +12,8 @@ const scenario = process.argv[2] ?? "tools";
 const label = process.argv[3] ?? scenario;
 const PAGE = process.env.PAGE_ORIGIN ?? "http://127.0.0.1:18941";
 const askWait = Number(process.env.ASK_WAIT_MS ?? 3000);
-mkdirSync("../.run/browser", { recursive: true });
+const reportDir = process.env.ACP_REPORT_DIR ?? "../.run/browser";
+mkdirSync(reportDir, { recursive: true });
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 412, height: 915 } });
@@ -39,7 +40,7 @@ try {
     await page.click("#run-tools");
     report.status = await waitStatus(["error", "done"], 20_000);
   } else if (scenario === "bad-token") {
-    await page.goto(`${PAGE}/?token=wrong`);
+    await page.goto(`${PAGE}${PAGE.includes("?") ? "&" : "?"}token=wrong`);
     await page.click("#run-tools");
     report.status = await waitStatus(["error", "done"], 20_000);
   } else if (scenario === "tools") {
@@ -91,6 +92,9 @@ try {
       ms.map((m) => m.textContent),
     );
   }
+  report.marked = await page.$$eval("mark", (ms) =>
+    ms.map((m) => m.textContent),
+  );
   report.answer = await page.textContent("#answer");
 } catch (error) {
   report.error = String(error?.message ?? error).split("\n")[0];
@@ -99,8 +103,8 @@ report.events = await page
   .evaluate(() => window.spike?.events ?? [])
   .catch(() => []);
 report.console = consoleLines.slice(0, 20);
-await page.screenshot({ path: `../.run/browser/${label}.png`, fullPage: true });
-writeFileSync(`../.run/browser/${label}.json`, JSON.stringify(report, null, 2));
+await page.screenshot({ path: `${reportDir}/${label}.png`, fullPage: true });
+writeFileSync(`${reportDir}/${label}.json`, JSON.stringify(report, null, 2));
 await browser.close();
 console.log(
   JSON.stringify(

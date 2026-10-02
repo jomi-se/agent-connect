@@ -89,6 +89,7 @@ async fn main() -> anyhow::Result<()> {
             snapshot,
             permissions: cli.permissions,
             grant_sessions: Default::default(),
+            actions_dir: None,
         }));
         components = components.proxy(SpyProxy);
     }

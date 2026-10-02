@@ -11,3 +11,5 @@ Architecture Story - Desktop.html
 contract/open-responses/openapi.json
 experiments/acp-gateway/target
 experiments/acp-gateway/.run
+
+/target

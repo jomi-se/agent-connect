@@ -1,0 +1,282 @@
+// Deterministic compatibility gate: real gateway, pinned adapters and Chromium.
+// Every process and home belongs to this run; no personal harness state is used.
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  copyFile,
+  readFile,
+} from "node:fs/promises";
+import { tmpdir, homedir } from "node:os";
+import { resolve, join } from "node:path";
+import { createServer } from "node:http";
+import { createServer as tcpServer } from "node:net";
+
+const repo = resolve(import.meta.dirname, "..");
+const spike = join(repo, "experiments/acp-gateway");
+const run = await mkdtemp(join(tmpdir(), "agent-connect-acp-"));
+const children = new Set();
+const cleanEnv = {
+  PATH: process.env.PATH,
+  HOME: run,
+  LANG: "C.UTF-8",
+  PLAYWRIGHT_BROWSERS_PATH:
+    process.env.PLAYWRIGHT_BROWSERS_PATH ??
+    join(homedir(), ".cache/ms-playwright"),
+  CARGO_HOME: process.env.CARGO_HOME,
+  RUSTUP_HOME: process.env.RUSTUP_HOME,
+};
+// Build tools need their existing cache, never harness homes.
+async function command(bin, args, options = {}) {
+  const child = spawn(bin, args, {
+    cwd: repo,
+    ...options,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let output = "";
+  child.stdout.on("data", (b) => {
+    output += b;
+  });
+  child.stderr.on("data", (b) => {
+    output += b;
+  });
+  return await new Promise((ok, fail) => {
+    child.on("error", fail);
+    child.on("exit", (code) =>
+      code === 0
+        ? ok(output)
+        : fail(new Error(`${bin} exited ${code}\n${output.slice(-6000)}`)),
+    );
+  });
+}
+function service(bin, args, env) {
+  const child = spawn(bin, args, {
+    cwd: run,
+    env,
+    detached: true,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  children.add(child);
+  let tail = "";
+  child.stderr.on("data", (b) => {
+    tail = (tail + b).slice(-6000);
+  });
+  child.on("error", (e) => {
+    tail += String(e);
+  });
+  child.tail = () => tail;
+  return child;
+}
+async function stop(child) {
+  if (!child || child.exitCode !== null) return;
+  try {
+    process.kill(-child.pid, "SIGTERM");
+  } catch {}
+  await new Promise((ok) => {
+    child.once("exit", ok);
+    setTimeout(() => {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {}
+      ok();
+    }, 3000).unref();
+  });
+  children.delete(child);
+}
+async function port() {
+  const server = tcpServer();
+  await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
+  const value = server.address().port;
+  await new Promise((ok) => server.close(ok));
+  return value;
+}
+async function ready(url, child) {
+  for (let i = 0; i < 100; i++) {
+    if (child?.exitCode !== null && child?.exitCode !== undefined)
+      throw new Error(child.tail());
+    try {
+      await fetch(url);
+      return;
+    } catch {}
+    await new Promise((ok) => setTimeout(ok, 100));
+  }
+  throw new Error(`Service did not start: ${url}\n${child?.tail() ?? ""}`);
+}
+const pageServer = createServer(async (req, res) => {
+  try {
+    const path = new URL(req.url, "http://localhost").pathname;
+    if (path.includes("..")) throw new Error("bad path");
+    const data = await readFile(
+      join(run, "web", path === "/" ? "index.html" : path),
+    );
+    res.setHeader(
+      "Content-Type",
+      path.endsWith(".js") ? "text/javascript" : "text/html",
+    );
+    res.end(data);
+  } catch {
+    res.writeHead(404).end();
+  }
+});
+try {
+  await command(process.env.CARGO ?? "cargo", ["build", "--locked", "--bins"]);
+  for (const name of ["adapters", "web"]) {
+    await mkdir(join(run, name));
+    for (const file of ["package.json", "package-lock.json"])
+      await copyFile(join(spike, name, file), join(run, name, file));
+    await command(
+      "npm",
+      [
+        "ci",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--cache",
+        join(tmpdir(), "agent-connect-npm-cache"),
+      ],
+      { cwd: join(run, name) },
+    );
+  }
+  for (const file of [
+    "app.js",
+    "resumable-stream.js",
+    "tools.json",
+    "index.html",
+  ])
+    await copyFile(join(spike, "web", file), join(run, "web", file));
+  await command("npm", ["run", "build"], { cwd: join(run, "web") });
+  await mkdir(join(run, ".run/codex-home"), { recursive: true });
+  await mkdir(join(run, ".run/claude-config"), { recursive: true });
+  await mkdir(join(run, ".run/browser"), { recursive: true });
+  const mockPort = await port();
+  const mockUrl = `http://127.0.0.1:${mockPort}`;
+  await writeFile(
+    join(run, ".run/codex-home/config.toml"),
+    `model = "mock-model"\nmodel_provider = "mock"\napproval_policy = "never"\n[model_providers.mock]\nname = "Deterministic compatibility fixture"\nbase_url = "${mockUrl}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`,
+  );
+  const model = service("node", [join(spike, "mock-model/server.mjs")], {
+    ...cleanEnv,
+    MOCK_PORT: String(mockPort),
+    MOCK_LOG: join(run, "model.jsonl"),
+  });
+  await ready(mockUrl, model);
+  await new Promise((ok) => pageServer.listen(0, "127.0.0.1", ok));
+  const origin = `http://127.0.0.1:${pageServer.address().port}`;
+  for (const harness of ["codex", "claude"]) {
+    for (const [mobile, scenario] of [
+      [false, "tools"],
+      [false, "ask"],
+      [false, "resume"],
+      [false, "load-foreign"],
+      [false, "bad-token"],
+      [false, "bad-origin"],
+      ...[
+        "slow-cut",
+        "ask-cut",
+        "lateask-cut",
+        "answer-halfopen",
+        "halfopen-stream",
+        "expire",
+        "overflow",
+        "takeover",
+        "discard",
+      ].map((s) => [true, s]),
+    ]) {
+      if (
+        process.env.ACP_SCENARIOS &&
+        !process.env.ACP_SCENARIOS.split(",").includes(scenario)
+      )
+        continue;
+      const gatewayPort = await port();
+      const gateway = service(
+        join(repo, "target/debug/agent-connect-gateway"),
+        [
+          "--token",
+          "spike-dev-token",
+          "--harness",
+          harness,
+          "--listen",
+          `127.0.0.1:${gatewayPort}`,
+          "--allow-origin",
+          origin,
+          "--tools",
+          join(spike, "web/tools.json"),
+          "--mock-url",
+          `${mockUrl}/v1`,
+          "--resume-grace-secs",
+          scenario === "expire" ? "5" : "60",
+          "--resume-max-bytes",
+          scenario === "overflow" ? "3000" : "8388608",
+        ],
+        { ...cleanEnv, AGENT_CONNECT_TEST_ROOT: run },
+      );
+      await ready(`http://127.0.0.1:${gatewayPort}`, gateway);
+      const relayPort = await port(),
+        controlPort = await port();
+      const relay = mobile
+        ? service("node", [join(spike, "web/relay.mjs")], {
+            ...cleanEnv,
+            RELAY_LISTEN: String(relayPort),
+            RELAY_TARGET: String(gatewayPort),
+            RELAY_CONTROL: String(controlPort),
+          })
+        : null;
+      if (relay) await ready(`http://127.0.0.1:${controlPort}/stats`, relay);
+      const label = `${harness}-${scenario}`;
+      const output = await command(
+        "node",
+        [
+          join(spike, "web", mobile ? "drive-mobile.mjs" : "drive.mjs"),
+          scenario,
+          label,
+        ],
+        {
+          cwd: join(run, ".run"),
+          env: {
+            ...cleanEnv,
+            ACP_REPORT_DIR: join(run, ".run/browser"),
+            PAGE_ORIGIN: `${origin}/?gateway=ws://127.0.0.1:${mobile ? relayPort : gatewayPort}/acp${mobile ? "" : "&resume=0"}`,
+            RELAY_CONTROL: `http://127.0.0.1:${controlPort}`,
+            AWAY_MS: "10000",
+            ASK_WAIT_MS: "50",
+          },
+        },
+      );
+      const report = JSON.parse(output);
+      assert.equal(
+        report.error,
+        undefined,
+        `${label}: ${report.error}\n${gateway.tail()}`,
+      );
+      if (["bad-token", "bad-origin", "load-foreign"].includes(scenario))
+        assert.match(report.status, /^error/);
+      else if (["expire", "overflow"].includes(scenario))
+        assert.equal(report.status, "recovered:interrupted");
+      else if (scenario === "takeover") {
+        assert.equal(report.wrongResume.code, 4404);
+        assert.equal(report.rightToken.open, true);
+        assert.equal(report.firstPage.ended, "superseded");
+      } else
+        assert.match(
+          report.status,
+          /^done:/,
+          `${label}: ${JSON.stringify(report)}`,
+        );
+      if (["tools", "discard"].includes(scenario))
+        assert.ok(report.marked.length > 0);
+      if (["slow-cut", "halfopen-stream"].includes(scenario))
+        assert.equal(report.answerExact, true);
+      if (["ask-cut", "lateask-cut", "answer-halfopen"].includes(scenario))
+        assert.equal(report.toolCounts.ask_reader, 1);
+      console.log(`PASS ACP ${label}`);
+      await stop(relay);
+      await stop(gateway);
+    }
+  }
+} finally {
+  await Promise.all([...children].map(stop));
+  await new Promise((ok) => pageServer.close(ok));
+  console.log(`ACP diagnostics: ${run}`);
+}

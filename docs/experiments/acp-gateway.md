@@ -400,3 +400,14 @@ their grace period.
 ## Reproduce
 
 See [`experiments/acp-gateway/README.md`](../../experiments/acp-gateway/README.md).
+
+## Product implementation (2026-10-02, unreleased)
+
+Phase 1 moves the gateway, policy and resumable host into the root Cargo
+workspace at `crates/gateway`, with binary `agent-connect-gateway`. The spike
+retains its fixtures and compatibility entry points. The verification gate
+uses pinned real adapters, deterministic inference and Chromium with isolated
+temporary homes. Product policy also checks chain session ownership, rejects
+concurrent prompts, removes unrecognized authority fields, and journals stable
+action IDs before application delivery. Browser authorization failures use
+4401/4403 close codes. ADR 0016 remains proposed; the OpenClaw plugin is intact.
