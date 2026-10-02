@@ -413,3 +413,19 @@ boxes receive a separate internal network per session, connected only to the
 operator-selected egress proxy. Deterministic fixtures can explicitly attach a
 mock model. Session capacity, WebSocket frame bounds and graceful shutdown are
 also enforced. Live credential/refresh/terms checks remain open.
+
+Phase 3 configures cargo-dist for the three initial targets, without release CI.
+Both Linux musl gateway archives and static session runners build locally. The
+npm comparison favors per-platform optional packages without runtime downloads;
+the wrapper pins both adapters and their native CLIs. Local pack/install smokes
+pass. The session OCI archive contains Linux ARM64 and AMD64 images, built without
+host binfmt changes. Both installed CLIs start in an isolated, unauthenticated box.
+macOS installation remains untested.
+
+The deterministic boxed gate passes eight scenarios per adapter: application
+and native tools, session/load, stream reattach, held human input, half-open tool
+answers, expired transport recovery and discarded pages. This exposed a Codex
+mode mismatch: boxed sessions now default to full access inside the container,
+while explicit host fixtures use workspace-write. Proxy reset handling and
+reserved-address filtering have regression tests, including mapped IPv6. These
+checks spend no subscription allowance and prove no live credential behavior.

@@ -18,6 +18,11 @@ const repo = resolve(import.meta.dirname, "..");
 const spike = join(repo, "experiments/acp-gateway");
 const run = await mkdtemp(join(tmpdir(), "agent-connect-acp-"));
 const children = new Set();
+const dockerContainers = [];
+const dockerNetworks = [];
+const boxed = process.env.ACP_BOXED === "1";
+const sessionImage = "agent-connect-session:0.1.0";
+let mockContainer, egressContainer;
 const cleanEnv = {
   PATH: process.env.PATH,
   HOME: run,
@@ -168,9 +173,68 @@ try {
   await ready(mockUrl, model);
   await new Promise((ok) => pageServer.listen(0, "127.0.0.1", ok));
   const origin = `http://127.0.0.1:${pageServer.address().port}`;
+  if (boxed) {
+    await command("node", [
+      "--test",
+      join(repo, "deploy/acp-gateway/test/egress-proxy.test.mjs"),
+    ]);
+    await command("docker", ["image", "inspect", sessionImage]);
+    const suffix = run.split("-").at(-1).toLowerCase();
+    mockContainer = `acp-test-model-${suffix}`;
+    egressContainer = `acp-test-egress-${suffix}`;
+    await mkdir(join(run, "box-logs"));
+    const modelNetwork = `${mockContainer}-base`;
+    dockerNetworks.push(modelNetwork);
+    await command("docker", ["network", "create", "--internal", modelNetwork]);
+    const uid = `${process.getuid()}:${process.getgid()}`;
+    for (const [name, args] of [
+      [
+        mockContainer,
+        [
+          "--network",
+          modelNetwork,
+          "--user",
+          uid,
+          "-v",
+          `${join(spike, "mock-model")}:/app:ro`,
+          "-v",
+          `${join(run, "box-logs")}:/log`,
+          "-e",
+          "MOCK_HOST=0.0.0.0",
+          "-e",
+          "MOCK_PORT=18931",
+          "-e",
+          "MOCK_LOG=/log/model.jsonl",
+          "node:24-bookworm",
+          "node",
+          "/app/server.mjs",
+        ],
+      ],
+      [
+        egressContainer,
+        [
+          "--network",
+          "bridge",
+          "--user",
+          "node",
+          "-v",
+          `${join(repo, "deploy/acp-gateway/egress-proxy.mjs")}:/app/proxy.mjs:ro`,
+          "node:24-bookworm",
+          "node",
+          "/app/proxy.mjs",
+        ],
+      ],
+    ]) {
+      dockerContainers.push(name);
+      await command("docker", ["run", "-d", "--name", name, ...args]);
+    }
+  }
   for (const harness of ["codex", "claude"]) {
+    const harnessHome = join(run, `boxed-home-${harness}`);
+    if (boxed) await mkdir(harnessHome, { mode: 0o700 });
     for (const [mobile, scenario] of [
       [false, "tools"],
+      [false, "shell"],
       [false, "ask"],
       [false, "resume"],
       [false, "load-foreign"],
@@ -188,6 +252,7 @@ try {
         "discard",
       ].map((s) => [true, s]),
     ]) {
+      if (!boxed && scenario === "shell") continue;
       if (
         process.env.ACP_SCENARIOS &&
         !process.env.ACP_SCENARIOS.split(",").includes(scenario)
@@ -198,10 +263,25 @@ try {
         join(repo, "target/debug/agent-connect-gateway"),
         [
           "serve",
+          ...(boxed
+            ? [
+                "--boxed",
+                "--harness-home",
+                harnessHome,
+                "--session-image",
+                sessionImage,
+                "--egress-container",
+                egressContainer,
+                "--mock-container",
+                mockContainer,
+              ]
+            : []),
           "--mock-root",
           run,
           "--state-dir",
           join(run, ".run/state"),
+          "--codex-mode",
+          boxed ? "agent-full-access" : "workspace-write",
           "--token",
           "spike-dev-token",
           "--harness",
@@ -271,8 +351,12 @@ try {
         assert.match(
           report.status,
           /^done:/,
-          `${label}: ${JSON.stringify(report)}`,
+          `${label}: ${JSON.stringify(report)}\n${gateway.tail()}`,
         );
+      if (scenario === "shell") {
+        assert.match(report.answer, /native-42/);
+        if (boxed) assert.match(report.answer, /work/);
+      }
       if (["tools", "discard"].includes(scenario))
         assert.ok(report.marked.length > 0);
       if (["slow-cut", "halfopen-stream"].includes(scenario))
@@ -284,8 +368,18 @@ try {
       await stop(gateway);
     }
   }
+} catch (error) {
+  for (const name of dockerContainers)
+    console.error(
+      (await command("docker", ["logs", name]).catch(String)).slice(-3000),
+    );
+  throw error;
 } finally {
   await Promise.all([...children].map(stop));
+  for (const name of dockerContainers)
+    await command("docker", ["rm", "-f", name]).catch(() => {});
+  for (const name of dockerNetworks)
+    await command("docker", ["network", "rm", name]).catch(() => {});
   await new Promise((ok) => pageServer.close(ok));
   console.log(`ACP diagnostics: ${run}`);
 }

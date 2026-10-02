@@ -165,7 +165,7 @@ adds a second application protocol for the gateway to own.
 ### Build matrix
 
 Rust produces one binary per OS and processor. CI builds every target from
-one tag, and four targets cover the expected owners:
+one approved tag, and three initial targets cover the expected owners:
 
 | Target                       | Covers                                                      |
 | ---------------------------- | ----------------------------------------------------------- |
@@ -207,22 +207,23 @@ Deprecation is outward-facing, so it is a separate, explicitly approved step.
 
 ## Phases
 
-1. **Product crate.** Move the gateway from `experiments/acp-gateway/` into a
-   root Cargo workspace (`crates/gateway`). Its scenario tests (the real
-   adapters, a mock model, and the browser drivers) run in `npm run verify`.
-2. **Packaging dry run.** Run `dist init` and a prerelease tag on a fork or
-   prerelease channel. Install it on each target, including a macOS ARM CI
-   runner. Choose the npm wrapper shape.
-3. **SDK core.** Add `connectAgent`, the typed resumable transport,
-   `AcpProvider` and recovery. Port the spike page onto the SDK. Test against
-   the real gateway and adapters, with a deterministic model.
-4. **AI SDK transport.** Add `createAcpChatTransport`, a `useChat` example,
-   then migrate Firebase Canvas and Bookhand.
-5. **Release.** Publish the gateway, the SDK and the session image. Then, with
-   approval, deprecate the plugin and the OpenClaw SDK exports.
+1. **Product crate.** Promote the gateway into the root Cargo workspace at
+   `crates/gateway`. Gate pinned real adapters with deterministic inference.
+2. **Credentials.** Implement the dedicated shared harness home, UID/mode
+   checks and owner-run login helper. Live credential checks remain separate.
+3. **Packaging dry run.** Configure cargo-dist and compare local npm wrapper
+   shapes. Build Linux artifacts and a multi-architecture session image locally.
+   macOS installation and release approval remain gates; create no release tag.
+4. **SDK core.** Add `connectAgent`, typed resume, `AcpProvider` and session/load
+   recovery. Port the spike page and test it against the real gateway/adapters.
+5. **AI SDK transport.** Add `createAcpChatTransport`, a `useChat` example and
+   tests. Downstream application migrations are separate work.
+6. **Approved release.** Publish only after ADR 0016 is accepted and its
+   prerequisites pass. Plugin retirement and removal of OpenClaw SDK exports
+   require separate approval; this implementation keeps both intact.
 
-Phases 1–3 can run alongside the credential-boundary spike. Phase 5 waits for
-ADR 0016's acceptance and all of its prerequisites.
+The current implementation covers phases 1–5 on an unpublished feature branch.
+No local dry run authorizes a tag, push, registry publication or live login.
 
 ## Open questions
 

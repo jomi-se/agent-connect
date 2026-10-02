@@ -1,0 +1,32 @@
+{
+  "name": "@open-agent-connect/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Unreleased unstable ACP gateway launcher",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "agent-connect-gateway": "bin/gateway.mjs"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24.15 <25"
+  },
+  "dependencies": {
+    "@agentclientprotocol/codex-acp": "2.0.1",
+    "@agentclientprotocol/claude-agent-acp": "0.84.0",
+    "@openai/codex": "0.159.2",
+    "@anthropic-ai/claude-code": "2.1.286"
+  },
+  "optionalDependencies": {
+    "@open-agent-connect/gateway-darwin-arm64": "0.1.0",
+    "@open-agent-connect/gateway-linux-x64": "0.1.0",
+    "@open-agent-connect/gateway-linux-arm64": "0.1.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

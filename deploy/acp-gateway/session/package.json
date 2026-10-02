@@ -1,0 +1,11 @@
+{
+  "name": "agent-connect-session-image",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@agentclientprotocol/codex-acp": "2.0.1",
+    "@agentclientprotocol/claude-agent-acp": "0.84.0",
+    "@openai/codex": "0.159.2",
+    "@anthropic-ai/claude-code": "2.1.286"
+  }
+}

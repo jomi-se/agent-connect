@@ -26,7 +26,7 @@ this directory retains deterministic fixtures and compatibility entry points.
   (`resumable-stream.js` is its mobile transport), Playwright drivers
   (`drive.mjs`, and `drive-mobile.mjs` for mobile lifecycle), and a
   fault-injecting relay (`relay.mjs`).
-- `sandbox/`: session image, egress proxy, setup (`up.sh`) and network probes
+- `sandbox/`: archived image alias, setup (`up.sh`) and network probes
   (`probe.sh`).
 - `mock-model/server.mjs`: scripted Responses and Messages model server that
   logs every request.
@@ -48,7 +48,9 @@ cargo run --bin tool_client -- --harness claude --snapshot .run/snapshot.json --
 
 # Browser
 python3 -m http.server 18941 --bind 127.0.0.1 -d web &
-cargo run --bin gateway -- --harness claude --listen 127.0.0.1:18943 &
+cargo run --bin gateway -- serve --harness claude --listen 127.0.0.1:18943 \
+  --mock-root "$PWD" --state-dir .run/state --tools web/tools.json \
+  --allow-origin http://127.0.0.1:18941 --token spike-dev-token &
 (cd web && PAGE_ORIGIN="http://127.0.0.1:18941/?gateway=ws://127.0.0.1:18943/acp" node drive.mjs tools)
 
 # Mobile lifecycle: the page goes through the relay; add ?resume=0 for plain ACP
@@ -79,3 +81,7 @@ requires_openai_auth = false
 `--live` uses the owner's real harness login in place, on the host, with a
 clean process environment. It spends subscription allowance, and it is not a
 security boundary.
+
+The canonical session image and egress proxy now live in `deploy/acp-gateway`.
+The local multi-architecture build is `deploy/acp-gateway/session/build-local.sh`
+from the repository root. It creates no registry release.

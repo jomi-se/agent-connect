@@ -20,6 +20,7 @@ for (const [net, prefix] of [
   ["192.0.0.0", 24],
   ["192.0.2.0", 24],
   ["192.168.0.0", 16],
+  ["192.88.99.0", 24],
   ["198.18.0.0", 15],
   ["198.51.100.0", 24],
   ["203.0.113.0", 24],
@@ -35,17 +36,26 @@ for (const [net, prefix] of [
   ["ff00::", 8],
   ["64:ff9b::", 96],
   ["2001:db8::", 32],
+  ["2001::", 23],
+  ["2002::", 16],
+  ["3fff::", 20],
 ]) {
   denied.addSubnet(net, prefix, "ipv6");
 }
 
+const publicIpv6 = new BlockList();
+publicIpv6.addSubnet("2000::", 3, "ipv6");
 function isDenied(address) {
   const family = isIP(address) === 6 ? "ipv6" : "ipv4";
-  const mapped =
-    family === "ipv6" && address.toLowerCase().startsWith("::ffff:")
-      ? address.slice(7)
-      : null;
-  return mapped ? denied.check(mapped, "ipv4") : denied.check(address, family);
+  // URL parsing canonicalizes mapped addresses to hex (e.g. ::ffff:7f00:1).
+  // Refuse mapped IPv6 altogether rather than checking that hex as IPv4.
+  if (
+    family === "ipv6" &&
+    (address.toLowerCase().startsWith("::ffff:") ||
+      !publicIpv6.check(address, "ipv6"))
+  )
+    return true;
+  return denied.check(address, family);
 }
 
 async function resolveAllowed(host) {
@@ -90,15 +100,26 @@ const server = createServer(async (req, res) => {
         up.pipe(res);
       },
     );
-    upstream.on("error", () => res.writeHead(502).end("upstream error\n"));
+    upstream.on("error", () => {
+      if (!res.headersSent && !res.destroyed)
+        res.writeHead(502).end("upstream error\n");
+      else res.destroy();
+    });
+    req.on("aborted", () => upstream.destroy());
+    res.on("close", () => upstream.destroy());
     req.pipe(upstream);
   } catch (error) {
     log("deny", req.url, String(error));
-    res.writeHead(400).end("bad request\n");
+    if (!res.headersSent && !res.destroyed)
+      res.writeHead(400).end("bad request\n");
   }
 });
 
+server.on("clientError", (_error, socket) => socket.destroy());
 server.on("connect", async (req, clientSocket, head) => {
+  let upstream;
+  clientSocket.on("error", () => upstream?.destroy());
+  clientSocket.on("close", () => upstream?.destroy());
   const [rawHost, rawPort] = req.url.startsWith("[")
     ? [req.url.slice(1, req.url.indexOf("]")), req.url.split("]:")[1]]
     : req.url.split(":");
@@ -106,22 +127,30 @@ server.on("connect", async (req, clientSocket, head) => {
     const address = await resolveAllowed(rawHost);
     if (!address) {
       log("deny", req.url, "private or reserved destination");
-      clientSocket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
+      if (!clientSocket.destroyed)
+        clientSocket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
       return;
     }
     log("allow", req.url, address);
-    const upstream = connect(Number(rawPort || 443), address, () => {
+    if (clientSocket.destroyed) return;
+    upstream = connect(Number(rawPort || 443), address, () => {
+      if (clientSocket.destroyed) {
+        upstream.destroy();
+        return;
+      }
       clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
       upstream.write(head);
       upstream.pipe(clientSocket);
       clientSocket.pipe(upstream);
     });
-    upstream.on("error", () =>
-      clientSocket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n"),
-    );
+    upstream.on("error", () => {
+      if (!clientSocket.destroyed)
+        clientSocket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
+    });
   } catch (error) {
     log("deny", req.url, String(error));
-    clientSocket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
+    if (!clientSocket.destroyed)
+      clientSocket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
   }
 });
 
