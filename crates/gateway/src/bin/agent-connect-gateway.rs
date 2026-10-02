@@ -16,7 +16,7 @@
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use agent_client_protocol::AcpAgent;
@@ -33,6 +33,7 @@ use agent_connect_gateway::resume::{
 };
 use agent_connect_gateway::sandbox::{SessionNetwork, box_args, egress_start, egress_stop};
 use agent_connect_gateway::{Harness, SpikePaths, mock_harness};
+use anyhow::Context;
 use axum::Router;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, State};
@@ -111,6 +112,8 @@ struct Gateway {
     cli: ServeCli,
     home: Option<HarnessHome>,
     capacity: Arc<tokio::sync::Semaphore>,
+    sessions: Mutex<tokio::task::JoinSet<()>>,
+    shutdown: tokio::sync::watch::Sender<bool>,
     /// The spike has one development grant, so one session registry.
     grant_sessions: GrantSessions,
     snapshot: BTreeMap<String, Value>,
@@ -216,6 +219,8 @@ async fn run() -> anyhow::Result<()> {
         hosts,
         home,
         capacity: Arc::new(tokio::sync::Semaphore::new(cli.max_sessions)),
+        sessions: Mutex::new(tokio::task::JoinSet::new()),
+        shutdown: tokio::sync::watch::channel(false).0,
         cli,
         snapshot,
         paths,
@@ -243,7 +248,20 @@ async fn run() -> anyhow::Result<()> {
         {
             let _ = tokio::signal::ctrl_c().await;
         }
+        {
+            let _sessions = shutdown_gateway.sessions.lock().unwrap();
+            shutdown_gateway.capacity.close();
+            shutdown_gateway.shutdown.send_replace(true);
+        }
         shutdown_gateway.hosts.shutdown().await;
+        // Registry completion tracks ACP output. Session tasks also await owned
+        // Docker cleanup, so shutdown must collect both before exiting.
+        let mut sessions = std::mem::take(&mut *shutdown_gateway.sessions.lock().unwrap());
+        while let Some(result) = sessions.join_next().await {
+            if let Err(error) = result {
+                tracing::error!(%error, "session task failed during shutdown");
+            }
+        }
     })
     .await?;
     Ok(())
@@ -428,19 +446,56 @@ async fn close_with(socket: &mut WebSocket, code: u16, reason: &'static str) {
         .await;
 }
 
-/// Creates a host and runs its chain in the background.
-fn start_host(
+/// Track allocation before its first await: graceful shutdown must also collect
+/// sessions whose Docker resources exist before their ACP host is registered.
+async fn start_host(
     gateway: &Arc<Gateway>,
     grant: &str,
     resumable: bool,
     peer: SocketAddr,
 ) -> anyhow::Result<Arc<Host>> {
-    let label = uuid::Uuid::new_v4().to_string();
     let permit = gateway
         .capacity
         .clone()
         .try_acquire_owned()
         .map_err(|_| anyhow::anyhow!("session capacity reached"))?;
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+    {
+        let mut sessions = gateway.sessions.lock().unwrap();
+        if gateway.capacity.is_closed() {
+            anyhow::bail!("gateway is shutting down");
+        }
+        while let Some(result) = sessions.try_join_next() {
+            if let Err(error) = result {
+                tracing::error!(%error, "session task failed");
+            }
+        }
+        let gateway = gateway.clone();
+        let grant = grant.to_string();
+        sessions.spawn(async move {
+            let mut ready = Some(ready_tx);
+            if let Err(error) = run_host(gateway, grant, resumable, peer, permit, &mut ready).await
+            {
+                if let Some(ready) = ready {
+                    let _ = ready.send(Err(error));
+                } else {
+                    tracing::error!(%error, "session task failed");
+                }
+            }
+        });
+    }
+    ready_rx.await.context("session startup task ended")?
+}
+
+async fn run_host(
+    gateway: Arc<Gateway>,
+    grant: String,
+    resumable: bool,
+    peer: SocketAddr,
+    permit: tokio::sync::OwnedSemaphorePermit,
+    ready: &mut Option<tokio::sync::oneshot::Sender<anyhow::Result<Arc<Host>>>>,
+) -> anyhow::Result<()> {
+    let label = uuid::Uuid::new_v4().to_string();
     let session_dir = gateway.cli.state_dir.join("sessions").join(&label);
     std::fs::create_dir_all(&session_dir)?;
     eprintln!(
@@ -448,36 +503,60 @@ fn start_host(
         if resumable { "resumable" } else { "plain" },
         gateway.hosts.live_hosts() + 1
     );
-    let (host, io) = gateway.hosts.create(grant, resumable, label.clone());
-
     let boxed = gateway.cli.boxed;
-    let network = if boxed {
-        Some(SessionNetwork::create(
-            &label,
-            gateway.cli.egress_container.as_deref().unwrap(),
-            gateway.cli.mock_container.as_deref(),
-        )?)
+    let (mut network, agent, permit) = if boxed {
+        let session = label.clone();
+        let egress = gateway.cli.egress_container.clone().unwrap();
+        let mock = gateway.cli.mock_container.clone();
+        let mode = gateway.cli.codex_mode.clone().unwrap();
+        let image = gateway.cli.session_image.clone();
+        let harness = gateway.cli.harness;
+        let home = gateway.home.clone();
+        let volume = gateway.cli.durable_home.then(|| home_volume(&grant));
+        let mocked = gateway.cli.mock_root.is_some();
+        // Startup rollback and Docker CLI calls belong off the async executor.
+        let (network, args) = tokio::task::spawn_blocking(move || {
+            let mut network = SessionNetwork::create(&session, &egress, mock.as_deref(), permit)?;
+            let args = box_args(
+                harness,
+                &session,
+                &mode,
+                volume.as_deref(),
+                home.as_ref(),
+                &image,
+                &network.name,
+                mocked,
+            );
+            match network.create_box(args) {
+                Ok(args) => Ok((network, args)),
+                Err(error) => {
+                    if let Err(cleanup) = network.cleanup_blocking() {
+                        tracing::error!(%cleanup, "session box startup rollback failed");
+                    }
+                    Err(error)
+                }
+            }
+        })
+        .await??;
+        match AcpAgent::from_args(args) {
+            Ok(agent) => (Some(network), agent, None),
+            Err(error) => {
+                if let Err(cleanup) = network.cleanup().await {
+                    tracing::error!(%cleanup, "session adapter startup rollback failed");
+                }
+                return Err(error.into());
+            }
+        }
     } else {
-        None
-    };
-    let agent = if let Some(network) = &network {
-        let volume = gateway.cli.durable_home.then(|| home_volume(grant));
-        AcpAgent::from_args(box_args(
-            gateway.cli.harness,
-            &label,
-            gateway.cli.codex_mode.as_deref().unwrap(),
-            volume.as_deref(),
-            gateway.home.as_ref(),
-            &gateway.cli.session_image,
-            &network.name,
-            gateway.cli.mock_root.is_some(),
-        ))?
-    } else {
-        mock_harness(
-            &gateway.paths,
-            gateway.cli.harness,
-            &gateway.cli.mock_url,
-            gateway.cli.codex_mode.as_deref().unwrap(),
+        (
+            None,
+            mock_harness(
+                &gateway.paths,
+                gateway.cli.harness,
+                &gateway.cli.mock_url,
+                gateway.cli.codex_mode.as_deref().unwrap(),
+            ),
+            Some(permit),
         )
     };
     let policy = PolicyProxy::new(PolicyConfig {
@@ -497,18 +576,43 @@ fn start_host(
         components = components.proxy(McpOverAcpPolyfill::http());
     }
     let chain = ConductorImpl::new_agent("agent-connect-gateway", components);
-    tokio::spawn(async move {
-        let _permit = permit;
-        let _network = network;
-        let started = Instant::now();
-        let result = chain.connect_to(Lines::new(io.outgoing, io.incoming)).await;
-        eprintln!(
-            "[gateway] chain {label} ended after {:?}: {:?}",
-            started.elapsed(),
-            result.as_ref().err()
-        );
-    });
-    Ok(host)
+    let host = {
+        let _sessions = gateway.sessions.lock().unwrap();
+        if gateway.capacity.is_closed() {
+            None
+        } else {
+            Some(gateway.hosts.create(&grant, resumable, label.clone()))
+        }
+    };
+    let Some((host, io)) = host else {
+        if let Some(network) = network {
+            if let Err(error) = network.cleanup().await {
+                tracing::error!(%error, "session shutdown startup rollback failed");
+            }
+        }
+        anyhow::bail!("gateway is shutting down");
+    };
+    let mut shutdown = gateway.shutdown.subscribe();
+    if ready.take().unwrap().send(Ok(host.clone())).is_err() {
+        host.kill("socket ended during startup");
+    }
+    let _permit = permit; // Boxed capacity is held by its resource owner.
+    let started = Instant::now();
+    let result = tokio::select! {
+        result = chain.connect_to(Lines::new(io.outgoing, io.incoming)) => Some(result),
+        _ = shutdown.wait_for(|stopped| *stopped) => None,
+    };
+    eprintln!(
+        "[gateway] chain {label} ended after {:?}: {:?}",
+        started.elapsed(),
+        result.as_ref().and_then(|result| result.as_ref().err())
+    );
+    if let Some(network) = network.take() {
+        if let Err(error) = network.cleanup().await {
+            tracing::error!(%error, "session Docker cleanup failed");
+        }
+    }
+    Ok(())
 }
 
 /// A volume name derived from the grant, never containing the token itself.
@@ -526,7 +630,7 @@ async fn start_or_close(
     resumable: bool,
     peer: SocketAddr,
 ) -> Option<Arc<Host>> {
-    match start_host(gateway, grant, resumable, peer) {
+    match start_host(gateway, grant, resumable, peer).await {
         Ok(host) => Some(host),
         Err(error) => {
             eprintln!("[gateway] session launch failed: {error}");
