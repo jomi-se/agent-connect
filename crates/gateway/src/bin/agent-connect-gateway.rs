@@ -19,28 +19,51 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use agent_client_protocol::AcpAgent;
 use agent_client_protocol::{ConnectTo, Lines};
 use agent_client_protocol_conductor::{ConductorImpl, ProxiesAndAgent};
 use agent_client_protocol_polyfill::mcp_over_acp::McpOverAcpPolyfill;
+use agent_connect_gateway::credentials::{HarnessHome, login_args};
 use agent_connect_gateway::policy::{GrantSessions, PermissionProfile, PolicyConfig, PolicyProxy};
 use agent_connect_gateway::resume::{
     self, AttachError, Host, RESUME_SUBPROTOCOL, Registry, ResumeConfig, ToSocket, close,
 };
-use agent_connect_gateway::{Harness, SpikePaths, boxed_harness, mock_harness};
+use agent_connect_gateway::sandbox::{SessionNetwork, box_args};
+use agent_connect_gateway::{Harness, SpikePaths, mock_harness};
 use axum::Router;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, State};
 use axum::http::HeaderMap;
 use axum::response::Response;
 use axum::routing::get;
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 use serde_json::Value;
 
 const ACP_SUBPROTOCOL: &str = "acp.v1";
 const BEARER_PREFIX: &str = "bearer.";
 
-#[derive(Parser, Clone)]
+#[derive(Parser)]
+#[command(version, about = "Unreleased, unstable ACP application gateway")]
 struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+#[derive(Subcommand)]
+enum Command {
+    Serve(ServeCli),
+    Login(LoginCli),
+}
+#[derive(Args)]
+struct LoginCli {
+    #[arg(long, value_enum)]
+    harness: Harness,
+    #[arg(long)]
+    harness_home: std::path::PathBuf,
+    #[arg(long, default_value = "agent-connect-session:0.1.0")]
+    session_image: String,
+}
+#[derive(Args, Clone)]
+struct ServeCli {
     #[arg(long, value_enum)]
     harness: Harness,
     #[arg(long, default_value = "127.0.0.1:18940")]
@@ -60,6 +83,24 @@ struct Cli {
     codex_mode: String,
     #[arg(long, value_enum, default_value = "sandboxed")]
     permissions: PermissionProfile,
+    /// Dedicated shared home: credentials, configuration and transcripts together.
+    #[arg(long)]
+    harness_home: Option<std::path::PathBuf>,
+    #[arg(long, default_value = "agent-connect-session:0.1.0")]
+    session_image: String,
+    /// Container running the egress proxy; connected to each internal session network.
+    #[arg(long)]
+    egress_container: Option<String>,
+    /// Isolated deterministic fixture root. Host launches are never production isolation.
+    #[arg(long)]
+    mock_root: Option<std::path::PathBuf>,
+    /// Deterministic boxed fixtures only: model container, with no provider login.
+    #[arg(long)]
+    mock_container: Option<String>,
+    #[arg(long, default_value = ".agent-connect/gateway")]
+    state_dir: std::path::PathBuf,
+    #[arg(long, default_value_t = 32)]
+    max_sessions: usize,
     /// Run each connection's adapter and polyfill in its own container.
     #[arg(long)]
     boxed: bool,
@@ -76,7 +117,9 @@ struct Cli {
 }
 
 struct Gateway {
-    cli: Cli,
+    cli: ServeCli,
+    home: Option<HarnessHome>,
+    capacity: Arc<tokio::sync::Semaphore>,
     /// The spike has one development grant, so one session registry.
     grant_sessions: GrantSessions,
     snapshot: BTreeMap<String, Value>,
@@ -90,19 +133,81 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
         .init();
-    let cli = Cli::parse();
-    let paths = SpikePaths::from_manifest();
-    let tools: Vec<Value> =
-        serde_json::from_str(&std::fs::read_to_string(paths.root.join(&cli.tools))?)?;
-    let snapshot = tools
-        .iter()
-        .filter_map(|t| {
-            Some((
-                t.get("name")?.as_str()?.to_string(),
-                t.get("inputSchema")?.clone(),
-            ))
-        })
-        .collect();
+    let mut cli = match Cli::parse().command {
+        Command::Serve(cli) => cli,
+        Command::Login(cli) => {
+            let home = HarnessHome::prepare(&cli.harness_home)?;
+            if matches!(cli.harness, Harness::Claude) {
+                eprintln!(
+                    "Claude Code usage through Agent Connect is unconfirmed against Anthropic terms."
+                );
+            }
+            let status = std::process::Command::new("docker")
+                .args(login_args(&home, &cli.session_image, cli.harness))
+                .status()?;
+            anyhow::ensure!(status.success(), "provider login helper failed");
+            return Ok(());
+        }
+    };
+    anyhow::ensure!(
+        cli.boxed || cli.mock_root.is_some(),
+        "production sessions require --boxed; host mode requires an isolated --mock-root"
+    );
+    anyhow::ensure!(
+        !cli.boxed || cli.egress_container.is_some(),
+        "--boxed requires --egress-container"
+    );
+    anyhow::ensure!(
+        cli.harness_home.is_none() || cli.boxed,
+        "--harness-home requires --boxed"
+    );
+    anyhow::ensure!(
+        cli.mock_container.is_none() || cli.mock_root.is_some(),
+        "--mock-container requires --mock-root"
+    );
+    anyhow::ensure!(
+        !cli.boxed || cli.mock_root.is_some() || cli.harness_home.is_some(),
+        "production boxes require a dedicated --harness-home"
+    );
+    anyhow::ensure!(
+        !cli.token.is_empty() && cli.max_sessions > 0,
+        "grant token and positive session capacity required"
+    );
+    let home = cli
+        .harness_home
+        .as_deref()
+        .map(HarnessHome::prepare)
+        .transpose()?;
+    std::fs::create_dir_all(&cli.state_dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&cli.state_dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    cli.state_dir = cli.state_dir.canonicalize()?;
+    let paths = SpikePaths {
+        root: cli
+            .mock_root
+            .clone()
+            .unwrap_or_else(|| std::path::PathBuf::from(".")),
+    };
+    let tools: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(&cli.tools)?)?;
+    let mut snapshot = BTreeMap::new();
+    for tool in tools {
+        let name = tool
+            .get("name")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("snapshot tool name required"))?;
+        let schema = tool
+            .get("inputSchema")
+            .filter(|s| s.is_object())
+            .ok_or_else(|| anyhow::anyhow!("snapshot tool schema required"))?;
+        anyhow::ensure!(
+            snapshot.insert(name.to_string(), schema.clone()).is_none(),
+            "duplicate snapshot tool"
+        );
+    }
     let listen = cli.listen;
     let hosts = Registry::new(ResumeConfig {
         grace: Duration::from_secs(cli.resume_grace_secs),
@@ -110,11 +215,14 @@ async fn main() -> anyhow::Result<()> {
     });
     let gateway = Arc::new(Gateway {
         hosts,
+        home,
+        capacity: Arc::new(tokio::sync::Semaphore::new(cli.max_sessions)),
         cli,
         snapshot,
         paths,
         grant_sessions: Default::default(),
     });
+    let shutdown_gateway = gateway.clone();
     let app = Router::new()
         .route("/acp", get(upgrade))
         .with_state(gateway);
@@ -124,6 +232,20 @@ async fn main() -> anyhow::Result<()> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
+    .with_graceful_shutdown(async move {
+        #[cfg(unix)]
+        {
+            let mut term =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .expect("SIGTERM handler");
+            tokio::select! { _ = tokio::signal::ctrl_c() => {}, _ = term.recv() => {} }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = tokio::signal::ctrl_c().await;
+        }
+        shutdown_gateway.hosts.shutdown().await;
+    })
     .await?;
     Ok(())
 }
@@ -134,6 +256,7 @@ async fn upgrade(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
+    let ws = ws.max_message_size(1024 * 1024).max_frame_size(1024 * 1024);
     let origin = headers
         .get("origin")
         .and_then(|v| v.to_str().ok())
@@ -218,10 +341,19 @@ async fn serve_socket(
                     return Ok(());
                 }
             },
-            None => (start_host(&gateway, &grant, true, peer)?, 0),
+            None => {
+                let Some(host) = start_or_close(&mut socket, &gateway, &grant, true, peer).await
+                else {
+                    return Ok(());
+                };
+                (host, 0)
+            }
         }
     } else {
-        (start_host(&gateway, &grant, false, peer)?, 0)
+        let Some(host) = start_or_close(&mut socket, &gateway, &grant, false, peer).await else {
+            return Ok(());
+        };
+        (host, 0)
     };
 
     let (generation, mut outbound) = match host.attach(ack) {
@@ -305,7 +437,12 @@ fn start_host(
     peer: SocketAddr,
 ) -> anyhow::Result<Arc<Host>> {
     let label = uuid::Uuid::new_v4().to_string();
-    let session_dir = gateway.paths.run_dir().join("sessions").join(&label);
+    let permit = gateway
+        .capacity
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| anyhow::anyhow!("session capacity reached"))?;
+    let session_dir = gateway.cli.state_dir.join("sessions").join(&label);
     std::fs::create_dir_all(&session_dir)?;
     eprintln!(
         "[gateway] {peer} new {} host {label}; live hosts {}",
@@ -315,14 +452,27 @@ fn start_host(
     let (host, io) = gateway.hosts.create(grant, resumable, label.clone());
 
     let boxed = gateway.cli.boxed;
-    let agent = if boxed {
+    let network = if boxed {
+        Some(SessionNetwork::create(
+            &label,
+            gateway.cli.egress_container.as_deref().unwrap(),
+            gateway.cli.mock_container.as_deref(),
+        )?)
+    } else {
+        None
+    };
+    let agent = if let Some(network) = &network {
         let volume = gateway.cli.durable_home.then(|| home_volume(grant));
-        boxed_harness(
+        AcpAgent::from_args(box_args(
             gateway.cli.harness,
             &label,
             &gateway.cli.codex_mode,
             volume.as_deref(),
-        )
+            gateway.home.as_ref(),
+            &gateway.cli.session_image,
+            &network.name,
+            gateway.cli.mock_root.is_some(),
+        ))?
     } else {
         mock_harness(
             &gateway.paths,
@@ -349,6 +499,8 @@ fn start_host(
     }
     let chain = ConductorImpl::new_agent("agent-connect-gateway", components);
     tokio::spawn(async move {
+        let _permit = permit;
+        let _network = network;
         let started = Instant::now();
         let result = chain.connect_to(Lines::new(io.outgoing, io.incoming)).await;
         eprintln!(
@@ -366,4 +518,26 @@ fn home_volume(grant: &str) -> String {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     grant.hash(&mut hasher);
     format!("acp-home-{:016x}", hasher.finish())
+}
+
+async fn start_or_close(
+    socket: &mut WebSocket,
+    gateway: &Arc<Gateway>,
+    grant: &str,
+    resumable: bool,
+    peer: SocketAddr,
+) -> Option<Arc<Host>> {
+    match start_host(gateway, grant, resumable, peer) {
+        Ok(host) => Some(host),
+        Err(error) => {
+            eprintln!("[gateway] session launch failed: {error}");
+            let code = if gateway.capacity.available_permits() == 0 {
+                4418
+            } else {
+                4500
+            };
+            close_with(socket, code, "session unavailable").await;
+            None
+        }
+    }
 }

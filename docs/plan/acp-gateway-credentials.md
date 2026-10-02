@@ -90,7 +90,7 @@ plan can settle. Until Anthropic answers:
 
 - Claude Code behind Agent Connect is labeled as unconfirmed against
   Anthropic's terms;
-- an owner can use an API key in place of a subscription;
+- this implementation does not pass API-key variables into boxes;
 - Agent Connect asks Anthropic, through the contact route named on that page.
 
 **OpenAI.** OpenAI publicly supports ChatGPT-plan use in third-party tools,
@@ -176,3 +176,34 @@ starts it. Results go to `docs/experiments/acp-gateway.md`.
 - Concurrent boxes sharing one home corrupt the credential file, or log each
   other out.
 - A refresh inside a box invalidates the owner's personal login.
+
+## Implementation (2026-10-02, unreleased)
+
+The product binary implements `serve --harness-home <dir>` and
+`login --harness codex --harness-home <dir>`. The owner chooses an absolute,
+dedicated directory. The helper creates it with mode 0700, rejects symlinks,
+wrong ownership and permissive modes, and mounts the same directory read-write
+at `/home/node` in every session. The container runs as the invoking host UID
+and GID, including when these differ from the image's node UID 1000. No chown
+of personal files, credential copies, or credential/data separation occurs.
+The entrypoint uses umask 077; Codex uses a file credential store in the shared
+home. Existing private files stay in place. Container launch has an explicit
+environment allowlist; no API-key variables are forwarded.
+
+After the local session image is built, the owner runs one command:
+
+```sh
+agent-connect-gateway login --harness codex --harness-home /path/to/dedicated-home
+```
+
+This invokes `codex login --device-auth` interactively inside the image.
+`login --harness claude` invokes `claude /login`, with the same mount. Claude
+Code remains **unconfirmed against Anthropic terms**. `claude setup-token`
+remains a compared variant only; the gateway does not collect or forward that
+token. Dedicated homes include configuration and transcripts as well as the
+login: a consented application could read the dedicated credential and another
+application's transcripts, and could alter shared harness configuration.
+
+Command-contract tests use a disposable Docker stand-in; they never log in.
+Live subscription, concurrent refresh, personal-login coexistence and revocation
+checks remain owner-run and have not been performed. No allowance was spent.

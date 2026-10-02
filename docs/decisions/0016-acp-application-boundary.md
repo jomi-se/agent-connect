@@ -122,7 +122,8 @@ Costs and risks:
   credentials on their users' behalf, and they point Agent SDK products to API
   keys. Get Anthropic's answer on whether an application driving the owner's
   own Claude Code through Agent Connect is permitted. Until then, label the
-  Claude Code harness as unconfirmed, or require an API key for it. OpenAI
+  Claude Code harness as unconfirmed. The current implementation never
+  forwards API-key variables into boxes. OpenAI
   publicly supports ChatGPT-plan use in third-party tools. See the [credentials
   plan](../plan/acp-gateway-credentials.md).
 - **Credential boundary.** Use the owner's subscription without copying the
@@ -135,13 +136,13 @@ Costs and risks:
 - **Hosting and installation.** What the owner installs and runs, and how it
   relates to OpenClaw, which could remain one optional host. The
   [release plan](../plan/acp-gateway-release.md) proposes a prebuilt binary
-  through npm and GitHub Releases, and deprecating the OpenClaw plugin package.
+  through npm and GitHub Releases. The implementation retains the OpenClaw
+  plugin; any retirement requires separate release approval.
 - **Consent code.** Port the OAuth/PKCE consent, grant and revocation code, or
   keep it as a separate component.
-- **Session isolation.** A per-session internal network. Decide on durable
-  boxed storage: a per-grant home volume restores conversations after the box
-  is gone (spike M8), but lets a grant's sessions read each other's
-  transcripts.
+- **Session isolation.** A per-session internal network. The dedicated shared harness home restores conversations after a
+  box is gone, but exposes transcripts across grants. Live credential checks
+  remain a release prerequisite.
 - **Mobile.** One manual iOS Safari check of the resumable transport.
 - **Migration.** Bookhand and Firebase Canvas move to `createAgentChat` or
   `useChat` over the SDK's ACP provider ([release

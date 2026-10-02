@@ -373,18 +373,12 @@ their grace period.
 
 ## Open problems for a follow-up
 
-- **The credential boundary.** Purpose-built configuration means the
-  subscription login must reach a per-session home without being copied and
-  without being readable by the harness's own shell. Refresh tokens rotate:
-  copying or symlinking a login file into another directory can silently log
-  out the owner's other sessions. Candidate designs are an egress proxy that
-  injects credentials, or keeping the loop on the host with every native
-  action routed into the box. Both need their own spike.
-- **Per-session networks.** Boxes currently share one internal network. Give
-  each session its own internal network, with the egress proxy attached.
-- **Durable boxed sessions.** A per-grant home volume works (M8). Still open:
-  whether per-grant transcript visibility is acceptable, workspace
-  persistence, and volume lifecycle on revocation.
+- **Live credential validation.** The [credential plan](../plan/acp-gateway-credentials.md)
+  now chooses one dedicated shared home per harness, including credentials and
+  transcripts. Its filesystem and command boundaries are implemented; live login,
+  concurrent refresh, revocation and personal-login coexistence remain untested.
+- **Durable boxed sessions.** The shared home trades transcript and configuration
+  isolation across grants for continuity. Workspace storage remains ephemeral.
 - **Mobile.**
   - One manual check in iOS Safari.
   - Whether the gateway should keep held tool calls alive past the harness
@@ -411,3 +405,11 @@ temporary homes. Product policy also checks chain session ownership, rejects
 concurrent prompts, removes unrecognized authority fields, and journals stable
 action IDs before application delivery. Browser authorization failures use
 4401/4403 close codes. ADR 0016 remains proposed; the OpenClaw plugin is intact.
+
+Phase 2 adds shared harness homes and the interactive login helper. Tests confirm
+private modes, host UID/GID mount behavior and absence of API-key variables in
+box arguments, using no provider login. Production host launches are refused;
+boxes receive a separate internal network per session, connected only to the
+operator-selected egress proxy. Deterministic fixtures can explicitly attach a
+mock model. Session capacity, WebSocket frame bounds and graceful shutdown are
+also enforced. Live credential/refresh/terms checks remain open.
