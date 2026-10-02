@@ -15,6 +15,7 @@ ENV PATH=/opt/adapters/node_modules/.bin:$PATH
 COPY --from=dependencies /opt/adapters /opt/adapters
 COPY dist/session-runners/${TARGETARCH}/session-runner /usr/local/bin/session-runner
 COPY deploy/acp-gateway/session/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY deploy/acp-gateway/egress-proxy.mjs /opt/agent-connect/egress-proxy.mjs
 COPY experiments/acp-gateway/sandbox/codex-config.toml /opt/agent-connect/mock-codex-config.toml
 USER node
 WORKDIR /work

@@ -2,6 +2,72 @@
 use crate::{Harness, credentials::HarnessHome};
 use anyhow::{Context, bail};
 
+const EGRESS_LABEL: &str = "org.agent-connect.component";
+const EGRESS_OWNER: &str = "acp-egress";
+
+pub fn egress_start_args(name: &str, image: &str) -> Vec<String> {
+    [
+        "run",
+        "--detach",
+        "--name",
+        name,
+        "--label",
+        &format!("{EGRESS_LABEL}={EGRESS_OWNER}"),
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--memory=256m",
+        "--cpus=1",
+        "--pids-limit=64",
+        "--entrypoint",
+        "node",
+        image,
+        "/opt/agent-connect/egress-proxy.mjs",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+
+pub fn egress_start(name: &str, image: &str) -> anyhow::Result<()> {
+    crate::config::validate_container_name(name)?;
+    let args = egress_start_args(name, image);
+    docker(&args.iter().map(String::as_str).collect::<Vec<_>>())
+}
+
+pub fn egress_stop(name: &str) -> anyhow::Result<()> {
+    crate::config::validate_container_name(name)?;
+    let output = std::process::Command::new("docker")
+        .args(["inspect", "--type", "container", name])
+        .output()
+        .context("Docker is required to stop the egress proxy")?;
+    if !output.status.success() {
+        bail!("cannot inspect egress container; nothing was removed");
+    }
+    let containers: Vec<serde_json::Value> =
+        serde_json::from_slice(&output.stdout).context("invalid Docker container inspection")?;
+    let container = containers
+        .first()
+        .filter(|_| containers.len() == 1)
+        .ok_or_else(|| anyhow::anyhow!("expected one egress container; nothing was removed"))?;
+    if container
+        .pointer("/Config/Labels")
+        .and_then(|v| v.get(EGRESS_LABEL))
+        .and_then(|v| v.as_str())
+        != Some(EGRESS_OWNER)
+    {
+        bail!("container is not labelled as an Agent Connect egress proxy; nothing was removed");
+    }
+    // Remove the inspected immutable ID so a concurrent name replacement cannot
+    // cause deletion of a different, unowned container.
+    let id = container
+        .get("Id")
+        .and_then(|v| v.as_str())
+        .filter(|id| id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()))
+        .ok_or_else(|| anyhow::anyhow!("invalid inspected container ID; nothing was removed"))?;
+    docker(&["rm", "--force", id])
+}
+
 pub fn box_args(
     harness: Harness,
     session: &str,
@@ -134,6 +200,22 @@ fn docker(args: &[&str]) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn egress_uses_same_image_without_host_port_or_credentials() {
+        let args = egress_start_args("owned-egress", "session:test");
+        assert!(args.contains(&"--read-only".into()));
+        assert!(args.contains(&format!("{EGRESS_LABEL}={EGRESS_OWNER}")));
+        assert!(args.ends_with(&[
+            "node".into(),
+            "session:test".into(),
+            "/opt/agent-connect/egress-proxy.mjs".into()
+        ]));
+        assert!(
+            !args
+                .iter()
+                .any(|a| a == "-p" || a.contains("publish") || a.contains("API_KEY"))
+        );
+    }
     #[test]
     fn boxes_never_receive_api_key_variables() {
         for mock in [false, true] {
