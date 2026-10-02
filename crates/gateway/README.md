@@ -20,3 +20,17 @@ must deduplicate side effects with the stable `agent-connect/actionId`.
 The experimental browser fixture and deterministic model remain under
 `experiments/acp-gateway`. Host adapter launches are test-only and provide no
 native-action isolation; container sessions provide that boundary.
+
+Production runs use `agent-connect-gateway serve --boxed --harness codex`, with
+`--harness-home`, `--egress-container`, `--tools`, `--token` and `--allow-origin`.
+The shared home must be dedicated, private (0700) and owned by the invoking user;
+containers run as that UID/GID. The home includes credentials and transcripts,
+so a consented application could obtain the dedicated login and read other
+applications' transcripts. See the [credential boundary](../../docs/plan/acp-gateway-credentials.md).
+
+`agent-connect-gateway login --harness codex --harness-home /path/to/dedicated-home`
+runs the one-time device login in the session image. The owner runs it; tests
+never authenticate. `--harness claude` opens `/login`; Claude Code is unconfirmed
+against Anthropic terms. `setup-token` is a compared variant only. API-key
+variables are never supplied to boxes. Host adapter launches require an explicit
+isolated `--mock-root`; this is only a deterministic test mode.

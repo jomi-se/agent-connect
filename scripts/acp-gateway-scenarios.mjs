@@ -122,6 +122,10 @@ const pageServer = createServer(async (req, res) => {
 });
 try {
   await command(process.env.CARGO ?? "cargo", ["build", "--locked", "--bins"]);
+  await command("node", [
+    "--test",
+    join(repo, "scripts/acp-gateway-cli.test.mjs"),
+  ]);
   for (const name of ["adapters", "web"]) {
     await mkdir(join(run, name));
     for (const file of ["package.json", "package-lock.json"])
@@ -193,6 +197,11 @@ try {
       const gateway = service(
         join(repo, "target/debug/agent-connect-gateway"),
         [
+          "serve",
+          "--mock-root",
+          run,
+          "--state-dir",
+          join(run, ".run/state"),
           "--token",
           "spike-dev-token",
           "--harness",

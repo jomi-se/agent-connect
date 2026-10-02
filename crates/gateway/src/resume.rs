@@ -199,6 +199,24 @@ impl Registry {
         }
     }
 
+    pub async fn shutdown(&self) {
+        let hosts: Vec<_> = self.hosts.lock().unwrap().values().cloned().collect();
+        for host in &hosts {
+            host.kill("gateway shutdown");
+        }
+        for host in hosts {
+            let mut ended = host.ended.clone();
+            let _ = tokio::time::timeout(Duration::from_secs(10), async {
+                while !*ended.borrow() {
+                    if ended.changed().await.is_err() {
+                        break;
+                    }
+                }
+            })
+            .await;
+        }
+    }
+
     pub fn live_hosts(&self) -> usize {
         self.hosts.lock().unwrap().len()
     }

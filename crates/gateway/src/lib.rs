@@ -1,8 +1,10 @@
 //! Agent Connect gateway launch recipes and deterministic compatibility fixtures.
 //! ACP and MCP-over-ACP APIs are unstable.
 
+pub mod credentials;
 pub mod policy;
 pub mod resume;
+pub mod sandbox;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -57,11 +59,7 @@ pub fn mock_harness(
     let (env, bin): (Vec<(String, String)>, PathBuf) = match harness {
         Harness::Codex => (
             vec![
-                (
-                    "CODEX_HOME".into(),
-                    std::env::var("SPIKE_CODEX_HOME")
-                        .unwrap_or_else(|_| path(&run.join("codex-home"))),
-                ),
+                ("CODEX_HOME".into(), path(&run.join("codex-home"))),
                 ("INITIAL_AGENT_MODE".into(), codex_mode.into()),
             ],
             paths.bin("codex-acp"),
@@ -73,7 +71,10 @@ pub fn mock_harness(
                     "ANTHROPIC_BASE_URL".into(),
                     mock_url.trim_end_matches("/v1").into(),
                 ),
-                ("ANTHROPIC_API_KEY".into(), "sk-spike-dummy".into()),
+                (
+                    "ANTHROPIC_AUTH_TOKEN".into(),
+                    "deterministic-fixture".into(),
+                ),
                 ("DISABLE_TELEMETRY".into(), "1".into()),
                 (
                     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(),
@@ -83,10 +84,19 @@ pub fn mock_harness(
             paths.bin("claude-agent-acp"),
         ),
     };
-    let args = env
-        .into_iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .chain(std::iter::once(path(&bin)));
+    let args = [
+        "env".to_string(),
+        "-i".to_string(),
+        format!("PATH={}", std::env::var("PATH").unwrap_or_default()),
+        format!("HOME={}", path(&run)),
+        "LANG=C.UTF-8".to_string(),
+    ]
+    .into_iter()
+    .chain(
+        env.into_iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .chain(std::iter::once(path(&bin))),
+    );
     AcpAgent::from_args(args).expect("valid adapter command")
 }
 
@@ -191,68 +201,15 @@ pub fn boxed_harness(
     codex_mode: &str,
     home_volume: Option<&str>,
 ) -> AcpAgent {
-    let name = match harness {
-        Harness::Codex => "codex",
-        Harness::Claude => "claude",
-    };
-    let proxy = "http://egress:3128";
-    let no_proxy = "mock,localhost,127.0.0.1";
-    let mut args: Vec<String> = [
-        "docker",
-        "run",
-        "-i",
-        "--rm",
-        "--name",
-        &format!("acp-sess-{session}"),
-        "--network",
+    let args = sandbox::box_args(
+        harness,
+        session,
+        codex_mode,
+        home_volume,
+        None,
+        "acp-spike-session:dev",
         "acp-internal",
-        "--read-only",
-        "--tmpfs",
-        "/work:rw,exec,size=512m,uid=1000,gid=1000",
-        "--tmpfs",
-        "/tmp:rw,exec,size=256m",
-        "--cap-drop",
-        "ALL",
-        "--security-opt",
-        "no-new-privileges",
-        "--memory",
-        "1536m",
-        "--cpus",
-        "2",
-        "--pids-limit",
-        "512",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
-    match home_volume {
-        Some(volume) => args.extend(["-v".into(), format!("{volume}:/home/node")]),
-        None => args.extend([
-            "--tmpfs".into(),
-            "/home/node:rw,exec,size=512m,uid=1000,gid=1000".into(),
-        ]),
-    }
-    for (k, v) in [
-        ("HTTPS_PROXY", proxy),
-        ("HTTP_PROXY", proxy),
-        ("NO_PROXY", no_proxy),
-        ("https_proxy", proxy),
-        ("http_proxy", proxy),
-        ("no_proxy", no_proxy),
-        ("NODE_USE_ENV_PROXY", "1"),
-        ("INITIAL_AGENT_MODE", codex_mode),
-        ("ANTHROPIC_BASE_URL", "http://mock:18931"),
-        ("ANTHROPIC_API_KEY", "sk-spike-dummy"),
-        ("DISABLE_TELEMETRY", "1"),
-        ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
-    ] {
-        args.push("-e".into());
-        args.push(format!("{k}={v}"));
-    }
-    args.extend([
-        "acp-spike-session:dev".into(),
-        "--harness".into(),
-        name.into(),
-    ]);
+        true,
+    );
     AcpAgent::from_args(args).expect("valid docker command")
 }
