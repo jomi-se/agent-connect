@@ -4,7 +4,7 @@ Updated: 2026-10-02
 
 The ACP product candidate is **0.1.0-alpha.1**: packaged browser SDK and Rust
 launcher/platform binaries, private setup/config/manual grants, dedicated login
-helper, boxed sessions, resumable transport/recovery and AI SDK useChat.
+helper (`agent-connect login`, harness selector and shared default homes), boxed sessions, resumable transport/recovery and AI SDK useChat.
 The [artifact install guide](../install/README.md) works without a checkout.
 The [release guide](../install/release.md) covers protected automation and local
 validation. ADR 0016 remains proposed and no ACP artifact is published.

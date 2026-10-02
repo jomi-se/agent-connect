@@ -5,7 +5,7 @@
 Agent Connect is an application-to-user-owned-agent bridge. Keep the application-facing API agent- and harness-neutral. Codex, Omnigent, ACP adapters, and transport bridges belong behind internal adapter boundaries.
 
 The ACP prerelease install path is the product Rust gateway in `crates/gateway`
-(binary `agent-connect-gateway`), packaged as `@open-agent-connect/gateway`, plus
+(CLI `agent-connect`, compatibility executable `agent-connect-gateway`), packaged as `@open-agent-connect/gateway`, plus
 its digest-pinned Docker session image and `@open-agent-connect/web/acp` SDK.
 See `docs/install/README.md` and `docs/plan/acp-gateway-release.md`. ACP,
 MCP-over-ACP and the resume extension are unstable; ADR 0016 remains proposed.
@@ -26,8 +26,10 @@ uncertain prompt/effect. Boxed capacity is released only after owned resource cl
 cleanup retains the slot until operator cleanup and process restart. Test this
 boundary with `npm run test:integration:acp:teardown` before relying on acceptance
 driver fallback cleanup. Never remove shared peers or prune unrelated resources.
-Live login checks are owner-run through the prepared
-single-command helper. Read the accepted shared-home risks in
+Live login checks are owner-run through `agent-connect login`, which selects
+an available harness and uses a dedicated per-harness platform-default home.
+New init/production serve share that convention; existing config homes retain
+precedence. Tests must isolate HOME/XDG_STATE_HOME and never invoke real login. Read the accepted shared-home risks in
 `docs/plan/acp-gateway-credentials.md`.
 
 ## Terminology

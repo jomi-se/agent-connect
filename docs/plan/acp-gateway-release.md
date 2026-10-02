@@ -202,7 +202,7 @@ plan tool. Results are recorded in [the experiment](../experiments/acp-gateway.m
 
 Only [current-work.md](current-work.md)'s owner gates remain: live dedicated login
 checks, the first approved real release/account setup, and ADR acceptance. The
-initial binary name is `agent-connect-gateway`; current grant issuance is the
+primary CLI is `agent-connect`, with `agent-connect-gateway` retained for compatibility; current grant issuance is the
 explicit operator snapshot/bearer handoff, not a deferred product implementation.
 
 The OpenClaw plugin stays in the repository and on npm as the previous published

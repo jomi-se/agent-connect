@@ -193,10 +193,18 @@ environment allowlist; no API-key variables are forwarded.
 After the local session image is built, the owner runs one command:
 
 ```sh
-agent-connect-gateway login --harness codex --harness-home /path/to/dedicated-home
+agent-connect login
 ```
 
-This invokes `codex login --device-auth` interactively inside the image.
+The terminal selector defaults to Codex and labels Claude Code as unconfirmed.
+Login, new init and production serve use a dedicated per-harness home under
+`$HOME/.local/state/agent-connect/harnesses/` on Linux or
+`$HOME/Library/Application Support/agent-connect/harnesses/` on macOS.
+An absolute `XDG_STATE_HOME` overrides the platform root. Explicit home overrides
+and existing private config homes remain supported; no personal provider home
+is discovered or copied. `login --config <file>` selects from an existing runtime,
+and refuses a harness mismatch before creating a home or invoking Docker.
+Selecting Codex invokes `codex login --device-auth` interactively inside the image.
 `login --harness claude` invokes `claude /login`, with the same mount. Claude
 Code remains **unconfirmed against Anthropic terms**. `claude setup-token`
 remains a compared variant only; the gateway does not collect or forward that
