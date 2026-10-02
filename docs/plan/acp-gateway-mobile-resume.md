@@ -161,3 +161,12 @@ Separate the session from the socket, at the transport layer, below ACP.
 - Holding frames breaks an adapter (for example, it times out on its own
   requests while the client is detached, with no recovery).
 - The design needs adapter changes.
+
+## Product SDK implementation (2026-10-02, unreleased)
+
+The typed resume transport now lives in `packages/web-sdk`, reached through
+`connectAgent`. It owns Page Lifecycle probes, bounded outgoing replay and
+listener/timer disposal. The spike page uses this SDK. Session/load recovery
+reports interrupted turns, aborts cooperative held application handlers and
+never re-sends uncertain prompts/results. Deterministic Chromium scenarios are
+part of verification; the manual Safari check remains open.

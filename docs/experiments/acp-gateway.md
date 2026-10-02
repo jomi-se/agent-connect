@@ -429,3 +429,19 @@ mode mismatch: boxed sessions now default to full access inside the container,
 while explicit host fixtures use workspace-write. Proxy reset handling and
 reserved-address filtering have regression tests, including mapped IPv6. These
 checks spend no subscription allowance and prove no live credential behavior.
+
+Phase 4 adds the unstable typed transport, connectAgent and AcpProvider. The
+reader fixture now uses the SDK and AgentSession. Contract tests cover immutable
+snapshots, one session/new, one active prompt, stable application actions,
+thought/plan/native-tool events, cancellation, typed close failures, listener
+cleanup and recovery without prompt replay. Real-adapter browser gates cover
+these transport paths with deterministic inference; contract fixtures are not
+claimed as provider compatibility evidence.
+
+Expiry while a human handler was held exposed a missing interruption signal.
+The provider now aborts cooperative handlers before reporting task_interrupted
+and loads the owned session without re-sending the prompt. The pinned ACP SDK
+also settles prompt/load responses before asynchronous notification middleware
+has drained; the provider waits for that drain before finishing a turn or
+leaving replay mode. Authorization failure and attachment takeover never load
+a replacement session. Cancellation is checked against chain session ownership.

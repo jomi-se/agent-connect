@@ -153,6 +153,11 @@ export class AgentSession {
             text += event.delta;
             yield event;
             break;
+          case "thought.delta":
+          case "plan.updated":
+          case "tool.updated":
+            yield event;
+            break;
           case "tool.requested": {
             if (completedActions.has(event.actionId)) {
               break;
@@ -207,9 +212,11 @@ export class AgentSession {
                 toolName: event.name,
                 meta: null,
                 actionId: event.actionId,
-                signal: controller.signal,
+                signal: event.signal
+                  ? AbortSignal.any([controller.signal, event.signal])
+                  : controller.signal,
               });
-              if (controller.signal.aborted) break;
+              if (controller.signal.aborted || event.signal?.aborted) break;
               await this.provider.submitToolResult(
                 event.requestToken,
                 serializeToolResult(result),
@@ -221,7 +228,7 @@ export class AgentSession {
                 isError: false,
               };
             } catch (cause) {
-              if (controller.signal.aborted) break;
+              if (controller.signal.aborted || event.signal?.aborted) break;
               const error = taskError(
                 "tool_execution_failed",
                 cause instanceof Error

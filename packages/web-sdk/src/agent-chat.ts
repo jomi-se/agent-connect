@@ -1,5 +1,10 @@
 import { AgentConnectError, type AgentSession } from "./agent-session.js";
-import type { AgentTaskEvent, JsonObject } from "./types.js";
+import type {
+  AcpPlanEntry,
+  AcpToolUpdate,
+  AgentTaskEvent,
+  JsonObject,
+} from "./types.js";
 
 export interface AgentChatError {
   readonly name: string;
@@ -25,7 +30,30 @@ export interface AgentChatToolPart {
   readonly error?: AgentChatError;
 }
 
-export type AgentChatPart = AgentChatTextPart | AgentChatToolPart;
+/** @experimental ACP presentation parts are unstable. */
+export interface AgentChatThoughtPart {
+  readonly type: "thought";
+  readonly id: string;
+  readonly text: string;
+}
+/** @experimental ACP plan presentation is unstable. */
+export interface AgentChatPlanPart {
+  readonly type: "plan";
+  readonly id: string;
+  readonly entries: readonly AcpPlanEntry[];
+}
+/** @experimental ACP harness-native progress is unstable. */
+export interface AgentChatProgressPart {
+  readonly type: "progress";
+  readonly id: string;
+  readonly update: AcpToolUpdate;
+}
+export type AgentChatPart =
+  | AgentChatTextPart
+  | AgentChatToolPart
+  | AgentChatThoughtPart
+  | AgentChatPlanPart
+  | AgentChatProgressPart;
 
 export interface AgentChatMessage {
   readonly id: string;
@@ -178,6 +206,46 @@ export function createAgentChat(options: AgentChatOptions): AgentChat {
             parts.push(
               Object.freeze({ type: "text", id: id(), text: event.delta }),
             );
+        } else if (event.type === "thought.delta") {
+          const last = parts.at(-1);
+          if (last?.type === "thought")
+            parts[parts.length - 1] = Object.freeze({
+              ...last,
+              text: last.text + event.delta,
+            });
+          else
+            parts.push(
+              Object.freeze({ type: "thought", id: id(), text: event.delta }),
+            );
+        } else if (event.type === "plan.updated") {
+          const index = parts.findIndex((part) => part.type === "plan");
+          const part: AgentChatPlanPart = Object.freeze({
+            type: "plan",
+            id: index < 0 ? id() : parts[index]!.id,
+            entries: Object.freeze(
+              event.entries.map((entry) => Object.freeze({ ...entry })),
+            ),
+          });
+          if (index < 0) parts.push(part);
+          else parts[index] = part;
+        } else if (event.type === "tool.updated") {
+          const index = parts.findIndex(
+            (part) =>
+              part.type === "progress" &&
+              part.update.toolCallId === event.toolCallId,
+          );
+          const previous =
+            index < 0 ? undefined : (parts[index] as AgentChatProgressPart);
+          const part: AgentChatProgressPart = Object.freeze({
+            type: "progress",
+            id: previous?.id ?? id(),
+            update: freezeProgress({
+              ...previous?.update,
+              ...structuredClone(event),
+            }),
+          });
+          if (index < 0) parts.push(part);
+          else parts[index] = part;
         } else if (event.type === "tool.requested") {
           parts.push(
             Object.freeze({
@@ -189,7 +257,7 @@ export function createAgentChat(options: AgentChatOptions): AgentChat {
               status: "running",
             }),
           );
-        } else {
+        } else if (event.type === "tool.completed") {
           const index = parts.findIndex(
             (part) => part.type === "tool" && part.actionId === event.actionId,
           );
@@ -390,7 +458,7 @@ export function exportAgentChatMarkdown(
       const content = message.parts.flatMap((part) =>
         part.type === "text"
           ? [part.text]
-          : options.includeToolActivity
+          : options.includeToolActivity && part.type === "tool"
             ? [`> Tool ${JSON.stringify(part.name)}: ${part.status}`]
             : [],
       );
@@ -403,4 +471,12 @@ export function exportAgentChatMarkdown(
       return `## ${message.role === "user" ? "You" : "Assistant"}\n\n${content.join("\n\n")}`;
     })
     .join("\n\n");
+}
+
+function freezeProgress<T>(value: T): T {
+  if (value !== null && typeof value === "object") {
+    for (const child of Object.values(value)) freezeProgress(child);
+    Object.freeze(value);
+  }
+  return value;
 }

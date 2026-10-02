@@ -28,6 +28,7 @@ interface ConnectionState {
   initialized: boolean;
 }
 
+/** @experimental Unstable MCP-over-ACP protocol error. */
 export class McpOverAcpError extends Error {
   readonly code: number;
   readonly data: JsonValue | undefined;
@@ -47,6 +48,7 @@ export function defineTool<Arguments extends JsonObject>(
 }
 
 /**
+ * @experimental Unstable MCP-over-ACP implementation.
  * A deliberately narrow application-owned MCP server transported through ACP.
  *
  * It supports one logical connection and a fixed tool set. Draft ACP transport

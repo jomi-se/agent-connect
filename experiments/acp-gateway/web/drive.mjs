@@ -58,6 +58,12 @@ try {
     await page.waitForTimeout(askWait);
     await page.click("#ask-answer");
     report.status = await waitStatus(["done", "error"], askWait + 90_000);
+  } else if (scenario === "cancel") {
+    await page.goto(PAGE);
+    await page.click("#run-ask");
+    await page.waitForSelector("#ask.open", { timeout: 60000 });
+    await page.evaluate(() => window.spike.cancel());
+    report.status = await waitStatus(["done", "error"]);
   } else if (scenario === "shell") {
     await page.goto(PAGE);
     await page.evaluate(() => window.runShell().catch(() => {}));

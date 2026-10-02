@@ -10,6 +10,7 @@ import type { BrowserAcpStreamOptions } from "./types.js";
  * secure cookies, a negotiated subprotocol, or another conductor-supported
  * browser mechanism.
  */
+/** @experimental Unstable ACP WebSocket transport; prefer connectAgent for resume. */
 export function createBrowserAcpStream(
   url: string,
   options: BrowserAcpStreamOptions = {},
