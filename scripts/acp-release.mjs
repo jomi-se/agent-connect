@@ -158,6 +158,8 @@ if (command === "check") {
     )
       throw new Error("Unsafe release archive paths");
     run("tar", ["-xf", archive, "-C", staging]);
+    if (!entries.some((entry) => /(?:^|\/)agent-connect$/.test(entry)))
+      throw new Error(`No primary agent-connect executable in ${filename}`);
     const executable = entries.find((entry) =>
       /(?:^|\/)agent-connect-gateway$/.test(entry),
     );

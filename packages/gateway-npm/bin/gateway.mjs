@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 const platform = `${process.platform}-${process.arch}`;
 const supported = new Set(["darwin-arm64", "linux-x64", "linux-arm64"]);
 function fail(message, code = 1) {
-  console.error(`agent-connect-gateway: ${message}`);
+  console.error(`agent-connect: ${message}`);
   process.exit(code);
 }
 if (!supported.has(platform))

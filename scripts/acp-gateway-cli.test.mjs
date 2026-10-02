@@ -4,6 +4,8 @@ import { mkdtemp, mkdir, writeFile, readFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+const cliHome = await mkdtemp(join(tmpdir(), "acp-cli-isolated-home-"));
+const cliState = join(cliHome, "state");
 const binary = resolve(
   import.meta.dirname,
   "../target/debug/agent-connect-gateway",
@@ -77,8 +79,9 @@ function command(args, env = {}) {
     ),
   );
   return spawnSync(binary, args, {
+    timeout: 5000,
     encoding: "utf8",
-    env: { ...inherited, ...env },
+    env: { ...inherited, HOME: cliHome, XDG_STATE_HOME: cliState, ...env },
   });
 }
 
@@ -121,13 +124,17 @@ test("init validates first, creates private scoped grant, and refuses overwrites
   assert.match(grant.token, /^[a-f0-9]{64}$/);
   assert.equal(config.allow_origin, "https://app.example");
   assert.equal(config.boxed, true);
-  assert.equal(config.harness_home, "home");
+  assert.equal(
+    config.harness_home,
+    join(cliState, "agent-connect/harnesses/codex"),
+  );
   assert.equal(config.tools, "tools.json");
   assert.ok(!result.stdout.includes(grant.token));
   assert.match(result.stdout, /egress start/);
-  assert.match(result.stdout, /login --harness codex/);
+  assert.match(result.stdout, /Next: agent-connect login \(choose Codex\)/);
   assert.match(result.stdout, /serve --config/);
-  for (const name of ["", "home", "state"]) {
+  assert.equal((await stat(config.harness_home)).mode & 0o777, 0o700);
+  for (const name of ["", "state"]) {
     assert.equal(
       (await stat(join(fixture.directory, name))).mode & 0o777,
       0o700,
@@ -204,7 +211,7 @@ async function serveUntilReady(args, env = {}, cwd) {
   );
   const child = spawn(binary, args, {
     cwd,
-    env: { ...inherited, ...env },
+    env: { ...inherited, HOME: cliHome, XDG_STATE_HOME: cliState, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stderr = "";
@@ -282,10 +289,15 @@ test("production isolation requirements and runtime failures have distinct exits
   ];
   assert.equal(command(base).status, 2);
   assert.equal(command([...base, "--boxed"]).status, 2);
-  assert.equal(
-    command([...base, "--boxed", "--egress-container", "egress"]).status,
-    2,
-  );
+  const defaultHome = await serveUntilReady([
+    ...base,
+    "--boxed",
+    "--egress-container",
+    "egress",
+    "--listen",
+    "127.0.0.1:0",
+  ]);
+  assert.equal(defaultHome.code, 0, defaultHome.stderr);
   const runtime = command([
     ...base.slice(0, -1),
     join(fixture.root, "missing.json"),
@@ -399,3 +411,177 @@ test("relative config argument resolves a dedicated production home to an absolu
   );
   assert.equal(result.code, 0, result.stderr);
 });
+
+test("flagless login refuses nonterminal input without allocating a home", async () => {
+  const { access } = await import("node:fs/promises");
+  const state = join(await mkdtemp(join(tmpdir(), "acp-no-tty-")), "state");
+  const result = command(["login"], { XDG_STATE_HOME: state });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /needs a terminal.*--harness codex/);
+  await assert.rejects(access(state), { code: "ENOENT" });
+});
+
+test("login defaults match init, explicit homes and old configs remain usable", async () => {
+  const root = await mkdtemp(join(tmpdir(), "acp-login-defaults-"));
+  await mkdir(join(root, "bin"));
+  await writeFile(
+    join(root, "bin/docker"),
+    '#!/bin/sh\nprintf "%s\\n" "$@" > "$LOGIN_ARGS"\n',
+  );
+  await chmod(join(root, "bin/docker"), 0o755);
+  const env = { PATH: join(root, "bin"), LOGIN_ARGS: join(root, "args") };
+  assert.equal(command(["login", "--harness", "codex"], env).status, 0);
+  const fixture = await setup();
+  assert.equal(command(fixture.args).status, 0);
+  const path = join(fixture.directory, "config.json");
+  const config = JSON.parse(await readFile(path, "utf8"));
+  const args = (await readFile(env.LOGIN_ARGS, "utf8")).split("\n");
+  assert.ok(
+    args.includes(`type=bind,src=${config.harness_home},dst=/home/node`),
+  );
+  // An existing runtime may still use its relative, per-runtime home/image.
+  config.harness_home = "legacy-home";
+  config.session_image = "session:legacy-test";
+  await writeFile(path, JSON.stringify(config));
+  const configured = command(
+    ["login", "--harness", "codex", "--config", path],
+    env,
+  );
+  assert.equal(configured.status, 0, configured.stderr);
+  const legacy = await readFile(env.LOGIN_ARGS, "utf8");
+  assert.ok(
+    legacy.includes(
+      `type=bind,src=${join(fixture.directory, "legacy-home")},dst=/home/node`,
+    ),
+  );
+  assert.ok(legacy.includes("session:legacy-test"));
+  const overridden = command(
+    [
+      "login",
+      "--harness",
+      "codex",
+      "--config",
+      path,
+      "--harness-home",
+      join(root, "override"),
+      "--session-image",
+      "session:override",
+    ],
+    env,
+  );
+  assert.equal(overridden.status, 0, overridden.stderr);
+  const override = await readFile(env.LOGIN_ARGS, "utf8");
+  assert.ok(
+    override.includes(`type=bind,src=${join(root, "override")},dst=/home/node`),
+  );
+  assert.ok(override.includes("session:override"));
+  const mismatch = command(
+    ["login", "--harness", "claude", "--config", path],
+    env,
+  );
+  assert.equal(mismatch.status, 2);
+  assert.match(mismatch.stderr, /does not match/);
+  assert.equal(await readFile(env.LOGIN_ARGS, "utf8"), override);
+  // Login needs no bearer, origin, proxy or server isolation configuration.
+  await writeFile(
+    path,
+    JSON.stringify({
+      harness: "codex",
+      harness_home: "legacy-home",
+      session_image: "session:legacy-test",
+    }),
+  );
+  const loginOnly = command(["login", "--harness", "codex", "--config", path], {
+    ...env,
+    AGENT_CONNECT_TOKEN: "fixture-supplied-at-serve-time",
+  });
+  assert.equal(loginOnly.status, 0, loginOnly.stderr);
+  const loginArgs = await readFile(env.LOGIN_ARGS, "utf8");
+  assert.ok(
+    loginArgs.includes(
+      `type=bind,src=${join(fixture.directory, "legacy-home")},dst=/home/node`,
+    ),
+  );
+  assert.ok(!loginArgs.includes("fixture-supplied-at-serve-time"));
+  const custom = await setup();
+  const home = join(custom.root, "explicit-home");
+  assert.equal(command([...custom.args, "--harness-home", home]).status, 0);
+  assert.equal(
+    JSON.parse(await readFile(join(custom.directory, "config.json")))
+      .harness_home,
+    home,
+  );
+});
+
+test(
+  "agent-connect login offers a real terminal selector before invoking the chosen provider",
+  { skip: process.platform !== "linux" },
+  async () => {
+    for (const [input, harness] of [
+      ["\n", "codex"],
+      ["wrong\n2\n", "claude"],
+      ["q\n", null],
+    ]) {
+      const root = await mkdtemp(join(tmpdir(), "acp-selector-"));
+      await mkdir(join(root, "bin"));
+      await writeFile(
+        join(root, "bin/docker"),
+        '#!/bin/sh\nprintf "%s\\n" "$@" > "$LOGIN_ARGS"\n',
+      );
+      await chmod(join(root, "bin/docker"), 0o755);
+      const env = {
+        ...process.env,
+        HOME: root,
+        XDG_STATE_HOME: join(root, "state"),
+        PATH: `${join(root, "bin")}:${process.env.PATH}`,
+        LOGIN_ARGS: join(root, "args"),
+      };
+      for (const name of Object.keys(env))
+        if (name.startsWith("AGENT_CONNECT_")) delete env[name];
+      const canonical = resolve(
+        import.meta.dirname,
+        "../target/debug/agent-connect",
+      );
+      const result = spawnSync(
+        "/usr/bin/script",
+        [
+          "-q",
+          "-e",
+          "-c",
+          `'${canonical.replaceAll("'", "'\\''")}' login`,
+          "/dev/null",
+        ],
+        { input, encoding: "utf8", timeout: 10000, env },
+      );
+      assert.equal(
+        result.status,
+        0,
+        `${result.error ?? ""}\n${result.stdout}\n${result.stderr}`,
+      );
+      assert.match(result.stdout, /Choose a harness/);
+      assert.match(
+        result.stdout,
+        /Claude Code \(unconfirmed against Anthropic terms\)/,
+      );
+      if (harness) {
+        const args = await readFile(env.LOGIN_ARGS, "utf8");
+        assert.ok(
+          args.includes(
+            `type=bind,src=${join(root, "state/agent-connect/harnesses", harness)},dst=/home/node`,
+          ),
+        );
+        assert.ok(
+          args.includes(
+            harness === "codex"
+              ? "codex\nlogin\n--device-auth"
+              : "claude\n/login",
+          ),
+        );
+      } else {
+        const { access } = await import("node:fs/promises");
+        await assert.rejects(access(env.LOGIN_ARGS), { code: "ENOENT" });
+        await assert.rejects(access(join(root, "state")), { code: "ENOENT" });
+      }
+    }
+  },
+);

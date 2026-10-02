@@ -41,7 +41,7 @@ impl SpikePaths {
     }
 }
 
-#[derive(Clone, Copy, Debug, clap::ValueEnum, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Harness {
     Codex,

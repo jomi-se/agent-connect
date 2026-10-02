@@ -1,5 +1,9 @@
 //! Private JSON configuration and first-run setup for the unstable ACP gateway.
-use crate::{Harness, credentials::HarnessHome, policy::PermissionProfile};
+use crate::{
+    Harness,
+    credentials::{HarnessHome, default_home},
+    policy::PermissionProfile,
+};
 use anyhow::Context;
 use clap::Args;
 use serde::{Deserialize, Serialize};
@@ -149,26 +153,7 @@ pub struct ServeCli {
 impl ServeOptions {
     pub fn resolve(mut self) -> anyhow::Result<ServeCli> {
         let mut file = if let Some(path) = &self.config {
-            let bytes = read_private(path)?;
-            let mut parsed: Self = serde_json::from_slice(&bytes)
-                .map_err(|e| usage(format!("invalid configuration: {e}")))?;
-            let config_path = path
-                .canonicalize()
-                .context("resolve configuration directory")?;
-            let base = config_path.parent().unwrap_or(Path::new("/"));
-            for entry in [
-                &mut parsed.tools,
-                &mut parsed.harness_home,
-                &mut parsed.state_dir,
-                &mut parsed.mock_root,
-            ] {
-                if let Some(value) = entry {
-                    if value.is_relative() {
-                        *value = base.join(&*value);
-                    }
-                }
-            }
-            parsed
+            read_config(path)?
         } else {
             Self::default()
         };
@@ -187,7 +172,7 @@ impl ServeOptions {
                 })?
             };
         }
-        let cli = ServeCli {
+        let mut cli = ServeCli {
             harness: required!(harness),
             listen: merged!(listen).unwrap_or_else(|| "127.0.0.1:18940".parse().unwrap()),
             allow_origin: required!(allow_origin),
@@ -240,13 +225,38 @@ impl ServeOptions {
             return Err(usage("--mock-container requires --mock-root"));
         }
         if cli.boxed && cli.mock_root.is_none() && cli.harness_home.is_none() {
-            return Err(usage("production boxes require a dedicated --harness-home"));
+            cli.harness_home = Some(default_home(cli.harness)?);
         }
         if let Some(name) = &cli.egress_container {
             validate_container_name(name)?;
         }
         Ok(cli)
     }
+}
+
+/// Read private configuration and resolve paths without requiring server-only
+/// fields. Login uses this metadata even when grants are supplied at serve time.
+pub fn read_config(path: &Path) -> anyhow::Result<ServeOptions> {
+    let bytes = read_private(path)?;
+    let mut parsed: ServeOptions =
+        serde_json::from_slice(&bytes).map_err(|e| usage(format!("invalid configuration: {e}")))?;
+    let config_path = path
+        .canonicalize()
+        .context("resolve configuration directory")?;
+    let base = config_path.parent().unwrap_or(Path::new("/"));
+    for entry in [
+        &mut parsed.tools,
+        &mut parsed.harness_home,
+        &mut parsed.state_dir,
+        &mut parsed.mock_root,
+    ] {
+        if let Some(value) = entry {
+            if value.is_relative() {
+                *value = base.join(&*value);
+            }
+        }
+    }
+    Ok(parsed)
 }
 
 fn read_private(path: &Path) -> anyhow::Result<Vec<u8>> {
@@ -357,6 +367,9 @@ pub struct InitCli {
     pub directory: PathBuf,
     #[arg(long, value_enum)]
     pub harness: Harness,
+    /// Dedicated whole home; defaults to the same per-harness home used by login.
+    #[arg(long, env = "AGENT_CONNECT_HARNESS_HOME", hide_env_values = true)]
+    pub harness_home: Option<PathBuf>,
     #[arg(long)]
     pub allow_origin: String,
     /// Approved snapshot to validate and copy before issuing the grant.
@@ -390,7 +403,12 @@ pub fn init(cli: InitCli) -> anyhow::Result<()> {
     builder.create(&cli.directory).context("create new private runtime directory; destination must not exist and its parent must exist")?;
     let directory = cli.directory.canonicalize()?;
     let result = (|| -> anyhow::Result<()> {
-        HarnessHome::prepare(&directory.join("home"))?;
+        let home_path = cli
+            .harness_home
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(|| default_home(cli.harness))?;
+        let home = HarnessHome::prepare(&home_path)?;
         builder.create(directory.join("state"))?;
         write_private(&directory.join("tools.json"), &source)?;
         let token = format!(
@@ -404,7 +422,7 @@ pub fn init(cli: InitCli) -> anyhow::Result<()> {
             allow_origin: Some(cli.allow_origin.clone()),
             token: Some(token.clone()),
             tools: Some("tools.json".into()),
-            harness_home: Some("home".into()),
+            harness_home: Some(home.path),
             state_dir: Some("state".into()),
             boxed: Some(true),
             session_image: Some(cli.session_image.clone()),
@@ -443,21 +461,26 @@ pub fn init(cli: InitCli) -> anyhow::Result<()> {
         directory.join("grant.json").display()
     );
     println!(
-        "Next: agent-connect-gateway egress start --name {} --session-image {}",
+        "Next: agent-connect egress start --name {} --session-image {}",
         shell_quote(&cli.egress_container),
         shell_quote(&cli.session_image)
     );
+    if cli.harness_home.is_none() && cli.session_image == DEFAULT_SESSION_IMAGE {
+        println!(
+            "Next: agent-connect login (choose {})",
+            match cli.harness {
+                Harness::Codex => "Codex",
+                Harness::Claude => "Claude Code",
+            }
+        );
+    } else {
+        println!(
+            "Next: agent-connect login --config {}",
+            shell_quote(&directory.join("config.json").to_string_lossy())
+        );
+    }
     println!(
-        "Next: agent-connect-gateway login --harness {} --harness-home {} --session-image {}",
-        match cli.harness {
-            Harness::Codex => "codex",
-            Harness::Claude => "claude",
-        },
-        shell_quote(&directory.join("home").to_string_lossy()),
-        shell_quote(&cli.session_image)
-    );
-    println!(
-        "Next: agent-connect-gateway serve --config {}",
+        "Next: agent-connect serve --config {}",
         shell_quote(&directory.join("config.json").to_string_lossy())
     );
     Ok(())

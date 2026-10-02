@@ -1,7 +1,84 @@
 //! Dedicated shared harness homes. No credential contents are read or copied.
 use crate::Harness;
 use anyhow::{Context, bail};
+use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
+
+/// A dedicated whole home per harness, never the provider's personal home.
+pub fn default_home(harness: Harness) -> anyhow::Result<PathBuf> {
+    default_home_from(
+        harness,
+        cfg!(target_os = "macos"),
+        std::env::var_os("HOME").map(PathBuf::from),
+        std::env::var_os("XDG_STATE_HOME").map(PathBuf::from),
+    )
+}
+
+fn default_home_from(
+    harness: Harness,
+    macos: bool,
+    home: Option<PathBuf>,
+    state: Option<PathBuf>,
+) -> anyhow::Result<PathBuf> {
+    let base = if let Some(state) = state.filter(|path| !path.as_os_str().is_empty()) {
+        state
+    } else {
+        let home = home
+            .filter(|path| !path.as_os_str().is_empty())
+            .ok_or_else(|| {
+                crate::config::UsageError("set HOME, XDG_STATE_HOME or --harness-home".into())
+            })?;
+        if macos {
+            home.join("Library/Application Support")
+        } else {
+            home.join(".local/state")
+        }
+    };
+    if !base.is_absolute() {
+        return Err(crate::config::UsageError(
+            "HOME and XDG_STATE_HOME must be absolute paths".into(),
+        )
+        .into());
+    }
+    Ok(base.join("agent-connect/harnesses").join(match harness {
+        Harness::Codex => "codex",
+        Harness::Claude => "claude",
+    }))
+}
+
+/// A small terminal selector; EOF or q cancels before creating a home.
+pub fn select_harness(
+    input: &mut impl BufRead,
+    output: &mut impl Write,
+    default: Harness,
+) -> anyhow::Result<Option<Harness>> {
+    writeln!(
+        output,
+        "Choose a harness:\n  1) Codex\n  2) Claude Code (unconfirmed against Anthropic terms)"
+    )?;
+    loop {
+        write!(
+            output,
+            "Selection [{}], or q to cancel: ",
+            match default {
+                Harness::Codex => "1",
+                Harness::Claude => "2",
+            }
+        )?;
+        output.flush()?;
+        let mut answer = String::new();
+        if input.read_line(&mut answer)? == 0 {
+            return Ok(None);
+        }
+        match answer.trim().to_ascii_lowercase().as_str() {
+            "" => return Ok(Some(default)),
+            "1" | "codex" => return Ok(Some(Harness::Codex)),
+            "2" | "claude" => return Ok(Some(Harness::Claude)),
+            "q" | "quit" => return Ok(None),
+            _ => writeln!(output, "Enter 1 for Codex or 2 for Claude Code.")?,
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct HarnessHome {
@@ -90,6 +167,55 @@ pub fn login_args(home: &HarnessHome, image: &str, harness: Harness) -> Vec<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn convention_homes_are_per_harness_and_platform_with_explicit_state_override() {
+        let home = Some(PathBuf::from("/example/user"));
+        assert_eq!(
+            default_home_from(Harness::Codex, false, home.clone(), None).unwrap(),
+            Path::new("/example/user/.local/state/agent-connect/harnesses/codex")
+        );
+        assert_eq!(
+            default_home_from(Harness::Claude, true, home.clone(), None).unwrap(),
+            Path::new("/example/user/Library/Application Support/agent-connect/harnesses/claude")
+        );
+        assert_eq!(
+            default_home_from(Harness::Codex, true, None, Some("/example/state".into())).unwrap(),
+            Path::new("/example/state/agent-connect/harnesses/codex")
+        );
+        assert!(default_home_from(Harness::Codex, false, None, None).is_err());
+        assert!(default_home_from(Harness::Codex, false, home, Some("relative".into())).is_err());
+    }
+
+    #[test]
+    fn selector_defaults_validates_and_cancels_before_login() {
+        let mut output = Vec::new();
+        assert!(matches!(
+            select_harness(&mut &b"\n"[..], &mut output, Harness::Codex).unwrap(),
+            Some(Harness::Codex)
+        ));
+        assert!(matches!(
+            select_harness(&mut &b"invalid\n2\n"[..], &mut output, Harness::Codex).unwrap(),
+            Some(Harness::Claude)
+        ));
+        assert!(matches!(
+            select_harness(&mut &b"\n"[..], &mut output, Harness::Claude).unwrap(),
+            Some(Harness::Claude)
+        ));
+        assert!(
+            select_harness(&mut &b"q\n"[..], &mut output, Harness::Codex)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            select_harness(&mut &b""[..], &mut output, Harness::Codex)
+                .unwrap()
+                .is_none()
+        );
+        let text = String::from_utf8(output).unwrap();
+        assert!(text.contains("Codex"));
+        assert!(text.contains("unconfirmed against Anthropic terms"));
+        assert!(text.contains("Enter 1"));
+    }
     #[test]
     fn shared_home_uses_host_identity_and_private_modes() {
         let dir = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
