@@ -220,12 +220,13 @@ export class AgentSession {
               await this.provider.submitToolResult(
                 event.requestToken,
                 serializeToolResult(result),
+                typeof result === "object" ? result : undefined,
               );
               yield {
                 type: "tool.completed",
                 actionId: event.actionId,
                 name: event.name,
-                isError: false,
+                isError: typeof result === "object" && result.isError === true,
               };
             } catch (cause) {
               if (controller.signal.aborted || event.signal?.aborted) break;

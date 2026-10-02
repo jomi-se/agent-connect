@@ -184,3 +184,9 @@ window.spike = {
   answer: () => $("answer").textContent,
   transport: () => provider?.transport.stats(),
 };
+
+if (query.get("chat") === "1") {
+  const connection = await connect();
+  const { mountChat } = await import("./use-chat.jsx");
+  mountChat(connection, applicationTools);
+}

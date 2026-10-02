@@ -79,7 +79,8 @@ MCP-over-ACP server) and `createBrowserAcpStream`.
      `submitToolResult` answers the pending MCP request;
    - `cancel` sends `session/cancel`.
 
-   `AgentSession` and `createAgentChat` then work over ACP unchanged.
+   `AgentSession` and `createAgentChat` retain their interfaces and now forward
+   thought, plan and native-tool presentation events.
 
 3. **Recovery.** When a resumable session has ended, the SDK reconnects with
    `session/load`, reports the interrupted turn as interrupted, and never
@@ -127,8 +128,8 @@ implements it on `AcpProvider`:
 | trigger `regenerate-message`                                                     | rejected: ACP cannot truncate a harness conversation                                                                                                             |
 | `reconnectToStream`                                                              | resumable reattach, or `session/load`                                                                                                                            |
 
-Bookhand and Firebase Canvas move to `useChat` with this transport, or to
-`createAgentChat`. The tool definitions stay the same. Applications that call
+Separately approved downstream migrations may move Bookhand and Firebase
+Canvas to `useChat` with this transport, or to `createAgentChat`. The tool definitions stay the same. Applications that call
 a model provider directly keep using the AI SDK as before, outside Agent
 Connect.
 
@@ -180,14 +181,17 @@ one approved tag, and three initial targets cover the expected owners:
   generates the GitHub Actions release workflow. It builds the matrix,
   uploads release archives, and generates the shell, PowerShell, npm and
   Homebrew installers.
-- **npm wrapper shape** (decided in phase 2, after testing both):
+- **npm wrapper shape** (compared locally in phase 3):
   - cargo-dist's npm installer;
   - the per-platform package pattern (one small launcher package, plus one
     package per target, selected through `optionalDependencies`).
 
-  Some installers download every platform's package. Codex moved to platform
-  builds published as dist-tags of one package to avoid that. Install size
-  decides the choice.
+  The dry run chooses per-platform optional packages: a 1.6 KB launcher tarball
+  and only the selected platform binary (about 4.4 MB for Linux ARM64), without
+  runtime downloads. cargo-dist's generated npm tarball is about 7.2 KB and uses
+  a download during installation; these are different wrapper sizes, not an
+  equal comparison of total installed disk usage. Exact adapter/CLI pins stay
+  in the wrapper manifest. No package has been published.
 
 - **Provenance:** publish from CI with npm trusted publishing (OIDC) and
   provenance, never from a workstation token. Releases attach checksums.
@@ -231,3 +235,16 @@ No local dry run authorizes a tag, push, registry publication or live login.
 - Whether Windows is a supported owner platform for the first release.
 - How a grant is issued: pairing in the gateway, or the ported OAuth consent
   code (an ADR 0016 prerequisite).
+
+## Implementation evidence (2026-10-02, unreleased)
+
+Phases 1–5 are implemented; ADR 0016 remains proposed. See the
+[experiment results](../experiments/acp-gateway.md) and
+[local build instructions](../../deploy/acp-gateway/README.md).
+`npm run verify` includes host and boxed real-adapter scenarios with isolated
+homes and deterministic inference. The useChat example exercises thoughts,
+application tools, follow-ups and cancellation. Neither pinned fixture CLI
+advertises a native plan tool; typed plan-to-UI conversion is contract-tested
+and is not claimed as real-harness plan evidence. Grant issuance, live
+credentials, desktop/mobile owner-platform checks and release approval remain
+unfinished. Existing OpenClaw product tests and exports remain intact.

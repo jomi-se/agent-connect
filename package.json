@@ -41,7 +41,7 @@
     "verify": "npm run format:check && npm run typecheck && npm test && npm run build && npm run test:integration:openclaw && npm run test:integration:acp && npm run test:integration:acp:boxed",
     "verify:full": "npm run verify && npm run test:package:web && npm run test:release && npm run test:webmcp && npm run test:e2e --workspace @agent-connect/firebase-canvas",
     "test:integration:acp": "node scripts/acp-gateway-scenarios.mjs",
-    "test:integration:acp:boxed": "ACP_BOXED=1 ACP_SCENARIOS=tools,shell,resume,slow-cut,ask-cut,answer-halfopen,expire,discard node scripts/acp-gateway-scenarios.mjs"
+    "test:integration:acp:boxed": "ACP_BOXED=1 ACP_SCENARIOS=tools,use-chat,shell,cancel,resume,slow-cut,ask-cut,answer-halfopen,expire,discard node scripts/acp-gateway-scenarios.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

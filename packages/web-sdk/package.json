@@ -43,7 +43,12 @@
   },
   "devDependencies": {
     "typescript": "6.0.2",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "@ai-sdk/react": "4.0.96",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.2.3"
   },
   "engines": {
     "node": ">=22"

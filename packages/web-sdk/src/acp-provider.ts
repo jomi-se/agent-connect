@@ -142,7 +142,13 @@ export class AcpProvider implements AgentProvider {
       grant: { ...options.grant },
       ...(options.transport ? { transport: { ...options.transport } } : {}),
     };
-    this.definitions = structuredClone(options.tools);
+    this.definitions = structuredClone(
+      options.tools.map(({ name, description, inputSchema }) => ({
+        name,
+        description,
+        inputSchema,
+      })),
+    );
     if (
       new Set(this.definitions.map((t) => t.name)).size !==
       this.definitions.length
@@ -495,7 +501,11 @@ export class AcpProvider implements AgentProvider {
       if (this.active === turn) this.active = undefined;
     }
   }
-  async submitToolResult(requestToken: string, output: string): Promise<void> {
+  async submitToolResult(
+    requestToken: string,
+    output: string,
+    applicationResult?: ApplicationToolResult,
+  ): Promise<void> {
     const pending = this.pending.get(requestToken);
     if (!pending)
       throw new AgentConnectError(
@@ -539,7 +549,7 @@ export class AcpProvider implements AgentProvider {
     }
     clearInterval(pending.timer);
     this.pending.delete(requestToken);
-    pending.resolve(result as ApplicationToolResult);
+    pending.resolve(applicationResult ?? result);
   }
   async cancel(): Promise<void> {
     if (!this.active || this.active.cancelled) return;
@@ -575,6 +585,11 @@ export class AcpProvider implements AgentProvider {
   /** Load history on a new transport. Never replays a prompt or tool result. */
   recover(interrupted = false): Promise<AcpRecovery> {
     if (this.recovery) return this.recovery;
+    if (
+      this.link.error &&
+      ![4404, 4410, 4413].includes(this.link.error.closeCode)
+    )
+      return Promise.reject(this.link.error);
     if (!this.id || this.stopped || (this.active && !interrupted))
       return Promise.reject(
         new AgentConnectError(

@@ -61,8 +61,11 @@ writeFileSync(
 );
 writeFileSync(
   join(consumerDir, "check.mjs"),
-  `import { defineTool, createWebMcpToolSnapshot, AgentSession, createAgentChat, exportAgentChatMarkdown, createOpenClawConversationClient, getOpenClawConnectionProviderUrl, normalizeOpenClawProviderUrl, parseOpenClawConnection, serializeOpenClawConnection } from "@open-agent-connect/web";
+  `import { connectAgent, AcpProvider, createAcpChatTransport, createResumableAcpStream, AcpTransportError, defineTool, createWebMcpToolSnapshot, AgentSession, createAgentChat, exportAgentChatMarkdown, createOpenClawConversationClient, getOpenClawConnectionProviderUrl, normalizeOpenClawProviderUrl, parseOpenClawConnection, serializeOpenClawConnection } from "@open-agent-connect/web";
 
+for (const exported of [connectAgent, AcpProvider, createAcpChatTransport, createResumableAcpStream, AcpTransportError]) {
+  if (typeof exported !== "function") throw new Error("Missing unstable ACP package export");
+}
 if (typeof createWebMcpToolSnapshot !== "function") throw new Error("Missing WebMCP export");
 if (normalizeOpenClawProviderUrl("https://gateway.example/agent-connect") !== "https://gateway.example/agent-connect") throw new Error("Missing plugin provider layout");
 try {

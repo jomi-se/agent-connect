@@ -94,7 +94,12 @@ export interface AgentProvider {
   streamTask(
     request: AgentProviderTaskRequest,
   ): AsyncIterable<AgentProviderEvent>;
-  submitToolResult(requestToken: string, output: string): Promise<void>;
+  submitToolResult(
+    requestToken: string,
+    output: string,
+    /** Optional original result for providers that retain structured content. */
+    applicationResult?: ApplicationToolResult,
+  ): Promise<void>;
   cancel(): Promise<void>;
 }
 

@@ -126,3 +126,9 @@ export type {
   AcpTransportSnapshot,
 } from "./resumable-acp-stream.js";
 export type { AcpPlanEntry, AcpToolUpdate } from "./types.js";
+
+export { createAcpChatTransport } from "./acp-chat-transport.js";
+export type {
+  AcpChatTransport,
+  AcpChatTransportOptions,
+} from "./acp-chat-transport.js";

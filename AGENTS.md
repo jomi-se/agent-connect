@@ -12,6 +12,11 @@ native-patch experiment have also been removed. Current authorization, grant,
 and tool-snapshot modules live in the plugin package. Keep provider/plugin types
 out of the application API.
 
+The unreleased implementation of proposed ADR 0016 lives in `crates/gateway`
+and the ACP exports of `packages/web-sdk`, with the scoped release plan at
+`docs/plan/acp-gateway-release.md`. It does not change the current installation
+target or authorize publishing, accepting the ADR or retiring OpenClaw.
+
 ## Terminology
 
 Use **gateway** for the Agent Connect component that applications reach and

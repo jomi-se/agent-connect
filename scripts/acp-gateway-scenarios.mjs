@@ -191,6 +191,10 @@ try {
       join(repo, "deploy/acp-gateway/test/egress-proxy.test.mjs"),
     ]);
     await command("docker", ["image", "inspect", sessionImage]);
+    await command("node", [
+      "--test",
+      join(repo, "deploy/acp-gateway/test/session-image.test.mjs"),
+    ]);
     const suffix = run.split("-").at(-1).toLowerCase();
     mockContainer = `acp-test-model-${suffix}`;
     egressContainer = `acp-test-egress-${suffix}`;
@@ -246,6 +250,7 @@ try {
     if (boxed) await mkdir(harnessHome, { mode: 0o700 });
     for (const [mobile, scenario] of [
       [false, "tools"],
+      [false, "use-chat"],
       [false, "shell"],
       [false, "ask"],
       [false, "cancel"],
@@ -330,7 +335,15 @@ try {
       const output = await command(
         "node",
         [
-          join(spike, "web", mobile ? "drive-mobile.mjs" : "drive.mjs"),
+          join(
+            spike,
+            "web",
+            scenario === "use-chat"
+              ? "drive-use-chat.mjs"
+              : mobile
+                ? "drive-mobile.mjs"
+                : "drive.mjs",
+          ),
           scenario,
           label,
         ],
@@ -339,6 +352,7 @@ try {
           env: {
             ...cleanEnv,
             ACP_REPORT_DIR: join(run, ".run/browser"),
+            ACP_HARNESS: harness,
             PAGE_ORIGIN: `${origin}/?gateway=ws://127.0.0.1:${mobile ? relayPort : gatewayPort}/acp${mobile ? "" : "&resume=0"}`,
             RELAY_CONTROL: `http://127.0.0.1:${controlPort}`,
             AWAY_MS: "10000",

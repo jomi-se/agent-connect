@@ -40,3 +40,13 @@ The proxy conservatively permits IPv6 only within the currently allocated
 [global unicast range](https://www.iana.org/assignments/ipv6-address-space),
 excluding special-purpose blocks and IPv4-mapped addresses. DNS answers are
 validated before connecting; reset clients cannot terminate the proxy.
+
+## Verification prerequisites
+
+`npm run verify` requires Node 24, Rust on PATH, the pinned OpenClaw fixture,
+Chromium installed for Playwright, Docker and the locally built
+`agent-connect-session:0.1.0` image. Build the image with the command above
+before the boxed gate. The runners create and remove only their own named
+containers and networks, with private temporary homes and a deterministic model.
+No credential/login or subscription-backed model is used. Run `cargo test
+--locked` for the Rust-owned policy, journal, home and resume invariants.
