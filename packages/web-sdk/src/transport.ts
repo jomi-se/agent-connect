@@ -7,7 +7,7 @@ import type { BrowserAcpStreamOptions } from "./types.js";
  * Create an ACP stream using the browser's native WebSocket implementation.
  *
  * Browsers cannot set arbitrary WebSocket headers. Authentication should use
- * secure cookies, a negotiated subprotocol, or another conductor-supported
+ * secure cookies, a negotiated subprotocol, or another gateway-supported
  * browser mechanism.
  */
 /** @experimental Unstable ACP WebSocket transport; prefer connectAgent for resume. */

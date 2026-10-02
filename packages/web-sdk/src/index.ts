@@ -102,6 +102,7 @@ export type {
   AgentTaskResult,
   AgentToolDefinition,
   BrowserAcpStreamOptions,
+  BrowserAcpStream,
   JsonObject,
   JsonSchema,
   JsonValue,

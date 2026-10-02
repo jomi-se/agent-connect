@@ -17,6 +17,7 @@ import type {
   JsonSchema,
 } from "./types.js";
 
+/** @deprecated Retained for Open Responses AI SDK compatibility. For experimental ACP, use createAcpChatTransport from @open-agent-connect/web/acp with application tools; the harness owns the tool loop. */
 export interface AiSdkOpenResponsesModelOptions {
   /** Absolute Open Responses POST endpoint, normally ending in `/v1/responses`. */
   readonly endpoint: string;
@@ -29,11 +30,13 @@ export interface AiSdkOpenResponsesModelOptions {
   readonly allowInsecureHttp?: boolean;
 }
 
+/** @deprecated Retained for Open Responses AI SDK compatibility. For experimental ACP, use createAcpChatTransport from @open-agent-connect/web/acp with application tools; the harness owns the tool loop. */
 export interface AiSdkApplicationToolsOptions {
   /** Stable application connection/grant identity exposed to local tool handlers. */
   readonly connectionId: string;
 }
 
+/** @deprecated Retained for Open Responses AI SDK compatibility. For experimental ACP, use createAcpChatTransport from @open-agent-connect/web/acp with application tools; the harness owns the tool loop. */
 export interface AiSdkOpenResponsesFinalStep {
   readonly finishReason:
     "stop" | "length" | "content-filter" | "tool-calls" | "error" | "other";
@@ -45,6 +48,7 @@ export interface AiSdkOpenResponsesFinalStep {
  * Create the browser-safe AI SDK model for an already-authorized Open Responses
  * endpoint. Authentication flow and token storage deliberately remain outside
  * this execution adapter.
+ * @deprecated Retained for Open Responses AI SDK compatibility. For experimental ACP, use createAcpChatTransport from @open-agent-connect/web/acp with application tools; the harness owns the tool loop.
  */
 export function createAiSdkOpenResponsesModel(
   options: AiSdkOpenResponsesModelOptions,
@@ -92,6 +96,7 @@ export function createAiSdkOpenResponsesModel(
  * Prepare AI SDK tool-loop steps to continue through provider-owned Responses
  * state. This relies on the pinned downstream @ai-sdk/open-responses patch; it
  * uses only AI SDK's public prepareStep and provider-options surfaces.
+ * @deprecated Retained for Open Responses AI SDK compatibility. For experimental ACP, use createAcpChatTransport from @open-agent-connect/web/acp with application tools; the harness owns the tool loop.
  */
 export function createAiSdkOpenResponsesPrepareStep<
   Tools extends ToolSet = ToolSet,
@@ -146,6 +151,7 @@ export function createAiSdkOpenResponsesPrepareStep<
 /**
  * Reusable native-continuation settings for generateText/streamText. Disabling
  * model-call retries prevents an ambiguous admitted request from being replayed.
+ * @deprecated Retained for Open Responses AI SDK compatibility. For experimental ACP, use createAcpChatTransport from @open-agent-connect/web/acp with application tools; the harness owns the tool loop.
  */
 export function createAiSdkOpenResponsesGenerationOptions<
   Tools extends ToolSet = ToolSet,
@@ -167,6 +173,7 @@ export function createAiSdkOpenResponsesGenerationOptions<
  * unresolved tool-call step. Retaining that identifier does not prove it is
  * safe to reuse after an ambiguously admitted failure: callers must interrupt
  * the conversation and must not replay the uncertain request.
+ * @deprecated Retained for Open Responses AI SDK compatibility. For experimental ACP, use createAcpChatTransport from @open-agent-connect/web/acp with application tools; the harness owns the tool loop.
  */
 export function selectAiSdkOpenResponsesCheckpoint(
   previousResponseId: string | undefined,
@@ -182,6 +189,7 @@ export function selectAiSdkOpenResponsesCheckpoint(
  * Adapt one already-selected, fixed ApplicationTool snapshot to AI SDK tools.
  * Passing `snapshot.tools` from createWebMcpToolSnapshot uses the same path and
  * performs no second native WebMCP discovery.
+ * @deprecated Retained for Open Responses AI SDK compatibility. For experimental ACP, use createAcpChatTransport from @open-agent-connect/web/acp with application tools; the harness owns the tool loop.
  */
 export function createAiSdkApplicationTools(
   applicationTools: readonly ApplicationTool[],

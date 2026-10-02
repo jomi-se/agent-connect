@@ -16,6 +16,7 @@ interface PendingOutput {
   readonly output: string;
 }
 
+/** @deprecated Retained for Responses compatibility. For experimental ACP, use connectAgent/AcpProvider from @open-agent-connect/web/acp with AgentSession. */
 export interface CreateOpenClawResponsesProviderOptions {
   /** Validated delegated connection returned by the OpenClaw OAuth flow. */
   readonly connection: OpenClawConnection;
@@ -30,6 +31,7 @@ export interface CreateOpenClawResponsesProviderOptions {
  * This is the safe application-facing path: it derives the provider base URL
  * and model from the validated connection, so callers cannot accidentally
  * duplicate the `/v1/responses` path or send a stale model alias.
+ * @deprecated Retained for Responses compatibility. For experimental ACP, use connectAgent/AcpProvider from @open-agent-connect/web/acp with AgentSession.
  */
 export function createOpenClawResponsesProvider(
   options: CreateOpenClawResponsesProviderOptions,
@@ -70,6 +72,7 @@ export function createOpenClawResponsesProvider(
  * a function result, and the next segment is created with
  * `previous_response_id` once the browser has produced it. The chaining is
  * internal, so `AgentSession` sees the same provider event stream as before.
+ * @deprecated Retained for Responses compatibility. For experimental ACP, use connectAgent/AcpProvider from @open-agent-connect/web/acp with AgentSession.
  */
 export class ResponsesProvider implements AgentProvider {
   private readonly baseUrl: string;
