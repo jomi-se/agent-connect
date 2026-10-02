@@ -28,11 +28,19 @@ provider API key, personal harness home or live model turn is involved.
 
 Browser checks cover one visible highlight, exactly one invocation per requested
 application tool, interruption and reconnect during an unanswered reader
-question with the same session, and cancellation without a follow-up model
+question with the same session, genuine browser back/forward-cache restoration
+both while idle and while an app tool waits, and cancellation without a follow-up model
 request. Diagnostics are retained under the printed temporary run directory.
 The gateway permits only one active host. After Stop, the test explicitly opens
 a new connection and completes another tool turn, retaining the cancelled
 transcript and verifying that the previous question is not replayed.
+The browser uses full Chromium's new headless mode with back/forward caching
+enabled, and asserts `pageshow.persisted`; synthetic lifecycle events alone
+cannot satisfy this gate. See [Playwright's browser reference](https://playwright.dev/docs/browsers#chromium-new-headless-mode).
+The runner gives each default test image a unique tag, runs the captured immutable
+image ID, and removes only its own matching tag after its containers close. Identical
+concurrent builds may share an image ID; other runs' tags are retained. An explicitly supplied
+`ACP_CLEAN_ROOM_IMAGE` is retained.
 Containers and session networks created by this run are cleaned on success or
 failure; retained directories are private and may contain generated test grants.
 

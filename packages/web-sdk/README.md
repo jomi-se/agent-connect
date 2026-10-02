@@ -156,6 +156,14 @@ retention window can continue an active stream without issuing another prompt.
 If retention expires or output overflows, the provider opens a new transport and
 uses `session/load`; gateway restart recovery is not promised.
 
+When a page enters the browser back/forward cache, keep the provider, transport
+and chat state alive: do not dispose them on `pagehide` when `event.persisted`
+is true. The transport's lifecycle listeners handle socket suspension and
+reattachment. Dispose only on an ordinary departure or an explicit close.
+A full reload creates a new page and requires authorization again. See the
+[pagehide lifecycle reference](https://developer.mozilla.org/en-US/docs/Web/API/Window/pagehide_event)
+and the sample's cleanup handler.
+
 ```ts
 const provider = await connectAgent({
   grant,
