@@ -20,7 +20,8 @@
     "CHANGELOG.md"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "next"
   },
   "exports": {
     ".": {

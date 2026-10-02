@@ -84,12 +84,20 @@ test("partial rerun skips the published package and publishes the other tarball"
   assert.match(messages.join("\n"), /SKIP.*PUBLISHED/s);
 });
 
-test("only a successful main push can enter the publication job", () => {
-  const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
-  assert.match(workflow, /publish:\n[\s\S]*needs: checks/);
-  assert.match(
-    workflow,
-    /github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/,
+test("ordinary CI cannot publish and ACP publication requires explicit protected authority", () => {
+  const ci = readFileSync(".github/workflows/ci.yml", "utf8");
+  assert.doesNotMatch(ci, /^\s{2}publish:/m);
+  assert.doesNotMatch(
+    ci,
+    /(?:id-token|packages|contents): write|release:publish/,
   );
-  assert.doesNotMatch(workflow, /publish:[\s\S]*workflow_dispatch ==/);
+  const release = readFileSync(".github/workflows/acp-release.yml", "utf8");
+  assert.match(release, /workflow_dispatch:/);
+  assert.match(release, /dry_run:[\s\S]*?default: true/);
+  assert.match(release, /publish:[\s\S]*?default: false/);
+  assert.match(release, /environment: acp-first-release/);
+  assert.match(release, /ADR 0016 is not ACCEPTED/);
+  assert.match(release, /Owner-pushed remote tag does not match checkout/);
+  assert.match(release, /id-token: write/);
+  assert.doesNotMatch(release, /NODE_AUTH_TOKEN|NPM_TOKEN|git push/);
 });

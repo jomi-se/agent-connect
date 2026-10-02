@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent Connect — reader chat</title>
+  </head>
+  <body>
+    <main>
+      <h1>Reader chat</h1>
+      <p>
+        Experimental ACP alpha. Connect to your own gateway and approve the
+        three reader tools below.
+      </p>
+      <form id="connect-form">
+        <label
+          >Operator grant JSON
+          <input id="grant-file" type="file" accept="application/json,.json"
+        /></label>
+        <label
+          >Gateway WebSocket URL
+          <input
+            id="gateway-url"
+            type="url"
+            placeholder="ws://127.0.0.1:18940/acp"
+            required
+        /></label>
+        <label
+          >Grant token
+          <input id="grant-token" type="password" autocomplete="off" required
+        /></label>
+        <details>
+          <summary>Tools requested by this application</summary>
+          <pre id="tool-snapshot"></pre>
+          <a id="download-tools" download="tools.json"
+            >Download the tool snapshot</a
+          >
+        </details>
+        <label class="approval"
+          ><input id="approve-tools" type="checkbox" required /> I approve these
+          tools for this connection.</label
+        >
+        <button id="connect">Connect</button>
+      </form>
+      <p id="connection-status" role="status">Disconnected</p>
+      <section aria-label="Open book" id="book">
+        <h2>The evening library</h2>
+        <p data-chapter="1">
+          Chapter 1: The library opened at dusk. A reader found a quiet table
+          beside the window.
+        </p>
+      </section>
+      <section aria-label="Agent chat">
+        <p id="chat-status" role="status">idle</p>
+        <div id="chat-messages" aria-live="polite"></div>
+        <p id="error" role="alert"></p>
+        <form id="chat-form">
+          <label>Message <input id="chat-input" required disabled /></label>
+          <button id="chat-send" disabled>Send</button>
+          <button id="chat-stop" type="button" disabled>Stop</button>
+        </form>
+      </section>
+      <form id="ask-form" hidden>
+        <label
+          ><span id="ask-question"></span><input id="ask-input" required
+        /></label>
+        <button id="ask-answer">Answer</button>
+      </form>
+    </main>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
