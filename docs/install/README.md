@@ -146,6 +146,11 @@ In the browser upload `grant.json`, review/confirm the tool consent checkbox,
 then connect. Ask: “Read chapter 1 and highlight its first sentence.” The
 highlight should appear in the sample and the chat should explain its result.
 Stop cancels a running turn, including an unanswered reader question.
+After Stop or a terminal failure, choose **New connection** before sending
+another message. The sample retains the transcript and in-memory grant, but
+starts a fresh harness session and never re-sends earlier prompts or effects.
+If a one-session gateway reports full capacity during box teardown, wait a
+moment and choose **New connection** again; the transcript stays visible.
 
 The default listener is loopback `127.0.0.1:18940`. For a remotely hosted app,
 use HTTPS/WSS through an operator-managed reverse proxy, an exact approved

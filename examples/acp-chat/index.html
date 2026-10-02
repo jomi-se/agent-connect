@@ -54,10 +54,16 @@
         <p id="chat-status" role="status">idle</p>
         <div id="chat-messages" aria-live="polite"></div>
         <p id="error" role="alert"></p>
+        <p id="new-session-notice" hidden>
+          This turn ended without a continuation. Start a new connection to send
+          another message. Previous messages remain visible; they are never sent
+          to the new session.
+        </p>
         <form id="chat-form">
           <label>Message <input id="chat-input" required disabled /></label>
           <button id="chat-send" disabled>Send</button>
           <button id="chat-stop" type="button" disabled>Stop</button>
+          <button id="chat-new" type="button" disabled>New connection</button>
         </form>
       </section>
       <form id="ask-form" hidden>

@@ -402,6 +402,8 @@ try {
       work,
       "--mock-container",
       modelName,
+      "--max-sessions",
+      "1",
     ],
     { env: { ...process.env, AGENT_CONNECT_TEST_ROOT: work } },
   );
@@ -459,7 +461,7 @@ try {
     );
     assert.equal(await page.locator("#error").textContent(), "");
   }
-  const toolsPage = await connectPage();
+  const toolsPage = await connectPage(true);
   await send(toolsPage, "SPIKE-TOOLS");
   await settled(toolsPage, "completed");
   assert.equal(await toolsPage.locator("#book mark").count(), 1);
@@ -483,8 +485,7 @@ try {
   report.checks.push(
     "real Codex adapter reads a passage and highlights it once",
   );
-  await toolsPage.close();
-  const reconnectPage = await connectPage(true);
+  const reconnectPage = toolsPage;
   await send(reconnectPage, "SPIKE-ASK");
   await reconnectPage.locator("#ask-form").waitFor({ state: "visible" });
   const beforeSession = await reconnectPage
@@ -544,8 +545,7 @@ try {
   report.checks.push(
     "ongoing-turn reconnect retains its session and executes the held reader tool once",
   );
-  await reconnectPage.close();
-  const cancelPage = await connectPage();
+  const cancelPage = reconnectPage;
   await send(cancelPage, "SPIKE-ASK");
   await cancelPage.locator("#ask-form").waitFor({ state: "visible" });
   const beforeCancel = (await modelRequests()).length;
@@ -562,10 +562,69 @@ try {
     await cancelPage
       .locator("#book")
       .evaluate((node) => Number(node.dataset.ask_readerCount)),
-    1,
+    2,
   );
   report.checks.push(
     "Stop cancels the pending reader question without a follow-up model request",
+  );
+  const cancelledSession = await cancelPage
+    .locator("#connection-status")
+    .getAttribute("data-session-id");
+  // Box teardown is asynchronous. Each capacity rejection permits a fresh
+  // deliberate connection click; no prompt is submitted during these retries.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await cancelPage.locator("#chat-new").click();
+    await cancelPage.waitForFunction(
+      () =>
+        !document.getElementById("chat-input").disabled ||
+        (!document.getElementById("chat-new").disabled &&
+          document.getElementById("error").textContent),
+    );
+    if (await cancelPage.locator("#chat-input").isEnabled()) break;
+    assert.match(
+      await cancelPage.locator("#error").textContent(),
+      /session capacity is full/,
+    );
+    assert.equal(
+      await cancelPage
+        .locator('#chat-messages article[data-status="cancelled"]')
+        .count(),
+      1,
+    );
+    assert.equal((await modelRequests()).length, beforeCancel);
+    await delay(500);
+  }
+  assert.ok(
+    await cancelPage.locator("#chat-input").isEnabled(),
+    "New connection becomes available after owned box teardown",
+  );
+  assert.equal(
+    await cancelPage
+      .locator('#chat-messages article[data-status="cancelled"]')
+      .count(),
+    1,
+    "A deliberate new connection retains the cancelled transcript",
+  );
+  assert.equal((await modelRequests()).length, beforeCancel);
+  await send(cancelPage, "SPIKE-TOOLS");
+  await settled(cancelPage, "completed");
+  assert.notEqual(
+    await cancelPage
+      .locator("#connection-status")
+      .getAttribute("data-session-id"),
+    cancelledSession,
+    "The deliberate new prompt uses a new harness session",
+  );
+  assert.equal(await cancelPage.locator("#book mark").count(), 1);
+  assert.equal(
+    await cancelPage
+      .locator("#book")
+      .evaluate((node) => Number(node.dataset.ask_readerCount)),
+    2,
+    "The cancelled question is never replayed",
+  );
+  report.checks.push(
+    "a deliberate new connection after Stop retains the transcript and accepts a new tool turn without replay",
   );
   await cancelPage.close();
   assert.deepEqual(report.pageErrors ?? [], []);

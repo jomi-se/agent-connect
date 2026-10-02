@@ -30,6 +30,9 @@ Browser checks cover one visible highlight, exactly one invocation per requested
 application tool, interruption and reconnect during an unanswered reader
 question with the same session, and cancellation without a follow-up model
 request. Diagnostics are retained under the printed temporary run directory.
+The gateway permits only one active host. After Stop, the test explicitly opens
+a new connection and completes another tool turn, retaining the cancelled
+transcript and verifying that the previous question is not replayed.
 Containers and session networks created by this run are cleaned on success or
 failure; retained directories are private and may contain generated test grants.
 

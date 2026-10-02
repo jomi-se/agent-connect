@@ -40,6 +40,51 @@ async function collect(provider: AcpProvider, prompt = "hello") {
   return events;
 }
 describe("ACP provider-owned contracts", () => {
+  it("allows a new explicit prompt after session creation is definitively rejected", async () => {
+    const peer = new Peer();
+    let attempts = 0;
+    peer.onNewSession = (_socket, _params, reply, fail) => {
+      if (++attempts === 1) fail(-32603, "Session temporarily unavailable");
+      else reply({ sessionId: "owned-session" });
+    };
+    const provider = await connect(peer);
+    expect((await collect(provider, "first")).at(-1)).toMatchObject({
+      type: "task.failed",
+      message: "Session temporarily unavailable",
+    });
+    expect(attempts).toBe(1);
+    expect((await collect(provider, "try again")).at(-1)).toMatchObject({
+      type: "task.completed",
+    });
+    expect(attempts).toBe(2);
+    expect(
+      peer.calls.filter((call) => call.method === "session/prompt"),
+    ).toEqual([
+      {
+        method: "session/prompt",
+        params: {
+          sessionId: "owned-session",
+          prompt: [{ type: "text", text: "try again" }],
+        },
+      },
+    ]);
+  });
+  it("does not create another session after an ambiguous invalid-response error", async () => {
+    const peer = new Peer();
+    peer.onNewSession = (_socket, _params, _reply, fail) =>
+      fail(-32600, "Invalid response");
+    const provider = await connect(peer);
+    expect((await collect(provider)).at(-1)?.type).toBe("task.failed");
+    expect((await collect(provider, "try again")).at(-1)?.type).toBe(
+      "task.failed",
+    );
+    expect(
+      peer.calls.filter((call) => call.method === "session/new"),
+    ).toHaveLength(1);
+    expect(
+      peer.calls.filter((call) => call.method === "session/prompt"),
+    ).toHaveLength(0);
+  });
   it("creates one session, maps thought/plan/tool progress, and sends only each explicit prompt", async () => {
     const peer = new Peer();
     peer.onPrompt = (socket, _params, reply) => {

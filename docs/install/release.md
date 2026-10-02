@@ -53,7 +53,7 @@ references.
 
 ## Local candidate and CI verification
 
-On a supported developer host with the pinned build tools, Node 24 and Docker,
+On a supported **Linux** developer host with the pinned build tools, Node 24 and Docker,
 the credential-free acceptance sequence is:
 
 ```sh
@@ -72,6 +72,10 @@ publishable candidates. The clean-room gate installs the packed launcher/SDK
 and sample into a fresh container and exercises the real adapter using a
 deterministic provider. It uses no subscription login or personal model key.
 The native WebMCP/provider gates install their separate compatibility pins.
+The artifact-only driver currently requires Linux temporary paths and a Linux
+platform package. The sequence above is not a macOS verification command:
+Apple Silicon native installation and public-artifact composition remain part
+of the first real release check, although macOS is in the release build matrix.
 
 CI prepares this local image and release directory before `npm run verify:full`,
 then runs Rust tests and lint/dependency-boundary checks. A passing synthetic

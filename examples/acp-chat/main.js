@@ -11,6 +11,10 @@ const element = (id) => document.getElementById(id);
 let provider;
 let chat;
 let answerPending;
+let approvedGrant;
+let archivedChat;
+let connecting = false;
+const previousMessages = [];
 element("tool-snapshot").textContent = JSON.stringify(definitions, null, 2);
 element("download-tools").href = toolsUrl;
 
@@ -73,9 +77,14 @@ function render() {
   element("chat-input").disabled = !snapshot.canSend;
   element("chat-send").disabled = !snapshot.canSend;
   element("chat-stop").disabled = !snapshot.canStop;
+  element("chat-new").disabled = connecting || !snapshot.needsNewSession;
+  element("new-session-notice").hidden = !snapshot.needsNewSession;
   element("error").textContent = snapshot.error?.message ?? "";
   element("chat-messages").replaceChildren(
-    ...snapshot.messages.map((message) => {
+    ...[
+      ...previousMessages,
+      ...(chat === archivedChat ? [] : snapshot.messages),
+    ].map((message) => {
       const article = document.createElement("article");
       article.dataset.role = message.role;
       article.dataset.status = message.status;
@@ -96,6 +105,42 @@ function render() {
       return article;
     }),
   );
+}
+
+async function startConnection(grant) {
+  if (connecting) return;
+  connecting = true;
+  try {
+    if (chat && chat !== archivedChat) {
+      previousMessages.push(...chat.getSnapshot().messages);
+      archivedChat = chat;
+      await chat.dispose();
+      provider.close();
+      render();
+    }
+    const nextProvider = await connectAgent({
+      grant,
+      tools: definitions,
+      onSession(id) {
+        element("connection-status").dataset.sessionId = id;
+      },
+      transport: {
+        onState(state) {
+          element("connection-status").textContent = state;
+        },
+      },
+    });
+    provider = nextProvider;
+    chat = createAgentChat({ session: new AgentSession({ provider, tools }) });
+    chat.subscribe(render);
+    approvedGrant = grant;
+    delete element("connection-status").dataset.sessionId;
+    element("connection-status").textContent = "Connected";
+    render();
+  } finally {
+    connecting = false;
+    if (chat) render();
+  }
 }
 
 element("grant-file").addEventListener("change", async (event) => {
@@ -129,28 +174,27 @@ element("connect-form").addEventListener("submit", async (event) => {
       throw new Error(
         "Use a ws:// or wss:// gateway URL without credentials or query parameters.",
       );
-    provider = await connectAgent({
-      grant,
-      tools: definitions,
-      onSession(id) {
-        element("connection-status").dataset.sessionId = id;
-      },
-      transport: {
-        onState(state) {
-          element("connection-status").textContent = state;
-        },
-      },
-    });
-    chat = createAgentChat({ session: new AgentSession({ provider, tools }) });
-    chat.subscribe(render);
+    await startConnection(grant);
     element("grant-token").value = "";
     for (const input of element("connect-form").querySelectorAll("input"))
       input.disabled = true;
-    element("connection-status").textContent = "Connected";
-    render();
   } catch (error) {
     element("error").textContent = error.message;
     element("connect").disabled = false;
+  }
+});
+element("chat-new").addEventListener("click", async () => {
+  if (connecting || !approvedGrant || !chat?.getSnapshot().needsNewSession)
+    return;
+  element("chat-new").disabled = true;
+  try {
+    await startConnection(approvedGrant);
+  } catch (error) {
+    element("error").textContent =
+      error.code === "session_capacity"
+        ? "Gateway session capacity is full. Wait a moment, then choose New connection again."
+        : error.message;
+    element("chat-new").disabled = false;
   }
 });
 element("chat-form").addEventListener("submit", (event) => {
