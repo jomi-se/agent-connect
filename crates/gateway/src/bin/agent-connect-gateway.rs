@@ -79,8 +79,8 @@ struct ServeCli {
     tools: std::path::PathBuf,
     #[arg(long, default_value = "http://127.0.0.1:18931/v1")]
     mock_url: String,
-    #[arg(long, default_value = "workspace-write")]
-    codex_mode: String,
+    #[arg(long)]
+    codex_mode: Option<String>,
     #[arg(long, value_enum, default_value = "sandboxed")]
     permissions: PermissionProfile,
     /// Dedicated shared home: credentials, configuration and transcripts together.
@@ -149,6 +149,13 @@ async fn main() -> anyhow::Result<()> {
             return Ok(());
         }
     };
+    cli.codex_mode.get_or_insert_with(|| {
+        if cli.boxed {
+            "agent-full-access".into()
+        } else {
+            "workspace-write".into()
+        }
+    });
     anyhow::ensure!(
         cli.boxed || cli.mock_root.is_some(),
         "production sessions require --boxed; host mode requires an isolated --mock-root"
@@ -466,7 +473,7 @@ fn start_host(
         AcpAgent::from_args(box_args(
             gateway.cli.harness,
             &label,
-            &gateway.cli.codex_mode,
+            gateway.cli.codex_mode.as_deref().unwrap(),
             volume.as_deref(),
             gateway.home.as_ref(),
             &gateway.cli.session_image,
@@ -478,7 +485,7 @@ fn start_host(
             &gateway.paths,
             gateway.cli.harness,
             &gateway.cli.mock_url,
-            &gateway.cli.codex_mode,
+            gateway.cli.codex_mode.as_deref().unwrap(),
         )
     };
     let policy = PolicyProxy::new(PolicyConfig {

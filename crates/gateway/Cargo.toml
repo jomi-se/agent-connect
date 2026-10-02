@@ -3,6 +3,8 @@ name = "agent-connect-gateway"
 version = "0.1.0"
 edition = "2024"
 publish = false
+license = "MIT"
+repository = "https://github.com/jomi-se/agent-connect"
 description = "Consent-enforcing ACP gateway for user-owned agents"
 
 [dependencies]
@@ -23,3 +25,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4"] }
 
 libc = "0.2"
+
+[package.metadata.dist]
+dist = true
