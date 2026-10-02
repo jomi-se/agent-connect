@@ -186,7 +186,10 @@ Authorization failures and attachment takeover do not trigger recovery.
 A gateway restart loses process-local ownership/resume handles. Saved transcripts
 in the shared home do not create a general cross-restart conversation API.
 Reconnect deliberately, then send a new user message. The sample keeps its grant
-only in memory, so a page reload requires uploading it again.
+only in memory, so a page reload requires uploading it again. An actual browser
+back/forward-cache restoration retains that same grant, chat and pending app
+question; the application must preserve them on `pagehide.persisted`. This is
+conditional on browser caching, not a promise that every Back navigation resumes.
 
 ## Upgrade, revoke and uninstall
 
@@ -220,6 +223,16 @@ dedicated login. Do not prune unrelated Docker resources.
 - Close 4409 means another attachment owns the session; 4418 means capacity;
   4500 means a harness/container launch failed. See
   [configuration and error reference](configuration.md) for all codes.
+- A boxed session retains its capacity slot until its container and private
+  network are removed. Cleanup retries are bounded; if Docker cleanup fails,
+  that slot stays reserved for this gateway process. Inspect the cleanup error
+  and the resources' `org.agent-connect.component=acp-session` and
+  `org.agent-connect.session` labels before removing only that session's
+  immutable IDs. Shared egress/model peers must stay running. Stop active turns
+  before restarting; restart loses resume ownership and does not itself clean
+  resources left by an earlier process. Allow at least 30 seconds for graceful
+  shutdown while allocation is in progress; SIGKILL or daemon outages can leave
+  resources requiring operator inspection. Never use a broad Docker prune.
 - Missing platform binary: reinstall with optional dependencies enabled or
   install its platform tarball alongside the launcher.
 - `RUST_LOG=info` enables diagnostics. Inspect Docker errors and proxy denials;

@@ -22,7 +22,11 @@ Production ACP sessions require boxed mode, a dedicated shared harness home and
 an owned egress proxy. `init` issues one exact-origin, fixed-tool bearer per
 instance; there is no ACP OAuth pairing portal. Never forward API-key environment
 variables into boxes, change personal harness logins, or automatically replay an
-uncertain prompt/effect. Live login checks are owner-run through the prepared
+uncertain prompt/effect. Boxed capacity is released only after owned resource cleanup; unresolved Docker
+cleanup retains the slot until operator cleanup and process restart. Test this
+boundary with `npm run test:integration:acp:teardown` before relying on acceptance
+driver fallback cleanup. Never remove shared peers or prune unrelated resources.
+Live login checks are owner-run through the prepared
 single-command helper. Read the accepted shared-home risks in
 `docs/plan/acp-gateway-credentials.md`.
 

@@ -12,7 +12,10 @@ validation. ADR 0016 remains proposed and no ACP artifact is published.
 Local gates exercise real pinned adapters with deterministic inference. The
 clean-room gate installs release tarballs in a fresh container, builds the
 standalone sample against the packed SDK, and verifies app tools, ongoing
-reconnect without duplication and cancellation. This is credential-free
+reconnect without duplication, cancellation and genuine browser back/forward
+cache restoration, including a pending app tool. A separate boxed teardown gate
+checks idle/active bye, expiry, shutdown and allocation failures before driver
+cleanup; capacity remains held until cleanup completes. This is credential-free
 composition evidence, not live subscription evidence. Native plan conversion
 has contract coverage; the selected pinned harness fixtures expose no plan tool.
 
