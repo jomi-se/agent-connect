@@ -238,7 +238,10 @@ impl Host {
         // within moments, so it only gets a generous hard cap; a dead
         // attachment is detached by the ping check first.
         let bound = if st.attachment.is_some() {
-            self.config.max_retained_bytes.saturating_mul(8)
+            self.config
+                .max_retained_bytes
+                .saturating_mul(8)
+                .max(1024 * 1024)
         } else {
             self.config.max_retained_bytes
         };
@@ -325,9 +328,13 @@ impl Host {
     pub async fn client_text(
         &self,
         registry: &Registry,
+        generation: u64,
         text: &str,
         replies: &mut Vec<String>,
     ) -> Result<(), u16> {
+        if self.state.lock().unwrap().generation != generation {
+            return Err(close::SUPERSEDED);
+        }
         if !self.resumable {
             self.forward(registry, text.to_string()).await;
             return Ok(());
@@ -444,4 +451,61 @@ impl Host {
 
 pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn reattach_keeps_sequence_and_drops_duplicate_client_frames() {
+        let registry = Registry::new(ResumeConfig {
+            grace: Duration::from_secs(60),
+            max_retained_bytes: 4096,
+        });
+        let (host, mut io) = registry.create("grant", true, "test".into());
+        let (first, _) = host.attach(0).unwrap_or_else(|_| panic!("first attach"));
+        let mut replies = Vec::new();
+        let frame =
+            r#"{"t":"m","s":1,"m":{"jsonrpc":"2.0","method":"session/cancel","params":{}}}"#;
+        host.client_text(&registry, first, frame, &mut replies)
+            .await
+            .unwrap();
+        host.client_text(&registry, first, frame, &mut replies)
+            .await
+            .unwrap();
+        assert!(io.incoming.next().await.unwrap().is_ok());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), io.incoming.next())
+                .await
+                .is_err()
+        );
+        host.on_chain_frame(r#"{"jsonrpc":"2.0","id":1,"result":{}}"#.into());
+        host.detach(first);
+        let (second, mut replay) = host.attach(0).unwrap_or_else(|_| panic!("reattach"));
+        assert!(matches!(replay.recv().await, Some(ToSocket::Text(s)) if s.contains("attached")));
+        assert!(matches!(replay.recv().await, Some(ToSocket::Text(s)) if s.contains("\"s\":1")));
+        assert_eq!(
+            host.client_text(&registry, first, frame, &mut replies)
+                .await,
+            Err(close::SUPERSEDED)
+        );
+        host.client_text(&registry, second, r#"{"t":"a","s":1}"#, &mut replies)
+            .await
+            .unwrap();
+        assert!(host.state.lock().unwrap().out_log.is_empty());
+        assert!(registry.find(&host.token, "wrong-grant").is_none());
+    }
+
+    #[tokio::test]
+    async fn detached_retention_is_bounded() {
+        let registry = Registry::new(ResumeConfig {
+            grace: Duration::from_secs(60),
+            max_retained_bytes: 16,
+        });
+        let (host, _io) = registry.create("grant", true, "test".into());
+        host.on_chain_frame("{}".into());
+        assert_eq!(host.state.lock().unwrap().end_reason, Some("overflow"));
+        assert!(host.attach(0).is_err());
+    }
 }

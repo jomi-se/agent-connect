@@ -11,7 +11,7 @@ The plan covers three questions:
 - how an application drives a chat over ACP;
 - what `@open-agent-connect/web` must add on top of the ACP SDK, including AI
   SDK support;
-- how the Rust gateway is packaged, and how the OpenClaw plugin is retired.
+- how the Rust gateway is packaged alongside the retained OpenClaw plugin.
 
 ## How a chat runs over ACP
 
@@ -87,10 +87,10 @@ MCP-over-ACP server) and `createBrowserAcpStream`.
 4. **A grant client** that replaces the OpenClaw OAuth discovery. Its shape
    depends on ADR 0016's consent prerequisite.
 
-**Retired:** the OpenClaw connection and conversation clients,
-`ResponsesProvider`, and the Open Responses AI SDK model. They are marked
-deprecated in one release and removed in the next breaking version. Published
-versions stay installable.
+**Retained for this implementation:** the OpenClaw plugin, connection and
+conversation clients, `ResponsesProvider`, and the Open Responses AI SDK model.
+Any future retirement requires a separately approved release and migration;
+this branch performs no deprecation or removal.
 
 Every ACP-facing export is labeled unstable while MCP-over-ACP is an unstable
 RFD.

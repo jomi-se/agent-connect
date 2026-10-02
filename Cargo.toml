@@ -1,0 +1,4 @@
+[workspace]
+members = ["crates/gateway"]
+exclude = ["experiments/acp-gateway"]
+resolver = "3"

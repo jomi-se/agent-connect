@@ -2,11 +2,13 @@
 
 Experimental code for the [ACP gateway spike](../../docs/plan/acp-gateway-spike.md).
 Results: [`docs/experiments/acp-gateway.md`](../../docs/experiments/acp-gateway.md).
-Not part of the npm workspaces or any release.
+Not released. The gateway implementation now lives in `crates/gateway`;
+this directory retains deterministic fixtures and compatibility entry points.
+`npm run verify` runs the browser scenarios against the product binary.
 
 ## Layout
 
-- `src/policy.rs`: the Agent Connect policy proxy (a default-deny ACP and
+- `../../crates/gateway/src/policy.rs`: the Agent Connect policy proxy (a default-deny ACP and
   MCP-over-ACP filter, a per-grant session registry and permission profiles)
   plus a test-only spy proxy.
 - `src/lib.rs`: harness launch recipes (mock, boxed and live) and the
@@ -15,7 +17,7 @@ Not part of the npm workspaces or any release.
   tools over MCP-over-ACP, with `--attack`, `--boxed` and `--live` modes.
 - `src/bin/gateway.rs`: browser-facing ACP-over-WebSocket gateway, with
   optional `--boxed` and `--durable-home`.
-- `src/resume.rs`: session hosts that outlive their socket, and the opt-in
+- `../../crates/gateway/src/resume.rs`: session hosts that outlive their socket, and the opt-in
   `agent-connect.resume.v1` transport (sequence-acknowledged frames, reattach,
   grace period, retention bound).
 - `src/bin/session_runner.rs`: runs inside a session container: polyfill and

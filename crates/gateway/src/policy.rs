@@ -48,6 +48,8 @@ pub struct PolicyConfig {
     /// `session/resume` are admitted only for these ids, pinned to their
     /// original workspace because harnesses key stored sessions by `cwd`.
     pub grant_sessions: GrantSessions,
+    /// Gateway-owned journal, written before an application action is delivered.
+    pub actions_dir: Option<PathBuf>,
 }
 
 pub type GrantSessions = Arc<Mutex<BTreeMap<String, PathBuf>>>;
@@ -56,6 +58,8 @@ pub type GrantSessions = Arc<Mutex<BTreeMap<String, PathBuf>>>;
 struct PolicyState {
     /// `serverId`s the application declared in admitted session setup.
     declared_servers: HashSet<String>,
+    session_id: Option<String>,
+    prompting: bool,
     /// toolCallId -> latest title seen in `session/update`, for attributing
     /// permission prompts whose own title is empty (codex-acp MCP prompts).
     tool_titles: BTreeMap<String, String>,
@@ -157,6 +161,7 @@ impl PolicyHandler {
                         &self.config.workspace.clone(),
                     );
                     let sessions = self.config.grant_sessions.clone();
+                    let state = self.state.clone();
                     let workspace = self.config.workspace.clone();
                     cx.send_request_to(Agent, request)
                         .forward_cancellation_from(responder.cancellation())
@@ -168,6 +173,7 @@ impl PolicyHandler {
                                 .and_then(Value::as_str)
                             {
                                 sessions.lock().unwrap().insert(id.to_string(), workspace);
+                                state.lock().unwrap().session_id = Some(id.to_string());
                             }
                             responder.respond_with_result(result)
                         })?;
@@ -191,13 +197,34 @@ impl PolicyHandler {
                             &format!("{method} of a session this grant does not own"),
                         );
                     };
+                    self.state.lock().unwrap().session_id = Some(id.clone());
                     self.admit_session_setup(&mut request.params, &method, &workspace);
                     cx.send_request_to(Agent, request)
                         .forward_cancellation_from(responder.cancellation())
                         .forward_response_to(responder)?;
                     Ok(Handled::Yes)
                 }
-                "session/prompt" => pass(Dispatch::Request(request, responder)),
+                "session/prompt" => {
+                    let mut state = self.state.lock().unwrap();
+                    let id = request.params.get("sessionId").and_then(Value::as_str);
+                    if id.is_none() || id != state.session_id.as_deref() || state.prompting {
+                        return deny(
+                            responder,
+                            agent_client_protocol::Error::invalid_params(),
+                            "unknown session or active prompt",
+                        );
+                    }
+                    state.prompting = true;
+                    drop(state);
+                    let state = self.state.clone();
+                    cx.send_request_to(Agent, request)
+                        .forward_cancellation_from(responder.cancellation())
+                        .on_receiving_result(async move |result| {
+                            state.lock().unwrap().prompting = false;
+                            responder.respond_with_result(result)
+                        })?;
+                    Ok(Handled::Yes)
+                }
                 method => {
                     let why = format!("application request {method}");
                     deny(
@@ -230,8 +257,8 @@ impl PolicyHandler {
         let Some(obj) = params.as_object_mut() else {
             return;
         };
+        obj.retain(|key, _| key == "sessionId" || key == "mcpServers");
         obj.insert("cwd".into(), json!(workspace));
-        obj.remove("additionalDirectories");
         let requested = obj
             .remove("mcpServers")
             .and_then(|v| v.as_array().cloned())
@@ -328,7 +355,7 @@ impl PolicyHandler {
 
     fn mcp_request_to_app(
         &self,
-        request: UntypedMessage,
+        mut request: UntypedMessage,
         responder: Responder,
         cx: &ConnectionTo<Conductor>,
     ) -> Outcome {
@@ -357,6 +384,17 @@ impl PolicyHandler {
                     .is_none_or(|s| s.contains_key(&name));
                 if admitted {
                     eprintln!("[policy] tools/call {name}");
+                    let action_id = uuid::Uuid::new_v4().to_string();
+                    request.params["_meta"] = json!({"agent-connect/actionId": action_id});
+                    if let Some(dir) = &self.config.actions_dir {
+                        if let Err(error) = persist_action(dir, &action_id, &request.params) {
+                            return deny(
+                                responder,
+                                agent_client_protocol::Error::internal_error(),
+                                &format!("action journal: {error}"),
+                            );
+                        }
+                    }
                     pass(Dispatch::Request(request, responder))
                 } else {
                     deny(
@@ -537,5 +575,55 @@ impl HandleDispatchFrom<Conductor> for SpyHandler {
 
     fn describe_chain(&self) -> impl std::fmt::Debug {
         "spy"
+    }
+}
+
+/// No journal entry is automatically replayed. A crash leaves an uncertain action.
+fn persist_action(dir: &std::path::Path, id: &str, value: &Value) -> std::io::Result<()> {
+    use std::io::Write;
+    std::fs::create_dir_all(dir)?;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+        options.mode(0o600);
+    }
+    let mut file = options.open(dir.join(format!("{id}.json")))?;
+    file.write_all(serde_json::to_string(value)?.as_bytes())?;
+    file.sync_all()?;
+    std::fs::File::open(dir)?.sync_all()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn setup_removes_authority_and_foreign_servers() {
+        let handler = PolicyHandler {
+            config: Arc::new(PolicyConfig {
+                workspace: "/safe".into(),
+                app_server_name: "app".into(),
+                snapshot: Some(BTreeMap::new()),
+                permissions: PermissionProfile::DenyAll,
+                grant_sessions: Default::default(),
+                actions_dir: None,
+            }),
+            state: Default::default(),
+        };
+        let mut params = json!({"cwd":"/secret","model":"other","mode":"unsafe","_meta":{"escape":true},"mcpServers":[{"type":"http","url":"http://localhost"},{"type":"acp","name":"app","serverId":"tools"}]});
+        handler.admit_session_setup(&mut params, "session/new", &"/safe".into());
+        assert_eq!(
+            params,
+            json!({"cwd":"/safe","mcpServers":[{"type":"acp","name":"app","serverId":"tools"}]})
+        );
+    }
+    #[test]
+    fn journal_never_overwrites_an_action() {
+        let dir = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+        persist_action(&dir, "action", &json!({"name":"highlight"})).unwrap();
+        assert!(persist_action(&dir, "action", &json!({})).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

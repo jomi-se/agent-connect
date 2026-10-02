@@ -38,8 +38,9 @@
     "test:integration:openclaw": "npm run test:openclaw:fixture && npm run test:openclaw:plugin-host && npm run test:integration:ai-sdk-openclaw",
     "pretypecheck": "npm run build --workspace @open-agent-connect/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "verify": "npm run format:check && npm run typecheck && npm test && npm run build && npm run test:integration:openclaw",
-    "verify:full": "npm run verify && npm run test:package:web && npm run test:release && npm run test:webmcp && npm run test:e2e --workspace @agent-connect/firebase-canvas"
+    "verify": "npm run format:check && npm run typecheck && npm test && npm run build && npm run test:integration:openclaw && npm run test:integration:acp",
+    "verify:full": "npm run verify && npm run test:package:web && npm run test:release && npm run test:webmcp && npm run test:e2e --workspace @agent-connect/firebase-canvas",
+    "test:integration:acp": "node scripts/acp-gateway-scenarios.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
