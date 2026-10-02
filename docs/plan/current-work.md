@@ -2,180 +2,42 @@
 
 Updated: 2026-10-02
 
-This is the canonical status page for unfinished work. Product boundaries live
-in the [mission](../mission.md), capability status lives in the [scope
-inventory](../scope-inventory.md), and accepted design decisions live in
-[`docs/decisions/`](../decisions/). Completed implementation plans are indexed
-in the [archive](../archive/README.md); they are not active instructions.
+The ACP product candidate is **0.1.0-alpha.1**: packaged browser SDK and Rust
+launcher/platform binaries, private setup/config/manual grants, dedicated login
+helper, boxed sessions, resumable transport/recovery and AI SDK useChat.
+The [artifact install guide](../install/README.md) works without a checkout.
+The [release guide](../install/release.md) covers protected automation and local
+validation. ADR 0016 remains proposed and no ACP artifact is published.
 
-## Current release
+Local gates exercise real pinned adapters with deterministic inference. The
+clean-room gate installs release tarballs in a fresh container, builds the
+standalone sample against the packed SDK, and verifies app tools, ongoing
+reconnect without duplication and cancellation. This is credential-free
+composition evidence, not live subscription evidence. Native plan conversion
+has contract coverage; the selected pinned harness fixtures expose no plan tool.
 
-Agent Connect is installed as the Agent Connect plugin for OpenClaw in the user's
-OpenClaw process.
-There is no separately operated Agent Connect proxy. The plugin owns a bounded
-application-only listener on `127.0.0.1:18790` by default; native OpenClaw stays
-on its own listener (the reference profile uses `127.0.0.1:18789`). Public
-application routes remain under `/agent-connect`.
+The OpenClaw plugin is the previous published installation target and remains
+in the repository and on npm (`@open-agent-connect/openclaw-plugin@0.0.7`).
+Its existing SDK imports remain functional with declaration-level deprecation
+labels. No npm deprecation or plugin removal has occurred. Windows is not yet
+supported by the ACP release matrix.
 
-The published package versions are:
+Only owner-required work remains for this candidate:
 
-- `@open-agent-connect/web@0.0.9`;
-- `@open-agent-connect/openclaw-plugin@0.0.7`.
+1. **Live dedicated login checks.** Run the prepared Codex device-login helper,
+   then explicitly authorize live/concurrent refresh, personal-session
+   coexistence and dedicated-login revocation checks. Claude subscription use
+   remains unconfirmed against Anthropic terms; confirming that optional path
+   requires provider/owner action. No live turns have been spent.
+2. **First real release run.** Configure the protected GitHub environment,
+   package ownership/trusted publishers and public GHCR visibility, push the
+   reviewed source and version tag yourself, then inspect a manual dry run and
+   approve publication. Verify anonymous image pulls, the complete native
+   matrix (including macOS) and the public artifact installation path. None of
+   these account/GitHub/registry actions has been performed locally.
+3. **ADR 0016 acceptance.** Decide whether the implemented manual grant and
+   shared-home credential boundary are acceptable, and accept the decision
+   explicitly before the publication workflow can proceed.
 
-The reference deployment pins the published plugin and its integrity, records
-`listenPort: 18790`, and has passing smoke/fresh-target installation evidence.
-The repository's reproducible host pin is OpenClaw `2026.9.1` on Node `>=24.15
-<25`; the plugin permits that version or newer without an upper bound.
-
-Setup and operations are documented in the [Agent Connect plugin for OpenClaw setup
-guide](../../deploy/openclaw-gateway/README.md). The setup path is fresh: it
-does not migrate provider credentials, owner identity, grants, conversations,
-or refresh tokens from an older deployment.
-
-## Unreleased ACP implementation
-
-The feature branch implements phases 1–5 of the [ACP release plan](acp-gateway-release.md):
-product Rust gateway, dedicated harness homes/login helper, local packaging,
-resumable browser provider and AI SDK useChat transport. Deterministic gates use
-pinned real adapters without live model allowance. ADR 0016 remains proposed;
-the OpenClaw plugin remains the current release. See [results](../experiments/acp-gateway.md).
-
-Remaining: owner-run live credential/refresh/revoke checks and Claude terms
-confirmation; Windows, macOS fresh installation and manual Safari validation;
-grant issuance/consent/revocation; ADR acceptance and release approval. No push,
-registry publication, plugin deprecation or personal-login change is authorized
-by this implementation.
-
-## Acceptance and evidence
-
-Deterministic installed-package tests cover the namespaced OAuth/Responses flow,
-approved application tools under an inherited global tool profile,
-continuation/history projection, refresh/revoke, native-tool denial,
-disable/re-enable cleanup, unsafe-policy refusal, listener separation, and
-native-owner coexistence. They use deterministic inference and are not
-subscription-allowance evidence.
-
-On 2026-09-09 the owner reported that the complete Bookhand vertical slice works
-through the selected OpenClaw subscription runtime. This is owner-reported live
-success, not an independently replayed certification of every browser,
-provider, timeout, or edge-case behavior. The report is intentionally kept
-separate from deterministic test evidence.
-
-## Unfinished work
-
-### Setup quality and visible product flow
-
-The next product phase improves the owner and application experience around the
-working Agent Connect plugin for OpenClaw vertical slice. These are proposed features, not release
-gates or accepted architecture. Work them in this order:
-
-1. [Owner console and managed agent profiles](../future/owner-console-and-profiles.md):
-   the mobile-first owner authentication, consent, grant inspection, individual
-   and bulk revocation, and browser-session management slice is implemented.
-   Next, investigate a tasteful OpenClaw-native persistence boundary before
-   adding owner-managed restricted profile editing.
-2. [Firebase Canvas Agent Connect plugin migration](../future/firebase-canvas-plugin-migration.md):
-   the polished workbench, deterministic three-scenario demo, and current
-   address-based OAuth entry are implemented. Complete controlled live-plugin
-   composition and the conversation/recovery acceptance matrix next.
-3. [Provider-owned conversation recovery and library](../future/provider-owned-conversation-recovery.md):
-   preserve enough provider provenance for applications to restore a valid
-   conversation as it was presented, then expose an application-owned picker
-   for active conversations without inventing a second transcript authority.
-   [Trusted application identity, a browser-visible connection doctor, and
-   bounded owner recovery controls](../future/setup-quality-candidates.md) are
-   unprioritized adjacent candidates. Their briefs preserve the ideas without
-   committing them to the sequence above.
-
-### Legacy implementation cleanup
-
-The runtime-card SDK, replacement gateway, replacement-engine tests, standalone
-wrappers, and native OpenClaw patch experiment were removed on 2026-09-17 after
-Canvas moved to the current address-based OAuth flow. Shared authorization,
-grant, owner-console, and tool-snapshot code now belongs to the Agent Connect plugin
-package. Historical rationale remains in Git and clearly marked archives; it is
-not an active compatibility surface. On first load, the plugin converts its
-immediately preceding combined version-2 auth file into owner-only state,
-preserving the enrollment verifier and active `aco_` browser sessions while
-discarding retired device keys and grants. Older standalone state formats are
-not supported migration inputs.
-
-### Personal deployment metadata and shared-history cleanup
-
-The owner's 2026-09-06 request remains pending: remove personal deployment
-identifiers from tracked configuration and inventory affected history/refs.
-Use explicit local configuration rather than weakening host checks. Coordinate
-other branches and preserve a private recovery backup before any history rewrite.
-Rewriting shared history or force-pushing requires separate explicit owner
-approval; this documentation pass does neither. Previously cleaned unpublished
-commits do not establish that shared ancestors, cached views, or forks are clean.
-
-### Proposed direction: ACP application boundary
-
-The current release gives applications a model loop, not the owner's harness:
-caller-supplied tools work only on OpenClaw's built-in runtime, and native
-tools are denied. The 2026-09-30
-[ACP gateway spike](../experiments/acp-gateway.md) showed that a browser can
-drive unmodified Codex and Claude Code adapters over ACP. It offered its own
-tools through MCP-over-ACP, with a Rust consent-enforcing proxy and a
-disposable container per session. A 2026-10-01
-[follow-up](acp-gateway-mobile-resume.md) kept turns and application tool
-calls alive across phone-style backgrounding and socket loss.
-
-[ADR 0016](../decisions/0016-acp-application-boundary.md) records the proposed
-direction. It is **not accepted**, and nothing in the current release changes.
-Its prerequisites, starting with the credential boundary for per-session
-harness configuration, are the next candidate work. The proposed [release
-plan](acp-gateway-release.md) covers packaging, the browser SDK over ACP, and
-retiring the OpenClaw plugin.
-
-### Bookhand/provider defects
-
-These are known follow-up defects; they do not reopen the plugin migration and
-must not trigger automatic action replay:
-
-- Search indexing can fail on an unstable Section 2 anchor in the difficult
-  EPUB; tool and Tutor feedback should distinguish failed, not-started, and
-  progress states.
-- An unavailable search should be explained rather than triggering an
-  unsolicited source scan or repair attempt.
-- Navigation can emit mutually exclusive fields despite its prose; investigate
-  the provider schema transformation that removes `oneOf`.
-- Surface the confirmed runtime timeout instead of an unknown-error message.
-
-### Deferred review debts (not gates)
-
-The following two bounded technical debts were explicitly deferred on
-2026-09-09. They are not publication, installation, or acceptance gates:
-
-- Exclude private `listenPort` from the delegated-policy fingerprint while
-  retaining invalidation for public-origin and policy changes. Until a focused
-  regression exists, changing only the private port may require reconnecting
-  and consent.
-- Tighten doctor readiness identification so a stale service returning HTTP 200
-  cannot be mistaken for the configured instance. This is diagnostic accuracy,
-  not an authorization bypass; occupied-port startup already fails.
-
-### Durable history boundary
-
-Conversation/checkpoint ownership is process-local and bounded. Restart, disable,
-or expiry ends continuation; an ambiguous application effect is never replayed.
-Persisting ownership across host restart, reopening after the native Responses
-cache expires, and any safe interrupted-turn recovery require a separately
-reviewed decision and are not part of this release.
-
-## Deliberately out of scope
-
-Do not add a generalized multi-agent orchestrator, arbitrary MCP surface,
-Android automation, second proprietary session protocol, public multi-tenancy,
-billing, hosted relay, or native-client identity profile as routine cleanup.
-The [north star](../vision.md) records longer-term product direction; it does
-not expand this release's implementation scope.
-
-## Historical material
-
-The [archive index](../archive/README.md) records completed and superseded plans,
-including the standalone replacement implementation, dedicated-listener and
-guided-setup execution ledgers, the release/deployment handoff, and the Open
-Responses vertical-slice plan. Their dated evidence and rationale remain useful;
-their old gates and commands are not current instructions.
+Earlier OpenClaw follow-ups retain their canonical architecture/future briefs;
+this status page does not schedule downstream app migrations or plugin retirement.

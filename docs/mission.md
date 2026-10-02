@@ -4,7 +4,7 @@
 
 Make **Connect your AI** a portable application capability: users choose their AI
 provider, approve scoped access on its trusted surface, and return to the app with
-an authorized Open Responses connection backed by their account/allowance.
+an authorized application connection backed by their account/allowance.
 The [accepted north star](vision.md), recorded 2026-09-06, defines the long-term
 app/provider boundary and proposed interoperability direction. It is not a claim
 of an already published standard or completed implementation.
@@ -16,19 +16,25 @@ must not require installing an MCP server, copying provider conversation IDs,
 or opening a terminal.
 
 Agent Connect is the application-delegation boundary, not another agent
-platform. The accepted installation target is an OpenClaw plugin that hosts
-this boundary without a separately operated executable; see
-[ADR 0015](decisions/0015-openclaw-plugin-host.md). The installable plugin and
-credential-free OpenClaw-host composition gates are implemented. Agent Connect
-retains consent, application authority, browser integration and a bounded
-grant-to-conversation map; OpenClaw owns execution, native events, context,
-tools and sandboxing. The retired standalone and replacement gateway
-implementations have been removed; their history remains available through Git
-and explicitly archived design records.
+platform. The ACP candidate's [artifact installation path](install/README.md)
+uses a Rust gateway and Docker session image. It is implemented and locally
+qualified while [ADR 0016](decisions/0016-acp-application-boundary.md) remains
+proposed; implementation does not accept the decision or authorize publication.
+The [previous published OpenClaw plugin](decisions/0015-openclaw-plugin-host.md)
+remains intact and available, with retained deprecated SDK exports.
 
-## Product promise
+ACP currently uses explicit operator snapshot review and one exact-origin bearer
+handoff per instance, rather than the plugin's OAuth consent service. Its shared
+home includes credentials, configuration and transcripts with the documented
+[accepted risks](plan/acp-gateway-credentials.md). The provider/harness owns the
+loop; recovery never re-sends uncertain turns. See the
+[scope inventory](scope-inventory.md) for the evidence and platform boundaries.
+The plugin contract below records the previous implementation; its OAuth,
+checkpoint and host-isolation guarantees must not be attributed to ACP.
 
-The list below describes the current browser implementation contract, not the
+## Previous plugin product contract
+
+The list below describes the previous plugin browser implementation contract, not the
 complete future interoperability profile. In particular, Origin-bound enrollment
 and our session capabilities must not silently become universal requirements.
 
@@ -48,7 +54,7 @@ Stable call IDs and persistence before publication support application-owned
 idempotency. They do not guarantee exactly-once external side effects. An
 ambiguous output submission is never automatically replayed.
 
-## Current strategy
+## Previous plugin strategy
 
 The following describes the plugin-hosted implementation. Any changed reliability
 or consent guarantees must be made explicit.
@@ -88,7 +94,7 @@ or consent guarantees must be made explicit.
   Their contracts are [WebMCP](plan/webmcp-tool-source.md) and
   [headless chat](plan/headless-chat.md). Images/files remain deferred.
 
-## Current implementation and acceptance boundary
+## Previous plugin implementation and acceptance boundary
 
 The Agent Connect plugin for OpenClaw provides delegated OAuth/PAR/PKCE,
 rotating refresh, revocation and public AI SDK contract inside OpenClaw's managed

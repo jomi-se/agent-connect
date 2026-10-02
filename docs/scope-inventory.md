@@ -1,11 +1,30 @@
 # Scope and capability inventory
 
-Updated: 2026-09-17
+Updated: 2026-10-02
 
-This inventory describes the supported Agent Connect plugin for OpenClaw selected by
-[ADR 0015](decisions/0015-openclaw-plugin-host.md). The retired standalone and
-replacement gateway implementations have been removed; historical rationale
-remains in Git and the documentation archive.
+The ACP artifact install path is implemented as an unpublished
+`0.1.0-alpha.1` candidate under proposed ADR 0016. The previous OpenClaw plugin
+selected by ADR 0015 remains in the repository and on npm. Its older standalone
+predecessors remain archival; they are distinct from the new ACP gateway.
+
+## ACP candidate
+
+| Capability                                  | Status                                          | Evidence / boundary                                                                                   |
+| ------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Artifact installation without a checkout    | Locally verified                                | Packed gateway/SDK, standalone sample, fresh container                                                |
+| Grant and exact tool consent                | Implemented                                     | Operator init/review/file handoff; single origin/bearer; no OAuth portal                              |
+| Boxed harness execution                     | Real-adapter deterministic gates                | Pinned CLIs/adapters, private egress, dedicated whole home                                            |
+| Chat/app tools/useChat                      | Implemented and tested                          | Browser tool effects, thoughts, cancel; no second app-side harness loop                               |
+| Resume and session/load recovery            | Implemented and tested                          | Same transport reattach; interrupted turns never re-sent; process-local ownership                     |
+| Native plan UI mapping                      | Contract-tested only                            | Pinned fixture configurations advertise no native plan tool                                           |
+| Live subscription credential refresh/revoke | Owner-run, unverified                           | Dedicated helper prepared; personal logins untouched                                                  |
+| Releases                                    | Automation locally validated, unpublished       | OIDC/provenance, immutable image digest, owner tag/approval gates                                     |
+| Platforms                                   | Apple Silicon + Linux x64/ARM64 artifact matrix | Both Linux archives built locally; macOS exercised by first real native workflow; Windows unsupported |
+
+## Previous OpenClaw capabilities
+
+The following sections retain the previous plugin's evidence and guarantees;
+they do not describe ACP OAuth, credential isolation or cross-restart recovery.
 
 ## Application and SDK
 

@@ -4,18 +4,27 @@
 
 Agent Connect is an application-to-user-owned-agent bridge. Keep the application-facing API agent- and harness-neutral. Codex, Omnigent, ACP adapters, and transport bridges belong behind internal adapter boundaries.
 
-The sole installation target is the Agent Connect plugin for OpenClaw (ADR 0015),
-tracked in docs/plan/openclaw-plugin-host.md. Users must not operate a separate
-proxy process. The ADR 0014 standalone scoped proxy was removed; its source is
-available in git history. The older replacement gateway, runtime-card API, and
-native-patch experiment have also been removed. Current authorization, grant,
-and tool-snapshot modules live in the plugin package. Keep provider/plugin types
-out of the application API.
+The ACP prerelease install path is the product Rust gateway in `crates/gateway`
+(binary `agent-connect-gateway`), packaged as `@open-agent-connect/gateway`, plus
+its digest-pinned Docker session image and `@open-agent-connect/web/acp` SDK.
+See `docs/install/README.md` and `docs/plan/acp-gateway-release.md`. ACP,
+MCP-over-ACP and the resume extension are unstable; ADR 0016 remains proposed.
+Local implementation and dry runs do not accept the ADR or authorize publication.
 
-The unreleased implementation of proposed ADR 0016 lives in `crates/gateway`
-and the ACP exports of `packages/web-sdk`, with the scoped release plan at
-`docs/plan/acp-gateway-release.md`. It does not change the current installation
-target or authorize publishing, accepting the ADR or retiring OpenClaw.
+The Agent Connect plugin for OpenClaw (ADR 0015) is the previous published
+installation target. Keep its source, npm package, tests and compatibility exports.
+Legacy SDK exports are marked `@deprecated`, not removed; do not run npm deprecate
+or retire the plugin without a separately authorized migration/release decision.
+The ADR 0014 standalone scoped proxy and older replacement gateway remain archival.
+Provider/plugin types stay outside shared application contracts.
+
+Production ACP sessions require boxed mode, a dedicated shared harness home and
+an owned egress proxy. `init` issues one exact-origin, fixed-tool bearer per
+instance; there is no ACP OAuth pairing portal. Never forward API-key environment
+variables into boxes, change personal harness logins, or automatically replay an
+uncertain prompt/effect. Live login checks are owner-run through the prepared
+single-command helper. Read the accepted shared-home risks in
+`docs/plan/acp-gateway-credentials.md`.
 
 ## Terminology
 
@@ -51,7 +60,14 @@ npm run verify
 npm run analyze
 ```
 
-`npm run verify` includes deterministic compatibility tests against the pinned OpenClaw package.
+`npm run verify` includes deterministic compatibility tests against the pinned
+OpenClaw package, real ACP adapters on host/in boxes, and the artifact-only
+clean-room sample (chat/app tools, ongoing reconnect and cancel). Prepare the
+local session image and release artifacts with the build commands in
+`docs/install/release.md`; no login is involved. `cargo test --locked` checks the
+Rust workspace. `npm run release:acp:dry-run` previews npm publication without
+writes. CI is read-only; the separately protected manual release workflow is
+written but must not be run or published by an agent without owner authorization.
 Use Node 24 LTS >=24.15 and <25 and the pin in `config/openclaw-test-compat.json`
 on `PATH` or at `OPENCLAW_TEST_BIN`. See `deploy/openclaw-gateway/README.md`.
 This is intentional: provider

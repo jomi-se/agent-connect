@@ -2,7 +2,7 @@
 
 `0.1.0-alpha.1` is a prepared candidate. ADR 0016 is still proposed;
 publication remains blocked until its status is explicitly accepted. The
-OpenClaw plugin remains the current supported installation target and is not
+OpenClaw plugin remains the previous published installation target and is not
 part of this ACP release's version bump or publication set.
 
 The [manual workflow](../../.github/workflows/acp-release.yml) is the only
