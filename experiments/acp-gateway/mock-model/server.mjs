@@ -70,6 +70,33 @@ function decide({ tools, history }) {
     return undefined;
   };
 
+  if (lastUser.includes("SPIKE-PROGRESS")) {
+    const codexPlan = findTool(tools, "update_plan");
+    const claudePlan = findTool(tools, "TodoWrite");
+    const plan = codexPlan ?? claudePlan;
+    const thought = "Deterministic thought: inspect the passage.";
+    if (!plan)
+      return { thought, text: "PROGRESS-DONE (native plan tool unavailable)" };
+    if (resultFor(plan.name) === undefined)
+      return {
+        thought,
+        call: {
+          ...plan,
+          args: codexPlan
+            ? { plan: [{ step: "Read the passage", status: "completed" }] }
+            : {
+                todos: [
+                  {
+                    content: "Read the passage",
+                    status: "completed",
+                    activeForm: "Reading the passage",
+                  },
+                ],
+              },
+        },
+      };
+    return { thought, text: "PROGRESS-DONE" };
+  }
   if (lastUser.includes("SPIKE-TOOLS")) {
     const read = findTool(tools, "read_passage");
     const highlight = findTool(tools, "highlight");
@@ -205,6 +232,53 @@ async function handleResponses(body, res) {
   };
   send({ type: "response.created", response: base });
 
+  let thoughtItem;
+  const outputIndex = decision.thought ? 1 : 0;
+  if (decision.thought) {
+    thoughtItem = {
+      type: "reasoning",
+      id: nextId("reasoning"),
+      summary: [{ type: "summary_text", text: decision.thought }],
+    };
+    send({
+      type: "response.output_item.added",
+      output_index: 0,
+      item: { ...thoughtItem, summary: [] },
+    });
+    send({
+      type: "response.reasoning_summary_part.added",
+      output_index: 0,
+      item_id: thoughtItem.id,
+      summary_index: 0,
+      part: { type: "summary_text", text: "" },
+    });
+    send({
+      type: "response.reasoning_summary_text.delta",
+      output_index: 0,
+      item_id: thoughtItem.id,
+      summary_index: 0,
+      delta: decision.thought,
+    });
+    send({
+      type: "response.reasoning_summary_text.done",
+      output_index: 0,
+      item_id: thoughtItem.id,
+      summary_index: 0,
+      text: decision.thought,
+    });
+    send({
+      type: "response.reasoning_summary_part.done",
+      output_index: 0,
+      item_id: thoughtItem.id,
+      summary_index: 0,
+      part: thoughtItem.summary[0],
+    });
+    send({
+      type: "response.output_item.done",
+      output_index: 0,
+      item: thoughtItem,
+    });
+  }
   let item;
   if (decision.call) {
     item = {
@@ -220,18 +294,18 @@ async function handleResponses(body, res) {
     };
     send({
       type: "response.output_item.added",
-      output_index: 0,
+      output_index: outputIndex,
       item: { ...item, arguments: "" },
     });
     send({
       type: "response.function_call_arguments.delta",
-      output_index: 0,
+      output_index: outputIndex,
       item_id: item.id,
       delta: item.arguments,
     });
     send({
       type: "response.function_call_arguments.done",
-      output_index: 0,
+      output_index: outputIndex,
       item_id: item.id,
       arguments: item.arguments,
     });
@@ -245,12 +319,12 @@ async function handleResponses(body, res) {
     };
     send({
       type: "response.output_item.added",
-      output_index: 0,
+      output_index: outputIndex,
       item: { ...item, content: [] },
     });
     send({
       type: "response.content_part.added",
-      output_index: 0,
+      output_index: outputIndex,
       item_id: item.id,
       content_index: 0,
       part: { type: "output_text", text: "", annotations: [] },
@@ -259,7 +333,7 @@ async function handleResponses(body, res) {
       if (i > 0 && decision.chunkDelayMs) await sleep(decision.chunkDelayMs);
       send({
         type: "response.output_text.delta",
-        output_index: 0,
+        output_index: outputIndex,
         item_id: item.id,
         content_index: 0,
         delta,
@@ -267,26 +341,26 @@ async function handleResponses(body, res) {
     }
     send({
       type: "response.output_text.done",
-      output_index: 0,
+      output_index: outputIndex,
       item_id: item.id,
       content_index: 0,
       text: decision.text,
     });
     send({
       type: "response.content_part.done",
-      output_index: 0,
+      output_index: outputIndex,
       item_id: item.id,
       content_index: 0,
       part: item.content[0],
     });
   }
-  send({ type: "response.output_item.done", output_index: 0, item });
+  send({ type: "response.output_item.done", output_index: outputIndex, item });
   send({
     type: "response.completed",
     response: {
       ...base,
       status: "completed",
-      output: [item],
+      output: thoughtItem ? [thoughtItem, item] : [item],
       usage: {
         input_tokens: 10,
         output_tokens: 5,
@@ -383,6 +457,25 @@ async function handleMessages(body, res) {
       usage,
     },
   });
+  const blockIndex = decision.thought ? 1 : 0;
+  if (decision.thought) {
+    send({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "", signature: "" },
+    });
+    send({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: decision.thought },
+    });
+    send({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "signature_delta", signature: "deterministic-fixture" },
+    });
+    send({ type: "content_block_stop", index: 0 });
+  }
   if (decision.call) {
     const block = {
       type: "tool_use",
@@ -390,10 +483,14 @@ async function handleMessages(body, res) {
       name: decision.call.name,
       input: {},
     };
-    send({ type: "content_block_start", index: 0, content_block: block });
+    send({
+      type: "content_block_start",
+      index: blockIndex,
+      content_block: block,
+    });
     send({
       type: "content_block_delta",
-      index: 0,
+      index: blockIndex,
       delta: {
         type: "input_json_delta",
         partial_json: JSON.stringify(decision.call.args),
@@ -402,19 +499,19 @@ async function handleMessages(body, res) {
   } else {
     send({
       type: "content_block_start",
-      index: 0,
+      index: blockIndex,
       content_block: { type: "text", text: "" },
     });
     for (const [i, text] of (decision.chunks ?? [decision.text]).entries()) {
       if (i > 0 && decision.chunkDelayMs) await sleep(decision.chunkDelayMs);
       send({
         type: "content_block_delta",
-        index: 0,
+        index: blockIndex,
         delta: { type: "text_delta", text },
       });
     }
   }
-  send({ type: "content_block_stop", index: 0 });
+  send({ type: "content_block_stop", index: blockIndex });
   send({
     type: "message_delta",
     delta: {

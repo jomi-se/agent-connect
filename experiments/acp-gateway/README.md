@@ -85,3 +85,10 @@ security boundary.
 The canonical session image and egress proxy now live in `deploy/acp-gateway`.
 The local multi-architecture build is `deploy/acp-gateway/session/build-local.sh`
 from the repository root. It creates no registry release.
+
+The reader now imports the product web SDK. Build that workspace first and
+bundle the page from this checkout so the workspace dependency resolves. The
+root scenario runner does this automatically, keeping adapter installs and
+browser outputs in private temporary directories. `?chat=1` mounts the
+useChat example. `web/resumable-stream.js` is retained only as archival spike
+source; the active transport is `packages/web-sdk/src/resumable-acp-stream.ts`.

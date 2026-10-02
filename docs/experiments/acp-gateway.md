@@ -445,3 +445,29 @@ also settles prompt/load responses before asynchronous notification middleware
 has drained; the provider waits for that drain before finishing a turn or
 leaving replay mode. Authorization failure and attachment takeover never load
 a replacement session. Cancellation is checked against chain session ownership.
+
+Phase 5 adds createAcpChatTransport and the typechecked React useChat example.
+UI contracts cover last-user-only prompts, regeneration/foreign-chat rejection,
+text/reasoning boundaries, plan data, provider-executed native progress, stable
+application actions, abort, reconnect and interrupted-turn errors. The real
+useChat browser flow passes tools, thoughts, same-session follow-up and Stop on
+both adapters. The deterministic model now emits real provider reasoning events;
+it does not inject ACP updates. Neither pinned CLI advertises a native plan tool
+in the selected fixture configuration. Plan conversion has contract evidence,
+not real-harness plan evidence. Existing OpenClaw exports and plugin stay intact.
+
+Local packaging artifacts remain unpublished. Live credentials, Windows/macOS
+installation, Safari, grant issuance/consent/revocation and release/ADR approval
+remain open. No personal harness home was opened or modified, and no live model
+turn or interactive login was run during implementation.
+
+The session image also starts both exact pinned CLIs as an unnamed UID/GID
+12345 with no network and temporary homes. Both harness configuration directories
+are owned by that identity with mode 0700. This validates the non-node-1000 image
+path without logging in or touching a host credential directory.
+
+Final SDK review adds an optional original application result to the existing
+provider string interface. ACP keeps image content, structured data and isError;
+Responses keeps the same string wire output. Regression tests also verify that
+an unread UI stream can be disposed without admitting a prompt and without
+retaining its AbortSignal listener.

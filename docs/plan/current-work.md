@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-09-17
+Updated: 2026-10-02
 
 This is the canonical status page for unfinished work. Product boundaries live
 in the [mission](../mission.md), capability status lives in the [scope
@@ -31,6 +31,20 @@ Setup and operations are documented in the [Agent Connect plugin for OpenClaw se
 guide](../../deploy/openclaw-gateway/README.md). The setup path is fresh: it
 does not migrate provider credentials, owner identity, grants, conversations,
 or refresh tokens from an older deployment.
+
+## Unreleased ACP implementation
+
+The feature branch implements phases 1–5 of the [ACP release plan](acp-gateway-release.md):
+product Rust gateway, dedicated harness homes/login helper, local packaging,
+resumable browser provider and AI SDK useChat transport. Deterministic gates use
+pinned real adapters without live model allowance. ADR 0016 remains proposed;
+the OpenClaw plugin remains the current release. See [results](../experiments/acp-gateway.md).
+
+Remaining: owner-run live credential/refresh/revoke checks and Claude terms
+confirmation; Windows, macOS fresh installation and manual Safari validation;
+grant issuance/consent/revocation; ADR acceptance and release approval. No push,
+registry publication, plugin deprecation or personal-login change is authorized
+by this implementation.
 
 ## Acceptance and evidence
 

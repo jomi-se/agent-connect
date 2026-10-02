@@ -293,4 +293,49 @@ describe("ACP provider-owned contracts", () => {
       peer.calls.filter((c) => c.method === "session/prompt"),
     ).toHaveLength(1);
   });
+  it("preserves error, image and structured tool results through AgentSession", async () => {
+    const peer = new Peer();
+    let returned: unknown;
+    peer.onPrompt = (socket, _params, reply) => {
+      void (async () => {
+        const connection = (await peer.request(socket, "mcp/connect", {
+          serverId: "application-tools",
+        })) as { connectionId: string };
+        await peer.request(socket, "mcp/message", {
+          connectionId: connection.connectionId,
+          method: "initialize",
+          params: { protocolVersion: "2025-06-18" },
+        });
+        returned = await peer.request(socket, "mcp/message", {
+          connectionId: connection.connectionId,
+          method: "tools/call",
+          params: { name: "highlight", arguments: { text: "image" } },
+          _meta: { "agent-connect/actionId": "structured-action" },
+        });
+        reply({ stopReason: "end_turn" });
+      })();
+    };
+    const provider = await connect(peer);
+    const result = {
+      content: [
+        {
+          type: "image" as const,
+          data: "fixture-image",
+          mimeType: "image/png",
+        },
+      ],
+      isError: true,
+      structuredContent: { reason: "application refused" },
+    };
+    const session = new AgentSession({
+      provider,
+      tools: [{ ...tools[0]!, execute: () => result }],
+    });
+    const events: AgentTaskEvent[] = [];
+    for await (const event of session.streamTask("image")) events.push(event);
+    expect(returned).toEqual(result);
+    expect(
+      events.find((event) => event.type === "tool.completed"),
+    ).toMatchObject({ isError: true });
+  });
 });

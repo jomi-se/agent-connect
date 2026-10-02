@@ -399,3 +399,43 @@ same grant's ownership. Gateway restart recovery is not promised.
 Close codes are typed: 4401 invalid grant, 4403 denied origin, 4404/4410/4413
 unavailable session, 4409 superseded attachment, 4418 capacity, and 4500 launch
 failure. Authorization errors and takeover do not trigger session/load.
+
+`createAcpChatTransport({ provider, tools })` implements AI SDK 7's
+[ChatTransport](https://ai-sdk.dev/docs/ai-sdk-ui/transport) for `useChat`.
+The runnable, typechecked [React example](examples/acp-use-chat.tsx) is exercised
+by the real-adapter browser gate (`?chat=1` on the reader fixture). Its development
+pin is `@ai-sdk/react@4.0.96`, matching `ai@7.0.93`.
+
+```tsx
+const transport = useMemo(
+  () => createAcpChatTransport({ provider, tools }),
+  [provider, tools],
+);
+const { messages, sendMessage, stop } = useChat({
+  id: "application-chat",
+  transport,
+});
+```
+
+One transport binds one UI chat ID to one provider-owned ACP session. Only the
+last explicit user message's text becomes a prompt; prior messages, model
+settings, system prompts and HTTP options are not forwarded. Files and
+regeneration are rejected. Thoughts become reasoning parts, plans become
+`data-acp-plan`, and native tool progress becomes dynamic tool parts marked
+`providerExecuted: true`. Approved application handlers run once through
+AgentSession. Do not install another AI SDK `execute` or `onToolCall` handler
+for those same operations.
+
+AbortSignal/Stop sends session/cancel. Active-stream reconnection probes the
+same resumable connection; an already locked UI stream cannot acquire another
+reader. Cold reconnect loads history and returns null, because no interrupted
+UI stream can safely be invented. A deliberate new user message can continue
+the recovered conversation. The mounting application owns provider disposal;
+call transport.close() and provider.close() when relinquishing it. The UI
+transport requires at least one application tool, matching AgentSession's
+existing tool-lending contract.
+
+AgentProvider's optional structured application result lets the ACP provider
+retain image content, structured data and isError while Responses providers
+continue using the existing string output. Manual submitToolResult calls may
+pass that original ApplicationToolResult as the third argument.
