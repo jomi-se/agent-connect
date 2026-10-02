@@ -15,7 +15,7 @@ Linux x64 and Linux ARM64; Windows is not yet supported. After publication:
 
 ```sh
 npm install --global @open-agent-connect/gateway@0.1.0-alpha.1
-agent-connect-gateway --help
+agent-connect --help
 ```
 
 For current local candidates, install the launcher and matching platform tarballs.
@@ -29,7 +29,7 @@ is required. The guide also covers upgrades, revocation and uninstalling.
 Web app (@open-agent-connect/web/acp + approved application tools)
    │ grant-authorized ACP WebSocket / resumable transport
    ▼
-Your Rust gateway (agent-connect-gateway)
+Your Rust gateway (agent-connect CLI)
    │ filters browser authority; one container per session
    ▼
 Pinned adapter + unmodified Codex or Claude Code CLI

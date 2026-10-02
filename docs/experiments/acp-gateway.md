@@ -595,3 +595,35 @@ pass. The clean-room installs the newly rebuilt gateway and packed SDK/sample,
 with no checkout mounted. Independent final review reports no remaining
 confirmed finding. macOS/native release and live credential evidence remain
 owner gates, as listed in `docs/plan/current-work.md`.
+
+## Convention-based login (2026-10-02)
+
+The primary command is now `agent-connect login`. It presents the release
+image's harness choices, defaults to Codex, labels Claude Code unconfirmed
+against Anthropic terms, and supports cancellation before home creation or
+Docker invocation. It uses a dedicated per-harness platform state home; new
+init and production serve share that default. Existing config homes and explicit
+home/image options retain precedence, with a harness/config mismatch rejected.
+`agent-connect-gateway` remains a compatibility command in npm and native archives.
+
+Regression coverage exercises the actual CLI in a pseudo-terminal with a fake
+Docker executable: default and explicit selections invoke the correct provider
+recipe, invalid input reprompts, and cancellation invokes nothing. It also checks
+nonterminal rejection, private home modes, default-home agreement across setup
+and serve, old relative config homes/images, and explicit overrides. No provider
+login, credential files or live turn are involved.
+
+Independent review found and corrected a login/config coupling: login must not
+require server-only bearer, origin or egress fields supplied at serve time.
+Private-file validation and relative path resolution are shared, while server
+validation remains in serve. A metadata-only config regression verifies login
+without those fields and prevents forwarding a server-environment bearer.
+
+Both Linux native archives and npm tarballs rebuilt successfully with the primary
+CLI and compatibility executable. An isolated installation from local wrapper
+and platform tarballs passes `npx @open-agent-connect/gateway --help`; both native
+archive command names also pass help checks. Final `npm run verify`,
+`cargo test --locked --workspace`, CLI regressions, Rust formatting and packed SDK
+smoke all pass. Clean-room acceptance now invokes the installed `agent-connect`
+command and checks the default home remains inside its isolated test mount.
+No interactive provider login or live model turn was performed.

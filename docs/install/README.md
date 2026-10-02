@@ -17,7 +17,7 @@ After publication, choose npm:
 
 ```sh
 npm install --global @open-agent-connect/gateway@0.1.0-alpha.1
-agent-connect-gateway --help
+agent-connect --help
 # Without a global installation:
 npx @open-agent-connect/gateway@0.1.0-alpha.1 --help
 ```
@@ -32,12 +32,12 @@ platform tarball together (use `linux-x64` or `darwin-arm64` when appropriate):
 ```sh
 npm install --global ./open-agent-connect-gateway-0.1.0-alpha.1.tgz \
   ./open-agent-connect-gateway-linux-arm64-0.1.0-alpha.1.tgz
-agent-connect-gateway --help
+agent-connect --help
 ```
 
 Alternatively download the archive for your host and `SHA256SUMS` from the
 [GitHub Release](https://github.com/jomi-se/agent-connect/releases), verify its
-checksum, extract it and place `agent-connect-gateway` on PATH. Artifact names:
+checksum, extract it and place `agent-connect` on PATH (the archive also includes `agent-connect-gateway` for compatibility). Artifact names:
 
 | Host          | Archive                                                   |
 | ------------- | --------------------------------------------------------- |
@@ -58,7 +58,7 @@ from the **same versioned release**, verify the checksum, inspect it and run
 matching archive from that release and installs the executable. There is no
 PowerShell/Windows installer in this release.
 
-`agent-connect-gateway release-info` prints the version and default session
+`agent-connect release-info` prints the version and default session
 image. Released binaries pin the image by immutable digest; Docker pulls it
 when needed. Local candidates use `agent-connect-session:0.1.0-alpha.1`: load
 the supplied native Docker image with `docker load --input <image.tar>` or ask
@@ -91,7 +91,7 @@ before giving this application access to your dedicated harness login.
 ```sh
 runtime_dir="${XDG_STATE_HOME:-$HOME/.local/state}/agent-connect/sample-codex"
 mkdir -p "$(dirname "$runtime_dir")"
-agent-connect-gateway init --directory "$runtime_dir" --harness codex \
+agent-connect init --directory "$runtime_dir" --harness codex \
   --allow-origin http://127.0.0.1:5173 --tools ./tools.json
 ```
 
@@ -102,7 +102,6 @@ Setup refuses an existing destination and creates:
 | `config.json`                    | Private operator config including the bearer and exact origin |
 | `grant.json`                     | Application capability: `{gatewayUrl, token}`                 |
 | `tools.json`                     | The approved, fixed tool snapshot                             |
-| `home/`                          | Shared credentials, harness configuration and transcripts     |
 | `state/`                         | Private application-action journal/runtime state              |
 
 Directories are mode 0700 and files 0600. There is one operator-issued bearer
@@ -118,22 +117,43 @@ it does not put the token in a URL or browser storage.
 Run this **one interactive command yourself**:
 
 ```sh
-agent-connect-gateway login --harness codex --harness-home "$runtime_dir/home"
+agent-connect login
 ```
 
-It starts the unmodified `codex login --device-auth` inside the release image.
-Follow the provider's device-login instructions. The helper never reads, copies
+It shows the available harnesses. Press Enter to choose Codex, select Claude
+Code explicitly, or enter `q` to cancel. It then starts the provider's login
+inside the release image: Codex uses unmodified `codex login --device-auth`.
+Follow the provider's login instructions. The helper never reads, copies
 or logs your credentials. Use this dedicated home, never your existing personal
-Codex home. Every session mounts the whole directory read-write at `/home/node`,
+Codex home. Login and new runtime setup share these defaults:
+
+| Platform                          | Dedicated home per harness                                            |
+| --------------------------------- | --------------------------------------------------------------------- |
+| Linux                             | `$HOME/.local/state/agent-connect/harnesses/<harness>`                |
+| macOS                             | `$HOME/Library/Application Support/agent-connect/harnesses/<harness>` |
+| Either, with `XDG_STATE_HOME` set | `$XDG_STATE_HOME/agent-connect/harnesses/<harness>`                   |
+
+The CLI prints the chosen home. `<harness>` is `codex` or `claude`; homes are
+private (0700), and a login is shared across that harness's application runtimes.
+It is not copied into each runtime. `init` records the selected home in its
+private config; production `serve` also uses this default when none is configured.
+Existing configs retain their home. For one of those, use
+`agent-connect login --config "$runtime_dir/config.json"`; the selector defaults
+to its configured harness, and selecting a different harness is refused.
+Use `--harness codex` to skip the selector and `--harness-home <absolute-dir>`
+to override the home. These overrides are available on login and setup.
+The provider's interactive login still needs a terminal.
+
+Every session mounts the whole directory read-write at `/home/node`,
 running as your host UID/GID, including when it differs from node UID 1000.
-Codex stores file credentials under `home/codex-home/`; Claude configuration uses
-`home/claude-config/`. Credentials and data are intentionally kept together.
+Codex stores file credentials under `codex-home/` inside that dedicated home; Claude configuration uses
+`claude-config/`. Credentials and data are intentionally kept together.
 
 ## Start egress and serve
 
 ```sh
-agent-connect-gateway egress start
-agent-connect-gateway serve --config "$runtime_dir/config.json"
+agent-connect egress start
+agent-connect serve --config "$runtime_dir/config.json"
 ```
 
 Egress is a gateway-owned Docker container, with no published host port.
@@ -205,8 +225,8 @@ fresh operator-issued grant, then restart; this ends attached sessions. To revok
 the harness login, use the provider's account controls for **that dedicated login**.
 Do not log out or change your personal harness session.
 
-To uninstall: stop the gateway; run `agent-connect-gateway egress stop`; uninstall
-`@open-agent-connect/gateway` globally, or remove the archive-installed binary.
+To uninstall: stop the gateway; run `agent-connect egress stop`; uninstall
+`@open-agent-connect/gateway` globally, or remove both archive-installed executables (`agent-connect` and its compatibility command).
 The helper only removes containers bearing its egress ownership label. Private
 homes and journals are left for the owner to retain or delete after revoking the
 dedicated login. Do not prune unrelated Docker resources.

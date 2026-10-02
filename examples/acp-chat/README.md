@@ -15,11 +15,11 @@ Install the gateway and the platform binary from the same release. With Docker
 and the release session image available, prepare a dedicated operator directory:
 
 ```sh
-agent-connect-gateway init --directory ./runtime --harness codex \
+agent-connect init --directory ./runtime --harness codex \
   --allow-origin http://127.0.0.1:5173 --tools ./tools.json
-agent-connect-gateway login --harness codex --harness-home "$PWD/runtime/home"
-agent-connect-gateway egress start
-agent-connect-gateway serve --config ./runtime/config.json
+agent-connect login
+agent-connect egress start
+agent-connect serve --config ./runtime/config.json
 ```
 
 The operator reviews `tools.json`, then supplies `runtime/grant.json`

@@ -1,7 +1,14 @@
 # Gateway configuration reference (unstable ACP)
 
-`agent-connect-gateway --help` lists `init`, `login`, `egress`, `serve` and
-`release-info`. `serve --help` lists all flags. Release builds use the matching
+`agent-connect --help` lists `init`, `login`, `egress`, `serve` and
+`release-info`. `serve --help` lists all flags. `agent-connect-gateway` remains a compatibility
+alias in npm and the release archives. `agent-connect login` prompts for a
+harness and uses a dedicated platform-default home; `--harness` skips selection,
+`--harness-home` overrides the home, and `--config` honors an existing runtime's
+home/image. `XDG_STATE_HOME` overrides the platform state root and must be absolute.
+Without a terminal, omitted `--harness` is a usage error, never a silent choice.
+The [install guide](README.md#one-time-codex-login) lists home defaults.
+Release builds use the matching
 session image by digest; `release-info` reports its compiled default.
 
 `serve --config config.json` reads a JSON object with snake_case keys below.
@@ -12,27 +19,27 @@ config, defaults**. Each key supports `AGENT_CONNECT_<UPPER_SNAKE_KEY>`;
 `AGENT_CONNECT_CONFIG` selects the file. CLI booleans accept `--boxed` or
 `--boxed=false`. Never place real tokens in shell history or checked-in examples.
 
-| JSON key / flag                             | Meaning / default                                                                   |
-| ------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `harness` / `--harness`                     | Required `codex` or `claude`                                                        |
-| `listen` / `--listen`                       | `127.0.0.1:18940`                                                                   |
-| `allow_origin` / `--allow-origin`           | Required exact HTTP(S) browser origin, no path/trailing slash                       |
-| `token` / `--token`                         | Required operator-issued application bearer; prefer private config                  |
-| `tools` / `--tools`                         | Required fixed snapshot JSON array of tool names and schemas                        |
-| `harness_home` / `--harness-home`           | Dedicated whole-home read-write bind mount; required in production                  |
-| `session_image` / `--session-image`         | Matching release digest; local builds use a versioned local tag                     |
-| `egress_container` / `--egress-container`   | Required operator-selected proxy; setup uses `agent-connect-egress`                 |
-| `boxed` / `--boxed`                         | Required true in production; set true by setup                                      |
-| `permissions` / `--permissions`             | `sandboxed`, `app-tools-only` or `deny-all`; default `sandboxed`                    |
-| `codex_mode` / `--codex-mode`               | Operator mode; boxed default `agent-full-access`, host fixture `workspace-write`    |
-| `state_dir` / `--state-dir`                 | Private action journals; default `.agent-connect/gateway`                           |
-| `max_sessions` / `--max-sessions`           | Positive capacity, default 32                                                       |
-| `resume_grace_secs` / `--resume-grace-secs` | Detached session grace, default 600 seconds                                         |
-| `resume_max_bytes` / `--resume-max-bytes`   | Unacknowledged output budget, default 8388608 bytes                                 |
-| `mock_root` / `--mock-root`                 | Isolated deterministic fixture root; never a production host-mode switch            |
-| `mock_url` / `--mock-url`                   | Fixture model URL, default `http://127.0.0.1:18931/v1`                              |
-| `mock_container` / `--mock-container`       | Fixture model container; requires `mock_root`                                       |
-| `durable_home` / `--durable-home`           | Legacy deterministic-fixture named-volume option; use dedicated home for production |
+| JSON key / flag                             | Meaning / default                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `harness` / `--harness`                     | Required `codex` or `claude`                                                               |
+| `listen` / `--listen`                       | `127.0.0.1:18940`                                                                          |
+| `allow_origin` / `--allow-origin`           | Required exact HTTP(S) browser origin, no path/trailing slash                              |
+| `token` / `--token`                         | Required operator-issued application bearer; prefer private config                         |
+| `tools` / `--tools`                         | Required fixed snapshot JSON array of tool names and schemas                               |
+| `harness_home` / `--harness-home`           | Dedicated whole-home read-write bind mount; defaults to the per-harness Agent Connect home |
+| `session_image` / `--session-image`         | Matching release digest; local builds use a versioned local tag                            |
+| `egress_container` / `--egress-container`   | Required operator-selected proxy; setup uses `agent-connect-egress`                        |
+| `boxed` / `--boxed`                         | Required true in production; set true by setup                                             |
+| `permissions` / `--permissions`             | `sandboxed`, `app-tools-only` or `deny-all`; default `sandboxed`                           |
+| `codex_mode` / `--codex-mode`               | Operator mode; boxed default `agent-full-access`, host fixture `workspace-write`           |
+| `state_dir` / `--state-dir`                 | Private action journals; default `.agent-connect/gateway`                                  |
+| `max_sessions` / `--max-sessions`           | Positive capacity, default 32                                                              |
+| `resume_grace_secs` / `--resume-grace-secs` | Detached session grace, default 600 seconds                                                |
+| `resume_max_bytes` / `--resume-max-bytes`   | Unacknowledged output budget, default 8388608 bytes                                        |
+| `mock_root` / `--mock-root`                 | Isolated deterministic fixture root; never a production host-mode switch                   |
+| `mock_url` / `--mock-url`                   | Fixture model URL, default `http://127.0.0.1:18931/v1`                                     |
+| `mock_container` / `--mock-container`       | Fixture model container; requires `mock_root`                                              |
+| `durable_home` / `--durable-home`           | Legacy deterministic-fixture named-volume option; use dedicated home for production        |
 
 `sandboxed` means permission prompts are approved inside the container boundary;
 it does not enable a separate nested Codex sandbox. `app-tools-only` rejects

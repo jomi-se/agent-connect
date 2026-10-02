@@ -9,7 +9,8 @@ and Linux ARM64. Windows is not yet supported.
 
 ```sh
 npm install --global @open-agent-connect/gateway@0.1.0-alpha.1
-agent-connect-gateway --help
+agent-connect --help
+agent-connect login
 # Or, without a global installation:
 npx @open-agent-connect/gateway@0.1.0-alpha.1 --help
 ```
@@ -19,6 +20,15 @@ It covers the sample app, explicit tool consent, private config, Docker egress,
 one-time Codex device login, recovery, upgrades and uninstalling. Claude Code
 subscription use is unconfirmed against Anthropic terms; no API-key environment
 variables are forwarded to session containers.
+
+`agent-connect login` offers Codex and Claude Code, defaults to Codex, then
+uses a dedicated home without requiring flags. Linux uses
+`$HOME/.local/state/agent-connect/harnesses/<harness>`; macOS uses
+`$HOME/Library/Application Support/agent-connect/harnesses/<harness>`.
+`XDG_STATE_HOME` overrides the state root. New setup uses the same home.
+Existing runtime homes work with `login --config <file>`. Explicit `--harness`
+and `--harness-home` remain available. `agent-connect-gateway` is a compatibility
+alias; both npm commands launch the same pinned platform executable.
 
 The launcher selects one platform package through `optionalDependencies`.
 Keep optional dependencies enabled. It performs no downloads during launch.

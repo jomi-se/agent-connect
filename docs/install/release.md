@@ -33,6 +33,10 @@ The explicit native matrix is:
 | `ubuntu-24.04`     | `x86_64-unknown-linux-musl`  |
 | `ubuntu-24.04-arm` | `aarch64-unknown-linux-musl` |
 
+Each archive and shell installation includes `agent-connect` and the
+`agent-connect-gateway` compatibility executable. npm exposes both names through
+the same launcher.
+
 Cargo-dist produces target archives, SHA-256 checksums and the global shell
 installer. npm packaging is owned by `scripts/acp-release.mjs`, avoiding a
 second cargo-dist npm installer. The collection contains:
