@@ -5,16 +5,20 @@ members = ["cargo:."]
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.33.0"
+rust-toolchain-version = "1.98.1"
 # Whether to consider the binaries in a package for distribution (defaults true)
 dist = true
 # CI backends to support
 ci = []
-# Metadata for archive/installer URLs only; no release workflow is enabled.
+# The hand-authored workflow is manual and enforces the owner-pushed tag boundary.
 hosting = ["github"]
 # The installers to generate for each app
-installers = ["shell", "npm"]
-# A namespace to use when publishing this package to the npm registry
-npm-scope = "@open-agent-connect"
+installers = ["shell"]
+# scripts/acp-release.mjs owns npm launcher/platform/SDK packaging.
+checksum = "sha256"
+unix-archive = ".tar.xz"
+source-tarball = false
+create-release = false
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl"]
 # Skip checking whether the specified configuration files are up to date
@@ -23,6 +27,12 @@ allow-dirty = ["ci"]
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
+
+[dist.github-custom-runners]
+aarch64-apple-darwin = "macos-14"
+x86_64-unknown-linux-musl = "ubuntu-24.04"
+aarch64-unknown-linux-musl = "ubuntu-24.04-arm"
+global = "ubuntu-24.04"
 
 [dist.binaries]
 aarch64-apple-darwin = ["agent-connect-gateway"]

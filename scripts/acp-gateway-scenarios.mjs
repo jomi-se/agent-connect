@@ -21,7 +21,9 @@ const children = new Set();
 const dockerContainers = [];
 const dockerNetworks = [];
 const boxed = process.env.ACP_BOXED === "1";
-const sessionImage = "agent-connect-session:0.1.0";
+const sessionImage =
+  process.env.ACP_SESSION_IMAGE ??
+  `agent-connect-session:${JSON.parse(await readFile(join(repo, "deploy/acp-gateway/session/package.json"), "utf8")).version}`;
 let mockContainer, egressContainer;
 const cleanEnv = {
   PATH: process.env.PATH,
