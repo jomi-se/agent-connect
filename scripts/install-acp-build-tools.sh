@@ -62,7 +62,7 @@ export PATH="$tools_dir/bin:$tools_dir/cargo-tools/bin:$PATH"
 printf '%s\n' "$tools_dir/bin" "$tools_dir/cargo-tools/bin" >> "$GITHUB_PATH"
 
 [[ "$(dist --version)" == "cargo-dist $dist_version" ]]
-[[ "$(cargo zigbuild --version)" == "cargo-zigbuild $zigbuild_version" ]]
+[[ "$(cargo-zigbuild --version)" == "cargo-zigbuild $zigbuild_version" ]]
 [[ "$(zig version)" == "$zig_version" ]]
 printf 'Installed ACP build pins: Rust %s, cargo-dist %s, cargo-zigbuild %s, Zig %s\n' \
   "$rust_version" "$dist_version" "$zigbuild_version" "$zig_version"
