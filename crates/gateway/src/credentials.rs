@@ -46,6 +46,17 @@ fn default_home_from(
     }))
 }
 
+/// The shipped session image sets CODEX_HOME and CLAUDE_CONFIG_DIR under the
+/// mounted whole home. Inspect metadata only; never open credential contents.
+pub fn credential_file_present(home: &Path, harness: Harness) -> bool {
+    home.join(match harness {
+        Harness::Codex => "codex-home/auth.json",
+        Harness::Claude => "claude-config/.credentials.json",
+    })
+    .symlink_metadata()
+    .is_ok_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+}
+
 /// A small terminal selector; EOF or q cancels before creating a home.
 pub fn select_harness(
     input: &mut impl BufRead,
@@ -184,6 +195,36 @@ mod tests {
         );
         assert!(default_home_from(Harness::Codex, false, None, None).is_err());
         assert!(default_home_from(Harness::Codex, false, home, Some("relative".into())).is_err());
+    }
+
+    #[test]
+    fn login_detection_matches_shipped_image_homes_without_reading_credentials() {
+        let entrypoint = include_str!("../../../deploy/acp-gateway/session/entrypoint.sh");
+        assert!(entrypoint.contains("CODEX_HOME=\"$HOME/codex-home\""));
+        assert!(entrypoint.contains("CLAUDE_CONFIG_DIR=\"$HOME/claude-config\""));
+        let root =
+            std::env::temp_dir().join(format!("acp-login-metadata-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("codex-home")).unwrap();
+        std::fs::create_dir_all(root.join("claude-config")).unwrap();
+        assert!(!credential_file_present(&root, Harness::Codex));
+        assert!(!credential_file_present(&root, Harness::Claude));
+        // Empty files test presence, without placing any credentials in a fixture.
+        std::fs::write(root.join("codex-home/auth.json"), []).unwrap();
+        assert!(credential_file_present(&root, Harness::Codex));
+        assert!(!credential_file_present(&root, Harness::Claude));
+        std::fs::write(root.join("claude-config/.credentials.json"), []).unwrap();
+        assert!(credential_file_present(&root, Harness::Claude));
+        std::fs::remove_file(root.join("codex-home/auth.json")).unwrap();
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(
+                root.join("claude-config/.credentials.json"),
+                root.join("codex-home/auth.json"),
+            )
+            .unwrap();
+            assert!(!credential_file_present(&root, Harness::Codex));
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

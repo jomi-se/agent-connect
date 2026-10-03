@@ -195,15 +195,7 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
                 "Dedicated harness home is private (contents not read)",
                 None,
             );
-            let candidates: &[&str] = match configured.harness {
-                Harness::Codex => &[".codex/auth.json"],
-                Harness::Claude => &[".claude/.credentials.json"],
-            };
-            if candidates.iter().any(|file| {
-                home.join(file)
-                    .symlink_metadata()
-                    .is_ok_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
-            }) {
+            if crate::credentials::credential_file_present(home, configured.harness) {
                 report.add(
                     "login_file_present",
                     CheckStatus::Pass,
