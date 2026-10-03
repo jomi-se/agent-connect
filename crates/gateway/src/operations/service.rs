@@ -59,6 +59,7 @@ struct ServicePaths {
     executable: PathBuf,
     logs: PathBuf,
     domain: String,
+    search_path: String,
 }
 impl ServicePaths {
     fn from_cli(cli: &ServiceCli) -> anyhow::Result<Self> {
@@ -95,6 +96,9 @@ impl ServicePaths {
         #[cfg(not(unix))]
         let domain = "unsupported".into();
         let executable = std::env::current_exe()?.canonicalize()?;
+        let search_path = std::env::var("PATH")
+            .map_err(|_| usage("service installation requires a Unicode PATH"))?;
+        validate_service_path(&search_path)?;
         let logs = config.parent().unwrap().join("service-logs");
         for path in [&unit, &config, &executable, &logs] {
             validate_argument(&path.to_string_lossy())?;
@@ -106,6 +110,7 @@ impl ServicePaths {
             executable,
             logs,
             domain,
+            search_path,
         })
     }
     fn target(&self) -> String {
@@ -114,16 +119,18 @@ impl ServicePaths {
     fn content(&self) -> String {
         match self.manager {
             ServiceManager::Systemd => format!(
-                "# {MARKER}\n# Runtime: {}\n[Unit]\nDescription=Agent Connect unstable ACP gateway\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart={} serve --config {}\nRestart=on-failure\nRestartSec=5\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
+                "# {MARKER}\n# Runtime: {}\n[Unit]\nDescription=Agent Connect unstable ACP gateway\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart={} serve --config {}\nEnvironment={}\nRestart=on-failure\nRestartSec=5\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
                 self.config.display(),
                 systemd_quote(&self.executable),
-                systemd_quote(&self.config)
+                systemd_quote(&self.config),
+                systemd_environment_quote(&format!("PATH={}", self.search_path))
             ),
             ServiceManager::Launchd => format!(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<!-- {MARKER} -->\n<!-- Runtime: {} -->\n<plist version=\"1.0\"><dict><key>Label</key><string>{LABEL}</string><key>ProgramArguments</key><array><string>{}</string><string>serve</string><string>--config</string><string>{}</string></array><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>RunAtLoad</key><true/><key>ThrottleInterval</key><integer>5</integer><key>Umask</key><integer>63</integer><key>StandardOutPath</key><string>{}</string><key>StandardErrorPath</key><string>{}</string></dict></plist>\n",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<!-- {MARKER} -->\n<!-- Runtime: {} -->\n<plist version=\"1.0\"><dict><key>Label</key><string>{LABEL}</string><key>ProgramArguments</key><array><string>{}</string><string>serve</string><string>--config</string><string>{}</string></array><key>EnvironmentVariables</key><dict><key>PATH</key><string>{}</string></dict><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>RunAtLoad</key><true/><key>ThrottleInterval</key><integer>5</integer><key>Umask</key><integer>63</integer><key>StandardOutPath</key><string>{}</string><key>StandardErrorPath</key><string>{}</string></dict></plist>\n",
                 xml(&self.config.to_string_lossy()),
                 xml(&self.executable.to_string_lossy()),
                 xml(&self.config.to_string_lossy()),
+                xml(&self.search_path),
                 xml(&self.logs.join("stdout.log").to_string_lossy()),
                 xml(&self.logs.join("stderr.log").to_string_lossy())
             ),
@@ -150,6 +157,33 @@ impl ServicePaths {
         );
         Ok(())
     }
+}
+
+fn validate_service_path(value: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !value.is_empty() && value.len() <= 8192 && !value.chars().any(char::is_control),
+        "service PATH must be nonempty, at most 8192 bytes, and contain no control characters"
+    );
+    let entries = value.split(':').collect::<Vec<_>>();
+    anyhow::ensure!(
+        entries.len() <= 128
+            && entries
+                .iter()
+                .all(|entry| !entry.is_empty() && Path::new(entry).is_absolute()),
+        "service PATH must contain at most 128 absolute directories; remove empty or relative search entries"
+    );
+    Ok(())
+}
+
+fn systemd_environment_quote(value: &str) -> String {
+    // Environment= expands specifiers, but does not expand dollar variables.
+    format!(
+        "\"{}\"",
+        value
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('%', "%%")
+    )
 }
 
 fn systemd_quote(path: &Path) -> String {
@@ -427,6 +461,7 @@ mod tests {
             executable: "/example/bin/agent-connect".into(),
             logs: directory.join("logs"),
             domain: "gui/123".into(),
+            search_path: "/example/package/bin:/example/tools/bin".into(),
         }
     }
     #[tokio::test]
@@ -712,5 +747,38 @@ mod tests {
             "\"/example/a $$b%%\\\"c\""
         );
         assert_eq!(xml("a<&\"'--b"), "a&lt;&amp;&quot;&apos;&#45;&#45;b");
+    }
+    #[test]
+    fn service_path_is_bounded_and_rejects_relative_entries_and_directive_injection() {
+        assert!(validate_service_path("/example/package/bin:/example/tools/bin").is_ok());
+        for invalid in [
+            "",
+            ".:/example/bin",
+            "/example/bin:",
+            ":/example/bin",
+            "/example/bin\n[Service]\nExecStart=/example/injected",
+            "/example/bin\rPATH=/example/injected",
+            "/example/\0bin",
+        ] {
+            assert!(
+                validate_service_path(invalid).is_err(),
+                "accepted {invalid:?}"
+            );
+        }
+        assert!(validate_service_path(&format!("/{}", "x".repeat(8192))).is_err());
+        assert!(validate_service_path(&vec!["/example/bin"; 129].join(":")).is_err());
+    }
+    #[test]
+    fn managers_preserve_the_validated_installer_path_without_expansion() {
+        let path = "/example/tools space/%literal/$literal/\"quoted\"/&<directory>:/example/bin";
+        validate_service_path(path).unwrap();
+        let mut systemd = paths(ServiceManager::Systemd);
+        systemd.search_path = path.into();
+        let unit = systemd.content();
+        assert!(unit.contains("Environment=\"PATH=/example/tools space/%%literal/$literal/\\\"quoted\\\"/&<directory>:/example/bin\"\n"));
+        let mut launchd = paths(ServiceManager::Launchd);
+        launchd.search_path = path.into();
+        let plist = launchd.content();
+        assert!(plist.contains("<key>EnvironmentVariables</key><dict><key>PATH</key><string>/example/tools space/%literal/$literal/&quot;quoted&quot;/&amp;&lt;directory&gt;:/example/bin</string></dict>"));
     }
 }
