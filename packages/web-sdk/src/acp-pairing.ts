@@ -164,7 +164,7 @@ export class AcpPairing {
     this.storage = options.storage ?? globalThis.sessionStorage;
     if (!this.storage)
       throw new TypeError("ACP pairing requires session-scoped storage");
-    this.fetcher = options.fetch ?? globalThis.fetch;
+    this.fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.tools = structuredClone(
       options.tools
         .map(({ name, description, inputSchema }) => ({
