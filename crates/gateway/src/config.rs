@@ -229,7 +229,7 @@ impl ServeOptions {
             mock_container: merged!(mock_container),
             state_dir: merged!(state_dir)
                 .unwrap_or_else(|| PathBuf::from(".agent-connect/gateway")),
-            max_sessions: merged!(max_sessions).unwrap_or_else(|| 1),
+            max_sessions: merged!(max_sessions).unwrap_or_else(|| 32),
             boxed: merged!(boxed).unwrap_or_else(|| false),
             resume_grace_secs: merged!(resume_grace_secs).unwrap_or_else(|| 600),
             durable_home: merged!(durable_home).unwrap_or_else(|| false),
@@ -757,6 +757,15 @@ mod tests {
         assert_eq!(resolved.tools, root.join("tools.json"));
         assert_eq!(resolved.state_dir, root.join("state"));
         assert_eq!(resolved.mock_root, Some(root.join("fixture")));
+        assert_eq!(resolved.max_sessions, 32);
+        let overridden = ServeOptions {
+            config: Some(path.clone()),
+            max_sessions: Some(4),
+            ..Default::default()
+        }
+        .resolve()
+        .unwrap();
+        assert_eq!(overridden.max_sessions, 4);
         #[cfg(unix)]
         {
             use std::os::unix::fs::{PermissionsExt, symlink};

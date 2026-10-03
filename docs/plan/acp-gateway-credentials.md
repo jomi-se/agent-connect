@@ -173,9 +173,8 @@ harness for a live release.
   Claude subscription and requires a Pro, Max, Team, or Enterprise plan." So
   it uses subscription allowance, not API billing.
 - The token is valid for one year, and Claude Code does not refresh it. It is
-  printed once and read from `CLAUDE_CODE_OAUTH_TOKEN`. This avoids refresh
-  races between concurrent boxes, and keeps the credential out of the home
-  directory.
+  printed once and read from `CLAUDE_CODE_OAUTH_TOKEN`. It keeps the credential
+  out of the home directory.
 - It is documented for "CI pipelines and scripts where browser login isn't
   available". Agent Connect is interactive use through another client, and
   the owner must copy the printed token into Agent Connect. That sits closer
@@ -221,9 +220,6 @@ harness for a live release.
 
 3. **Live checks, on a deterministic prompt, with each harness:**
    - one boxed turn on the dedicated login;
-   - two concurrent boxes;
-   - a turn after an access-token refresh. For Codex, this means letting the
-     cached token age, or observing a refresh in the logs;
    - the owner's personal login still works afterwards;
    - revoking the dedicated login stops boxed turns with a clear error.
 4. **Claude Code token variant:** `CLAUDE_CODE_OAUTH_TOKEN` passed into the
@@ -238,8 +234,6 @@ starts it. Results go to `docs/experiments/acp-gateway.md`.
 
 ## Kill criteria
 
-- Concurrent boxes sharing one home corrupt the credential file, or log each
-  other out.
 - A refresh inside a box invalidates the owner's personal login.
 
 ## Implementation (2026-10-02, unreleased)
@@ -282,20 +276,19 @@ On 2026-10-03, the owner reported a successful dedicated Codex device login
 and a subscription-backed sample chat that completed `read_passage` and returned
 the chapter text. This establishes the basic live login/application-tool path
 for this candidate, based on the owner's report rather than automated evidence.
-Concurrent boxes, token refresh, personal-login coexistence and scoped revocation
-remain unverified and require separate owner-run checks. Claude subscription
+Personal-login coexistence and scoped revocation require separate owner-run
+checks. Claude subscription
 use remains unconfirmed against Anthropic terms. Deterministic implementation
 checks spent no allowance; the owner initiated the live turn.
 
-## Shared-home refresh availability boundary
+## Shared-home concurrency
 
 Provider credential refresh is separate from application-grant refresh. Every
 box mounts the same read-write dedicated harness home, including provider
-credentials and conversations. Concurrent provider refreshes may race or reuse
-a single-use refresh token; provider file locking has not been qualified. The
-safe default is **one session box** (`max_sessions: 1`). Raising capacity is an
-explicit availability risk choice pending owner-run concurrency qualification.
-Do not run multiple gateways against the same harness home until that behavior
-is verified; a per-process capacity limit cannot serialize another process.
-This concern does not change the accepted risk that the harness reads its own
-auth file. Owner authorization state and TOTP secrets are never in this mount.
+credentials and conversations. This follows the harness's normal local
+multi-process behavior on the same host. The default capacity is **32 session
+boxes** (`max_sessions: 32`); shared-home concurrency is not a release gate.
+There is no refresh broker. Investigate a refresh problem if one is observed
+in real use rather than limiting capacity for an unobserved theoretical race.
+The accepted risk that the harness reads its own auth file remains unchanged.
+Owner authorization state and TOTP secrets are never in this mount.

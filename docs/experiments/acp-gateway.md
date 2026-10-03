@@ -666,8 +666,7 @@ termination before the next host can claim a transcript.
 
 The earlier 18-finding review is folded into this quality gate: terminal eviction
 and oversized frames, aligned startup and immediate never-attached cleanup,
-single-box default while provider refresh concurrency is unverified, honest
-boxed Codex profile rejection, asserted policy handling, preflight/restart-safe
+honest boxed Codex profile rejection, asserted policy handling, preflight/restart-safe
 owned egress, preserved MCP metadata/progress, durable metadata-only bounded
 action records, bounded session ownership, healthy idle recovery, concurrent
 shutdown, retained plugin release documentation, executable release-image checks,
@@ -737,3 +736,12 @@ The clean-room driver applies the same policy after owned Docker cleanup.
 Regression coverage protects retained evidence and linked external data.
 `AGENT_CONNECT_KEEP_TEST_INSTALLS=1` explicitly opts into retaining full installs
 for debugging. Shared tool caches and operator/harness homes are untouched.
+
+### Shared-home concurrency correction
+
+The owner rejected the pre-auth review's theoretical provider-refresh race;
+parallel local Codex processes already share the same files on one host. Restored
+the gateway's default capacity to 32 session hosts and removed the single-box
+release caveats. No refresh broker is introduced. Configuration regression
+coverage checks the default and an explicit capacity override. Terminal eviction
+(4415), oversized-frame handling (1009), and the 30-second connect timeout remain.

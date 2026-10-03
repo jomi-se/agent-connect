@@ -39,7 +39,7 @@ Owner-required work:
 
 1. **Remaining live credential checks.** The owner reported successful dedicated
    Codex device login and a sample chat with a completed `read_passage` call.
-   Concurrent boxes, token refresh, personal-session coexistence and dedicated-login
+   Personal-session coexistence and dedicated-login
    revocation still require explicitly authorized owner-run checks. Claude subscription use
    remains unconfirmed against Anthropic terms; confirming that optional path
    requires provider/owner action. Automated checks remain credential-free;

@@ -262,7 +262,7 @@ The artifact-only browser test must complete real owner consent before its app
 connects; copied static tokens cannot satisfy this gate.
 
 The pre-auth review also requires terminal eviction and oversized-frame handling,
-bounded startup/shutdown, safe single-box shared-login defaults, honest per-harness
+bounded startup/shutdown, honest per-harness
 permission profiles, asserted real-adapter policy tests, restart-safe owned egress
 and startup preflight. Metadata-only durable action records, bounded ownership,
 correct MCP progress, safe idle recovery, stable volume IDs, typed Codex modes,
