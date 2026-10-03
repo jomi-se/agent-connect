@@ -1,6 +1,7 @@
 //! Agent Connect gateway launch recipes and deterministic compatibility fixtures.
 //! ACP and MCP-over-ACP APIs are unstable.
 
+pub mod authorization;
 pub mod config;
 pub mod credentials;
 pub mod policy;

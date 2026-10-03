@@ -95,6 +95,7 @@ async function setup() {
   const directory = join(root, "runtime");
   const args = [
     "init",
+    "--headless-static-bearer",
     "--directory",
     directory,
     "--harness",
@@ -202,6 +203,49 @@ test("serve refuses unknown JSON fields and insecure config modes without printi
   assert.ok(!unknown.stderr.includes(configuration.token));
 });
 
+async function preflightDocker() {
+  const root = await mkdtemp(join(tmpdir(), "acp-preflight-cli-"));
+  const image = { Id: `sha256:${"d".repeat(64)}`, Config: { Env: [] } };
+  const container = {
+    Id: "a".repeat(64),
+    Image: image.Id,
+    Config: {
+      Env: [],
+      Labels: { "org.agent-connect.component": "acp-egress" },
+      Entrypoint: ["node"],
+      Cmd: ["/opt/agent-connect/egress-proxy.mjs"],
+    },
+    HostConfig: {
+      ReadonlyRootfs: true,
+      Privileged: false,
+      CapDrop: ["ALL"],
+      SecurityOpt: ["no-new-privileges"],
+      Memory: 268435456,
+      NanoCpus: 1000000000,
+      PidsLimit: 64,
+      RestartPolicy: { Name: "unless-stopped" },
+      LogConfig: {
+        Type: "json-file",
+        Config: { "max-size": "10m", "max-file": "3" },
+      },
+    },
+    State: { Running: true, Restarting: false },
+    Mounts: [],
+  };
+  await writeFile(join(root, "image"), JSON.stringify(image));
+  await writeFile(join(root, "container"), JSON.stringify(container));
+  await writeFile(
+    join(root, "docker"),
+    '#!/bin/sh\nif [ "$1" = image ]; then /bin/cat "$PREFLIGHT_IMAGE"; elif [ "$1" = inspect ]; then /bin/cat "$PREFLIGHT_CONTAINER"; else exit 1; fi\n',
+  );
+  await chmod(join(root, "docker"), 0o755);
+  return {
+    PATH: root,
+    PREFLIGHT_IMAGE: join(root, "image"),
+    PREFLIGHT_CONTAINER: join(root, "container"),
+  };
+}
+
 async function serveUntilReady(args, env = {}, cwd) {
   const { spawn } = await import("node:child_process");
   const inherited = Object.fromEntries(
@@ -282,6 +326,7 @@ test("production isolation requirements and runtime failures have distinct exits
     "codex",
     "--allow-origin",
     "https://app.example",
+    "--headless-static-bearer",
     "--token",
     "fixture",
     "--tools",
@@ -289,14 +334,17 @@ test("production isolation requirements and runtime failures have distinct exits
   ];
   assert.equal(command(base).status, 2);
   assert.equal(command([...base, "--boxed"]).status, 2);
-  const defaultHome = await serveUntilReady([
-    ...base,
-    "--boxed",
-    "--egress-container",
-    "egress",
-    "--listen",
-    "127.0.0.1:0",
-  ]);
+  const defaultHome = await serveUntilReady(
+    [
+      ...base,
+      "--boxed",
+      "--egress-container",
+      "egress",
+      "--listen",
+      "127.0.0.1:0",
+    ],
+    await preflightDocker(),
+  );
   assert.equal(defaultHome.code, 0, defaultHome.stderr);
   const runtime = command([
     ...base.slice(0, -1),
@@ -314,16 +362,21 @@ test("egress uses read-only same-image proxy and verifies ownership before delet
   const docker = join(root, "bin/docker");
   await writeFile(
     docker,
-    '#!/bin/sh\nprintf "%s\\n" "$@" > "$DOCKER_ARGS"\nif [ "$1" = inspect ]; then /bin/cat "$DOCKER_INSPECT"; fi\n',
+    '#!/bin/sh\nprintf "%s\\n" "$@" > "$DOCKER_ARGS"\nif [ "$1" = image ]; then /bin/cat "$DOCKER_IMAGE"; elif [ "$1" = inspect ]; then if [ -f "$DOCKER_INSPECT" ]; then /bin/cat "$DOCKER_INSPECT"; else echo "Error: No such container: fixture" >&2; exit 1; fi; fi\n',
   );
   await chmod(docker, 0o755);
   const env = {
     PATH: join(root, "bin"),
     DOCKER_ARGS: join(root, "args"),
     DOCKER_INSPECT: join(root, "inspect.json"),
+    DOCKER_IMAGE: join(root, "image.json"),
     OPENAI_API_KEY: "never-forward",
     ANTHROPIC_API_KEY: "never-forward",
   };
+  await writeFile(
+    env.DOCKER_IMAGE,
+    JSON.stringify({ Id: `sha256:${"d".repeat(64)}`, Config: { Env: [] } }),
+  );
   const start = command(
     [
       "egress",
@@ -351,7 +404,7 @@ test("egress uses read-only same-image proxy and verifies ownership before delet
   assert.deepEqual(args.slice(-4), [
     "--entrypoint",
     "node",
-    "session:test",
+    `sha256:${"d".repeat(64)}`,
     "/opt/agent-connect/egress-proxy.mjs",
   ]);
   const id = "a".repeat(64);
@@ -406,7 +459,7 @@ test("relative config argument resolves a dedicated production home to an absolu
   assert.equal(command(fixture.args).status, 0);
   const result = await serveUntilReady(
     ["serve", "--config", "runtime/config.json", "--listen", "127.0.0.1:0"],
-    {},
+    await preflightDocker(),
     fixture.root,
   );
   assert.equal(result.code, 0, result.stderr);
@@ -585,3 +638,156 @@ test(
     }
   },
 );
+
+test("normal init enrolls owner auth without issuing an app bearer", async () => {
+  const { stat } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "acp-owner-setup-"));
+  const passwordFile = join(root, "owner-passphrase");
+  await writeFile(passwordFile, "isolated-owner-test-passphrase", {
+    mode: 0o600,
+  });
+  const directory = join(root, "runtime");
+  const result = command([
+    "init",
+    "--directory",
+    directory,
+    "--harness",
+    "codex",
+    "--public-url",
+    "https://gateway.example",
+    "--owner-passphrase-file",
+    passwordFile,
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /https:\/\/gateway\.example\/agent-connect\/owner/,
+  );
+  assert.ok(!result.stdout.includes("isolated-owner-test-passphrase"));
+  const config = JSON.parse(await readFile(join(directory, "config.json")));
+  assert.equal(config.public_url, "https://gateway.example");
+  assert.equal(config.headless_static_bearer, false);
+  assert.equal(config.token, undefined);
+  assert.equal(config.tools, undefined);
+  assert.equal(config.allow_origin, undefined);
+  await assert.rejects(stat(join(directory, "grant.json")), { code: "ENOENT" });
+  const state = await readFile(
+    join(directory, "state/auth/authorization.json"),
+    "utf8",
+  );
+  assert.ok(!state.includes("isolated-owner-test-passphrase"));
+  assert.equal(
+    (await stat(join(directory, "state/auth/authorization.json"))).mode & 0o777,
+    0o600,
+  );
+  Object.assign(config, {
+    boxed: false,
+    mock_root: root,
+    harness_home: undefined,
+  });
+  await writeFile(join(directory, "config.json"), JSON.stringify(config));
+  const serving = await serveUntilReady([
+    "serve",
+    "--config",
+    join(directory, "config.json"),
+    "--listen",
+    "127.0.0.1:0",
+  ]);
+  assert.equal(serving.code, 0, serving.stderr);
+});
+
+test("owner setup rejects unattended prompts and invalid public origins before creation", async () => {
+  const { stat } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "acp-owner-invalid-"));
+  const directory = join(root, "runtime");
+  const args = ["init", "--directory", directory, "--harness", "codex"];
+  const noTerminal = command(args);
+  assert.equal(noTerminal.status, 2);
+  assert.match(noTerminal.stderr, /owner setup needs a terminal/);
+  for (const url of [
+    "http://gateway.example",
+    "https://gateway.example/path",
+    "https://owner@gateway.example",
+    "https://gateway.example?secret=x",
+  ]) {
+    assert.equal(command([...args, "--public-url", url]).status, 2);
+  }
+  await assert.rejects(stat(directory), { code: "ENOENT" });
+});
+
+test("owner setup rejects runtime inside harness mount, including canonical aliases", async () => {
+  const { symlink, stat } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "acp-owner-boundary-"));
+  const passwordFile = join(root, "password");
+  await writeFile(passwordFile, "isolated-owner-test-passphrase", {
+    mode: 0o600,
+  });
+  const home = join(root, "harness");
+  await mkdir(home, { mode: 0o700 });
+  const alias = join(root, "alias");
+  await symlink(home, alias);
+  for (const parent of [home, alias]) {
+    const runtime = join(parent, "runtime");
+    const result = command([
+      "init",
+      "--directory",
+      runtime,
+      "--harness",
+      "codex",
+      "--harness-home",
+      home,
+      "--owner-passphrase-file",
+      passwordFile,
+    ]);
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /outside the mounted harness home/);
+    await assert.rejects(stat(runtime), { code: "ENOENT" });
+  }
+});
+
+test("serve rejects owner state or config inside harness mount before Docker startup", async () => {
+  const root = await mkdtemp(join(tmpdir(), "acp-serve-owner-boundary-"));
+  const home = join(root, "harness");
+  await mkdir(home, { mode: 0o700 });
+  const outside = join(root, "config.json");
+  const configuration = {
+    harness: "codex",
+    public_url: "https://gateway.example",
+    boxed: true,
+    harness_home: home,
+    session_image: "session:test",
+    egress_container: "owned-egress",
+    state_dir: join(home, "authstate"),
+  };
+  await writeFile(outside, JSON.stringify(configuration), { mode: 0o600 });
+  let result = command(["serve", "--config", outside]);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /outside the mounted harness home/);
+  configuration.state_dir = join(root, "safe-state");
+  const inside = join(home, "config.json");
+  await writeFile(inside, JSON.stringify(configuration), { mode: 0o600 });
+  result = command(["serve", "--config", inside]);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /outside the mounted harness home/);
+});
+
+test("boxed Codex rejects ineffective permission profiles and arbitrary modes", () => {
+  const args = [
+    "serve",
+    "--harness",
+    "codex",
+    "--boxed",
+    "--public-url",
+    "https://gateway.example",
+    "--egress-container",
+    "owned-egress",
+  ];
+  for (const profile of ["deny-all", "app-tools-only"]) {
+    const result = command([...args, "--permissions", profile]);
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /boxed Codex supports only/);
+  }
+  const invalidMode = command([...args, "--codex-mode", "invented"]);
+  assert.equal(invalidMode.status, 2);
+  assert.match(invalidMode.stderr, /invalid value/);
+});

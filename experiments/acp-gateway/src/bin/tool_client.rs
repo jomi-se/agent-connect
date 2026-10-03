@@ -87,6 +87,7 @@ async fn main() -> anyhow::Result<()> {
             workspace: policy_workspace.clone(),
             app_server_name: "app".into(),
             snapshot,
+            tool_definitions: None,
             permissions: cli.permissions,
             grant_sessions: Default::default(),
             actions_dir: None,

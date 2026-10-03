@@ -173,6 +173,13 @@ async function runCase(mode) {
   const active = mode.endsWith("active") || mode === "cancel-then-bye";
   const startupFailure =
     mode.startsWith("startup-") && mode !== "startup-shutdown";
+  const preflightFailure = [
+    "startup-peer-failure",
+    "startup-unowned-egress",
+    "startup-stopped-egress",
+  ].includes(mode);
+  if (mode === "startup-stopped-egress")
+    await docker(["stop", sharedContainers[0]]);
   const dir = join(root, mode);
   sessionDirs.push(dir); // Register before any allocation/readiness failure.
   await mkdir(join(dir, "home"), { recursive: true, mode: 0o700 });
@@ -201,7 +208,9 @@ async function runCase(mode) {
       "--egress-container",
       mode === "startup-peer-failure"
         ? `acp-test-absent-${suffix}`
-        : egressName,
+        : mode === "startup-unowned-egress"
+          ? modelName
+          : egressName,
       "--session-image",
       image,
       "--tools",
@@ -212,6 +221,7 @@ async function runCase(mode) {
       `127.0.0.1:${port}`,
       "--allow-origin",
       origin,
+      "--headless-static-bearer",
       "--token",
       token,
       "--resume-grace-secs",
@@ -238,6 +248,43 @@ async function runCase(mode) {
   });
   let socket;
   try {
+    if (preflightFailure) {
+      await waitFor(
+        () => child.exitCode !== null,
+        `${mode} preflight rejection`,
+      );
+      assert.notEqual(child.exitCode, 0);
+      assert.ok(
+        !log.includes("listening"),
+        "unsafe egress is rejected before listening",
+      );
+      assert.match(log, /egress/i);
+      assert.equal(
+        (await sessions(dir)).length,
+        0,
+        "preflight allocates no session resources",
+      );
+      if (mode === "startup-stopped-egress") {
+        await command(binary, [
+          "egress",
+          "start",
+          "--name",
+          egressName,
+          "--session-image",
+          image,
+        ]);
+      }
+      for (const id of sharedContainers)
+        assert.equal((await inspect("container", id))?.State.Running, true);
+      reports.push({
+        mode,
+        rejectedBeforeListening: true,
+        gatewayOnlyCleanup: true,
+        sharedPeersRunning: true,
+      });
+      console.log(`OK gateway teardown ${mode}`);
+      return;
+    }
     await waitFor(() => log.includes("listening"), `${mode} listening`);
     socket = new WebSocket(
       `ws://127.0.0.1:${port}/acp`,
@@ -378,6 +425,16 @@ async function runCase(mode) {
   } finally {
     socket?.terminate();
     await stop(child);
+    if (mode === "startup-stopped-egress") {
+      await command(binary, [
+        "egress",
+        "start",
+        "--name",
+        egressName,
+        "--session-image",
+        image,
+      ]);
+    }
     await writeFile(join(dir, "gateway.log"), log);
   }
 }
@@ -395,6 +452,43 @@ try {
   const egress = await inspect("container", egressName);
   assert.equal(egress.Config.Labels[componentLabel], "acp-egress");
   sharedContainers.push(immutableId(egress.Id));
+  await command(binary, [
+    "egress",
+    "start",
+    "--name",
+    egressName,
+    "--session-image",
+    image,
+  ]);
+  assert.equal(
+    (await inspect("container", egressName)).Id,
+    egress.Id,
+    "running owned proxy is reused",
+  );
+  await docker(["stop", egress.Id]);
+  await command(binary, [
+    "egress",
+    "start",
+    "--name",
+    egressName,
+    "--session-image",
+    image,
+  ]);
+  assert.equal(
+    (await inspect("container", egressName)).Id,
+    egress.Id,
+    "stopped owned proxy is restarted by ID",
+  );
+  assert.equal(
+    (await inspect("container", egressName)).HostConfig.RestartPolicy.Name,
+    "unless-stopped",
+  );
+  assert.equal(
+    (await inspect("container", egressName)).HostConfig.LogConfig.Config[
+      "max-size"
+    ],
+    "10m",
+  );
   sharedNetworks.push(
     immutableId(await docker(["network", "create", "--internal", baseName])),
   );
@@ -435,6 +529,8 @@ try {
     "shutdown-active",
     "cancel-then-bye",
     "startup-peer-failure",
+    "startup-unowned-egress",
+    "startup-stopped-egress",
     "startup-box-failure",
     "startup-lost-box-response",
     "startup-lost-network-response",

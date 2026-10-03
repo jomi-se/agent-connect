@@ -1,6 +1,6 @@
 # Scope and capability inventory
 
-Updated: 2026-10-02
+Updated: 2026-10-03
 
 The ACP artifact install path is implemented as an unpublished
 `0.1.0-alpha.1` candidate under proposed ADR 0016. The previous OpenClaw plugin
@@ -12,7 +12,7 @@ predecessors remain archival; they are distinct from the new ACP gateway.
 | Capability                                  | Status                                          | Evidence / boundary                                                                                   |
 | ------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Artifact installation without a checkout    | Locally verified                                | Packed gateway/SDK, standalone sample, fresh container                                                |
-| Grant and exact tool consent                | Implemented                                     | Operator init/review/file handoff; single origin/bearer; no OAuth portal                              |
+| Grant and exact tool consent                | Implemented                                     | Hosted owner consent, S256 PKCE, fixed full tools, rotating grants and revocation                     |
 | Boxed harness execution                     | Real-adapter deterministic gates                | Pinned CLIs/adapters, private egress, dedicated whole home                                            |
 | Chat/app tools/useChat                      | Implemented and tested                          | Browser tool effects, thoughts, cancel; no second app-side harness loop                               |
 | Resume and session/load recovery            | Implemented and tested                          | Same transport reattach; interrupted turns never re-sent; process-local ownership                     |
@@ -24,7 +24,7 @@ predecessors remain archival; they are distinct from the new ACP gateway.
 ## Previous OpenClaw capabilities
 
 The following sections retain the previous plugin's evidence and guarantees;
-they do not describe ACP OAuth, credential isolation or cross-restart recovery.
+they do not establish ACP-specific isolation or cross-restart recovery.
 
 ## Application and SDK
 

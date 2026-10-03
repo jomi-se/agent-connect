@@ -205,53 +205,63 @@ try {
     dockerNetworks.push(modelNetwork);
     await command("docker", ["network", "create", "--internal", modelNetwork]);
     const uid = `${process.getuid()}:${process.getgid()}`;
-    for (const [name, args] of [
+    dockerContainers.push(mockContainer);
+    await command("docker", [
+      "run",
+      "-d",
+      "--name",
+      mockContainer,
+      "--network",
+      modelNetwork,
+      "--user",
+      uid,
+      "-v",
+      `${join(spike, "mock-model")}:/app:ro`,
+      "-v",
+      `${join(run, "box-logs")}:/log`,
+      "-e",
+      "MOCK_HOST=0.0.0.0",
+      "-e",
+      "MOCK_PORT=18931",
+      "-e",
+      "MOCK_LOG=/log/model.jsonl",
+      "node:24-bookworm",
+      "node",
+      "/app/server.mjs",
+    ]);
+    await command(
+      join(repo, "target/debug/agent-connect-gateway"),
       [
-        mockContainer,
-        [
-          "--network",
-          modelNetwork,
-          "--user",
-          uid,
-          "-v",
-          `${join(spike, "mock-model")}:/app:ro`,
-          "-v",
-          `${join(run, "box-logs")}:/log`,
-          "-e",
-          "MOCK_HOST=0.0.0.0",
-          "-e",
-          "MOCK_PORT=18931",
-          "-e",
-          "MOCK_LOG=/log/model.jsonl",
-          "node:24-bookworm",
-          "node",
-          "/app/server.mjs",
-        ],
-      ],
-      [
+        "egress",
+        "start",
+        "--name",
         egressContainer,
-        [
-          "--network",
-          "bridge",
-          "--user",
-          "node",
-          "-v",
-          `${join(repo, "deploy/acp-gateway/egress-proxy.mjs")}:/app/proxy.mjs:ro`,
-          "node:24-bookworm",
-          "node",
-          "/app/proxy.mjs",
-        ],
+        "--session-image",
+        sessionImage,
       ],
-    ]) {
-      dockerContainers.push(name);
-      await command("docker", ["run", "-d", "--name", name, ...args]);
-    }
+      { env: cleanEnv },
+    );
+    // The helper verified this owner-labelled proxy and its selected image.
+    // Retain its immutable ID so cleanup cannot remove a name replacement.
+    dockerContainers.push(
+      (
+        await command("docker", [
+          "inspect",
+          "--type",
+          "container",
+          "--format",
+          "{{.Id}}",
+          egressContainer,
+        ])
+      ).trim(),
+    );
   }
   for (const harness of ["codex", "claude"]) {
     const harnessHome = join(run, `boxed-home-${harness}`);
     if (boxed) await mkdir(harnessHome, { mode: 0o700 });
     for (const [mobile, scenario] of [
       [false, "tools"],
+      [false, "policy"],
       [false, "use-chat"],
       [false, "shell"],
       [false, "ask"],
@@ -302,6 +312,7 @@ try {
           join(run, ".run/state"),
           "--codex-mode",
           boxed ? "agent-full-access" : "workspace-write",
+          "--headless-static-bearer",
           "--token",
           "spike-dev-token",
           "--harness",
@@ -314,6 +325,8 @@ try {
           join(spike, "web/tools.json"),
           "--mock-url",
           `${mockUrl}/v1`,
+          "--max-sessions",
+          "2",
           "--resume-grace-secs",
           scenario === "expire" ? "5" : "60",
           "--resume-max-bytes",
@@ -337,15 +350,17 @@ try {
       const output = await command(
         "node",
         [
-          join(
-            spike,
-            "web",
-            scenario === "use-chat"
-              ? "drive-use-chat.mjs"
-              : mobile
-                ? "drive-mobile.mjs"
-                : "drive.mjs",
-          ),
+          scenario === "policy"
+            ? join(repo, "scripts/acp-policy-browser.mjs")
+            : join(
+                spike,
+                "web",
+                scenario === "use-chat"
+                  ? "drive-use-chat.mjs"
+                  : mobile
+                    ? "drive-mobile.mjs"
+                    : "drive.mjs",
+              ),
           scenario,
           label,
         ],
@@ -382,6 +397,17 @@ try {
           /^done:/,
           `${label}: ${JSON.stringify(report)}\n${gateway.tail()}`,
         );
+      if (scenario === "policy") {
+        assert.equal(report.oversizedInitialCode, 1009);
+        assert.equal(report.denied["session/set_mode"], -32601);
+        assert.equal(report.denied["session/set_config_option"], -32601);
+        assert.deepEqual(report.connects, ["policy-app"]);
+        assert.ok(report.listCalls > 0, "real adapter must request tools/list");
+        assert.match(report.answer, /MISSING-TOOLS read=true highlight=false/);
+        assert.deepEqual(report.toolCalls, []);
+        assert.equal(report.evictedCode, 4415);
+        assert.equal(report.secondClientStopReason, "end_turn");
+      }
       if (scenario === "cancel") assert.equal(report.status, "done:cancelled");
       if (scenario === "shell") {
         assert.match(report.answer, /native-42/);
