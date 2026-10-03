@@ -28,10 +28,10 @@ dedicated prefix with `scripts/openclaw-install.mjs` and sets
 `OPENCLAW_TEST_BIN`.
 
 ```sh
-# Active Agent Connect plugin for OpenClaw boundary
+# Retained Agent Connect plugin for OpenClaw boundary
 npm run test:openclaw:plugin-host
 
-# Repository verification, including the active Agent Connect plugin for OpenClaw boundary
+# ACP gateway and retained OpenClaw plugin verification
 npm run verify
 
 # Release, native WebMCP, and browser gates
@@ -41,6 +41,21 @@ npm run verify:full
 The fixture is disposable, loopback-only, and model-free. Missing or mismatched
 pins fail rather than skip in CI. Never use a modified OpenClaw checkout as
 compatibility evidence.
+
+## Fixture storage
+
+Each runtime uses a private temporary home. After owned services stop, ACP
+scenario, clean-room and OpenClaw fixtures prune their dependency trees and
+per-run npm/transformation caches on both success and failure. Logs, reports,
+screenshots and synthetic runtime state remain for focused diagnosis; cleanup
+never follows symlinks into shared caches or a checkout. Regression tests cover
+evidence preservation, nested installs, repeated cleanup and external links.
+
+Set `AGENT_CONNECT_KEEP_TEST_INSTALLS=1` only when diagnosing an installation
+problem that requires the dependencies themselves. Repeated opt-in runs retain
+large trees. Abrupt process termination such as SIGKILL can also leave fixtures;
+check ownership and active processes before removing leftovers. Do not rely on
+reboots or a host's temporary-directory retention policy for normal test cleanup.
 
 ## Interpreting failures
 

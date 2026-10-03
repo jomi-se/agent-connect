@@ -5,6 +5,7 @@ import { mkdtemp, writeFile, appendFile, readFile } from "node:fs/promises";
 import { openSync, closeSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
 
 export const compatibility = JSON.parse(
   await readFile(
@@ -201,6 +202,7 @@ export async function startOpenClawTestRuntime({
     model.closeAllConnections();
     if (model.listening) await new Promise((resolve) => model.close(resolve));
     if (log !== undefined) closeSync(log);
+    await pruneTestInstallations(directory);
   };
   try {
     await new Promise((resolve) => model.listen(0, "127.0.0.1", resolve));

@@ -13,6 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
+import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
 const repo = resolve(import.meta.dirname, "..");
 const artifactDirectory = resolve(
   process.env.ACP_RELEASE_DIR ??
@@ -224,5 +225,6 @@ try {
   );
 } finally {
   await cleanup();
+  await pruneTestInstallations(run);
   console.log(`ACP clean-room diagnostics: ${run}/work/report.json`);
 }
