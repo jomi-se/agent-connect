@@ -31,6 +31,7 @@ use agent_connect_gateway::config::{
     self, CodexMode, DEFAULT_SESSION_IMAGE, InitCli, ServeCli, ServeOptions, UsageError,
 };
 use agent_connect_gateway::credentials::{HarnessHome, default_home, login_args, select_harness};
+use agent_connect_gateway::operations::{self, DoctorCli, ResetTotpCli, ServiceCli, SetupCli};
 use agent_connect_gateway::policy::{GrantSessions, PermissionProfile, PolicyConfig, PolicyProxy};
 use agent_connect_gateway::resume::{
     self, AttachError, Host, RESUME_SUBPROTOCOL, Registry, ResumeConfig, ToSocket, close,
@@ -65,6 +66,14 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Guided private setup, harness login, egress and user service.
+    Setup(SetupCli),
+    /// Diagnose configuration, boxed runtime, login presence and public reachability.
+    Doctor(DoctorCli),
+    /// Install and operate the gateway's per-user systemd or launchd service.
+    Service(ServiceCli),
+    /// Reset a lost owner TOTP factor offline; stop the service first.
+    ResetTotp(ResetTotpCli),
     /// Serve owner sign-in, app consent, grant management and unstable ACP.
     Serve(ServeOptions),
     /// Create a private runtime and owner sign-in for browser pairing.
@@ -270,6 +279,10 @@ async fn run() -> anyhow::Result<()> {
             return Ok(());
         }
         Command::Init(cli) => return config::init(cli),
+        Command::Setup(cli) => return operations::setup(cli).await,
+        Command::Doctor(cli) => return operations::doctor(cli).await,
+        Command::Service(cli) => return operations::service(cli).await,
+        Command::ResetTotp(cli) => return operations::reset_totp(cli).await,
         Command::Egress(cli) => {
             match cli.command {
                 EgressCommand::Start {
