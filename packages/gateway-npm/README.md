@@ -4,7 +4,10 @@ ACP prerelease **0.1.0-alpha.1**. ACP, MCP-over-ACP and transport resumption are
 unstable. Release artifacts have not yet been published; these commands describe
 the approved-release installation path.
 
-Requires Node 24 (>=24.15, <25) and Docker. Supports Apple Silicon, Linux x64
+Requires Node >=24.15 and Docker. The launcher only selects and spawns the
+pinned native executable, so its npm engine range permits later Node majors.
+Repository development and provider compatibility checks continue to use
+Node 24 LTS; this range does not claim every later major has been tested. Supports Apple Silicon, Linux x64
 and Linux ARM64. Windows is not yet supported.
 
 ```sh
@@ -16,10 +19,25 @@ npx @open-agent-connect/gateway@0.1.0-alpha.1 --help
 ```
 
 Start with the [install and operator guide](https://github.com/jomi-se/agent-connect/blob/main/docs/install/README.md).
-It covers the sample app, explicit tool consent, private config, Docker egress,
+It covers the sample app, hosted owner sign-in and tool consent, private config, Docker egress,
 one-time Codex device login, recovery, upgrades and uninstalling. Claude Code
 subscription use is unconfirmed against Anthropic terms; no API-key environment
 variables are forwarded to session containers.
+
+Normal setup uses `agent-connect init --directory <private-runtime> --harness codex`
+(or adds `--public-url https://gateway.example` for remote use). It prompts for
+a hidden owner passphrase and confirmation. Unattended setup uses a private
+`--owner-passphrase-file`; keep owner state outside the dedicated harness home.
+Start egress, then `agent-connect serve --config <private-runtime>/config.json`.
+Applications request their own exact origin and fixed tools through hosted OAuth
+consent; no normal `grant.json` or `tools.json` handoff is required.
+
+The owner page at `/agent-connect/owner` provides optional TOTP enrollment and
+individual grant revocation without restarting. Once enrolled, TOTP is required
+at sign-in and approval. Remote owner pages, OAuth routes, metadata and `/acp`
+must share the configured HTTPS origin through the reverse proxy. Owner sign-in
+is separate from provider login. `--headless-static-bearer` explicitly retains
+the manual origin/tool/token path for headless integrations and is off by default.
 
 `agent-connect login` offers Codex and Claude Code, defaults to Codex, then
 uses a dedicated home without requiring flags. Linux uses
