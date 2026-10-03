@@ -6,7 +6,9 @@ until the owner approves and runs the first release. No checkout, Rust compiler
 or personal harness installation is needed. ADR 0016 remains proposed.
 ACP, MCP-over-ACP and `agent-connect.resume.v1` are unstable.
 
-You need Node 24 LTS (>=24.15, <25), a running Docker engine and a browser.
+The gateway launcher needs Node >=24.15, a running Docker engine and a browser.
+Node 24 LTS (>=24.15, <25) remains the repository and provider-validation baseline;
+the launcher's broader range does not establish testing of every later major.
 Supported hosts: Apple Silicon macOS, Linux x64 and Linux ARM64. Docker Desktop
 provides Linux containers on macOS. Windows is not yet supported. Codex is the
 first supported login path; live subscription checks remain owner-run.
@@ -82,35 +84,39 @@ This builds against the packed SDK, without repository aliases. Open
 `http://127.0.0.1:5173`. Keep this terminal running and use another terminal
 in the sample directory for gateway setup.
 
-## Approve the app and initialize the gateway
+## Initialize owner sign-in
 
-Read the sample's `tools.json`: it permits reading one chapter, highlighting
-exact text and asking the reader a question. Review the schemas and effects
-before giving this application access to your dedicated harness login.
+Create a private runtime outside the dedicated harness home:
 
 ```sh
 runtime_dir="${XDG_STATE_HOME:-$HOME/.local/state}/agent-connect/sample-codex"
 mkdir -p "$(dirname "$runtime_dir")"
-agent-connect init --directory "$runtime_dir" --harness codex \
-  --allow-origin http://127.0.0.1:5173 --tools ./tools.json
+agent-connect init --directory "$runtime_dir" --harness codex
 ```
+
+For a remotely hosted gateway, add `--public-url https://gateway.example`.
+The URL is a canonical HTTPS origin without a path or trailing slash. With the
+default loopback listener, omission selects `http://127.0.0.1:18940`; HTTP is
+permitted only for local loopback use.
+
+Setup prompts for a hidden owner passphrase of at least 12 characters and a
+confirmation. This authenticates you to the gateway; provider login is a
+separate step. Unattended setup requires `--owner-passphrase-file <private-file>`
+with an owned regular file, mode 0600 or stricter. Do not put the passphrase in
+arguments, environment variables, app code or the harness home.
 
 Setup refuses an existing destination and creates:
 
-| Path under the runtime directory | Purpose                                                       |
-| -------------------------------- | ------------------------------------------------------------- |
-| `config.json`                    | Private operator config including the bearer and exact origin |
-| `grant.json`                     | Application capability: `{gatewayUrl, token}`                 |
-| `tools.json`                     | The approved, fixed tool snapshot                             |
-| `state/`                         | Private application-action journal/runtime state              |
+| Path under the runtime directory | Purpose                                                                       |
+| -------------------------------- | ----------------------------------------------------------------------------- |
+| `config.json`                    | Private operator configuration, canonical public URL and boxed harness policy |
+| `state/auth/`                    | Owner passphrase hash, optional TOTP secret and application grant state       |
+| `state/`                         | Private application-action journals and runtime state                         |
 
-Directories are mode 0700 and files 0600. There is one operator-issued bearer
-for one exact browser origin and snapshot per gateway instance. Setup is the
-current grant issuance mechanism: there is **no OAuth pairing service, consent
-portal or refresh-token API** on this ACP path. The operator reviews the tool
-file and hands `grant.json` to that application. Do not commit or publicly serve
-the grant or runtime directory. The sample reads an uploaded grant into memory;
-it does not put the token in a URL or browser storage.
+Directories are mode 0700 and files 0600. Normal setup creates no `grant.json`
+or `tools.json`: each application requests its tools at the gateway consent
+page. Keep the entire runtime private and outside the home mounted into boxes.
+Owner authentication state is separate from application bearer credentials.
 
 ## One-time Codex login
 
@@ -162,21 +168,40 @@ image, dropped capabilities and resource limits. Only the selected proxy and
 deterministic-test model, when explicitly configured, join that network.
 Production sessions require Docker, this proxy and a dedicated home.
 
-In the browser upload `grant.json`, review/confirm the tool consent checkbox,
-then connect. Ask: “Read chapter 1 and highlight its first sentence.” The
-highlight should appear in the sample and the chat should explain its result.
-Stop cancels a running turn, including an unanswered reader question.
-After Stop or a terminal failure, choose **New connection** before sending
-another message. The sample retains the transcript and in-memory grant, but
-starts a fresh harness session and never re-sends earlier prompts or effects.
-If a one-session gateway reports full capacity during box teardown, wait a
-moment and choose **New connection** again; the transcript stays visible.
+Open `http://127.0.0.1:18940/agent-connect/owner` and sign in with the owner
+passphrase. Optionally enroll a TOTP authenticator under the owner page's
+factor enrollment form. Keep a secure authenticator backup; this alpha has no
+recovery-code or remote factor-reset flow. A lost factor requires stopping the
+old gateway and initializing a new private runtime, then pairing apps again.
+Once enrolled, both sign-in and each approval require
+a fresh authenticator code. The owner cookie is HttpOnly and SameSite=Lax,
+with Secure required on HTTPS; it is never an application grant. Owner forms
+use CSRF protection, and hosted pages forbid framing with CSP and frame headers.
 
-The default listener is loopback `127.0.0.1:18940`. For a remotely hosted app,
-use HTTPS/WSS through an operator-managed reverse proxy, an exact approved
-`https://app.example` origin and a `wss://gateway.example/acp` application URL.
-Keep Docker's API and egress ports private. Configuring a public ingress is an
-operator task; the package does not open firewall ports or configure DNS/TLS.
+In the sample, enter the gateway origin (`http://127.0.0.1:18940` locally or
+`https://gateway.example` remotely), then choose **Connect**. The explicit
+browser action opens gateway consent. Sign in if needed, review the exact
+application origin, complete tool schemas, requested access duration and native
+boxed harness authority, then approve or deny. The sample requests reading a
+chapter, highlighting exact text and asking the reader a question. A grant
+approves that fixed snapshot; reconnect cannot expand it. Duration choices are
+1 hour (the default), 1 day, 7 days or 30 days.
+
+Ask: “Read chapter 1 and highlight its first sentence.” The highlight should
+appear in the sample and the chat should explain its result. Stop cancels a
+running turn, including an unanswered reader question. After Stop or a terminal
+failure, choose **New connection** before sending another message. The sample
+retains the transcript and starts a fresh harness session without re-sending
+earlier prompts or effects. If capacity remains full during box teardown, wait
+a moment and choose **New connection** again.
+
+The default listener is loopback `127.0.0.1:18940`. Remote use requires a single
+operator-managed HTTPS origin matching `public_url`: forward `/acp`, all
+`/agent-connect/owner` and `/agent-connect/oauth` routes, and the `/.well-known`
+metadata routes through the same reverse proxy. For example,
+`https://gateway.example` serves owner pages and OAuth, while
+`wss://gateway.example/acp` serves the socket. Keep Docker's API and egress
+ports private. The package does not configure DNS, TLS or firewall ingress.
 
 ## Claude Code and the API-key alternative
 
@@ -202,13 +227,20 @@ attachment is distinct from a new harness session. After expiry, the SDK may
 load the owned session's history; it reports an interrupted turn and never
 automatically re-sends the prompt or an uncertain application-tool result.
 Authorization failures and attachment takeover do not trigger recovery.
+Access tokens last five minutes; the SDK rotates refresh tokens and briefly
+detaches/reconnects while retaining the same grant and session ownership.
+It never replays a prompt to renew authorization. Refresh-token reuse revokes
+the grant; uncertain refresh results require explicit recovery rather than retry.
+The default pairing mode never opens another consent popup.
 
 A gateway restart loses process-local ownership/resume handles. Saved transcripts
 in the shared home do not create a general cross-restart conversation API.
-Reconnect deliberately, then send a new user message. The sample keeps its grant
-only in memory, so a page reload requires uploading it again. An actual browser
-back/forward-cache restoration retains that same grant, chat and pending app
-question; the application must preserve them on `pagehide.persisted`. This is
+Reconnect deliberately, then send a new user message. Managed grants default to
+`sessionStorage`, scoped to gateway origin, application origin and tool snapshot.
+A page reload can reuse that grant within the same tab; this does not restore a
+harness conversation automatically. An actual browser back/forward-cache
+restoration retains the chat and pending app question; the application must
+preserve them on `pagehide.persisted`. This is
 conditional on browser caching, not a promise that every Back navigation resumes.
 
 ## Upgrade, revoke and uninstall
@@ -220,9 +252,14 @@ that image (`egress stop`, then `egress start`). Keep the private dedicated home
 do not copy its credential files between boxes or into a repository. Existing
 interrupted turns must not be replayed during an upgrade.
 
-To revoke the application grant, stop this gateway and replace its bearer with a
-fresh operator-issued grant, then restart; this ends attached sessions. To revoke
-the harness login, use the provider's account controls for **that dedicated login**.
+To revoke an application grant, open `/agent-connect/owner` on the gateway,
+sign in and choose **Revoke access** for that application. No restart is needed.
+Revocation ends active and detached authority within one second, and the gateway
+checks authorization before forwarding each frame; completed effects cannot be
+undone. The application must explicitly Connect again for new consent. Gateway
+policy changes invalidate grants through the policy fingerprint.
+
+To revoke the harness login, use the provider's account controls for **that dedicated login**.
 Do not log out or change your personal harness session.
 
 To uninstall: stop the gateway; run `agent-connect egress stop`; uninstall
@@ -231,6 +268,19 @@ The helper only removes containers bearing its egress ownership label. Private
 homes and journals are left for the owner to retain or delete after revoking the
 dedicated login. Do not prune unrelated Docker resources.
 
+## Explicit headless static bearer mode
+
+For an intentionally headless integration, `init --headless-static-bearer`
+requires `--allow-origin <exact-origin>` and `--tools <snapshot.json>`. It creates
+a static bearer in private config and a `grant.json` for the application. Serve
+also requires `--headless-static-bearer` (or that explicit config setting), the
+exact origin, tool snapshot and token. This mode hosts no owner or OAuth pages
+and has no managed refresh or individual hosted revocation. Treat grant files as
+secrets. It is disabled by default; use hosted consent for normal installation.
+
+Existing manual-bearer configs must explicitly opt into this headless mode or
+initialize a new owner runtime. There is no automatic grant migration.
+
 ## Troubleshooting and accepted risks
 
 - `docker info` must work for the invoking user. Keep the same user for init,
@@ -238,7 +288,8 @@ dedicated login. Do not prune unrelated Docker resources.
   not changing personal credential permissions.
 - An unpublished package/image is not an authentication failure. Use the local
   tarballs/native image, or wait for the first approved release.
-- Close 4401 means an invalid bearer; 4403 means an origin mismatch. Match
+- Close 4401 means an invalid or expired application grant; revoked grants need
+  a new explicit Connect action. Close 4403 means an origin mismatch. Match
   `http://127.0.0.1:5173` exactly; `localhost` is a different origin.
 - Close 4409 means another attachment owns the session; 4418 means capacity;
   4500 means a harness/container launch failed. See

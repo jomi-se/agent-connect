@@ -1,6 +1,6 @@
 # Plan: harness credentials for boxed sessions
 
-Status: proposed (2026-10-01). It addresses the credential-boundary
+Status: dedicated shared-home direction implemented; hosted owner authorization updated 2026-10-03, unreleased. It addresses the credential-boundary
 prerequisite of [ADR 0016](../decisions/0016-acp-application-boundary.md). It
 follows the [ACP gateway spike](../experiments/acp-gateway.md), whose boxed runs
 used only a mock model.
@@ -52,37 +52,70 @@ A shared home also lets one application's sessions read another
 application's transcripts through the harness. That is a known limitation of
 this direction.
 
-## Open idea: owner verification in addition to the bearer (2026-10-03)
+## Gateway owner authentication and application consent (2026-10-03)
 
-Consider requiring an additional owner-controlled verification step before an
-application bearer can authorize agent use. The aim is to make possession of a
-stolen bearer insufficient to start a newly authorized session. This is an idea
-for investigation, not an accepted design or implemented feature.
+Normal setup now creates gateway-owned sign-in and authorization state, separate
+from the dedicated provider login. `agent-connect init` prompts for a hidden
+owner passphrase of at least 12 characters and confirmation; unattended setup
+requires an owned private `--owner-passphrase-file`. An Argon2 passphrase hash,
+optional TOTP secret and grant state live under the runtime's private
+`state/auth` directory, outside the harness home and application access.
+The owner passphrase is not an application bearer and is never sent to a box.
 
-Candidate mechanisms:
+The gateway hosts owner sign-in, optional TOTP enrollment and a consent page
+showing the exact requesting application origin, full fixed tools, native boxed
+harness authority and access duration. Enrolled TOTP is required at login and
+again with a fresh code for each approval. Owner sessions use a separate
+HttpOnly, SameSite=Lax cookie, Secure on HTTPS. Owner forms use CSRF protection;
+CSP and frame headers prevent embedding the approval UI in an application.
+Provider device login still uses `agent-connect login`; owner sign-in does not
+log in to the provider, modify personal credentials or alter accepted home risks.
 
-- Notify a previously paired mobile app and require explicit approval or denial.
-  Show the requesting app, origin, approved tools and requested access duration
-  so the owner can understand the request.
-- Require a code from a previously enrolled TOTP authenticator, entered through
-  a gateway-owned approval interface rather than the requesting application.
+Apps begin popup or redirect consent through an explicit user action. Requests
+expire after ten minutes; PKCE authorization codes after two minutes; application
+access tokens after five minutes. The owner selects 1 hour (default), 1 day,
+7 days or 30 days, bounding the grant and rotating refresh chain. Each grant has
+a stable ID, exact app origin, fixed tools and a gateway policy fingerprint.
+Changing operator policy invalidates its grants. Refresh rotation detaches and
+reconnects transport without changing ownership or replaying a prompt.
+Refresh-token reuse revokes the grant; uncertain rotation is not automatically
+retried. SDK default resume only reuses/completes a grant and never opens consent.
 
-Open questions include when verification applies: initial pairing, each new
-harness session, renewal after an approval expires, or selected sensitive
-operations. Decide whether a brief transport reconnect can reuse an existing
-approval without opening new authority. Approval should be bound to the pending
-request and grant, with a defined lifetime and replay protection; a successful
-verification must not become an indefinite bypass for every holder of the
-bearer. Investigate trustworthy request identification, notification abuse and
-approval fatigue, enrollment, device loss/recovery, and revocation of both the
-application grant and the enrolled factor. Enrollment secrets and approval
-authority must stay outside the application's and harness's reach.
+The hosted owner grant list revokes individual applications without a gateway
+restart. Active and detached authority ends within one second, and per-frame
+checks prevent forwarding newly unauthorized effects. Revocation cannot undo
+completed effects. App consent renewal requires another explicit Connect action;
+provider-login revocation remains a separate provider-account action affecting
+only the dedicated login. Optional TOTP adds protection to owner login and new
+approvals; a stolen active application token remains authority until expiry or
+revocation. This design does not require a code for every harness session.
 
-This proposal addresses unauthorized use of an application grant. The owner
-explicitly accepts the harness being able to read its own authentication files;
-this idea does not reopen that risk or make credential separation a prerequisite.
-Grant expiration and revocation remain separate considerations alongside the
-additional verification step.
+The canonical HTTPS `public_url` origin serves owner pages, OAuth metadata and
+endpoints, and the `/acp` socket; reverse proxies must preserve that single-origin
+layout. HTTP loopback is permitted for local use. Normal setup issues no grant
+file. The explicit `--headless-static-bearer` mode retains manual origin/tool
+approval for headless integrations without owner pages or managed refresh.
+These changes do not establish live pairing or provider-refresh acceptance;
+new checks and owner-run live evidence remain separate release gates.
+
+### Mobile owner approval follow-up
+
+A dedicated mobile approval client remains unimplemented. Its first design pass
+should define separate device pairing under gateway owner authentication, a
+revocable device credential outside the harness and app grant state, and a
+bounded approval request bound to a specific origin, tool snapshot, duration and
+grant. Notifications should reveal enough to identify the request without
+exposing app content; rate limits, denial, expiry and replay protection must
+apply before an approval can issue authority. Define recovery after device loss
+and revocation of both device access and application grants before shipping.
+
+Transport reattachment and refresh within an existing approval should preserve
+its fixed authority. Any proposal to require device approval for a new harness
+session or sensitive operation needs a separate decision and explicit SDK
+behavior. Current mobile support is browser redirect consent with gateway-owned
+TOTP, not a native mobile approval app. The accepted ability of a consented
+harness to read its own dedicated provider credential and shared transcripts
+remains unchanged.
 
 ## Provider terms come first (researched 2026-10-01)
 
@@ -253,3 +286,16 @@ Concurrent boxes, token refresh, personal-login coexistence and scoped revocatio
 remain unverified and require separate owner-run checks. Claude subscription
 use remains unconfirmed against Anthropic terms. Deterministic implementation
 checks spent no allowance; the owner initiated the live turn.
+
+## Shared-home refresh availability boundary
+
+Provider credential refresh is separate from application-grant refresh. Every
+box mounts the same read-write dedicated harness home, including provider
+credentials and conversations. Concurrent provider refreshes may race or reuse
+a single-use refresh token; provider file locking has not been qualified. The
+safe default is **one session box** (`max_sessions: 1`). Raising capacity is an
+explicit availability risk choice pending owner-run concurrency qualification.
+Do not run multiple gateways against the same harness home until that behavior
+is verified; a per-process capacity limit cannot serialize another process.
+This concern does not change the accepted risk that the harness reads its own
+auth file. Owner authorization state and TOTP secrets are never in this mount.

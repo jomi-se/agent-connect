@@ -19,8 +19,12 @@ The ADR 0014 standalone scoped proxy and older replacement gateway remain archiv
 Provider/plugin types stay outside shared application contracts.
 
 Production ACP sessions require boxed mode, a dedicated shared harness home and
-an owned egress proxy. `init` issues one exact-origin, fixed-tool bearer per
-instance; there is no ACP OAuth pairing portal. Never forward API-key environment
+an owned egress proxy. Normal `init` creates private owner authentication state;
+the gateway hosts owner login, optional TOTP enrollment, exact-origin/fixed-tool
+OAuth consent and individual grant revocation. Owner authentication and grant
+state must remain outside the harness home. The explicit
+`--headless-static-bearer` escape hatch is separate from normal pairing.
+Never forward API-key environment
 variables into boxes, change personal harness logins, or automatically replay an
 uncertain prompt/effect. Boxed capacity is released only after owned resource cleanup; unresolved Docker
 cleanup retains the slot until operator cleanup and process restart. Test this

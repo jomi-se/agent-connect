@@ -646,3 +646,57 @@ not demonstrate a visible highlighting effect. The assistant's general claims
 about native capabilities are not security evidence: the gateway/container
 boundary, rather than model self-description, controls authority. Claude terms,
 first publication and ADR 0016 acceptance remain unchanged.
+
+## Hosted authorization and pre-auth review hardening (2026-10-03)
+
+The normal ACP path now uses gateway-hosted owner sign-in, app consent and grant
+revocation, replacing the manual-bearer proof of concept. Consent fixes exact
+origin, complete tool definitions and selected duration. S256 PKCE, rotating
+five-minute access tokens, refresh replay detection, stable grant ownership and
+optional TOTP are implemented; owner auth state cannot overlap the harness home.
+Static bearer setup requires explicit headless mode and does not satisfy product
+pairing acceptance. ADR 0016 remains proposed.
+
+An independent source review found three auth integration defects: opaque-origin
+owner form submissions under universal no-referrer, owner state within the
+mounted home, and descriptions drifting from approved definitions. All were
+corrected with regression coverage. Its second pass found simultaneous session
+load ownership admission; admission now requires serialized eviction and confirmed
+termination before the next host can claim a transcript.
+
+The earlier 18-finding review is folded into this quality gate: terminal eviction
+and oversized frames, aligned startup and immediate never-attached cleanup,
+single-box default while provider refresh concurrency is unverified, honest
+boxed Codex profile rejection, asserted policy handling, preflight/restart-safe
+owned egress, preserved MCP metadata/progress, durable metadata-only bounded
+action records, bounded session ownership, healthy idle recovery, concurrent
+shutdown, retained plugin release documentation, executable release-image checks,
+typed Codex mode, stable SHA-256 volumes, egress resource/log bounds, and launcher
+support beyond Node 24 without changing the provider development pin.
+
+Targeted evidence includes Rust authorization/policy/sandbox/resume tests,
+SDK pairing/refresh/revocation/frame/lifecycle tests, CLI setup/preflight fixtures,
+proxy socket tests, and release manifest mismatch/tamper tests. The release
+launcher also passes an isolated Node 26 smoke; this makes no new provider
+compatibility claim. Real pinned Codex policy scenarios assert oversized raw
+frames close with 1009 and two-client takeover closes the old host with 4415.
+The fresh artifact-only clean-room passes all 16 checks: private owner setup,
+packed SDK/CLI installation, real browser consent denial/approval, refresh rotation,
+app-token isolation from owner approval, origin binding, application-tool turns,
+reconnect and back/forward cache restoration, cancellation and owner revocation.
+It reports no browser errors and removes all three owned session hosts.
+
+Fresh Chromium testing exposed an unbound default browser `fetch` and a sample
+revocation callback using the wrong argument. Both are fixed; 35 pairing tests
+include the browser fetch receiver contract. The model-request assertion excludes
+only native conversation-title generation with its exact instruction and title-only
+schema; app prompts and tool-effect counters remain strict against replay.
+
+Both Linux archives, shell installer and npm artifacts were rebuilt locally, as
+were both session-image architectures without push. `cargo test --locked --workspace`,
+CLI checks, release manifest tests, actionlint and publication dry runs pass.
+Final `npm run verify` passes, including both host and boxed adapter suites,
+the 14-case teardown gate and a fresh consent-based clean-room run. Independent
+final source review reports no remaining confirmed auth/UI/lifecycle blocker;
+it does not claim a separate full audit of the earlier 18-item checklist.
+All inference remains deterministic, with disposable homes and no provider login.
