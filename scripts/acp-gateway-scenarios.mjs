@@ -13,6 +13,7 @@ import { tmpdir, homedir } from "node:os";
 import { resolve, join } from "node:path";
 import { createServer } from "node:http";
 import { createServer as tcpServer } from "node:net";
+import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
 
 const repo = resolve(import.meta.dirname, "..");
 const spike = join(repo, "experiments/acp-gateway");
@@ -437,5 +438,6 @@ try {
   for (const name of dockerNetworks)
     await command("docker", ["network", "rm", name]).catch(() => {});
   await new Promise((ok) => pageServer.close(ok));
+  await pruneTestInstallations(run);
   console.log(`ACP diagnostics: ${run}`);
 }
