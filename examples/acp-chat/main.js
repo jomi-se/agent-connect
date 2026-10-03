@@ -7,6 +7,7 @@ import {
 } from "@open-agent-connect/web/acp";
 import definitions from "./tools.json";
 import toolsUrl from "./tools.json?url";
+import { getConversationRecoveryAction } from "./recovery-policy.js";
 import "./style.css";
 
 const element = (id) => document.getElementById(id);
@@ -26,6 +27,7 @@ let connecting = false;
 let recovering = false;
 let recoveryAttemptedChat;
 let recoveryNotice = "";
+let recoveryErrorCode;
 const previousMessages = [];
 element("tool-snapshot").textContent = JSON.stringify(definitions, null, 2);
 element("download-tools").href = toolsUrl;
@@ -83,9 +85,21 @@ const tools = definitions.map((definition) => ({
   },
 }));
 
+function recoveryAction(error) {
+  return getConversationRecoveryAction({
+    sessionId: provider?.sessionId,
+    closeCode: provider?.transport.error?.closeCode,
+    errorCode:
+      error?.code ??
+      recoveryErrorCode ??
+      chat?.getSnapshot().error?.code ??
+      provider?.transport.error?.code,
+  });
+}
+
 function render() {
   const snapshot = chat.getSnapshot();
-  const terminal = snapshot.error?.code === "session_superseded";
+  const action = recoveryAction();
   element("chat-status").textContent = recovering
     ? "Recovering conversation"
     : snapshot.status;
@@ -97,19 +111,19 @@ function render() {
   element("chat-new").disabled =
     !gatewayUrl || connecting || recovering || !snapshot.needsNewSession;
   element("chat-new").textContent =
-    provider?.sessionId && !terminal ? "Retry recovery" : "New connection";
+    action === "recover" ? "Retry recovery" : "New connection";
   element("new-session-notice").hidden =
     !snapshot.needsNewSession && !recoveryNotice;
   element("new-session-notice").textContent = recovering
     ? "Restoring the conversation. The interrupted message and application actions will not be repeated."
     : snapshot.needsNewSession
-      ? provider?.sessionId && !terminal
+      ? action === "recover"
         ? "Recovery is unavailable. Retry recovery to restore the conversation. Your previous message will not be repeated."
-        : "The conversation could not be started. Start a new connection to send another message. Previous messages remain visible and will not be repeated."
+        : "This conversation ended. Start a new connection to send another message. Previous messages remain visible and will not be repeated."
       : recoveryNotice;
   element("error").textContent =
     connectionError || snapshot.error?.message || "";
-  if (snapshot.error?.code === "invalid_app_grant") void clearAuthorization();
+  if (action === "approval") void clearAuthorization();
   element("chat-messages").replaceChildren(
     ...[
       ...previousMessages,
@@ -152,8 +166,7 @@ function render() {
     !connecting &&
     !recovering &&
     !clearingAuthorization &&
-    snapshot.error?.code !== "invalid_app_grant" &&
-    !terminal &&
+    action === "recover" &&
     recoveryAttemptedChat !== chat
   ) {
     recoveryAttemptedChat = chat;
@@ -162,7 +175,12 @@ function render() {
 }
 
 async function recoverConversation() {
-  if (recovering || connecting || clearingAuthorization || !provider?.sessionId)
+  if (
+    recovering ||
+    connecting ||
+    clearingAuthorization ||
+    recoveryAction() !== "recover"
+  )
     return;
   const previous = chat;
   const currentProvider = provider;
@@ -185,18 +203,23 @@ async function recoverConversation() {
     // deliberate user message, never the interrupted turn or application results.
     chat = createAgentChat({ session: new AgentSession({ provider, tools }) });
     chat.subscribe(render);
+    recoveryErrorCode = undefined;
     recoveryNotice =
       "Conversation restored. Send a new message when you are ready; the previous turn was not repeated.";
     element("connection-status").textContent = "Connected";
   } catch (error) {
-    if (error.code === "invalid_app_grant") {
+    recoveryErrorCode = error.code;
+    const action = recoveryAction(error);
+    if (action === "approval") {
       await clearAuthorization();
       return;
     }
     connectionError =
       error.code === "session_capacity"
         ? "Gateway session capacity is full. Wait for cleanup, then retry recovery."
-        : `Could not restore the conversation: ${error.message}. Retry recovery when the gateway is available.`;
+        : action === "recover"
+          ? `Could not restore the conversation: ${error.message}. Retry recovery when the gateway is available.`
+          : `Could not restore the conversation: ${error.message}. Start a new connection to send another message.`;
   } finally {
     recovering = false;
     if (chat) render();
@@ -207,7 +230,7 @@ async function clearAuthorization() {
   if (clearingAuthorization) return;
   clearingAuthorization = true;
   connectionError =
-    "Gateway approval was revoked or expired. Connect again to request approval. Your previous messages will not be replayed.";
+    "Gateway approval ended or could not authorize this application. Connect again to request approval. Your previous messages will not be replayed.";
   element("error").textContent = connectionError;
   element("error").dataset.code = "invalid_app_grant";
   await pairing?.clear();
@@ -234,6 +257,7 @@ async function startConnection(mode = "resume") {
   clearingAuthorization = false;
   connectionError = "";
   recoveryNotice = "";
+  recoveryErrorCode = undefined;
   delete element("error").dataset.code;
   try {
     if (chat && chat !== archivedChat) {
@@ -315,7 +339,12 @@ async function startConnection(mode = "resume") {
       return;
     }
     if (
-      ["invalid_app_grant", "invalid_grant", "expired"].includes(error.code)
+      [
+        "invalid_app_grant",
+        "invalid_grant",
+        "expired",
+        "authorization_denied",
+      ].includes(error.code)
     ) {
       await clearAuthorization();
       return;
@@ -348,10 +377,7 @@ element("connect-form").addEventListener("submit", (event) => {
 element("chat-new").addEventListener("click", async () => {
   if (connecting || !gatewayUrl || !chat?.getSnapshot().needsNewSession) return;
   element("chat-new").disabled = true;
-  if (
-    provider?.sessionId &&
-    chat.getSnapshot().error?.code !== "session_superseded"
-  ) {
+  if (recoveryAction() === "recover") {
     await recoverConversation();
     return;
   }

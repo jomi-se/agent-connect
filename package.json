@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=24.15 <25"
   },
   "scripts": {
     "analyze": "npm run lint && npm run analyze:dependencies && npm run analyze:dead-code && npm run analyze:duplicates",
