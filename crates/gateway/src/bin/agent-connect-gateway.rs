@@ -200,9 +200,10 @@ struct GrantContext {
     permissions: PermissionProfile,
 }
 impl Gateway {
-    fn authenticate(&self, token: &str, origin: &str) -> Option<GrantContext> {
+    fn authenticate(&self, token: &str, origin: &str, headers: &HeaderMap) -> Option<GrantContext> {
         let (id, snapshot, tool_definitions, access) = if let Some(service) = &self.authorization {
-            let access = service.authenticate(token, origin).ok()?;
+            let issuer = service.entry_point(headers).ok()?;
+            let access = service.authenticate_at(token, origin, &issuer).ok()?;
             (
                 access.id.clone(),
                 access.snapshot.clone(),
@@ -586,7 +587,7 @@ async fn upgrade(
     let grant = offered.iter().find_map(|protocol| {
         protocol
             .strip_prefix(BEARER_PREFIX)
-            .and_then(|token| gateway.authenticate(token, origin))
+            .and_then(|token| gateway.authenticate(token, origin, &headers))
     });
     let Some(grant) = grant else {
         eprintln!("[gateway] reject {peer}: invalid or expired app grant");

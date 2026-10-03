@@ -70,6 +70,8 @@ pub struct AuthConfig {
 #[derive(Clone, Debug)]
 pub struct AuthorizedGrant {
     pub id: String,
+    /// Exact configured entry point for the grant bearer audience.
+    pub issuer: String,
     pub permissions: PermissionProfile,
     pub snapshot: BTreeMap<String, Value>,
     pub tool_definitions: BTreeMap<String, Value>,
@@ -482,8 +484,23 @@ impl AuthService {
         router.with_state(self)
     }
 
+    /// Authenticate a canonical-entry-point bearer. Transports must use authenticate_at.
     pub fn authenticate(&self, token: &str, origin: &str) -> Result<AuthorizedGrant> {
+        self.authenticate_at(token, origin, &self.config.public_url)
+    }
+
+    pub fn authenticate_at(
+        &self,
+        token: &str,
+        origin: &str,
+        issuer: &str,
+    ) -> Result<AuthorizedGrant> {
         canonical_origin(origin)?;
+        ensure!(
+            issuer == self.config.public_url
+                || self.config.entry_points.iter().any(|entry| entry == issuer),
+            "invalid target"
+        );
         ensure!(
             token.len() <= 256 && token.starts_with("ac_access_"),
             "invalid bearer"
@@ -499,7 +516,9 @@ impl AuthService {
             .grants
             .iter()
             .find(|g| {
-                g.client == origin && g.access_hash.as_deref().is_some_and(|h| equal(h, &hashed))
+                self.grant_issuer(g) == issuer
+                    && g.client == origin
+                    && g.access_hash.as_deref().is_some_and(|h| equal(h, &hashed))
             })
             .ok_or_else(|| anyhow!("invalid bearer"))?;
         ensure!(
@@ -508,6 +527,7 @@ impl AuthService {
         );
         Ok(AuthorizedGrant {
             id: grant.id.clone(),
+            issuer: self.grant_issuer(grant).to_string(),
             permissions: self.grant_profile(grant),
             snapshot: snapshot(&grant.tools),
             tool_definitions: tool_definitions(&grant.tools),
@@ -525,6 +545,7 @@ impl AuthService {
             && inner.stored.grants.iter().any(|g| {
                 g.id == principal.id
                     && g.epoch == principal.epoch
+                    && self.grant_issuer(g) == principal.issuer
                     && self.grant_profile(g) == principal.permissions
                     && self.grant_active(g, self.now())
                     && g.access_expires > self.now()
@@ -1440,13 +1461,17 @@ impl AuthService {
         Ok(())
     }
     fn request_origin(&self, headers: &HeaderMap) -> Result<String> {
-        // HTTP Host identifies a configured ingress. Never trust forwarded routing
-        // headers; proxies must preserve the configured public Host.
-        let hosts = headers.get_all(header::HOST).iter().collect::<Vec<_>>();
-        if hosts.is_empty() {
+        if !headers.contains_key(header::HOST) {
             // In-process contract fixtures have no HTTP transport/Host.
             return Ok(self.config.public_url.clone());
         }
+        self.entry_point(headers)
+    }
+
+    /// Resolve the bearer audience from exactly one configured HTTP Host. Transport
+    /// callers must use this strict helper; forwarded headers never select authority.
+    pub fn entry_point(&self, headers: &HeaderMap) -> Result<String> {
+        let hosts = headers.get_all(header::HOST).iter().collect::<Vec<_>>();
         ensure!(hosts.len() == 1, "invalid_target");
         let host = hosts[0].to_str()?;
         let origin = std::iter::once(&self.config.public_url)
