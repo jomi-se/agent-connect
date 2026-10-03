@@ -27,6 +27,10 @@ fn config(dir: PathBuf, password: Option<&str>) -> AuthConfig {
         public_url: ISSUER.into(),
         state_dir: dir,
         policy_fingerprint: "policy-1".into(),
+        entry_points: Vec::new(),
+        profiles: vec![PermissionProfile::Sandboxed],
+        default_profile: PermissionProfile::Sandboxed,
+        harness: Harness::Codex,
         owner_passphrase: password.map(str::to_string),
     }
 }
@@ -48,10 +52,24 @@ async fn request(
     cookie: Option<&str>,
     fields: &[(&str, &str)],
 ) -> Reply {
+    request_at(auth, method, path, origin, cookie, None, fields).await
+}
+async fn request_at(
+    auth: &Arc<AuthService>,
+    method: Method,
+    path: &str,
+    origin: Option<&str>,
+    cookie: Option<&str>,
+    host: Option<&str>,
+    fields: &[(&str, &str)],
+) -> Reply {
     let mut builder = axum::http::Request::builder()
         .method(method)
         .uri(path)
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
+    if let Some(host) = host {
+        builder = builder.header(header::HOST, host);
+    }
     if let Some(origin) = origin {
         builder = builder.header("origin", origin);
     }
@@ -182,6 +200,7 @@ async fn consent(
             ("decision", decision),
             ("duration", duration),
             ("totp", factor),
+            ("profile", "sandboxed"),
         ],
     )
     .await
@@ -686,11 +705,13 @@ async fn persistence_failure_disables_every_existing_grant() {
         .auth
         .authenticate(tokens["access_token"].as_str().unwrap(), APP)
         .unwrap();
+    assert!(fixture.auth.healthy());
     let backup = fixture.dir.with_extension("backup");
     fs::rename(&fixture.dir, &backup).unwrap();
     fs::write(&fixture.dir, b"cannot persist").unwrap();
     let response = refresh(&fixture.auth, tokens["refresh_token"].as_str().unwrap()).await;
     assert_ne!(response.status, StatusCode::OK);
+    assert!(!fixture.auth.healthy());
     assert!(!response.text.contains("access_token"));
     assert!(!fixture.auth.recheck(&principal));
     assert!(!fixture.auth.is_grant_active(&principal.id));
@@ -1168,4 +1189,694 @@ async fn overloaded_owner_forms_keep_html_and_security_headers() {
     let response = request(auth, Method::POST, TOKEN, Some(APP), None, &[]).await;
     assert_eq!(response.status, StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(response.json()["error"], "slow_down");
+}
+
+fn form_token(page: &str, action: &str) -> String {
+    let marker = format!("<form method=post action='{action}'>");
+    input(
+        page.split(&marker)
+            .nth(1)
+            .unwrap()
+            .split("</form>")
+            .next()
+            .unwrap(),
+        "csrf_token",
+    )
+}
+
+struct RuntimeFixture {
+    auth: std::sync::Weak<AuthService>,
+    view: OwnerRuntimeSnapshot,
+    ended: Mutex<Vec<String>>,
+}
+impl OwnerRuntime for RuntimeFixture {
+    fn snapshot(&self) -> OwnerRuntimeSnapshot {
+        assert!(self.auth.upgrade().unwrap().inner.try_lock().is_ok());
+        self.view.clone()
+    }
+    fn end_session(&self, id: &str) -> Result<()> {
+        assert!(self.auth.upgrade().unwrap().inner.try_lock().is_ok());
+        ensure!(
+            self.view.sessions.iter().any(|session| session.id == id),
+            "invalid_session"
+        );
+        self.ended.lock().unwrap().push(id.to_string());
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn owner_runtime_controls_are_csrf_bound_and_keep_grants() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let owner = login(auth, "").await;
+    let uri = pushed(auth).await;
+    let tokens = exchange(
+        auth,
+        &code(&consent(auth, &owner, &uri, "approve", "", "3600").await),
+        VERIFIER,
+        APP,
+    )
+    .await
+    .json();
+    let bearer = tokens["access_token"].as_str().unwrap();
+    let grant_id = tokens["grant_id"].as_str().unwrap();
+    let runtime = Arc::new(RuntimeFixture {
+        auth: Arc::downgrade(auth),
+        view: OwnerRuntimeSnapshot {
+            problems: vec![OwnerProblem {
+                message: "Repair <runtime>".into(),
+                repair: "Run doctor & review configuration".into(),
+            }],
+            sessions: vec![OwnerSession {
+                id: "live-one".into(),
+                grant_id: grant_id.into(),
+                state: "Connected".into(),
+            }],
+        },
+        ended: Mutex::new(Vec::new()),
+    });
+    auth.set_runtime(runtime.clone()).unwrap();
+    let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+    assert!(page.text.contains("runtime-problem' role='status"));
+    assert!(page.text.contains("Repair &lt;runtime&gt;"));
+    assert!(page.text.contains("doctor &amp; review"));
+    assert!(page.text.contains("Live sessions"));
+    assert!(
+        !page
+            .text
+            .contains(&format!("<h3 class='origin'>{grant_id}</h3>"))
+    );
+    let token = form_token(&page.text, "/agent-connect/owner/sessions/end");
+    let tampered = request(
+        auth,
+        Method::POST,
+        "/agent-connect/owner/sessions/end",
+        Some(ISSUER),
+        Some(&owner),
+        &[("csrf_token", &token), ("session_id", "another-session")],
+    )
+    .await;
+    assert_eq!(tampered.status, StatusCode::FORBIDDEN);
+    assert!(runtime.ended.lock().unwrap().is_empty());
+    let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+    let token = form_token(&page.text, "/agent-connect/owner/sessions/end");
+    let ended = request(
+        auth,
+        Method::POST,
+        "/agent-connect/owner/sessions/end",
+        Some(ISSUER),
+        Some(&owner),
+        &[("csrf_token", &token), ("session_id", "live-one")],
+    )
+    .await;
+    assert_eq!(ended.status, StatusCode::FOUND, "{}", ended.text);
+    assert_eq!(*runtime.ended.lock().unwrap(), vec!["live-one"]);
+    assert!(auth.authenticate(bearer, APP).is_ok());
+    let replay = request(
+        auth,
+        Method::POST,
+        "/agent-connect/owner/sessions/end",
+        Some(ISSUER),
+        Some(&owner),
+        &[("csrf_token", &token), ("session_id", "live-one")],
+    )
+    .await;
+    assert_eq!(replay.status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn revoke_all_invalidates_grants_and_codes_but_keeps_owner() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let owner = login(auth, "").await;
+    let uri = pushed(auth).await;
+    let tokens = exchange(
+        auth,
+        &code(&consent(auth, &owner, &uri, "approve", "", "3600").await),
+        VERIFIER,
+        APP,
+    )
+    .await
+    .json();
+    let bearer = tokens["access_token"].as_str().unwrap();
+    let refresh_token = tokens["refresh_token"].as_str().unwrap();
+    let uri = pushed(auth).await;
+    let outstanding_code = code(&consent(auth, &owner, &uri, "approve", "", "3600").await);
+    let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+    let token = form_token(&page.text, "/agent-connect/owner/grants/revoke-all");
+    let bad_origin = request(
+        auth,
+        Method::POST,
+        "/agent-connect/owner/grants/revoke-all",
+        Some(APP),
+        Some(&owner),
+        &[("csrf_token", &token)],
+    )
+    .await;
+    assert_eq!(bad_origin.status, StatusCode::FORBIDDEN);
+    assert!(auth.authenticate(bearer, APP).is_ok());
+    let reply = request(
+        auth,
+        Method::POST,
+        "/agent-connect/owner/grants/revoke-all",
+        Some(ISSUER),
+        Some(&owner),
+        &[("csrf_token", &token)],
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::FOUND);
+    assert!(auth.authenticate(bearer, APP).is_err());
+    assert_eq!(
+        refresh(auth, refresh_token).await.json()["error"],
+        "invalid_grant"
+    );
+    assert_eq!(
+        exchange(auth, &outstanding_code, VERIFIER, APP)
+            .await
+            .json()["error"],
+        "invalid_grant"
+    );
+    assert_eq!(
+        request(auth, Method::GET, OWNER, None, Some(&owner), &[])
+            .await
+            .status,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn forget_browser_expires_owner_cookie_without_revoking_application() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let owner = login(auth, "").await;
+    let uri = pushed(auth).await;
+    let tokens = exchange(
+        auth,
+        &code(&consent(auth, &owner, &uri, "approve", "", "3600").await),
+        VERIFIER,
+        APP,
+    )
+    .await
+    .json();
+    let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+    let token = form_token(&page.text, "/agent-connect/owner/forget-browser");
+    let reply = request(
+        auth,
+        Method::POST,
+        "/agent-connect/owner/forget-browser",
+        Some(ISSUER),
+        Some(&owner),
+        &[("csrf_token", &token)],
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::FOUND);
+    assert!(
+        reply.headers[header::SET_COOKIE]
+            .to_str()
+            .unwrap()
+            .contains("Max-Age=0")
+    );
+    assert!(
+        auth.authenticate(tokens["access_token"].as_str().unwrap(), APP)
+            .is_ok()
+    );
+    assert_eq!(
+        request(auth, Method::GET, OWNER, None, Some(&owner), &[])
+            .await
+            .status,
+        StatusCode::FOUND
+    );
+}
+
+#[tokio::test]
+async fn profile_choice_is_fixed_in_grant_and_unoffered_profiles_are_rejected() {
+    let dir = std::env::temp_dir().join(random("agent-connect-profile-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.profiles.push(PermissionProfile::ReadOnly);
+    let auth = AuthService::open(configuration).unwrap();
+    let owner = login(&auth, "").await;
+    let uri = pushed(&auth).await;
+    let page = request(
+        &auth,
+        Method::GET,
+        &authorize_url(APP, &uri),
+        None,
+        Some(&owner),
+        &[],
+    )
+    .await;
+    assert!(page.text.contains("name=profile"));
+    assert!(
+        page.text
+            .contains("Native reads and effects of approved application tools remain allowed")
+    );
+    let invalid = request(
+        &auth,
+        Method::POST,
+        AUTHORIZE,
+        Some(ISSUER),
+        Some(&owner),
+        &[
+            ("request_uri", &uri),
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("decision", "approve"),
+            ("duration", "3600"),
+            ("profile", "app-tools-only"),
+        ],
+    )
+    .await;
+    assert_eq!(invalid.status, StatusCode::BAD_REQUEST);
+    assert!(auth.inner.lock().unwrap().stored.grants.is_empty());
+    let page = request(
+        &auth,
+        Method::GET,
+        &authorize_url(APP, &uri),
+        None,
+        Some(&owner),
+        &[],
+    )
+    .await;
+    let approved = request(
+        &auth,
+        Method::POST,
+        AUTHORIZE,
+        Some(ISSUER),
+        Some(&owner),
+        &[
+            ("request_uri", &uri),
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("decision", "approve"),
+            ("duration", "3600"),
+            ("profile", "read-only"),
+        ],
+    )
+    .await;
+    let tokens = exchange(&auth, &code(&approved), VERIFIER, APP)
+        .await
+        .json();
+    let bearer = tokens["access_token"].as_str().unwrap();
+    let principal = auth.authenticate(bearer, APP).unwrap();
+    assert_eq!(principal.permissions, PermissionProfile::ReadOnly);
+    let mut expanded = principal.clone();
+    expanded.permissions = PermissionProfile::Sandboxed;
+    assert!(!auth.recheck(&expanded));
+    drop(auth);
+    let auth = AuthService::open(config(dir.clone(), None)).unwrap();
+    // Retiring an offered choice does not rewrite the authority already approved.
+    assert_eq!(
+        auth.authenticate(bearer, APP).unwrap().permissions,
+        PermissionProfile::ReadOnly
+    );
+    drop(auth);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn legacy_default_grant_survives_upgrade_and_entry_point_addition() {
+    let dir = std::env::temp_dir().join(random("agent-connect-upgrade-test-"));
+    let auth = AuthService::open(config(dir.clone(), Some(PASSWORD))).unwrap();
+    let owner = login(&auth, "").await;
+    let uri = pushed(&auth).await;
+    let tokens = exchange(
+        &auth,
+        &code(&consent(&auth, &owner, &uri, "approve", "", "3600").await),
+        VERIFIER,
+        APP,
+    )
+    .await
+    .json();
+    let bearer = tokens["access_token"].as_str().unwrap();
+    drop(auth);
+    let path = dir.join("authorization.json");
+    let mut stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    for grant in stored["grants"].as_array_mut().unwrap() {
+        grant.as_object_mut().unwrap().remove("profile");
+        grant.as_object_mut().unwrap().remove("issuer");
+    }
+    stored.as_object_mut().unwrap().remove("totp_reset_count");
+    stored.as_object_mut().unwrap().remove("last_totp_reset_at");
+    fs::write(path, serde_json::to_vec(&stored).unwrap()).unwrap();
+    let mut configuration = config(dir.clone(), None);
+    configuration.profiles.push(PermissionProfile::ReadOnly);
+    configuration
+        .entry_points
+        .push("https://second.example".into());
+    let auth = AuthService::open(configuration).unwrap();
+    assert_eq!(
+        auth.authenticate(bearer, APP).unwrap().permissions,
+        PermissionProfile::Sandboxed
+    );
+    drop(auth);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn reset_totp_requires_stopped_gateway_preserves_grants_and_passphrase() {
+    let dir = std::env::temp_dir().join(random("agent-connect-reset-test-"));
+    let auth = AuthService::open(config(dir.clone(), Some(PASSWORD))).unwrap();
+    let owner = login(&auth, "").await;
+    let uri = pushed(&auth).await;
+    let tokens = exchange(
+        &auth,
+        &code(&consent(&auth, &owner, &uri, "approve", "", "3600").await),
+        VERIFIER,
+        APP,
+    )
+    .await
+    .json();
+    let before = {
+        let mut inner = auth.inner.lock().unwrap();
+        let mut next = inner.stored.clone();
+        next.totp_secret = Some(base32(&[9; 20]));
+        next.last_totp_step = Some(auth.now() / 30);
+        auth.commit(&mut inner, next.clone()).unwrap();
+        next
+    };
+    assert!(
+        AuthService::reset_totp(&dir)
+            .unwrap_err()
+            .to_string()
+            .contains("stop the gateway")
+    );
+    drop(auth);
+    assert!(AuthService::reset_totp(&dir).unwrap());
+    assert!(!AuthService::reset_totp(&dir).unwrap());
+    let auth = AuthService::open(config(dir.clone(), None)).unwrap();
+    {
+        let inner = auth.inner.lock().unwrap();
+        assert!(inner.stored.totp_secret.is_none());
+        assert!(inner.stored.last_totp_step.is_none());
+        assert_eq!(inner.stored.password_hash, before.password_hash);
+        assert_eq!(
+            serde_json::to_value(&inner.stored.grants).unwrap(),
+            serde_json::to_value(&before.grants).unwrap()
+        );
+        assert_eq!(inner.stored.totp_reset_count, 1);
+        assert!(inner.stored.last_totp_reset_at.is_some());
+    }
+    assert!(
+        auth.authenticate(tokens["access_token"].as_str().unwrap(), APP)
+            .is_ok()
+    );
+    login(&auth, "").await;
+    drop(auth);
+    fs::remove_dir_all(&dir).unwrap();
+    assert!(AuthService::reset_totp(&dir).is_err());
+    assert!(!dir.exists());
+}
+
+#[tokio::test]
+async fn entry_points_pair_with_exact_issuer_and_bind_owner_sessions_to_origin() {
+    const SECOND: &str = "http://localhost:19840";
+    const SECOND_HOST: &str = "localhost:19840";
+    let dir = std::env::temp_dir().join(random("agent-connect-entry-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
+    let primary_owner = login(&auth, "").await;
+    let cross = request_at(
+        &auth,
+        Method::GET,
+        OWNER,
+        None,
+        Some(&primary_owner),
+        Some(SECOND_HOST),
+        &[],
+    )
+    .await;
+    assert_eq!(cross.status, StatusCode::FOUND);
+    let page = request_at(
+        &auth,
+        Method::GET,
+        LOGIN,
+        None,
+        None,
+        Some(SECOND_HOST),
+        &[],
+    )
+    .await;
+    assert!(
+        !page.headers[header::SET_COOKIE]
+            .to_str()
+            .unwrap()
+            .contains("Secure")
+    );
+    let reply = request_at(
+        &auth,
+        Method::POST,
+        LOGIN,
+        Some(SECOND),
+        Some(&cookie(&page)),
+        Some(SECOND_HOST),
+        &[
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("continue", ""),
+            ("passphrase", PASSWORD),
+        ],
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::FOUND, "{}", reply.text);
+    let owner = cookie(&reply);
+    let metadata = request_at(
+        &auth,
+        Method::GET,
+        "/.well-known/oauth-authorization-server/agent-connect",
+        None,
+        None,
+        Some(SECOND_HOST),
+        &[],
+    )
+    .await;
+    assert_eq!(metadata.json()["issuer"], SECOND);
+    let details = json!([{"type":"agent_connect","tools":[{"name":"read","description":"Read an application item","inputSchema":{"type":"object"}}]}]).to_string();
+    let challenge = hash(VERIFIER);
+    let resource = format!("{SECOND}/acp");
+    let par = request_at(
+        &auth,
+        Method::POST,
+        PAR,
+        Some(APP),
+        None,
+        Some(SECOND_HOST),
+        &[
+            ("client_id", APP),
+            ("redirect_uri", "https://app.example/callback"),
+            ("resource", &resource),
+            ("response_type", "code"),
+            ("scope", "acp"),
+            ("state", "second-state"),
+            ("code_challenge", &challenge),
+            ("code_challenge_method", "S256"),
+            ("authorization_details", &details),
+        ],
+    )
+    .await;
+    assert_eq!(par.status, StatusCode::CREATED, "{}", par.text);
+    let uri = par.json()["request_uri"].as_str().unwrap().to_string();
+    let page = request_at(
+        &auth,
+        Method::GET,
+        &authorize_url(APP, &uri),
+        None,
+        Some(&owner),
+        Some(SECOND_HOST),
+        &[],
+    )
+    .await;
+    assert_eq!(page.status, StatusCode::OK);
+    let cross_origin = request_at(
+        &auth,
+        Method::POST,
+        AUTHORIZE,
+        Some(ISSUER),
+        Some(&owner),
+        Some(SECOND_HOST),
+        &[
+            ("request_uri", &uri),
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("decision", "approve"),
+            ("duration", "3600"),
+            ("profile", "sandboxed"),
+        ],
+    )
+    .await;
+    assert_eq!(cross_origin.status, StatusCode::FORBIDDEN);
+    let approved = request_at(
+        &auth,
+        Method::POST,
+        AUTHORIZE,
+        Some(SECOND),
+        Some(&owner),
+        Some(SECOND_HOST),
+        &[
+            ("request_uri", &uri),
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("decision", "approve"),
+            ("duration", "3600"),
+            ("profile", "sandboxed"),
+        ],
+    )
+    .await;
+    assert_eq!(approved.status, StatusCode::FOUND, "{}", approved.text);
+    let callback = Url::parse(approved.headers[header::LOCATION].to_str().unwrap()).unwrap();
+    assert_eq!(
+        callback
+            .query_pairs()
+            .find(|(key, _)| key == "iss")
+            .unwrap()
+            .1,
+        SECOND
+    );
+    let code = callback
+        .query_pairs()
+        .find(|(key, _)| key == "code")
+        .unwrap()
+        .1
+        .into_owned();
+    let token_fields = [
+        ("client_id", APP),
+        ("grant_type", "authorization_code"),
+        ("code", code.as_str()),
+        ("code_verifier", VERIFIER),
+        ("redirect_uri", "https://app.example/callback"),
+        ("resource", resource.as_str()),
+    ];
+    let primary = request_at(
+        &auth,
+        Method::POST,
+        TOKEN,
+        Some(APP),
+        None,
+        Some("gateway.example"),
+        &token_fields,
+    )
+    .await;
+    assert_eq!(primary.json()["error"], "invalid_target");
+    let issued = request_at(
+        &auth,
+        Method::POST,
+        TOKEN,
+        Some(APP),
+        None,
+        Some(SECOND_HOST),
+        &token_fields,
+    )
+    .await;
+    assert_eq!(issued.status, StatusCode::OK, "{}", issued.text);
+    assert_eq!(issued.json()["gateway_url"], "ws://localhost:19840/acp");
+    let refresh_token = issued.json()["refresh_token"].as_str().unwrap().to_string();
+    let primary_refresh = request_at(
+        &auth,
+        Method::POST,
+        TOKEN,
+        Some(APP),
+        None,
+        Some("gateway.example"),
+        &[
+            ("client_id", APP),
+            ("grant_type", "refresh_token"),
+            ("refresh_token", &refresh_token),
+            ("resource", "https://gateway.example/acp"),
+        ],
+    )
+    .await;
+    assert_eq!(primary_refresh.json()["error"], "invalid_grant");
+    let refreshed = request_at(
+        &auth,
+        Method::POST,
+        TOKEN,
+        Some(APP),
+        None,
+        Some(SECOND_HOST),
+        &[
+            ("client_id", APP),
+            ("grant_type", "refresh_token"),
+            ("refresh_token", &refresh_token),
+            ("resource", &resource),
+        ],
+    )
+    .await;
+    assert_eq!(refreshed.status, StatusCode::OK);
+    let page = request_at(
+        &auth,
+        Method::GET,
+        OWNER,
+        None,
+        Some(&owner),
+        Some(SECOND_HOST),
+        &[],
+    )
+    .await;
+    assert!(page.text.contains(&format!("href='{SECOND}{OWNER}'")));
+    drop(auth);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn entry_point_totp_enrollment_and_verification_cannot_cross_origins() {
+    const SECOND: &str = "https://second.example";
+    let dir = std::env::temp_dir().join(random("agent-connect-factor-origin-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
+    let primary_owner = login(&auth, "").await;
+    let page = request(&auth, Method::GET, OWNER, None, Some(&primary_owner), &[]).await;
+    let token = form_token(&page.text, "/agent-connect/owner/totp/enroll");
+    let cross = request_at(
+        &auth,
+        Method::POST,
+        "/agent-connect/owner/totp/enroll",
+        Some(SECOND),
+        Some(&primary_owner),
+        Some("second.example"),
+        &[("csrf_token", &token), ("passphrase", PASSWORD)],
+    )
+    .await;
+    assert_ne!(cross.status, StatusCode::OK);
+    let enrolled = request(
+        &auth,
+        Method::POST,
+        "/agent-connect/owner/totp/enroll",
+        Some(ISSUER),
+        Some(&primary_owner),
+        &[("csrf_token", &token), ("passphrase", PASSWORD)],
+    )
+    .await;
+    assert_eq!(enrolled.status, StatusCode::OK, "{}", enrolled.text);
+    let secret = enrolled
+        .text
+        .split("<code>")
+        .nth(1)
+        .unwrap()
+        .split("</code>")
+        .next()
+        .unwrap();
+    let factor = totp(secret, auth.now() / 30).unwrap();
+    let token = input(&enrolled.text, "csrf_token");
+    let cross = request_at(
+        &auth,
+        Method::POST,
+        "/agent-connect/owner/totp/verify",
+        Some(SECOND),
+        Some(&primary_owner),
+        Some("second.example"),
+        &[("csrf_token", &token), ("totp", &factor)],
+    )
+    .await;
+    assert_ne!(cross.status, StatusCode::FOUND);
+    assert!(auth.inner.lock().unwrap().stored.totp_secret.is_none());
+    let verified = request(
+        &auth,
+        Method::POST,
+        "/agent-connect/owner/totp/verify",
+        Some(ISSUER),
+        Some(&primary_owner),
+        &[("csrf_token", &token), ("totp", &factor)],
+    )
+    .await;
+    assert_eq!(verified.status, StatusCode::FOUND);
+    assert!(auth.inner.lock().unwrap().stored.totp_secret.is_some());
+    drop(auth);
+    fs::remove_dir_all(dir).unwrap();
 }

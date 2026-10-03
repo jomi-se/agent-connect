@@ -227,17 +227,21 @@ async fn actual_handlers_deny_authority_and_filter_changed_tools() {
 }
 #[tokio::test]
 async fn each_permission_profile_is_asserted() {
-    for (profile, app_tool, wanted) in [
-        (PermissionProfile::Sandboxed, false, "yes"),
-        (PermissionProfile::DenyAll, true, "no"),
-        (PermissionProfile::AppToolsOnly, true, "yes"),
-        (PermissionProfile::AppToolsOnly, false, "no"),
+    for (profile, title, wanted) in [
+        (PermissionProfile::Sandboxed, "terminal native", "yes"),
+        (PermissionProfile::ReadOnly, "mcp.app.approved", "yes"),
+        (PermissionProfile::ReadOnly, "mcp__app__approved", "yes"),
+        (PermissionProfile::ReadOnly, "terminal native", "no"),
+        (PermissionProfile::ReadOnly, "mcp.app.unapproved", "no"),
+        (PermissionProfile::DenyAll, "mcp.app.approved", "no"),
+        (PermissionProfile::AppToolsOnly, "mcp.app.approved", "yes"),
+        (PermissionProfile::AppToolsOnly, "terminal native", "no"),
+        (
+            PermissionProfile::AppToolsOnly,
+            "mcp__app__unapproved",
+            "no",
+        ),
     ] {
-        let title = if app_tool {
-            "mcp.app.approved"
-        } else {
-            "terminal native"
-        };
         let (results, delivered, _) = run(config(profile), json!({}), vec![probe("session/request_permission", json!({"sessionId":"owned","toolCall":{"toolCallId":"call","title":title},"options":[{"kind":"allow_once","optionId":"yes","name":"Allow"},{"kind":"reject_once","optionId":"no","name":"Reject"}]}))], vec![]).await;
         assert_eq!(
             results.lock().unwrap()[0].as_ref().unwrap()["outcome"]["optionId"],

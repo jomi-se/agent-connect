@@ -75,6 +75,14 @@ pub struct ServeOptions {
     #[arg(long, env = "AGENT_CONNECT_PUBLIC_URL", hide_env_values = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_url: Option<String>,
+    /// Additional canonical gateway origins served by this runtime.
+    #[arg(long = "entry-point")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry_points: Option<Vec<String>>,
+    /// Profiles offered to the owner at consent; each grant keeps its chosen authority.
+    #[arg(long = "profile", value_enum)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profiles: Option<Vec<PermissionProfile>>,
     /// Explicit headless/CI escape hatch; disables owner pages and browser pairing.
     #[arg(long, env = "AGENT_CONNECT_HEADLESS_STATIC_BEARER", hide_env_values = true, num_args = 0..=1, default_missing_value = "true", require_equals = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -165,6 +173,8 @@ pub struct ServeCli {
     pub harness: Harness,
     pub listen: SocketAddr,
     pub public_url: Option<String>,
+    pub entry_points: Vec<String>,
+    pub profiles: Vec<PermissionProfile>,
     pub headless_static_bearer: bool,
     pub allow_origin: String,
     pub token: String,
@@ -206,6 +216,7 @@ impl ServeOptions {
                 })?
             };
         }
+        let configured_profiles = self.profiles.is_some() || file.profiles.is_some();
         let mut cli = ServeCli {
             config_path: self
                 .config
@@ -215,6 +226,8 @@ impl ServeOptions {
             harness: required!(harness),
             listen: merged!(listen).unwrap_or_else(|| "127.0.0.1:18940".parse().unwrap()),
             public_url: merged!(public_url),
+            entry_points: merged!(entry_points).unwrap_or_default(),
+            profiles: merged!(profiles).unwrap_or_default(),
             headless_static_bearer: merged!(headless_static_bearer).unwrap_or(false),
             allow_origin: merged!(allow_origin).unwrap_or_default(),
             token: merged!(token).unwrap_or_default(),
@@ -250,7 +263,7 @@ impl ServeOptions {
             if cli.tools.as_os_str().is_empty() {
                 return Err(usage("headless static bearer requires --tools"));
             }
-            if cli.public_url.is_some() {
+            if cli.public_url.is_some() || !cli.entry_points.is_empty() {
                 return Err(usage(
                     "--public-url pairing and --headless-static-bearer are mutually exclusive",
                 ));
@@ -267,13 +280,76 @@ impl ServeOptions {
             let public_url = cli.public_url.as_ref().ok_or_else(|| usage("pairing requires --public-url (canonical external HTTPS origin, or HTTP loopback for local use)"))?;
             validate_public_url(public_url)?;
         }
-        if cli.boxed
-            && matches!(cli.harness, Harness::Codex)
-            && !matches!(cli.permissions, PermissionProfile::Sandboxed)
-        {
+        if cli.profiles.is_empty() {
+            if configured_profiles {
+                return Err(usage("configured profiles must not be empty"));
+            }
+            cli.profiles = match cli.harness {
+                Harness::Codex => vec![PermissionProfile::Sandboxed, PermissionProfile::ReadOnly],
+                Harness::Claude => vec![
+                    PermissionProfile::Sandboxed,
+                    PermissionProfile::DenyAll,
+                    PermissionProfile::AppToolsOnly,
+                ],
+            };
+            if !cli.profiles.contains(&cli.permissions) {
+                cli.profiles.insert(0, cli.permissions);
+            }
+        }
+        if !cli.profiles.contains(&cli.permissions) {
             return Err(usage(
-                "boxed Codex supports only --permissions sandboxed: deny-all/app-tools-only cannot restrict native actions that the pinned adapter runs without permission prompts",
+                "configured profiles must include the default --permissions profile",
             ));
+        }
+        let mut seen_profiles = std::collections::HashSet::new();
+        for profile in &cli.profiles {
+            if !seen_profiles.insert(profile.as_str()) {
+                return Err(usage("configured profiles must be unique"));
+            }
+            match cli.harness {
+                Harness::Codex
+                    if cli.boxed
+                        && !matches!(
+                            profile,
+                            PermissionProfile::Sandboxed | PermissionProfile::ReadOnly
+                        ) =>
+                {
+                    return Err(usage(
+                        "boxed Codex supports only sandboxed and read-only profiles: deny-all/app-tools-only cannot restrict native actions that the pinned adapter runs without permission prompts",
+                    ));
+                }
+                Harness::Claude if *profile == PermissionProfile::ReadOnly => {
+                    return Err(usage("Claude does not support the Codex read-only profile"));
+                }
+                _ => {}
+            }
+        }
+        if cli.entry_points.len() > 16 {
+            return Err(usage(
+                "at most 16 additional entry points may be configured",
+            ));
+        }
+        let mut seen_origins = std::collections::HashSet::new();
+        if let Some(origin) = &cli.public_url {
+            seen_origins.insert(origin.clone());
+        }
+        let mut seen_authorities = std::collections::HashSet::new();
+        if let Some(origin) = &cli.public_url {
+            let parsed = url::Url::parse(origin)?;
+            seen_authorities
+                .insert(parsed[url::Position::BeforeHost..url::Position::AfterPort].to_string());
+        }
+        for origin in &cli.entry_points {
+            validate_public_url(origin)?;
+            let parsed = url::Url::parse(origin)?;
+            if !seen_authorities
+                .insert(parsed[url::Position::BeforeHost..url::Position::AfterPort].to_string())
+            {
+                return Err(usage("entry point host and port must be unique"));
+            }
+            if !seen_origins.insert(origin.clone()) {
+                return Err(usage("configured entry points must be unique"));
+            }
         }
         if cli.max_sessions == 0 || cli.resume_max_bytes == 0 {
             return Err(usage(
@@ -487,6 +563,15 @@ pub struct InitCli {
 }
 
 pub fn init(cli: InitCli) -> anyhow::Result<()> {
+    init_with_output(cli, true)
+}
+
+/// Setup's structured output uses the same initialization without human progress text.
+pub fn init_quiet(cli: InitCli) -> anyhow::Result<()> {
+    init_with_output(cli, false)
+}
+
+fn init_with_output(cli: InitCli, output: bool) -> anyhow::Result<()> {
     validate_container_name(&cli.egress_container)?;
     if cli.listen.port() == 0 {
         return Err(usage("init requires a nonzero listener port"));
@@ -610,6 +695,19 @@ pub fn init(cli: InitCli) -> anyhow::Result<()> {
                 state_dir: directory.join("state/auth"),
                 policy_fingerprint: "setup".into(),
                 owner_passphrase: owner_passphrase.clone(),
+                entry_points: Vec::new(),
+                profiles: match cli.harness {
+                    Harness::Codex => {
+                        vec![PermissionProfile::Sandboxed, PermissionProfile::ReadOnly]
+                    }
+                    Harness::Claude => vec![
+                        PermissionProfile::Sandboxed,
+                        PermissionProfile::DenyAll,
+                        PermissionProfile::AppToolsOnly,
+                    ],
+                },
+                default_profile: PermissionProfile::Sandboxed,
+                harness: cli.harness,
             })?;
         } else {
             let mut address = cli.listen;
@@ -634,40 +732,44 @@ pub fn init(cli: InitCli) -> anyhow::Result<()> {
         let _ = std::fs::remove_dir_all(&directory);
         return Err(error);
     }
-    println!("Created private runtime directory: {}", directory.display());
-    println!("Configuration: {}", directory.join("config.json").display());
-    if let Some(public_url) = &public_url {
-        println!("Owner sign-in and grants: {public_url}/agent-connect/owner");
-        println!("Apps pair through gateway-hosted consent; no application token file is created.");
-    } else {
+    if output {
+        println!("Created private runtime directory: {}", directory.display());
+        println!("Configuration: {}", directory.join("config.json").display());
+        if let Some(public_url) = &public_url {
+            println!("Owner sign-in and grants: {public_url}/agent-connect/owner");
+            println!(
+                "Apps pair through gateway-hosted consent; no application token file is created."
+            );
+        } else {
+            println!(
+                "Headless application grant (keep private): {}",
+                directory.join("grant.json").display()
+            );
+        }
         println!(
-            "Headless application grant (keep private): {}",
-            directory.join("grant.json").display()
+            "Next: agent-connect egress start --name {} --session-image {}",
+            shell_quote(&cli.egress_container),
+            shell_quote(&cli.session_image)
         );
-    }
-    println!(
-        "Next: agent-connect egress start --name {} --session-image {}",
-        shell_quote(&cli.egress_container),
-        shell_quote(&cli.session_image)
-    );
-    if cli.harness_home.is_none() && cli.session_image == DEFAULT_SESSION_IMAGE {
+        if cli.harness_home.is_none() && cli.session_image == DEFAULT_SESSION_IMAGE {
+            println!(
+                "Next: agent-connect login (choose {})",
+                match cli.harness {
+                    Harness::Codex => "Codex",
+                    Harness::Claude => "Claude Code",
+                }
+            );
+        } else {
+            println!(
+                "Next: agent-connect login --config {}",
+                shell_quote(&directory.join("config.json").to_string_lossy())
+            );
+        }
         println!(
-            "Next: agent-connect login (choose {})",
-            match cli.harness {
-                Harness::Codex => "Codex",
-                Harness::Claude => "Claude Code",
-            }
-        );
-    } else {
-        println!(
-            "Next: agent-connect login --config {}",
+            "Next: agent-connect serve --config {}",
             shell_quote(&directory.join("config.json").to_string_lossy())
         );
     }
-    println!(
-        "Next: agent-connect serve --config {}",
-        shell_quote(&directory.join("config.json").to_string_lossy())
-    );
     Ok(())
 }
 fn shell_quote(value: &str) -> String {
@@ -781,6 +883,131 @@ mod tests {
             );
         }
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn codex_modes_are_typed_and_read_only_profiles_pin_launch_mode() {
+        for (value, expected) in [
+            ("read-only", CodexMode::ReadOnly),
+            ("workspace-write", CodexMode::WorkspaceWrite),
+            ("agent-full-access", CodexMode::AgentFullAccess),
+        ] {
+            assert_eq!(
+                serde_json::from_value::<CodexMode>(serde_json::json!(value)).unwrap(),
+                expected
+            );
+            assert_eq!(PermissionProfile::Sandboxed.codex_mode(expected), expected);
+            assert_eq!(
+                PermissionProfile::ReadOnly.codex_mode(expected),
+                CodexMode::ReadOnly
+            );
+        }
+        for value in ["agent", "dangerous", "", "READ-ONLY"] {
+            assert!(serde_json::from_value::<CodexMode>(serde_json::json!(value)).is_err());
+        }
+    }
+
+    fn pairing_options(harness: Harness) -> ServeOptions {
+        ServeOptions {
+            harness: Some(harness),
+            public_url: Some("https://gateway.example".into()),
+            boxed: Some(true),
+            egress_container: Some("fixture-egress".into()),
+            harness_home: Some("fixture-home".into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn configured_profiles_preserve_default_and_reject_unsupported_authority() {
+        let codex = pairing_options(Harness::Codex).resolve().unwrap();
+        assert_eq!(codex.permissions, PermissionProfile::Sandboxed);
+        assert_eq!(
+            codex.profiles,
+            vec![PermissionProfile::Sandboxed, PermissionProfile::ReadOnly]
+        );
+        let claude = pairing_options(Harness::Claude).resolve().unwrap();
+        assert_eq!(
+            claude.profiles,
+            vec![
+                PermissionProfile::Sandboxed,
+                PermissionProfile::DenyAll,
+                PermissionProfile::AppToolsOnly
+            ]
+        );
+        for profile in [PermissionProfile::DenyAll, PermissionProfile::AppToolsOnly] {
+            let mut options = pairing_options(Harness::Codex);
+            options.permissions = Some(profile);
+            assert!(
+                options
+                    .resolve()
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("boxed Codex supports only")
+            );
+        }
+        let mut options = pairing_options(Harness::Claude);
+        options.profiles = Some(vec![
+            PermissionProfile::Sandboxed,
+            PermissionProfile::ReadOnly,
+        ]);
+        assert!(
+            options
+                .resolve()
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("Claude does not support")
+        );
+        let mut options = pairing_options(Harness::Codex);
+        options.profiles = Some(Vec::new());
+        assert!(options.resolve().is_err());
+        let mut options = pairing_options(Harness::Codex);
+        options.profiles = Some(vec![PermissionProfile::ReadOnly]);
+        assert!(options.resolve().is_err());
+        let mut options = pairing_options(Harness::Codex);
+        options.profiles = Some(vec![
+            PermissionProfile::Sandboxed,
+            PermissionProfile::Sandboxed,
+        ]);
+        assert!(options.resolve().is_err());
+        let mut options = pairing_options(Harness::Codex);
+        options.permissions = Some(PermissionProfile::ReadOnly);
+        assert_eq!(
+            options.resolve().unwrap().permissions,
+            PermissionProfile::ReadOnly
+        );
+    }
+
+    #[test]
+    fn entry_points_are_bounded_canonical_and_unique() {
+        let mut options = pairing_options(Harness::Codex);
+        options.entry_points = Some(vec![
+            "https://second.example".into(),
+            "http://localhost:19840".into(),
+        ]);
+        assert_eq!(options.resolve().unwrap().entry_points.len(), 2);
+        for entries in [
+            vec!["https://gateway.example".into()],
+            vec![
+                "https://second.example".into(),
+                "https://second.example".into(),
+            ],
+            vec!["http://public.example".into()],
+            vec!["https://second.example/path".into()],
+            vec![
+                "https://localhost:19840".into(),
+                "http://localhost:19840".into(),
+            ],
+            (0..17)
+                .map(|index| format!("https://entry-{index}.example"))
+                .collect(),
+        ] {
+            let mut options = pairing_options(Harness::Codex);
+            options.entry_points = Some(entries);
+            assert!(options.resolve().is_err());
+        }
     }
 
     #[test]

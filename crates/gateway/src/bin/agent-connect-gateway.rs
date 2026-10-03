@@ -16,19 +16,22 @@
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
 use agent_client_protocol::AcpAgent;
 use agent_client_protocol::{ConnectTo, Lines};
 use agent_client_protocol_conductor::{ConductorImpl, ProxiesAndAgent};
 use agent_client_protocol_polyfill::mcp_over_acp::McpOverAcpPolyfill;
-use agent_connect_gateway::authorization::{AuthConfig, AuthService, AuthorizedGrant};
+use agent_connect_gateway::authorization::{
+    AuthConfig, AuthService, AuthorizedGrant, OwnerProblem, OwnerRuntime, OwnerRuntimeSnapshot,
+    OwnerSession,
+};
 use agent_connect_gateway::config::{
     self, CodexMode, DEFAULT_SESSION_IMAGE, InitCli, ServeCli, ServeOptions, UsageError,
 };
 use agent_connect_gateway::credentials::{HarnessHome, default_home, login_args, select_harness};
-use agent_connect_gateway::policy::{GrantSessions, PolicyConfig, PolicyProxy};
+use agent_connect_gateway::policy::{GrantSessions, PermissionProfile, PolicyConfig, PolicyProxy};
 use agent_connect_gateway::resume::{
     self, AttachError, Host, RESUME_SUBPROTOCOL, Registry, ResumeConfig, ToSocket, close,
 };
@@ -39,6 +42,7 @@ use axum::Router;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, State};
 use axum::http::HeaderMap;
+use axum::http::StatusCode;
 use axum::response::Response;
 use axum::routing::get;
 use clap::{Args, Parser, Subcommand};
@@ -53,7 +57,7 @@ const MAX_CLIENT_FRAME_BYTES: usize = 1024 * 1024;
     name = "agent-connect",
     version,
     about = "Unreleased, unstable ACP application gateway",
-    after_help = "Example:\n  agent-connect login\n  agent-connect init --directory ./runtime --harness codex --public-url https://gateway.example\n  agent-connect serve --config ./runtime/config.json\n\nExit codes: 0 success; 1 runtime failure; 2 invalid arguments or configuration."
+    after_help = "Example:\n  agent-connect setup\n  agent-connect setup --origin https://gateway.example\n  agent-connect doctor\n  agent-connect service status\n\nExit codes: 0 success; 1 runtime or readiness failure; 2 invalid arguments or configuration. ACP and MCP-over-ACP are unstable."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -128,6 +132,53 @@ struct Gateway {
     snapshot: BTreeMap<String, Value>,
     paths: SpikePaths,
     hosts: Arc<Registry>,
+    readiness: Mutex<Readiness>,
+}
+
+struct Readiness {
+    checked_at: Instant,
+    problem: bool,
+}
+
+struct ConsoleRuntime(Weak<Gateway>);
+
+impl OwnerRuntime for ConsoleRuntime {
+    fn snapshot(&self) -> OwnerRuntimeSnapshot {
+        let Some(gateway) = self.0.upgrade() else {
+            return OwnerRuntimeSnapshot::default();
+        };
+        let readiness = gateway.readiness.lock().unwrap();
+        let mut problems = Vec::new();
+        if readiness.problem
+            || (gateway.cli.boxed && readiness.checked_at.elapsed() > Duration::from_secs(60))
+        {
+            problems.push(OwnerProblem {
+                message: "The boxed runtime is unavailable or its health check has stalled.".into(),
+                repair: "Run agent-connect doctor to diagnose Docker, the session image and owned egress.".into(),
+            });
+        }
+        if gateway.capacity.is_closed() {
+            problems.push(OwnerProblem {
+                message: "The gateway is stopping.".into(),
+                repair: "Use agent-connect service status or start to check the service.".into(),
+            });
+        }
+        let sessions: Vec<_> = gateway.hosts.session_views().into_iter().map(|session| {
+            if session.state == "cleanup-failed" {
+                problems.push(OwnerProblem { message: "A session could not release its Docker resources. Capacity remains held.".into(), repair: "Run agent-connect doctor and inspect agent-connect service logs before restarting.".into() });
+            }
+            OwnerSession { id: session.id, grant_id: session.grant_id, state: session.state.into() }
+        }).collect();
+        OwnerRuntimeSnapshot { problems, sessions }
+    }
+
+    fn end_session(&self, id: &str) -> anyhow::Result<()> {
+        let gateway = self.0.upgrade().context("gateway is stopping")?;
+        if !gateway.hosts.end_session(id) {
+            anyhow::bail!("session has already ended");
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -137,6 +188,7 @@ struct GrantContext {
     tool_definitions: Option<BTreeMap<String, Value>>,
     sessions: GrantSessions,
     access: Option<AuthorizedGrant>,
+    permissions: PermissionProfile,
 }
 impl Gateway {
     fn authenticate(&self, token: &str, origin: &str) -> Option<GrantContext> {
@@ -159,12 +211,16 @@ impl Gateway {
         let mut ownership = self.grant_sessions.lock().unwrap();
         ownership.retain(|grant_id, _| self.grant_active(grant_id));
         let sessions = ownership.entry(id.clone()).or_default().clone();
+        let permissions = access
+            .as_ref()
+            .map_or(self.cli.permissions, |access| access.permissions);
         Some(GrantContext {
             id,
             snapshot,
             tool_definitions,
             sessions,
             access,
+            permissions,
         })
     }
     fn grant_active(&self, id: &str) -> bool {
@@ -323,7 +379,8 @@ async fn run() -> anyhow::Result<()> {
         tokio::task::spawn_blocking(move || {
             agent_connect_gateway::sandbox::preflight(&image, &egress)
         })
-        .await??;
+        .await?
+        .context("serve preflight failed; run agent-connect doctor for actionable checks and repair commands")?;
     }
     let paths = SpikePaths {
         root: cli
@@ -349,6 +406,10 @@ async fn run() -> anyhow::Result<()> {
             state_dir: cli.state_dir.join("auth"),
             policy_fingerprint: fingerprint,
             owner_passphrase: None,
+            entry_points: cli.entry_points.clone(),
+            profiles: cli.profiles.clone(),
+            default_profile: cli.permissions,
+            harness: cli.harness,
         })?)
     } else {
         None
@@ -364,16 +425,50 @@ async fn run() -> anyhow::Result<()> {
         paths,
         grant_sessions: Default::default(),
         authorization: authorization.clone(),
+        readiness: Mutex::new(Readiness {
+            checked_at: Instant::now(),
+            problem: false,
+        }),
     });
+    if let Some(service) = &authorization {
+        service.set_runtime(Arc::new(ConsoleRuntime(Arc::downgrade(&gateway))))?;
+    }
+    if gateway.cli.boxed {
+        let monitored = Arc::downgrade(&gateway);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(15)).await;
+                let Some(gateway) = monitored.upgrade() else {
+                    break;
+                };
+                if gateway.capacity.is_closed() {
+                    break;
+                }
+                let image = gateway.cli.session_image.clone();
+                let egress = gateway.cli.egress_container.clone().unwrap();
+                let result = tokio::task::spawn_blocking(move || {
+                    agent_connect_gateway::sandbox::preflight(&image, &egress)
+                })
+                .await;
+                *gateway.readiness.lock().unwrap() = Readiness {
+                    checked_at: Instant::now(),
+                    problem: !matches!(result, Ok(Ok(()))),
+                };
+            }
+        });
+    }
     let shutdown_gateway = gateway.clone();
     let mut app = Router::new()
         .route("/acp", get(upgrade))
+        .route("/healthz", get(health))
         .with_state(gateway);
     if let Some(authorization) = authorization {
         app = app.merge(authorization.router());
     }
     eprintln!("[gateway] listening on ws://{listen}/acp");
-    let listener = tokio::net::TcpListener::bind(listen).await?;
+    let listener = tokio::net::TcpListener::bind(listen).await.context(
+        "gateway listener unavailable; run agent-connect doctor and check listener_port",
+    )?;
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -411,6 +506,41 @@ async fn run() -> anyhow::Result<()> {
     })
     .await?;
     Ok(())
+}
+
+async fn health(State(gateway): State<Arc<Gateway>>) -> impl axum::response::IntoResponse {
+    let readiness = gateway.readiness.lock().unwrap();
+    let ready = !readiness.problem
+        && (!gateway.cli.boxed || readiness.checked_at.elapsed() < Duration::from_secs(60))
+        && !gateway.capacity.is_closed()
+        && !gateway
+            .hosts
+            .session_views()
+            .iter()
+            .any(|session| session.state == "cleanup-failed");
+    drop(readiness);
+    let ready = ready
+        && gateway
+            .authorization
+            .as_ref()
+            .is_none_or(|auth| auth.healthy());
+    (
+        if ready {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        },
+        [
+            ("cache-control", "no-store"),
+            ("x-content-type-options", "nosniff"),
+        ],
+        axum::Json(serde_json::json!({
+            "status": if ready { "ok" } else { "unavailable" },
+            "ready": ready,
+            "version": env!("CARGO_PKG_VERSION"),
+            "repair": if ready { None } else { Some("Run agent-connect doctor") },
+        })),
+    )
 }
 
 async fn upgrade(
@@ -703,7 +833,9 @@ async fn run_host(
         let session = label.clone();
         let egress = gateway.cli.egress_container.clone().unwrap();
         let mock = gateway.cli.mock_container.clone();
-        let mode = gateway.cli.codex_mode.clone().unwrap();
+        let mode = grant
+            .permissions
+            .codex_mode(gateway.cli.codex_mode.unwrap());
         let image = gateway.cli.session_image.clone();
         let harness = gateway.cli.harness;
         let home = gateway.home.clone();
@@ -750,7 +882,10 @@ async fn run_host(
                 &gateway.paths,
                 gateway.cli.harness,
                 &gateway.cli.mock_url,
-                gateway.cli.codex_mode.unwrap().as_str(),
+                grant
+                    .permissions
+                    .codex_mode(gateway.cli.codex_mode.unwrap())
+                    .as_str(),
             ),
             Some(permit),
         )
@@ -764,7 +899,7 @@ async fn run_host(
         app_server_name: "app".into(),
         snapshot: Some(grant.snapshot.clone()),
         tool_definitions: grant.tool_definitions.clone(),
-        permissions: gateway.cli.permissions,
+        permissions: grant.permissions,
         grant_sessions: grant.sessions.clone(),
         actions_dir: Some(gateway.cli.state_dir.join("actions")),
     });
