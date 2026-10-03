@@ -1,7 +1,13 @@
 import http from "node:http";
 import { spawn, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, writeFile, appendFile, readFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  appendFile,
+  readFile,
+} from "node:fs/promises";
 import { openSync, closeSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -36,21 +42,15 @@ export function preflightOpenClaw() {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Starts the actual pinned gateway. Only the model's inference HTTP endpoint is a fixture. */
-export async function startOpenClawTestRuntime({
-  onModelRequest,
-  configure,
-  prepare,
-  tailscaleTestBinary,
-} = {}) {
-  const binary = preflightOpenClaw();
-  const directory = await mkdtemp(
-    join(tmpdir(), "agent-connect-openclaw-test-"),
-  );
-  const token = randomUUID();
-  const modelRequests = [];
+export async function openClawFixtureEnvironment(
+  directory,
+  { path = process.env.PATH, tailscaleTestBinary } = {},
+) {
   const env = {
-    PATH: process.env.PATH,
+    PATH: path,
+    HOME: join(directory, "home"),
+    XDG_STATE_HOME: join(directory, "xdg-state"),
+    XDG_CONFIG_HOME: join(directory, "xdg-config"),
     OPENCLAW_HOME: directory,
     OPENCLAW_STATE_DIR: join(directory, "state"),
     OPENCLAW_CONFIG_PATH: join(directory, "openclaw.json"),
@@ -64,7 +64,35 @@ export async function startOpenClawTestRuntime({
       ? { VITEST: "true", OPENCLAW_TEST_TAILSCALE_BINARY: tailscaleTestBinary }
       : {}),
   };
-  // Do not pass personal auth, provider API keys, HOME, or OpenClaw profile variables.
+  await Promise.all(
+    [
+      env.HOME,
+      env.XDG_STATE_HOME,
+      env.XDG_CONFIG_HOME,
+      env.OPENCLAW_STATE_DIR,
+    ].map((directory) => mkdir(directory, { recursive: true, mode: 0o700 })),
+  );
+  // Allowlist only fixture-owned homes and state; never inherit personal auth,
+  // provider API keys, the caller's HOME/XDG paths or OpenClaw profile variables.
+  return env;
+}
+
+/** Starts the actual pinned gateway. Only the model's inference HTTP endpoint is a fixture. */
+export async function startOpenClawTestRuntime({
+  onModelRequest,
+  configure,
+  prepare,
+  tailscaleTestBinary,
+} = {}) {
+  const binary = preflightOpenClaw();
+  const directory = await mkdtemp(
+    join(tmpdir(), "agent-connect-openclaw-test-"),
+  );
+  const token = randomUUID();
+  const modelRequests = [];
+  const env = await openClawFixtureEnvironment(directory, {
+    tailscaleTestBinary,
+  });
   const version = execFileSync(binary, ["--version"], {
     env,
     encoding: "utf8",
