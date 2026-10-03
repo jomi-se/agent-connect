@@ -37,28 +37,47 @@ async function recordResources() {
     mode: 0o600,
   });
 }
-async function command(bin, args, options = {}) {
+async function commandResult(bin, args, options = {}) {
   const child = spawn(bin, args, {
     cwd: work,
     stdio: ["ignore", "pipe", "pipe"],
     ...options,
   });
-  let tail = "";
+  let stdout = "",
+    stderr = "";
   child.stdout.on("data", (bytes) => {
-    tail = (tail + bytes).slice(-8000);
+    stdout = (stdout + bytes).slice(-16000);
   });
   child.stderr.on("data", (bytes) => {
-    tail = (tail + bytes).slice(-8000);
+    stderr = (stderr + bytes).slice(-8000);
   });
   return await new Promise((ok, fail) => {
     child.once("error", fail);
-    child.once("exit", (code) =>
-      code === 0
-        ? ok(tail)
-        : fail(new Error(`${bin} ${args[0]} failed (${code})\n${tail}`)),
-    );
+    child.once("exit", (code) => ok({ code, stdout, stderr }));
   });
 }
+async function command(bin, args, options = {}) {
+  const result = await commandResult(bin, args, options);
+  if (result.code !== 0)
+    throw new Error(
+      `${bin} ${args[0]} failed (${result.code})\n${result.stdout}${result.stderr}`,
+    );
+  return (result.stdout + result.stderr).slice(-8000);
+}
+function jsonResult(result, label) {
+  assert.ok(
+    result.code === 0 || result.code === 1,
+    `${label}: unexpected exit ${result.code}\n${result.stderr}`,
+  );
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    throw new Error(
+      `${label}: expected JSON output\n${result.stdout}${result.stderr}`,
+    );
+  }
+}
+
 function service(bin, args, options = {}) {
   const child = spawn(bin, args, {
     cwd: work,
@@ -360,13 +379,13 @@ try {
     { cwd: sample },
   );
   await ready(origin, preview);
-  await command(gateway, [
-    "init",
+  const setupArgs = [
+    "setup",
     "--directory",
     runtime,
     "--harness",
     "codex",
-    "--public-url",
+    "--origin",
     publicGateway,
     "--owner-passphrase-file",
     passphraseFile,
@@ -376,11 +395,72 @@ try {
     sessionImage,
     "--egress-container",
     egressName,
+    "--no-service",
+  ];
+  const setupPlanResult = await commandResult(gateway, [
+    ...setupArgs,
+    "--json",
   ]);
+  assert.equal(setupPlanResult.code, 0, setupPlanResult.stderr);
+  const setupPlan = jsonResult(setupPlanResult, "setup plan");
+  assert.equal(setupPlan.directory, runtime);
+  assert.equal(setupPlan.config, join(runtime, "config.json"));
+  assert.equal(setupPlan.existing, false);
+  assert.equal(setupPlan.harness, "codex");
+  assert.equal(setupPlan.origin, publicGateway);
+  assert.equal(setupPlan.login, false, "planning never invokes provider login");
+  assert.equal(setupPlan.service, false);
+  assert.ok(Array.isArray(setupPlan.steps) && setupPlan.steps.length > 0);
+  await assert.rejects(stat(runtime), { code: "ENOENT" });
+  report.checks.push(
+    "artifact-installed setup JSON plans without creating runtime or provider login state",
+  );
+  // Keep cleanup ownership before application in case setup fails after egress creation.
+  resources.containers.push(egressName);
+  await recordResources();
+  const appliedSetup = await commandResult(gateway, [
+    ...setupArgs,
+    "--apply",
+    "--non-interactive",
+    "--json",
+  ]);
+  assert.equal(appliedSetup.code, 0, appliedSetup.stderr);
+  assert.equal(jsonResult(appliedSetup, "setup apply").login, false);
+  const rerunPlanResult = await commandResult(gateway, [
+    ...setupArgs,
+    "--json",
+  ]);
+  assert.equal(rerunPlanResult.code, 0, rerunPlanResult.stderr);
+  assert.equal(jsonResult(rerunPlanResult, "setup rerun plan").existing, true);
+  report.checks.push(
+    "artifact-installed setup applies synthetic owner initialization non-interactively without provider login and preserves owner/runtime state across applied reruns",
+  );
   assert.equal((await stat(join(runtime, "config.json"))).mode & 0o077, 0);
   await assert.rejects(stat(join(runtime, "grant.json")), { code: "ENOENT" });
-  const operatorConfig = JSON.parse(
+  const operatorConfigBytes = await readFile(
+    join(runtime, "config.json"),
+    "utf8",
+  );
+  const operatorConfig = JSON.parse(operatorConfigBytes);
+  const ownerStatePath = join(runtime, "state/auth/authorization.json");
+  const originalOwnerState = await readFile(ownerStatePath, "utf8");
+  const resumedSetup = await commandResult(gateway, [
+    ...setupArgs,
+    "--apply",
+    "--non-interactive",
+    "--json",
+  ]);
+  assert.equal(resumedSetup.code, 0, resumedSetup.stderr);
+  assert.equal(jsonResult(resumedSetup, "setup apply rerun").existing, true);
+  assert.equal(
     await readFile(join(runtime, "config.json"), "utf8"),
+    operatorConfigBytes,
+    "setup rerun preserves runtime configuration",
+  );
+  assert.equal(
+    await readFile(ownerStatePath, "utf8"),
+    originalOwnerState,
+    "setup rerun preserves synthetic owner and issuer state",
   );
   assert.ok(operatorConfig.harness_home.startsWith(work + "/"));
   assert.equal((await stat(operatorConfig.harness_home)).mode & 0o077, 0);
@@ -388,6 +468,103 @@ try {
   report.checks.push(
     "normal owner bootstrap issues no static application grant",
   );
+  const serviceArgs = [
+    "service",
+    "--config",
+    join(runtime, "config.json"),
+    "--manager",
+    "systemd",
+  ];
+  await command(gateway, [...serviceArgs, "install", "--offline"]);
+  const unit = join(
+    process.env.XDG_CONFIG_HOME ?? join(process.env.HOME, ".config"),
+    "systemd/user/agent-connect.service",
+  );
+  const unitContent = await readFile(unit, "utf8");
+  assert.match(unitContent, /^\[Service\]$/m);
+  assert.match(unitContent, /^ExecStart=.*serve.*--config/m);
+  assert.ok(unitContent.includes(join(runtime, "config.json")));
+  assert.ok(
+    unitContent.includes(install + "/node_modules/"),
+    "service launches the installed artifact",
+  );
+  assert.ok(
+    !unitContent.includes(ownerPassphrase) &&
+      !unitContent.includes(passphraseFile),
+  );
+  assert.equal((await stat(unit)).mode & 0o077, 0);
+  const offlineVerify = await commandResult("systemd-analyze", [
+    "verify",
+    unit,
+  ]).catch((error) => ({
+    missing: error.code === "ENOENT",
+    stderr: error.message,
+  }));
+  if (offlineVerify.missing) {
+    report.serviceOfflineVerification =
+      "systemd-analyze unavailable; installed unit structure and artifact paths verified";
+  } else {
+    assert.equal(offlineVerify.code, 0, offlineVerify.stderr);
+    report.serviceOfflineVerification =
+      "systemd-analyze verify passed without a user manager";
+  }
+  const managerProbe = await commandResult("systemctl", [
+    "--user",
+    "show-environment",
+  ]).catch((error) => ({ code: 1, stderr: error.message }));
+  if (managerProbe.code === 0) {
+    await command(gateway, [...serviceArgs, "install"]);
+    await command(gateway, [...serviceArgs, "start"]);
+    await command(gateway, [...serviceArgs, "status"]);
+    await command(gateway, [...serviceArgs, "logs", "--lines", "20"]);
+    await command(gateway, [...serviceArgs, "stop"]);
+    await command(gateway, [...serviceArgs, "uninstall"]);
+    report.checks.push(
+      "artifact-installed user service install/start/status/logs/stop/uninstall lifecycle with an available isolated user manager",
+    );
+  } else {
+    for (const action of [
+      "install",
+      "start",
+      "stop",
+      "status",
+      "logs",
+      "uninstall",
+    ]) {
+      const result = await commandResult(gateway, [
+        ...serviceArgs,
+        action,
+        ...(action === "logs" ? ["--lines", "20"] : []),
+      ]);
+      if (action === "logs" && result.code === 0) {
+        assert.ok(
+          result.stdout.length <= 16000,
+          "offline journal output is bounded",
+        );
+        continue;
+      }
+      assert.equal(
+        result.code,
+        1,
+        `${action}: unavailable user manager must fail clearly\n${result.stdout}${result.stderr}`,
+      );
+      assert.match(
+        result.stderr,
+        /user manager|user service manager|run systemctl|run launchctl|run journalctl|supervisor|not installed/i,
+      );
+    }
+    await command(gateway, [...serviceArgs, "uninstall", "--offline"]);
+    report.checks.push(
+      "artifact-installed service operations report unsupported user-manager state with repair guidance; offline install/verify/uninstall preserves private runtime",
+    );
+  }
+  await assert.rejects(stat(unit), { code: "ENOENT" });
+  assert.equal(
+    await readFile(join(runtime, "config.json"), "utf8"),
+    operatorConfigBytes,
+    "service management preserves runtime configuration",
+  );
+
   await copyFile(
     "/opt/acceptance/mock-model.mjs",
     join(work, "mock-model.mjs"),
@@ -422,8 +599,6 @@ try {
     sessionImage,
     "/fixture.mjs",
   ]);
-  resources.containers.push(egressName);
-  await recordResources();
   await command(gateway, [
     "egress",
     "start",
@@ -460,6 +635,36 @@ try {
     { env: { ...process.env, AGENT_CONNECT_TEST_ROOT: work } },
   );
   await ready(`http://127.0.0.1:${gatewayPort}`, gatewayService);
+  const doctorResult = await commandResult(gateway, [
+    "doctor",
+    "--config",
+    join(runtime, "config.json"),
+    "--json",
+  ]);
+  const diagnosis = jsonResult(doctorResult, "doctor");
+  assert.equal(typeof diagnosis.ok, "boolean");
+  assert.ok(Array.isArray(diagnosis.checks) && diagnosis.checks.length > 0);
+  assert.equal(diagnosis.checks[0].code, "config_valid");
+  assert.equal(diagnosis.checks[0].status, "pass");
+  for (const check of diagnosis.checks) {
+    assert.match(check.code, /^[a-z][a-z0-9_]*$/);
+    assert.ok(["pass", "warn", "fail"].includes(check.status));
+    assert.equal(typeof check.message, "string");
+    if (check.status !== "pass")
+      assert.ok(
+        typeof check.fix === "string" && check.fix.length > 0,
+        `${check.code}: actionable repair required`,
+      );
+  }
+  assert.equal(JSON.stringify(diagnosis).includes(ownerPassphrase), false);
+  report.doctor = {
+    ok: diagnosis.ok,
+    checks: diagnosis.checks.map(({ code, status }) => ({ code, status })),
+  };
+  report.checks.push(
+    "artifact-installed doctor emits stable JSON checks and actionable fixes without reading provider credentials",
+  );
+
   const relay = service("node", ["/opt/acceptance/relay.mjs"], {
     env: {
       ...process.env,
@@ -549,6 +754,10 @@ try {
     for (const tool of ["read_passage", "highlight", "ask_reader"])
       assert.ok(consent.includes(tool), `Gateway consent includes ${tool}`);
     await owner.locator('select[name="duration"]').selectOption("3600");
+    if (decision === "Approve")
+      await owner
+        .getByLabel("Restricted profile", { exact: true })
+        .selectOption("read-only");
     await owner.getByRole("button", { name: decision, exact: true }).click();
     return owner;
   }
@@ -562,6 +771,140 @@ try {
     assert.ok(!new URL(page.url()).searchParams.has("code"));
     assert.equal(await page.locator("#grant-file, #grant-token").count(), 0);
     return page;
+  }
+  const ownerUrl = `${publicGateway}/agent-connect/owner`;
+  async function ownerPage(app) {
+    const page = await app.context().newPage();
+    await page.goto(ownerUrl);
+    if (await page.getByLabel("Owner passphrase", { exact: true }).count())
+      await ownerSignIn(page);
+    await page
+      .getByRole("heading", {
+        name: "Application access",
+        exact: true,
+        level: 1,
+      })
+      .waitFor();
+    return page;
+  }
+  const ownedHostSessions = new Map();
+  async function waitNoLiveSessions(page, containerId) {
+    const deadline = Date.now() + 25000;
+    const observed = [];
+    while (Date.now() < deadline) {
+      await page.goto(ownerUrl);
+      if (await page.getByText("No live sessions", { exact: true }).count()) {
+        const container = await commandResult("docker", [
+          "inspect",
+          "--format",
+          "{{.Id}}",
+          containerId,
+        ]);
+        assert.equal(
+          container.code,
+          1,
+          "owner end removes the owned session container",
+        );
+        assert.match(container.stderr, /No such/i);
+        const network = await commandResult("docker", [
+          "network",
+          "inspect",
+          `acp-sess-net-${ownedHostSessions.get(containerId)}`,
+        ]);
+        assert.equal(
+          network.code,
+          1,
+          "owner end removes the owned session network",
+        );
+        assert.match(network.stderr, /No such|not found/i);
+        observed.push("absent");
+        (report.ownerSessionCleanup ??= []).push({
+          observed,
+          containerRemoved: true,
+          networkRemoved: true,
+        });
+        return;
+      }
+      const state = await page
+        .locator('form[action="/agent-connect/owner/sessions/end"]')
+        .first()
+        .locator("..")
+        .textContent();
+      observed.push(
+        /stopping|closing|cleanup|ended/i.test(state) ? "stopping" : "present",
+      );
+      await delay(200);
+    }
+    throw new Error(
+      "owned session cleanup did not finish within 25 seconds: " +
+        (await page.locator("body").textContent()).slice(-2000),
+    );
+  }
+  async function ownedHost(page) {
+    await page.goto(ownerUrl);
+    const sessions = page.locator(
+      'form[action="/agent-connect/owner/sessions/end"]',
+    );
+    assert.equal(
+      await sessions.count(),
+      1,
+      "the isolated capacity-one runtime has one owned host",
+    );
+    const id = await sessions.locator('input[name="session_id"]').inputValue();
+    assert.match(id, /^[0-9a-f]{8}-[0-9a-f-]{27}$/);
+    assert.ok(
+      (await stat(join(runtime, "state/sessions", id))).isDirectory(),
+      "host belongs to this run's private state",
+    );
+    const container = JSON.parse(
+      await command("docker", [
+        "inspect",
+        "--format",
+        '{"id":{{json .Id}},"labels":{{json .Config.Labels}},"running":{{json .State.Running}}}',
+        `acp-sess-${id}`,
+      ]),
+    );
+    assert.equal(
+      container.labels["org.agent-connect.component"],
+      "acp-session",
+    );
+    assert.equal(container.labels["org.agent-connect.session"], id);
+    assert.equal(container.running, true, "the owned host box is live");
+    ownedHostSessions.set(container.id, id);
+    return container.id;
+  }
+  async function ownerCapture(page, state) {
+    await mkdir(join(work, "screenshots"), { recursive: true });
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert.ok(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+        `${state}/${width}: no horizontal overflow`,
+      );
+      if (width < 500)
+        for (const control of await page
+          .locator("button, select, input:not([type=hidden]), summary")
+          .all()) {
+          if (await control.isVisible())
+            assert.ok(
+              (await control.boundingBox()).height >= 44,
+              `${state}: touch target`,
+            );
+        }
+      await page.screenshot({
+        path: join(work, "screenshots", `${state}-${width}.png`),
+        fullPage: true,
+      });
+    }
+  }
+  async function effects(page) {
+    return await page.locator("#book").evaluate((node) => ({
+      read: Number(node.dataset.read_passageCount),
+      highlight: Number(node.dataset.highlightCount),
+      ask: Number(node.dataset.ask_readerCount),
+    }));
   }
   const denialContext = await browser.newContext();
   const deniedPage = await appPage(denialContext);
@@ -927,50 +1270,29 @@ try {
   const cancelledSession = await cancelPage
     .locator("#connection-status")
     .getAttribute("data-session-id");
-  // Box teardown is asynchronous. Each capacity rejection permits a fresh
-  // deliberate connection click; no prompt is submitted during these retries.
-  for (let attempt = 0; attempt < 20; attempt++) {
-    await cancelPage.locator("#chat-new").click();
-    await cancelPage.waitForFunction(
-      () =>
-        !document.getElementById("chat-input").disabled ||
-        (!document.getElementById("chat-new").disabled &&
-          document.getElementById("error").textContent),
-    );
-    if (await cancelPage.locator("#chat-input").isEnabled()) break;
-    assert.match(
-      await cancelPage.locator("#error").textContent(),
-      /session capacity is full/,
-    );
-    assert.equal(
-      await cancelPage
-        .locator('#chat-messages article[data-status="cancelled"]')
-        .count(),
-      1,
-    );
-    assert.equal((await modelRequests()).length, beforeCancel);
-    await delay(500);
-  }
+  await cancelPage.waitForFunction(
+    () => !document.getElementById("chat-input").disabled,
+  );
   assert.ok(
     await cancelPage.locator("#chat-input").isEnabled(),
-    "New connection becomes available after owned box teardown",
+    "Automatic recovery becomes available after owned box teardown",
   );
   assert.equal(
     await cancelPage
       .locator('#chat-messages article[data-status="cancelled"]')
       .count(),
     1,
-    "A deliberate new connection retains the cancelled transcript",
+    "Automatic recovery retains the cancelled transcript",
   );
   assert.equal((await modelRequests()).length, beforeCancel);
   await send(cancelPage, "SPIKE-TOOLS");
   await settled(cancelPage, "completed");
-  assert.notEqual(
+  assert.equal(
     await cancelPage
       .locator("#connection-status")
       .getAttribute("data-session-id"),
     cancelledSession,
-    "The deliberate new prompt uses a new harness session",
+    "The deliberate new prompt uses the recovered harness session",
   );
   assert.equal(await cancelPage.locator("#book mark").count(), 1);
   assert.equal(
@@ -981,7 +1303,186 @@ try {
     "The cancelled question is never replayed",
   );
   report.checks.push(
-    "a deliberate new connection after Stop retains the transcript and accepts a new tool turn without replay",
+    "automatic recovery after Stop retains the transcript and accepts a deliberate new tool turn without replay",
+  );
+  // The approved read-only profile still permits the fixed application tools,
+  // and its real native invocation fails closed. Record sandbox-startup limits
+  // separately from a filesystem-policy rejection; they prove different things.
+  const ownerGrants = await ownerPage(cancelPage);
+  const readOnlyHost = await ownedHost(ownerGrants);
+  assert.match(
+    await ownerGrants.locator("body").textContent(),
+    /Read-only native tools/,
+  );
+  await send(cancelPage, "SPIKE-SHELL-WRITE");
+  await settled(cancelPage, "completed");
+  const nativeWriteOutput = await cancelPage
+    .locator("#chat-messages article")
+    .last()
+    .textContent();
+  const nativeSandboxUnavailable =
+    /bwrap: No permissions to create a new namespace/.test(nativeWriteOutput);
+  assert.ok(
+    nativeSandboxUnavailable ||
+      /denied|rejected|read.only|not permitted|sandbox/i.test(
+        nativeWriteOutput,
+      ),
+    "native write must be refused by policy or a recorded sandbox startup limitation",
+  );
+  assert.match(
+    nativeWriteOutput,
+    /Process exited with code [1-9]\d*|: failed.*(?:denied|rejected|not permitted)/is,
+    "native invocation must fail rather than silently omit the effect",
+  );
+  report.nativeWriteProtection = {
+    profile: "read-only",
+    outcome: nativeSandboxUnavailable
+      ? "native-sandbox-startup-unavailable"
+      : "native-write-denied",
+    limitation: nativeSandboxUnavailable
+      ? "This Docker environment refuses native sandbox namespace creation; marker absence does not isolate read-only filesystem policy enforcement."
+      : null,
+  };
+  const marker = await commandResult("docker", [
+    "exec",
+    readOnlyHost,
+    "test",
+    "-e",
+    "/work/restricted-profile-marker",
+  ]);
+  assert.equal(marker.code, 1, "the real boxed native write creates no marker");
+  assert.equal(
+    marker.stderr,
+    "",
+    "marker check executed in the still-running owned box rather than a failed Docker exec",
+  );
+  report.nativeWriteProtection.markerAbsent = true;
+  report.profileCoverage = nativeSandboxUnavailable
+    ? "configured read-only; app-tools succeeds; native effect prevented by namespace refusal; filesystem restriction not independently qualified"
+    : "configured read-only; app-tools succeeds; native filesystem write refused and marker absent";
+  report.checks.push(
+    nativeSandboxUnavailable
+      ? "owner-selected Codex read-only profile permits approved app effects; native write fails closed because sandbox namespace creation is unavailable (filesystem-policy enforcement remains unqualified)"
+      : "owner-selected Codex read-only profile allows approved application tool effects and denies a native filesystem write in the real box",
+  );
+
+  await send(cancelPage, "SPIKE-ASK");
+  await cancelPage.locator("#ask-form").waitFor({ state: "visible" });
+  const interruptedSession = await cancelPage
+    .locator("#connection-status")
+    .getAttribute("data-session-id");
+  const beforeAbortRequests = (await modelRequests()).length;
+  const beforeAbortEffects = await effects(cancelPage);
+  const abortedHost = await ownedHost(ownerGrants);
+  await command("docker", ["kill", "--signal", "KILL", abortedHost]);
+  await cancelPage.waitForFunction(
+    () =>
+      !document.getElementById("chat-input").disabled &&
+      document
+        .getElementById("new-session-notice")
+        .textContent.includes("restored"),
+  );
+  assert.equal(
+    await cancelPage
+      .locator("#connection-status")
+      .getAttribute("data-session-id"),
+    interruptedSession,
+  );
+  await cancelPage.locator("#ask-form").waitFor({ state: "hidden" });
+  await delay(500);
+  assert.equal(
+    (await modelRequests()).length,
+    beforeAbortRequests,
+    "automatic recovery never repeats the uncertain prompt or tool result",
+  );
+  assert.deepEqual(
+    await effects(cancelPage),
+    beforeAbortEffects,
+    "automatic recovery executes no app effect",
+  );
+  assert.ok(
+    await cancelPage
+      .locator('#chat-messages article[data-status="failed"]')
+      .count(),
+    "interrupted transcript remains visible",
+  );
+  report.checks.push(
+    "the sample automatically loads the same owned session after genuine adapter exit4410, retaining transcript without replaying an uncertain prompt or effect",
+  );
+
+  await send(cancelPage, "SPIKE-ASK");
+  await cancelPage.locator("#ask-form").waitFor({ state: "visible" });
+  const ownerEndedHost = await ownedHost(ownerGrants);
+  await ownerCapture(ownerGrants, "live-session");
+  const beforeEndRequests = (await modelRequests()).length;
+  const beforeEndEffects = await effects(cancelPage);
+  const end = ownerGrants.getByRole("button", {
+    name: "End session",
+    exact: true,
+  });
+  await end.focus();
+  assert.equal(
+    await end.evaluate((control) => control === document.activeElement),
+    true,
+  );
+  await Promise.all([
+    ownerGrants.waitForNavigation({ waitUntil: "load" }),
+    ownerGrants.keyboard.press("Enter"),
+  ]);
+  await waitNoLiveSessions(ownerGrants, ownerEndedHost);
+  await cancelPage.waitForFunction(
+    () =>
+      document.getElementById("chat-input").disabled &&
+      !document.getElementById("chat-new").disabled,
+  );
+  await cancelPage.locator("#ask-form").waitFor({ state: "hidden" });
+  await delay(1500);
+  assert.ok(
+    await cancelPage.locator("#chat-input").isDisabled(),
+    "owner end is terminal and never automatically resumes",
+  );
+  assert.equal((await modelRequests()).length, beforeEndRequests);
+  assert.deepEqual(await effects(cancelPage), beforeEndEffects);
+  assert.equal(
+    await ownerGrants
+      .getByRole("button", { name: "Revoke access", exact: true })
+      .count(),
+    1,
+    "ending a session retains its application grant",
+  );
+  await ownerCapture(ownerGrants, "ended-session-active-grant");
+  report.checks.push(
+    "real boxed live sessions support keyboard End session, terminal4415 without automatic replay, and retain the approved app grant",
+  );
+
+  const forget = ownerGrants.getByRole("button", {
+    name: "Forget this browser",
+    exact: true,
+  });
+  await forget.focus();
+  await ownerGrants.keyboard.press("Enter");
+  await ownerGrants.getByLabel("Owner passphrase", { exact: true }).waitFor();
+  await ownerSignIn(ownerGrants);
+  assert.equal(
+    await ownerGrants
+      .getByRole("button", { name: "Revoke access", exact: true })
+      .count(),
+    1,
+    "forget-browser invalidates owner verification without revoking apps",
+  );
+  report.checks.push(
+    "real browser Forget this browser requires owner sign-in again and preserves application authority",
+  );
+  await cancelPage.locator("#chat-new").click();
+  await cancelPage.waitForFunction(
+    () => !document.getElementById("chat-input").disabled,
+  );
+  assert.notEqual(
+    await cancelPage
+      .locator("#connection-status")
+      .getAttribute("data-session-id"),
+    interruptedSession,
+    "deliberate connection after owner end creates a new native conversation",
   );
   const beforeRevoke = (await modelRequests()).length;
   const beforeRevokeEffects = await cancelPage
@@ -991,8 +1492,7 @@ try {
       highlight: Number(node.dataset.highlightCount),
       ask: Number(node.dataset.ask_readerCount),
     }));
-  const ownerGrants = await cancelPage.context().newPage();
-  await ownerGrants.goto(`${publicGateway}/agent-connect/owner`);
+  await ownerGrants.goto(ownerUrl);
   await ownerGrants
     .getByRole("button", { name: "Revoke access", exact: true })
     .waitFor();
@@ -1039,6 +1539,141 @@ try {
   );
   await ownerGrants.close();
   await cancelPage.close();
+  const firstGrantPage = await connectPage();
+  const allGrantsOwner = await ownerPage(firstGrantPage);
+  const firstGrantHost = await ownedHost(allGrantsOwner);
+  await allGrantsOwner
+    .getByRole("button", { name: "End session", exact: true })
+    .click();
+  await waitNoLiveSessions(allGrantsOwner, firstGrantHost);
+  await firstGrantPage.waitForFunction(
+    () =>
+      document.getElementById("chat-input").disabled &&
+      !document.getElementById("chat-new").disabled,
+  );
+  const secondGrantPage = await connectPage();
+  await allGrantsOwner.goto(ownerUrl);
+  assert.equal(
+    await allGrantsOwner
+      .getByRole("button", { name: "Revoke access", exact: true })
+      .count(),
+    2,
+  );
+  await ownerCapture(allGrantsOwner, "two-active-grants");
+  const beforeAllRequests = (await modelRequests()).length;
+  const revokeAll = allGrantsOwner.getByRole("button", {
+    name: "Revoke all active grants",
+    exact: true,
+  });
+  await revokeAll.focus();
+  assert.equal(
+    await revokeAll.evaluate((control) => control === document.activeElement),
+    true,
+  );
+  await allGrantsOwner.keyboard.press("Enter");
+  await allGrantsOwner.waitForFunction(
+    () =>
+      document.querySelector(
+        'form[action="/agent-connect/owner/grants/revoke-all"] button',
+      )?.disabled === true,
+  );
+  assert.ok(
+    await allGrantsOwner
+      .getByRole("button", { name: "Revoke all active grants", exact: true })
+      .isDisabled(),
+  );
+  assert.equal(
+    await allGrantsOwner
+      .getByRole("button", { name: "Revoke access", exact: true })
+      .count(),
+    0,
+  );
+  await secondGrantPage.waitForFunction(
+    () => document.getElementById("error").dataset.code === "invalid_app_grant",
+  );
+  // The ended tab has no live channel. Its next deliberate connection must
+  // discover revoked authority, clear authorization, and submit no prompt.
+  await firstGrantPage.locator("#chat-new").click();
+  await firstGrantPage.waitForFunction(
+    () => document.getElementById("error").dataset.code === "invalid_app_grant",
+  );
+  for (const page of [firstGrantPage, secondGrantPage]) {
+    assert.ok(await page.locator("#chat-input").isDisabled());
+    assert.equal(
+      await page.evaluate(
+        () =>
+          Object.keys(sessionStorage).filter((key) =>
+            key.startsWith("agent-connect:acp:"),
+          ).length,
+      ),
+      0,
+    );
+  }
+  await delay(500);
+  assert.equal(
+    (await modelRequests()).length,
+    beforeAllRequests,
+    "revoke-all triggers no model turn or uncertain effect replay",
+  );
+  await ownerCapture(allGrantsOwner, "all-grants-revoked");
+  report.checks.push(
+    "real browser keyboard revoke-all invalidates two application grants, clears active and deliberately reconnected tabs, and leaves owner verification active",
+  );
+
+  await command(gateway, ["egress", "stop", "--name", egressName]);
+  const outageDeadline = Date.now() + 25000;
+  while (Date.now() < outageDeadline) {
+    await allGrantsOwner.reload();
+    if (await allGrantsOwner.locator(".runtime-problem[role=status]").count())
+      break;
+    await delay(500);
+  }
+  const banner = allGrantsOwner.locator(".runtime-problem[role=status]");
+  assert.match(
+    await banner.textContent(),
+    /boxed runtime.*unavailable|health check.*stalled/i,
+  );
+  assert.match(await banner.textContent(), /agent-connect doctor/);
+  const outageDoctor = await commandResult(gateway, [
+    "doctor",
+    "--config",
+    join(runtime, "config.json"),
+    "--json",
+  ]);
+  const outageDiagnosis = jsonResult(outageDoctor, "outage doctor");
+  assert.equal(outageDoctor.code, 1);
+  assert.equal(outageDiagnosis.ok, false);
+  assert.ok(
+    outageDiagnosis.checks.some(
+      (check) =>
+        check.status === "fail" &&
+        typeof check.fix === "string" &&
+        check.fix.length > 0,
+    ),
+  );
+  assert.equal(
+    JSON.stringify(outageDiagnosis).includes(ownerPassphrase),
+    false,
+  );
+  await ownerCapture(allGrantsOwner, "runtime-problem");
+  report.checks.push(
+    "a real owned egress outage produces responsive owner runtime repair guidance and failing artifact-installed doctor JSON",
+  );
+  report.parityCoverage = [
+    "setup-plan",
+    "setup-apply",
+    "doctor-json",
+    "service-offline",
+    "profile-readonly",
+    "sample-auto-recovery",
+    "sessions-end",
+    "forget-browser",
+    "revoke-all",
+    "runtime-problem",
+  ];
+  await allGrantsOwner.close();
+  await firstGrantPage.close();
+  await secondGrantPage.close();
   assert.deepEqual(report.pageErrors ?? [], []);
   report.status = "passed";
   console.log(report.checks.map((check) => `PASS ${check}`).join("\n"));

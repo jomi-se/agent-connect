@@ -8,6 +8,7 @@
 //
 // Script, keyed on the latest user text:
 //   contains "SPIKE-TOOLS": call read_passage -> call highlight -> final text
+//   contains "SPIKE-SHELL-WRITE": try native write (restricted-profile check)
 //   contains "SPIKE-ASK":   call ask_reader  -> final text
 //   contains "SPIKE-SLOW":  stream 30 numbered chunks, one every 300 ms
 //   contains "SPIKE-LATEASK": wait 6 s, call ask_reader -> final text
@@ -131,10 +132,13 @@ function decide({ tools, history }) {
     if (!shell) return { text: "MISSING-TOOLS shell" };
     const output = resultFor(shell.name);
     if (output === undefined) {
+      const command = lastUser.includes("SPIKE-SHELL-WRITE")
+        ? "printf restricted-profile-write > /work/restricted-profile-marker"
+        : "echo native-$((6*7)) && pwd";
       const args = codexShell
-        ? { cmd: "echo native-$((6*7)) && pwd" }
+        ? { cmd: command }
         : {
-            command: "echo native-$((6*7)) && pwd",
+            command,
             description: "Spike native action",
           };
       return { call: { ...shell, args } };
