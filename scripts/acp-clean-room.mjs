@@ -213,6 +213,8 @@ try {
       `ACP_SESSION_IMAGE=${sessionImage}`,
       "-e",
       `HOME=${join(run, "work")}`,
+      "-e",
+      `XDG_STATE_HOME=${join(run, "work/state-home")}`,
       createdImageId,
     ],
     { inherit: true },
