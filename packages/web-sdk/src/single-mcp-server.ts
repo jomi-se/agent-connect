@@ -135,12 +135,7 @@ export class SingleMcpServer {
         return this.listTools();
       case "tools/call":
         this.requireInitialized(connection);
-        return this.callTool(connection, request.params, {
-          ...(isJsonObject(request.params?.["_meta"])
-            ? request.params["_meta"]
-            : {}),
-          ...(request._meta ?? {}),
-        });
+        return this.callTool(connection, request.params, toolMeta(request));
       default:
         throw new McpOverAcpError(
           METHOD_NOT_FOUND,
@@ -262,6 +257,25 @@ function actionIdFromMeta(
 ): string | undefined {
   const value = meta?.[ACTION_ID_META_KEY];
   return typeof value === "string" ? value : undefined;
+}
+
+function toolMeta(
+  request: MessageMcpRequest,
+): Readonly<Record<string, unknown>> {
+  const inner = isJsonObject(request.params?.["_meta"])
+    ? request.params["_meta"]
+    : {};
+  const outer = request._meta ?? {};
+  const meta: Record<string, unknown> = { ...inner, ...outer };
+  // MCP progress belongs to the inner tools/call request. Gateway action IDs
+  // belong to the outer ACP envelope; neither namespace may replace the other.
+  delete meta["progressToken"];
+  if (Object.hasOwn(inner, "progressToken"))
+    meta["progressToken"] = inner["progressToken"];
+  delete meta[ACTION_ID_META_KEY];
+  if (typeof outer[ACTION_ID_META_KEY] === "string")
+    meta[ACTION_ID_META_KEY] = outer[ACTION_ID_META_KEY];
+  return meta;
 }
 
 function isJsonObject(value: unknown): value is JsonObject {

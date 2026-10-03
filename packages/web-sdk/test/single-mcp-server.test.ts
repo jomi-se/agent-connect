@@ -216,6 +216,7 @@ it("preserves inner MCP progress tokens while the gateway supplies the authorita
       },
     },
     _meta: {
+      progressToken: "outer-must-not-win",
       "agent-connect/actionId": "durable-gateway-action",
       trace: "retained",
     },
@@ -230,5 +231,29 @@ it("preserves inner MCP progress tokens while the gateway supplies the authorita
         trace: "retained",
       },
     }),
+  );
+});
+
+it("ignores outer-only progress tokens and inner-only action IDs", async () => {
+  const { server, execute } = createServer();
+  server.connect({ serverId: "spreadsheet" });
+  await server.message({
+    connectionId: "mcp-connection-1",
+    method: "initialize",
+    params: { protocolVersion: "2025-06-18" },
+  });
+  await server.message({
+    connectionId: "mcp-connection-1",
+    method: "tools/call",
+    params: {
+      name: "read_range",
+      arguments: { range: "A1" },
+      _meta: { "agent-connect/actionId": "untrusted-inner" },
+    },
+    _meta: { progressToken: "not-an-MCP-token" },
+  });
+  expect(execute).toHaveBeenCalledWith(
+    { range: "A1" },
+    expect.objectContaining({ actionId: undefined, meta: {} }),
   );
 });

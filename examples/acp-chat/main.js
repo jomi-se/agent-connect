@@ -23,6 +23,9 @@ const storedGateway = sessionStorage.getItem("reader-chat-gateway");
 if (storedGateway) element("gateway-url").value = storedGateway;
 let archivedChat;
 let connecting = false;
+let recovering = false;
+let recoveryAttemptedChat;
+let recoveryNotice = "";
 const previousMessages = [];
 element("tool-snapshot").textContent = JSON.stringify(definitions, null, 2);
 element("download-tools").href = toolsUrl;
@@ -82,13 +85,28 @@ const tools = definitions.map((definition) => ({
 
 function render() {
   const snapshot = chat.getSnapshot();
-  element("chat-status").textContent = snapshot.status;
-  element("chat-input").disabled = !gatewayUrl || !snapshot.canSend;
-  element("chat-send").disabled = !gatewayUrl || !snapshot.canSend;
+  const terminal = snapshot.error?.code === "session_superseded";
+  element("chat-status").textContent = recovering
+    ? "Recovering conversation"
+    : snapshot.status;
+  element("chat-input").disabled =
+    !gatewayUrl || recovering || !snapshot.canSend;
+  element("chat-send").disabled =
+    !gatewayUrl || recovering || !snapshot.canSend;
   element("chat-stop").disabled = !gatewayUrl || !snapshot.canStop;
   element("chat-new").disabled =
-    !gatewayUrl || connecting || !snapshot.needsNewSession;
-  element("new-session-notice").hidden = !snapshot.needsNewSession;
+    !gatewayUrl || connecting || recovering || !snapshot.needsNewSession;
+  element("chat-new").textContent =
+    provider?.sessionId && !terminal ? "Retry recovery" : "New connection";
+  element("new-session-notice").hidden =
+    !snapshot.needsNewSession && !recoveryNotice;
+  element("new-session-notice").textContent = recovering
+    ? "Restoring the conversation. The interrupted message and application actions will not be repeated."
+    : snapshot.needsNewSession
+      ? provider?.sessionId && !terminal
+        ? "Recovery is unavailable. Retry recovery to restore the conversation. Your previous message will not be repeated."
+        : "The conversation could not be started. Start a new connection to send another message. Previous messages remain visible and will not be repeated."
+      : recoveryNotice;
   element("error").textContent =
     connectionError || snapshot.error?.message || "";
   if (snapshot.error?.code === "invalid_app_grant") void clearAuthorization();
@@ -100,6 +118,16 @@ function render() {
       const article = document.createElement("article");
       article.dataset.role = message.role;
       article.dataset.status = message.status;
+      if (message.status === "failed" || message.status === "cancelled") {
+        const status = document.createElement("p");
+        status.textContent =
+          message.error?.code === "task_interrupted"
+            ? "Turn interrupted. Your message and any application actions were not repeated."
+            : message.status === "cancelled"
+              ? "Turn stopped."
+              : `Turn failed: ${message.error?.message ?? "Unable to complete the message."}`;
+        article.append(status);
+      }
       for (const part of message.parts) {
         const paragraph = document.createElement("p");
         if (part.type === "text" || part.type === "thought")
@@ -117,6 +145,62 @@ function render() {
       return article;
     }),
   );
+  if (
+    snapshot.needsNewSession &&
+    provider?.sessionId &&
+    gatewayUrl &&
+    !connecting &&
+    !recovering &&
+    !clearingAuthorization &&
+    snapshot.error?.code !== "invalid_app_grant" &&
+    !terminal &&
+    recoveryAttemptedChat !== chat
+  ) {
+    recoveryAttemptedChat = chat;
+    queueMicrotask(() => void recoverConversation());
+  }
+}
+
+async function recoverConversation() {
+  if (recovering || connecting || clearingAuthorization || !provider?.sessionId)
+    return;
+  const previous = chat;
+  const currentProvider = provider;
+  recovering = true;
+  recoveryAttemptedChat = previous;
+  connectionError = "";
+  render();
+  try {
+    await currentProvider.recover();
+    if (
+      provider !== currentProvider ||
+      chat !== previous ||
+      clearingAuthorization
+    )
+      return;
+    previousMessages.push(...previous.getSnapshot().messages);
+    archivedChat = previous;
+    await previous.dispose();
+    // The loaded provider owns history. This new presenter sends only the next
+    // deliberate user message, never the interrupted turn or application results.
+    chat = createAgentChat({ session: new AgentSession({ provider, tools }) });
+    chat.subscribe(render);
+    recoveryNotice =
+      "Conversation restored. Send a new message when you are ready; the previous turn was not repeated.";
+    element("connection-status").textContent = "Connected";
+  } catch (error) {
+    if (error.code === "invalid_app_grant") {
+      await clearAuthorization();
+      return;
+    }
+    connectionError =
+      error.code === "session_capacity"
+        ? "Gateway session capacity is full. Wait for cleanup, then retry recovery."
+        : `Could not restore the conversation: ${error.message}. Retry recovery when the gateway is available.`;
+  } finally {
+    recovering = false;
+    if (chat) render();
+  }
 }
 
 async function clearAuthorization() {
@@ -149,6 +233,7 @@ async function startConnection(mode = "resume") {
   connecting = true;
   clearingAuthorization = false;
   connectionError = "";
+  recoveryNotice = "";
   delete element("error").dataset.code;
   try {
     if (chat && chat !== archivedChat) {
@@ -186,6 +271,11 @@ async function startConnection(mode = "resume") {
       onSession(id) {
         element("connection-status").dataset.sessionId = id;
       },
+      onRecovery({ interrupted }) {
+        recoveryNotice = interrupted
+          ? "Conversation restored after an interruption. The previous turn was not repeated."
+          : "Conversation restored.";
+      },
       transport: {
         onState(state, reason) {
           if (
@@ -207,7 +297,8 @@ async function startConnection(mode = "resume") {
     clearingAuthorization = false;
     chat = createAgentChat({ session: new AgentSession({ provider, tools }) });
     chat.subscribe(render);
-    delete element("connection-status").dataset.sessionId;
+    if (!provider.sessionId)
+      delete element("connection-status").dataset.sessionId;
     element("connection-status").textContent = "Connected";
     element("connect").disabled = true;
     element("gateway-url").disabled = true;
@@ -257,13 +348,21 @@ element("connect-form").addEventListener("submit", (event) => {
 element("chat-new").addEventListener("click", async () => {
   if (connecting || !gatewayUrl || !chat?.getSnapshot().needsNewSession) return;
   element("chat-new").disabled = true;
+  if (
+    provider?.sessionId &&
+    chat.getSnapshot().error?.code !== "session_superseded"
+  ) {
+    await recoverConversation();
+    return;
+  }
   try {
     await startConnection();
   } catch (error) {
-    element("error").textContent =
+    connectionError =
       error.code === "session_capacity"
         ? "Gateway session capacity is full. Wait for box cleanup, then choose New connection again. If it persists, ask the gateway operator to inspect cleanup errors."
         : error.message;
+    element("error").textContent = connectionError;
     element("chat-new").disabled = false;
   }
 });

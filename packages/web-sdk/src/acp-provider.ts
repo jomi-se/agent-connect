@@ -691,6 +691,16 @@ export class AcpProvider implements AgentProvider {
         observe(() => this.options.onRecovery?.(result));
         return result;
       })
+      .catch((error: unknown) => {
+        this.lastError =
+          error instanceof Error ? error : new Error(String(error));
+        // A live replacement transport is not a recovered conversation when
+        // initialize/load rejected. End it so an explicit recovery retry loads
+        // history again instead of treating the failed host as healthy idle.
+        this.connection.close();
+        this.link.close();
+        throw this.lastError;
+      })
       .finally(() => {
         this.recovery = undefined;
         this.loading = false;
