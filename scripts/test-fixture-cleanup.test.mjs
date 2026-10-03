@@ -11,7 +11,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
+import {
+  pruneTestInstallations,
+  runCleanupTasks,
+} from "./test-fixture-cleanup.mjs";
 
 test("fixture teardown drops heavy installs and caches while retaining evidence and linked external data", async () => {
   const sandbox = await mkdtemp(join(tmpdir(), "ac-fixture-cleanup-"));
@@ -84,4 +87,70 @@ test("fixture teardown drops heavy installs and caches while retaining evidence 
   } finally {
     await rm(sandbox, { recursive: true, force: true });
   }
+});
+
+for (const allocated of [false, true]) {
+  test(`egress cleanup failure ${allocated ? "after allocation" : "after missing-image allocation refusal"} does not skip owned gateways`, async () => {
+    const completed = [];
+    const absentContainer = new Error("container absent");
+    let releaseGateway;
+    const primaryStopped = new Promise((resolve) => {
+      releaseGateway = resolve;
+    });
+    const cleanup = runCleanupTasks([
+      async () => {
+        await primaryStopped;
+        completed.push("primary gateway");
+      },
+      async () => {
+        if (allocated) {
+          await Promise.resolve();
+          completed.push("problem gateway");
+        }
+      },
+      () => {
+        throw absentContainer;
+      },
+    ]);
+    const rejected = assert.rejects(cleanup, (error) => {
+      assert.ok(error instanceof AggregateError);
+      assert.deepEqual(error.errors, [absentContainer]);
+      assert.deepEqual(
+        completed.sort(),
+        allocated
+          ? ["primary gateway", "problem gateway"]
+          : ["primary gateway"],
+      );
+      return true;
+    });
+    releaseGateway();
+    await rejected;
+  });
+}
+
+test("a synchronous browser-close failure still attempts every process cleanup and retains both failures", async () => {
+  const stopped = [];
+  const browserFailure = new Error("browser close failed");
+  const egressFailure = new Error("owned egress cleanup failed");
+  await assert.rejects(
+    runCleanupTasks([
+      () => {
+        throw browserFailure;
+      },
+      () => {
+        stopped.push("primary gateway");
+      },
+      () => {
+        stopped.push("problem gateway");
+      },
+      () => {
+        throw egressFailure;
+      },
+    ]),
+    (error) => {
+      assert.deepEqual(stopped, ["primary gateway", "problem gateway"]);
+      assert.deepEqual(error.errors, [browserFailure, egressFailure]);
+      return true;
+    },
+  );
 });
