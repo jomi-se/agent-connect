@@ -32,7 +32,7 @@ forget-browser, immutable supported profiles, multiple entry points and offline
 TOTP recovery. The sample automatically recovers interrupted transport without
 replaying uncertain prompts or application effects.
 
-Earlier parity qualification passed `npm run verify` and `cargo test --locked --workspace`; the ACP-only cleanup requires fresh qualification. The artifact-only
+Release qualification reruns `npm run verify` and `cargo test --locked --workspace` against the exact reviewed ACP-only candidate. The artifact-only
 clean-room passes 26 checks, including real browser pairing, setup/doctor,
 offline service lifecycle, sessions/end-session, revoke-all, app tools,
 reconnect/cancel and browser back/forward cache restoration. All six owned hosts
@@ -53,13 +53,13 @@ and recovery codes remain future work; owner TOTP and offline recovery exist.
 
 Owner-required work:
 
-1. **Remaining live credential checks.** The owner reported successful dedicated
-   Codex device login and a sample chat with a completed `read_passage` call.
-   Personal-session coexistence and dedicated-login
-   revocation still require explicitly authorized owner-run checks. Claude subscription use
-   remains unconfirmed against Anthropic terms; confirming that optional path
-   requires provider/owner action. Automated checks remain credential-free;
-   the owner initiated the successful live turn.
+1. **Dedicated credential qualification.** Personal-session coexistence and
+   dedicated-login revocation require explicitly authorized owner-run checks.
+   Confirm the provider terms for optional subscription harnesses before release.
+   Default automated gates use deterministic inference without real logins;
+   opt-in real-model acceptance requires owner-prepared dedicated harness homes.
+   Keep login status and live-run evidence in private artifacts, outside this
+   product repository.
 2. **First real release run.** Configure the protected GitHub environment,
    package ownership/trusted publishers and public GHCR visibility, push the
    reviewed source and version tag yourself, then inspect a manual dry run and
