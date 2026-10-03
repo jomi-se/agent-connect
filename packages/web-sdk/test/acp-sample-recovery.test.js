@@ -1,7 +1,67 @@
 import { describe, expect, it } from "vitest";
-import { getConversationRecoveryAction } from "../../../examples/acp-chat/recovery-policy.js";
+import {
+  getConversationRecoveryAction,
+  getConversationRecoveryState,
+} from "../../../examples/acp-chat/recovery-policy.js";
 
 describe("ACP sample recovery choices", () => {
+  it("disables send and exposes a deliberate new connection when an idle session is ended by its owner", () => {
+    expect(
+      getConversationRecoveryState({
+        sessionId: "known-session",
+        closeCode: 4415,
+        errorCode: "session_superseded",
+        status: "idle",
+        canSend: true,
+        needsNewSession: false,
+      }),
+    ).toEqual({
+      action: "new-connection",
+      canSend: false,
+      needsNewSession: true,
+    });
+  });
+  it("blocks idle sending after revocation and requests approval instead of a new session", () => {
+    expect(
+      getConversationRecoveryState({
+        sessionId: "known-session",
+        closeCode: 4414,
+        errorCode: "invalid_app_grant",
+        status: "idle",
+        canSend: true,
+        needsNewSession: false,
+      }),
+    ).toEqual({ action: "approval", canSend: false, needsNewSession: false });
+  });
+  it("waits for an active interrupted presenter to settle before offering a new connection", () => {
+    expect(
+      getConversationRecoveryState({
+        sessionId: "known-session",
+        closeCode: 4415,
+        errorCode: "session_superseded",
+        status: "running",
+        canSend: false,
+        needsNewSession: false,
+      }),
+    ).toEqual({
+      action: "new-connection",
+      canSend: false,
+      needsNewSession: false,
+    });
+  });
+  it("preserves send availability on a healthy idle connection before its first prompt", () => {
+    expect(
+      getConversationRecoveryState({
+        status: "idle",
+        canSend: true,
+        needsNewSession: false,
+      }),
+    ).toEqual({
+      action: "new-connection",
+      canSend: true,
+      needsNewSession: false,
+    });
+  });
   it.each([4404, 4410, 4413])(
     "offers recovery for resumable interruption %s",
     (closeCode) => {

@@ -27,3 +27,17 @@ export function getConversationRecoveryAction({
     return "new-connection";
   return "recover";
 }
+
+export function getConversationRecoveryState(options) {
+  const action = getConversationRecoveryAction(options);
+  const terminal =
+    action !== "recover" &&
+    (options.closeCode !== undefined || options.errorCode !== undefined);
+  return {
+    action,
+    canSend: options.canSend && !terminal,
+    needsNewSession:
+      options.needsNewSession ||
+      (terminal && action === "new-connection" && options.status === "idle"),
+  };
+}
