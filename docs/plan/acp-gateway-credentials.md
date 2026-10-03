@@ -52,6 +52,38 @@ A shared home also lets one application's sessions read another
 application's transcripts through the harness. That is a known limitation of
 this direction.
 
+## Open idea: owner verification in addition to the bearer (2026-10-03)
+
+Consider requiring an additional owner-controlled verification step before an
+application bearer can authorize agent use. The aim is to make possession of a
+stolen bearer insufficient to start a newly authorized session. This is an idea
+for investigation, not an accepted design or implemented feature.
+
+Candidate mechanisms:
+
+- Notify a previously paired mobile app and require explicit approval or denial.
+  Show the requesting app, origin, approved tools and requested access duration
+  so the owner can understand the request.
+- Require a code from a previously enrolled TOTP authenticator, entered through
+  a gateway-owned approval interface rather than the requesting application.
+
+Open questions include when verification applies: initial pairing, each new
+harness session, renewal after an approval expires, or selected sensitive
+operations. Decide whether a brief transport reconnect can reuse an existing
+approval without opening new authority. Approval should be bound to the pending
+request and grant, with a defined lifetime and replay protection; a successful
+verification must not become an indefinite bypass for every holder of the
+bearer. Investigate trustworthy request identification, notification abuse and
+approval fatigue, enrollment, device loss/recovery, and revocation of both the
+application grant and the enrolled factor. Enrollment secrets and approval
+authority must stay outside the application's and harness's reach.
+
+This proposal addresses unauthorized use of an application grant. The owner
+explicitly accepts the harness being able to read its own authentication files;
+this idea does not reopen that risk or make credential separation a prerequisite.
+Grant expiration and revocation remain separate considerations alongside the
+additional verification step.
+
 ## Provider terms come first (researched 2026-10-01)
 
 Interactive versus non-interactive use is not the line that matters. The
