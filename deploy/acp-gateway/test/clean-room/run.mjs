@@ -116,15 +116,46 @@ async function ready(url, child) {
   }
   throw new Error(`Service failed to start: ${url}\n${child.tail()}`);
 }
+function isNativeConversationTitle(entry) {
+  // The pinned real Codex runtime generates titles after the ACP turn settles.
+  // Recognize that exact maintenance task and its title-only response schema;
+  // neither model names nor absence of application tools identify a replay.
+  const format = entry.body?.text?.format;
+  const schema = format?.schema;
+  const user = entry.body?.input?.filter((item) => item.role === "user").at(-1);
+  const text = Array.isArray(user?.content)
+    ? user.content
+        .filter((part) => part.type === "input_text")
+        .map((part) => part.text)
+        .join("")
+    : user?.content;
+  return (
+    typeof text === "string" &&
+    text.startsWith(
+      "Your task is to generate a very short title for a conversation based on the user's first message.",
+    ) &&
+    format?.type === "json_schema" &&
+    format.strict === true &&
+    schema?.type === "object" &&
+    schema.additionalProperties === false &&
+    JSON.stringify(schema.required) === '["title"]' &&
+    JSON.stringify(Object.keys(schema.properties ?? {})) === '["title"]' &&
+    schema.properties.title?.type === "string"
+  );
+}
 async function modelRequests() {
   const content = await readFile(join(work, "logs/model.jsonl"), "utf8").catch(
     () => "",
   );
-  return content
+  const requests = content
     .split("\n")
     .filter(Boolean)
     .map(JSON.parse)
     .filter((entry) => entry.path === "/v1/responses");
+  report.nativeConversationTitleRequests = requests.filter(
+    isNativeConversationTitle,
+  ).length;
+  return requests.filter((entry) => !isNativeConversationTitle(entry));
 }
 async function cleanSessionResources() {
   const ids = (
@@ -319,6 +350,10 @@ try {
   const relayPort = await port();
   const controlPort = await port();
   const origin = `http://127.0.0.1:${appPort}`;
+  const publicGateway = `http://127.0.0.1:${relayPort}`;
+  const ownerPassphrase = `disposable-owner-${suffix}-acceptance-only`;
+  const passphraseFile = join(work, "owner-passphrase.txt");
+  await writeFile(passphraseFile, ownerPassphrase, { mode: 0o600 });
   const preview = service(
     "npm",
     ["run", "preview", "--", "--port", String(appPort)],
@@ -331,10 +366,10 @@ try {
     runtime,
     "--harness",
     "codex",
-    "--allow-origin",
-    origin,
-    "--tools",
-    join(sample, "tools.json"),
+    "--public-url",
+    publicGateway,
+    "--owner-passphrase-file",
+    passphraseFile,
     "--listen",
     `127.0.0.1:${gatewayPort}`,
     "--session-image",
@@ -342,16 +377,17 @@ try {
     "--egress-container",
     egressName,
   ]);
-  for (const file of ["config.json", "grant.json", "tools.json"])
-    assert.equal((await stat(join(runtime, file))).mode & 0o077, 0);
+  assert.equal((await stat(join(runtime, "config.json"))).mode & 0o077, 0);
+  await assert.rejects(stat(join(runtime, "grant.json")), { code: "ENOENT" });
   const operatorConfig = JSON.parse(
     await readFile(join(runtime, "config.json"), "utf8"),
   );
   assert.ok(operatorConfig.harness_home.startsWith(work + "/"));
   assert.equal((await stat(operatorConfig.harness_home)).mode & 0o077, 0);
-  const grant = JSON.parse(await readFile(join(runtime, "grant.json"), "utf8"));
-  assert.equal(grant.gatewayUrl, `ws://127.0.0.1:${gatewayPort}/acp`);
-  assert.ok(grant.token.length >= 32);
+  assert.equal(operatorConfig.public_url, publicGateway);
+  report.checks.push(
+    "normal owner bootstrap issues no static application grant",
+  );
   await copyFile(
     "/opt/acceptance/mock-model.mjs",
     join(work, "mock-model.mjs"),
@@ -396,6 +432,18 @@ try {
     "--session-image",
     sessionImage,
   ]);
+  // Repeat the installed CLI operation to prove it recognizes its own hardened peer.
+  await command(gateway, [
+    "egress",
+    "start",
+    "--name",
+    egressName,
+    "--session-image",
+    sessionImage,
+  ]);
+  report.checks.push(
+    "installed egress start creates and reuses its hardened owned runtime peer",
+  );
   const gatewayService = service(
     gateway,
     [
@@ -427,8 +475,8 @@ try {
     args: ["--no-sandbox"],
     ignoreDefaultArgs: ["--disable-back-forward-cache"],
   });
-  async function connectPage(throughRelay = false) {
-    const page = await browser.newPage();
+  async function appPage(context) {
+    const page = await context.newPage();
     await page.addInitScript(() => {
       window.__pageRestorations = [];
       window.addEventListener("pageshow", (event) =>
@@ -436,32 +484,97 @@ try {
       );
     });
     page.setDefaultTimeout(60000);
+    page.on("response", async (response) => {
+      if (
+        response.url().startsWith(`${publicGateway}/agent-connect/oauth/`) &&
+        response.status() >= 400
+      ) {
+        const data = await response.json().catch(() => ({}));
+        report.authorizationFailures ??= [];
+        report.authorizationFailures.push({
+          status: response.status(),
+          error: data.error,
+        });
+      }
+    });
     page.on("pageerror", (error) => {
       report.pageErrors ??= [];
       report.pageErrors.push(error.message);
     });
     await page.goto(origin);
-    // Exercise the user-facing grant upload and consent flow, not hidden globals.
-    const uploaded = {
-      ...grant,
-      gatewayUrl: `ws://127.0.0.1:${throughRelay ? relayPort : gatewayPort}/acp`,
-    };
-    await page.locator("#grant-file").setInputFiles({
-      name: "grant.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(uploaded)),
-    });
-    await page.waitForFunction(
-      (expected) => document.getElementById("gateway-url").value === expected,
-      uploaded.gatewayUrl,
-    );
-    await page.locator("#approve-tools").check();
+    return page;
+  }
+  async function ownerSignIn(page) {
+    const password = page.locator('input[name="passphrase"]');
+    await password.waitFor({ state: "visible" });
+    await password.fill(ownerPassphrase);
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  }
+  async function requestApproval(page, decision = "Approve") {
+    await page.locator("#gateway-url").fill(publicGateway);
+    const popup = page.waitForEvent("popup");
     await page.locator("#connect").click();
+    const owner = await popup;
+    try {
+      await owner.waitForURL((url) => url.origin === publicGateway);
+    } catch (error) {
+      await page
+        .waitForFunction(
+          () => document.getElementById("error").textContent,
+          null,
+          { timeout: 2000 },
+        )
+        .catch(() => {});
+      const failure = await page.locator("#error").evaluate((node) => ({
+        code: node.dataset.code,
+        message: node.textContent,
+      }));
+      report.pairingFailure = failure;
+      throw new Error(
+        `${error.message}\nApplication pairing ${failure.code ?? "unknown"}: ${failure.message}`,
+      );
+    }
+    await owner
+      .locator('input[name="passphrase"], button[value="approve"]')
+      .first()
+      .waitFor({ state: "visible" });
+    if (await owner.locator('input[name="passphrase"]').count())
+      await ownerSignIn(owner);
+    await owner.getByRole("button", { name: decision, exact: true }).waitFor();
+    const consent = await owner.locator("body").textContent();
+    assert.ok(
+      consent.includes(origin),
+      "Gateway consent names the exact application origin",
+    );
+    for (const tool of ["read_passage", "highlight", "ask_reader"])
+      assert.ok(consent.includes(tool), `Gateway consent includes ${tool}`);
+    await owner.locator('select[name="duration"]').selectOption("3600");
+    await owner.getByRole("button", { name: decision, exact: true }).click();
+    return owner;
+  }
+  async function connectPage() {
+    const context = await browser.newContext();
+    const page = await appPage(context);
+    await requestApproval(page);
     await page.waitForFunction(
       () => !document.getElementById("chat-input").disabled,
     );
+    assert.ok(!new URL(page.url()).searchParams.has("code"));
+    assert.equal(await page.locator("#grant-file, #grant-token").count(), 0);
     return page;
   }
+  const denialContext = await browser.newContext();
+  const deniedPage = await appPage(denialContext);
+  await requestApproval(deniedPage, "Deny");
+  await deniedPage.waitForFunction(
+    () => document.getElementById("error").dataset.code === "denied",
+  );
+  assert.ok(await deniedPage.locator("#chat-input").isDisabled());
+  assert.equal((await modelRequests()).length, 0);
+  await denialContext.close();
+  report.checks.push(
+    "gateway owner denial returns a typed application error and starts no session",
+  );
   async function send(page, prompt) {
     await page.locator("#chat-input").fill(prompt);
     await page.locator("#chat-send").click();
@@ -476,7 +589,173 @@ try {
     );
     assert.equal(await page.locator("#error").textContent(), "");
   }
-  const toolsPage = await connectPage(true);
+  const toolsPage = await connectPage();
+  report.checks.push(
+    "real gateway owner sign-in and fixed-tool consent pair the packed SDK without token handoff",
+  );
+  let refreshRequests = 0;
+  toolsPage.on("request", (request) => {
+    if (
+      request.url() === `${publicGateway}/agent-connect/oauth/token` &&
+      new URLSearchParams(request.postData() ?? "").get("grant_type") ===
+        "refresh_token"
+    )
+      refreshRequests++;
+  });
+  const initialAccessToken = await toolsPage.evaluate(() => {
+    const key = Object.keys(sessionStorage).find(
+      (key) =>
+        key.startsWith("agent-connect:acp:") && !key.endsWith(":transaction"),
+    );
+    const grant = JSON.parse(sessionStorage.getItem(key));
+    const token = grant.token;
+    grant.expiresAt = 0;
+    sessionStorage.setItem(key, JSON.stringify(grant));
+    return token;
+  });
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await toolsPage.reload();
+    await toolsPage.waitForFunction(
+      () =>
+        !document.getElementById("chat-input").disabled ||
+        document.getElementById("error").textContent,
+    );
+    if (await toolsPage.locator("#chat-input").isEnabled()) break;
+    assert.equal(
+      await toolsPage.locator("#error").getAttribute("data-code"),
+      "session_capacity",
+    );
+    assert.equal((await modelRequests()).length, 0);
+    await delay(500);
+  }
+  assert.ok(await toolsPage.locator("#chat-input").isEnabled());
+  assert.equal((await modelRequests()).length, 0);
+  assert.equal(
+    refreshRequests,
+    1,
+    "Reload refreshes the managed access token once",
+  );
+  const applicationToken = await toolsPage.evaluate(() => {
+    const key = Object.keys(sessionStorage).find(
+      (key) =>
+        key.startsWith("agent-connect:acp:") && !key.endsWith(":transaction"),
+    );
+    return JSON.parse(sessionStorage.getItem(key)).token;
+  });
+  assert.notEqual(applicationToken, initialAccessToken);
+  report.checks.push(
+    "tab reload restores its managed grant with a real rotating refresh and no prompt replay",
+  );
+  const bearerOwnerPage = await fetch(`${publicGateway}/agent-connect/owner`, {
+    headers: { Authorization: `Bearer ${applicationToken}` },
+    redirect: "manual",
+  });
+  assert.ok([302, 303, 401, 403].includes(bearerOwnerPage.status));
+  if ([302, 303].includes(bearerOwnerPage.status))
+    assert.ok(
+      bearerOwnerPage.headers
+        .get("location")
+        .includes("/agent-connect/owner/login"),
+    );
+  // Use a real pending request and a real owner CSRF value so rejection cannot
+  // be satisfied merely by malformed consent fields.
+  const ownerProbePar = await fetch(
+    `${publicGateway}/agent-connect/oauth/par`,
+    {
+      method: "POST",
+      headers: { Origin: origin },
+      body: new URLSearchParams({
+        client_id: origin,
+        redirect_uri: `${origin}/`,
+        resource: `${publicGateway}/acp`,
+        response_type: "code",
+        scope: "acp",
+        state: "owner-authority-probe",
+        code_challenge: "A".repeat(43),
+        code_challenge_method: "S256",
+        authorization_details: JSON.stringify([
+          {
+            type: "agent_connect",
+            tools: JSON.parse(
+              await readFile(join(sample, "tools.json"), "utf8"),
+            ),
+          },
+        ]),
+      }),
+    },
+  );
+  assert.equal(ownerProbePar.status, 201);
+  const ownerProbeRequest = await ownerProbePar.json();
+  const ownerProbe = await toolsPage.context().newPage();
+  await ownerProbe.goto(
+    `${publicGateway}/agent-connect/oauth/authorize?${new URLSearchParams({ client_id: origin, request_uri: ownerProbeRequest.request_uri })}`,
+  );
+  await ownerProbe
+    .getByRole("button", { name: "Approve", exact: true })
+    .waitFor();
+  const ownerCsrf = await ownerProbe
+    .locator('input[name="csrf_token"]')
+    .inputValue();
+  const bearerConsent = await fetch(
+    `${publicGateway}/agent-connect/oauth/authorize`,
+    {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        Authorization: `Bearer ${applicationToken}`,
+        Origin: publicGateway,
+      },
+      body: new URLSearchParams({
+        decision: "approve",
+        duration: "3600",
+        request_uri: ownerProbeRequest.request_uri,
+        csrf_token: ownerCsrf,
+      }),
+    },
+  );
+  assert.equal(
+    bearerConsent.status,
+    403,
+    "An application bearer cannot approve valid owner consent",
+  );
+  // The rejected bearer request must not consume the owner's approval form.
+  await ownerProbe.getByRole("button", { name: "Deny", exact: true }).click();
+  await ownerProbe.waitForURL((url) => url.origin === origin);
+  await ownerProbe.close();
+  report.checks.push(
+    "application bearer cannot enter owner grants or approve owner consent",
+  );
+  const otherOrigin = await browser.newPage();
+  await otherOrigin.goto(`http://localhost:${appPort}`);
+  const mismatchedClose = await otherOrigin.evaluate(
+    ({ gateway, token }) =>
+      new Promise((resolve, reject) => {
+        const socket = new WebSocket(`${gateway.replace(/^http/, "ws")}/acp`, [
+          "acp.v1",
+          `bearer.${token}`,
+        ]);
+        const timeout = setTimeout(() => {
+          socket.close();
+          reject(new Error("Origin mismatch was not rejected"));
+        }, 5000);
+        socket.onclose = (event) => {
+          clearTimeout(timeout);
+          resolve(event.code);
+        };
+        socket.onerror = () => {};
+      }),
+    { gateway: publicGateway, token: applicationToken },
+  );
+  assert.equal(
+    mismatchedClose,
+    4401,
+    "Managed grant requires the exact approved application origin",
+  );
+  await otherOrigin.close();
+  assert.equal((await modelRequests()).length, 0);
+  report.checks.push(
+    "a managed application bearer is rejected at a different browser origin",
+  );
   await send(toolsPage, "SPIKE-TOOLS");
   await settled(toolsPage, "completed");
   assert.equal(await toolsPage.locator("#book mark").count(), 1);
@@ -704,6 +983,61 @@ try {
   report.checks.push(
     "a deliberate new connection after Stop retains the transcript and accepts a new tool turn without replay",
   );
+  const beforeRevoke = (await modelRequests()).length;
+  const beforeRevokeEffects = await cancelPage
+    .locator("#book")
+    .evaluate((node) => ({
+      read: Number(node.dataset.read_passageCount),
+      highlight: Number(node.dataset.highlightCount),
+      ask: Number(node.dataset.ask_readerCount),
+    }));
+  const ownerGrants = await cancelPage.context().newPage();
+  await ownerGrants.goto(`${publicGateway}/agent-connect/owner`);
+  await ownerGrants
+    .getByRole("button", { name: "Revoke access", exact: true })
+    .waitFor();
+  const listedGrants = await ownerGrants.locator("body").textContent();
+  assert.ok(listedGrants.includes(origin));
+  assert.ok(listedGrants.includes("Active"));
+  assert.ok(listedGrants.includes("Expires"));
+  await ownerGrants
+    .getByRole("button", { name: "Revoke access", exact: true })
+    .click();
+  await cancelPage.waitForFunction(
+    () =>
+      document.getElementById("error").dataset.code === "invalid_app_grant" &&
+      document.getElementById("chat-input").disabled &&
+      !document.getElementById("connect").disabled,
+  );
+  assert.equal(
+    await cancelPage.evaluate(
+      () =>
+        Object.keys(sessionStorage).filter((key) =>
+          key.startsWith("agent-connect:acp:"),
+        ).length,
+    ),
+    0,
+  );
+  assert.ok(await cancelPage.locator("#chat-new").isDisabled());
+  await delay(500);
+  assert.equal(
+    (await modelRequests()).length,
+    beforeRevoke,
+    "Revocation sends no prompt and does not replay previous effects",
+  );
+  assert.deepEqual(
+    await cancelPage.locator("#book").evaluate((node) => ({
+      read: Number(node.dataset.read_passageCount),
+      highlight: Number(node.dataset.highlightCount),
+      ask: Number(node.dataset.ask_readerCount),
+    })),
+    beforeRevokeEffects,
+    "Revocation executes no application tool effect",
+  );
+  report.checks.push(
+    "gateway owner grants list revokes the actual application grant, clears tab authorization and forbids automatic replay",
+  );
+  await ownerGrants.close();
   await cancelPage.close();
   assert.deepEqual(report.pageErrors ?? [], []);
   report.status = "passed";

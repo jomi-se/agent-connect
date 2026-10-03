@@ -16,31 +16,40 @@ and the release session image available, prepare a dedicated operator directory:
 
 ```sh
 agent-connect init --directory ./runtime --harness codex \
-  --allow-origin http://127.0.0.1:5173 --tools ./tools.json
+  --public-url http://127.0.0.1:18940
 agent-connect login
 agent-connect egress start
 agent-connect serve --config ./runtime/config.json
 ```
 
-The operator reviews `tools.json`, then supplies `runtime/grant.json`
-using the grant upload control, or enters the gateway URL and token in the form.
-Check the approval box and connect. The grant stays in memory; the sample never
-puts it in a URL or browser storage. Use HTTPS/WSS when hosting remotely.
+Enter the gateway's HTTP or HTTPS address and choose **Connect**. The gateway's
+owner sign-in and consent pages show the application origin and its exact three
+tools. Approve there, choosing the grant duration; an enabled owner TOTP factor
+is also required there. The application receives its scoped grant through a
+PKCE callback. There is no grant file upload or token entry. Desktop consent
+opens a popup; touch devices use a redirect back to this application. Use
+HTTPS/WSS when hosting remotely.
+
+The SDK keeps the managed grant in this tab's session storage and rotates its
+refresh token when needed. Reloading restores authorization, without replaying
+a message or restoring a previous harness conversation. Other tabs need their
+own approval. The gateway owner can inspect and revoke grants on the gateway's
+owner pages. Revocation clears this application's stored authorization and
+shows an explicit approval-ended error; choose **Connect** to request a new
+approval. A rejected or expired grant never opens consent automatically.
 
 Ask the agent to read chapter 1 and highlight a phrase. The three fixed tools
 read a passage, mark exact text, and ask a question which waits for your answer.
-Stop cancels the active turn, including an unanswered reader question. Reloading
-the page requires a deliberate new connection; it does not replay a prompt.
-After cancellation or a terminal failure, choose **New connection** to send a
-new message with the same in-memory grant and approved tools. Previous messages
-stay visible but are never sent to the new harness session. Reloading still
-requires uploading the grant again. A real browser back/forward-cache restoration
-keeps the same chat, in-memory grant and pending tool answer. The page's cleanup
-handler preserves these when `pagehide.persisted` is true; ordinary departure
-still closes them.
-If the gateway reports full session capacity while the old box closes, wait
-a moment and choose **New connection** again. No message is sent until you
-submit it yourself.
+Stop cancels the active turn, including an unanswered reader question. After
+cancellation or a terminal failure, choose **New connection** to send a new
+message using the managed grant and approved tools. Previous messages stay
+visible but are never sent to the new harness session.
+
+A real browser back/forward-cache restoration keeps the same chat, grant and
+pending tool answer. The page's cleanup handler preserves these when
+`pagehide.persisted` is true; ordinary departure closes its connection. If the
+gateway reports full session capacity while the old box closes, wait a moment
+and choose **New connection** again. No message is sent until you submit it.
 
 For deterministic clean-room testing, the scripted model recognizes
 `SPIKE-TOOLS`, `SPIKE-ASK`, and `SPIKE-SLOW`. These prompts are test-fixture

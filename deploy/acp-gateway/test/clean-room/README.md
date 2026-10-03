@@ -22,11 +22,22 @@ It never mounts a repository checkout, SDK source or a prior build directory.
 
 The fresh container installs the packed gateway and selected binary, builds the
 standalone reader sample against the packed SDK's public ACP export, then uses
-the CLI's `init` and `serve --config` flow. A real Codex ACP adapter runs in the
+the CLI's normal owner-bootstrap `init` and `serve --config` flow. The test
+passphrase and HOME/XDG_STATE_HOME directories are isolated fixtures; initialization
+creates no static application grant. A real Codex ACP adapter runs in the
 release session image with an isolated synthetic model; no account login,
 provider API key, personal harness home or live model turn is involved.
 
-Browser checks cover one visible highlight, exactly one invocation per requested
+Browser checks drive the real gateway owner sign-in, approval and denial pages,
+then restore the tab-scoped managed grant on reload with a real rotating refresh
+without resubmitting a prompt. They reject an application bearer at owner
+endpoints and at a different browser origin. The owner grants page revokes
+the active application grant and the sample clears its authorization without
+replaying a prompt or tool effect. The prompt oracle recognizes the pinned real
+Codex runtime's exact conversation-title maintenance instruction together with
+its title-only JSON schema, reports those calls separately, and counts every
+other model request. Tool-effect counters must also remain unchanged after
+revocation. They cover one visible highlight, exactly one invocation per requested
 application tool, interruption and reconnect during an unanswered reader
 question with the same session, genuine browser back/forward-cache restoration
 both while idle and while an app tool waits, and cancellation without a follow-up model
@@ -42,7 +53,8 @@ image ID, and removes only its own matching tag after its containers close. Iden
 concurrent builds may share an image ID; other runs' tags are retained. An explicitly supplied
 `ACP_CLEAN_ROOM_IMAGE` is retained.
 Containers and session networks created by this run are cleaned on success or
-failure; retained directories are private and may contain generated test grants.
+failure; retained directories are private and contain only generated fixture
+credentials and grants.
 
 The Docker socket is granted only to this trusted operator acceptance driver.
 It is never mounted in a harness session. This is a test configuration, not a

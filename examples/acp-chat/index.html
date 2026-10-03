@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Agent Connect — reader chat</title>
   </head>
@@ -14,20 +15,12 @@
       </p>
       <form id="connect-form">
         <label
-          >Operator grant JSON
-          <input id="grant-file" type="file" accept="application/json,.json"
-        /></label>
-        <label
-          >Gateway WebSocket URL
+          >Gateway address
           <input
             id="gateway-url"
             type="url"
-            placeholder="ws://127.0.0.1:18940/acp"
+            placeholder="http://127.0.0.1:18940"
             required
-        /></label>
-        <label
-          >Grant token
-          <input id="grant-token" type="password" autocomplete="off" required
         /></label>
         <details>
           <summary>Tools requested by this application</summary>
@@ -36,10 +29,7 @@
             >Download the tool snapshot</a
           >
         </details>
-        <label class="approval"
-          ><input id="approve-tools" type="checkbox" required /> I approve these
-          tools for this connection.</label
-        >
+        <p>You will sign in and approve these tools on your gateway.</p>
         <button id="connect">Connect</button>
       </form>
       <p id="connection-status" role="status">Disconnected</p>
