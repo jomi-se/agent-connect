@@ -228,6 +228,9 @@ jobs:
         with:
           ref: ${{ needs.checks.outputs.commit }}
           persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.15.0
       - run: ./scripts/install-acp-build-tools.sh
       - name: Require the exact selected image for every binary
         env:
@@ -242,12 +245,18 @@ jobs:
           TARGET: ${{ matrix.target }}
           TAG: ${{ needs.checks.outputs.tag }}
         run: dist build --artifacts local --target "$TARGET" --tag "$TAG" --no-local-paths
+      - name: Record image and version from the exact native archive executables
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.checks.outputs.version }}
+        run: node scripts/acp-release-info.mjs record --target "$TARGET" --version "$VERSION" --image "$AGENT_CONNECT_SESSION_IMAGE"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: acp-native-${{ matrix.target }}
           path: |
             target/distrib/*.tar.xz
             target/distrib/*.sha256
+            target/distrib/*.release-info.json
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
