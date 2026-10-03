@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Future feature: migrate Firebase Canvas to the Agent Connect plugin for OpenClaw
 
 Status: implementation in progress. Product intent captured 2026-09-09;

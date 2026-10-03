@@ -1,10 +1,10 @@
 # ADR 0016: ACP application boundary and consent-enforcing ACP gateway
 
-Date: 2026-09-30. Status: **proposed**, not accepted. If accepted, it would
-supersede the application wire of [ADR 0010](0010-open-responses-gateway-pivot.md)
-and the execution host of [ADR 0015](0015-openclaw-plugin-host.md). The owner has approved ACP as the product direction and the current recommended
-implementation. Formal supersession and publication still require acceptance;
-the OpenClaw plugin remains available as the previous published target.
+Date: 2026-09-30. Status: **proposed**, not accepted. The owner selected ACP
+as the product direction and retired the superseded plugin implementation on
+2026-10-03. [ADR 0010](0010-open-responses-gateway-pivot.md) and
+[ADR 0015](0015-openclaw-plugin-host.md) preserve historical context.
+Formal acceptance of the ACP decision and publication remain owner gates.
 
 Evidence: [ACP gateway spike results](../experiments/acp-gateway.md).
 
@@ -163,11 +163,9 @@ Costs and risks:
   home that every box mounts. Credential exposure to the harness's shell is
   accepted and documented ([credentials
   plan](../plan/acp-gateway-credentials.md)).
-- **Hosting and installation.** What the owner installs and runs, and how it
-  relates to OpenClaw, which could remain one optional host. The
+- **Hosting and installation.** What the owner installs and runs. The
   [release plan](../plan/acp-gateway-release.md) proposes a prebuilt binary
-  through npm and GitHub Releases. The implementation retains the OpenClaw
-  plugin; any retirement requires separate release approval.
+  through npm and GitHub Releases. The implementation removes the superseded plugin. Owner-only post-publication npm retirement is recorded in the release checklist.
 - **Consent code.** The Rust gateway now implements hosted owner consent,
   OAuth/PKCE, refresh, revocation and optional TOTP, following ADR 0009/0014/0015
   semantics. Automated browser composition and independent security review are
@@ -176,8 +174,7 @@ Costs and risks:
   box is gone, but exposes transcripts across grants. Live credential checks
   remain a release prerequisite.
 - **Mobile.** One manual iOS Safari check of the resumable transport.
-- **Migration.** Bookhand and Firebase Canvas move to `createAgentChat` or
-  `useChat` over the SDK's ACP provider ([release
+- **Migration.** Applications move to AI SDK `useChat` over the root SDK's ACP transport ([release
   plan](../plan/acp-gateway-release.md)). The SDK's MCP server answers unknown
   methods with method-not-found and sends progress while it waits.
 

@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../../install/README.md).
+
 # OC-SCR-005: current operator documentation contradicts replacement
 
 Target: VAL-OC-004. Read-only reproduction:

@@ -6,7 +6,7 @@ Agent Connect is an application-to-user-owned-agent bridge. Keep the application
 
 The ACP prerelease install path is the product Rust gateway in `crates/gateway`
 (CLI `agent-connect`, compatibility executable `agent-connect-gateway`), packaged as `@open-agent-connect/gateway`, plus
-its digest-pinned Docker session image and `@open-agent-connect/web/acp` SDK.
+its digest-pinned Docker session image and `@open-agent-connect/web` SDK.
 See `docs/install/README.md` and `docs/plan/acp-gateway-release.md`. ACP,
 MCP-over-ACP and the resume extension are unstable; ADR 0016 remains proposed.
 Local implementation and dry runs do not accept the ADR or authorize publication.
@@ -15,12 +15,11 @@ checklist and limitations are recorded in
 `docs/archive/plans/acp-gateway-parity.md`. Current owner release gates are in
 `docs/plan/current-work.md`. Per-application box isolation is deferred.
 
-The Agent Connect plugin for OpenClaw (ADR 0015) is the previous published
-installation target. Keep its source, npm package, tests and compatibility exports.
-Legacy SDK exports are marked `@deprecated`, not removed; do not run npm deprecate
-or retire the plugin without a separately authorized migration/release decision.
-The ADR 0014 standalone scoped proxy and older replacement gateway remain archival.
-Provider/plugin types stay outside shared application contracts.
+`@open-agent-connect/web` is the ACP SDK at its package root. It has no ACP
+subpath, legacy re-exports, migration aliases, or Open Responses client. The
+removed plugin and browser client survive only in npm history and archived
+records. Agents never publish or run npm deprecate; owner release gates are
+recorded in `docs/install/release.md`.
 
 Production ACP sessions require boxed mode, a dedicated shared harness home and
 an owned egress proxy. `agent-connect setup` is the guided install/upgrade path;
@@ -57,9 +56,9 @@ new connector terminology.
 
 Keep independent app conversations, one active request per conversation, a fixed
 approved tool snapshot and an operator-selected restricted agent profile. Browser
-APIs never accept private OpenClaw session keys or operator credentials. Recent
+APIs never accept private harness session keys or operator credentials. Recent
 conversation ownership is process-local and expires; execution history is not a
-faithful human-chat transcript. See docs/architecture/scoped-conversation-history.md
+faithful human-chat transcript. See docs/architecture/target-architecture.md
 and docs/plan/current-work.md. Do not change personal services or credentials
 during tests, and never replay uncertain application effects automatically.
 
@@ -79,18 +78,14 @@ npm run verify
 npm run analyze
 ```
 
-`npm run verify` includes deterministic compatibility tests against the pinned
-OpenClaw package, real ACP adapters on host/in boxes, and the artifact-only
-clean-room sample (chat/app tools, ongoing reconnect and cancel). Prepare the
-local session image and release artifacts with the build commands in
-`docs/install/release.md`; no login is involved. `cargo test --locked` checks the
-Rust workspace. `npm run release:acp:dry-run` previews npm publication without
-writes. CI is read-only; the separately protected manual release workflow is
-written but must not be run or published by an agent without owner authorization.
-Use Node 24 LTS >=24.15 and <25 and the pin in `config/openclaw-test-compat.json`
-on `PATH` or at `OPENCLAW_TEST_BIN`. See `deploy/openclaw-gateway/README.md`.
-This is intentional: provider
-compatibility is a default gate, not an optional check someone must remember.
+`npm run verify` includes deterministic tests against the pinned real Codex and
+Claude ACP adapters on host/in boxes, plus the artifact-only clean-room sample
+(chat/app tools, ongoing reconnect and cancel). Prepare local session images and
+release artifacts using `docs/install/release.md`; no login is involved.
+`cargo test --locked` checks the Rust workspace. CI is read-only; the protected
+manual release workflow must not be run by an agent without owner authorization.
+Use Node 24 LTS >=24.15 and <25. The SDK is 0.0.10; the gateway, platform
+packages and session image are 0.0.1. They are independently versioned.
 
 `npm run analyze` is initially report-first. Treat its metrics as investigation
 inputs, not automatic refactoring instructions; dependency boundary violations
@@ -100,7 +95,7 @@ Add or update tests for public SDK behavior. Keep browser packages free of Node-
 `npm run test:ui:acp-owner` checks actual owner pages at desktop, phone and narrow
 reflow widths, including keyboard/touch behavior, and saves screenshots in a
 private temporary fixture. It is part of verify and invokes no harness login.
-ACP and OpenClaw fixtures remove dependency trees and per-run caches after their
+ACP fixtures remove dependency trees and per-run caches after their
 owned processes stop, on success and failure, while retaining diagnostic logs,
 reports and screenshots. `AGENT_CONNECT_KEEP_TEST_INSTALLS=1` is an explicit
 debugging opt-in; it retains large installs and must not be the default for checks.
@@ -121,7 +116,7 @@ legacy file handles continue to use that implementation.
 For example:
 
 ```sh
-./scripts/quiet-run.sh "plugin tests" npm test --workspace @open-agent-connect/openclaw-plugin
+./scripts/quiet-run.sh "SDK tests" npm test --workspace @open-agent-connect/web
 ./scripts/quiet-run.sh "build" npm run build
 ```
 
@@ -246,23 +241,16 @@ judgment. Anything requiring a decision goes back up.
 
 ### Test the dependency you actually ship
 
-If a test's expected result would become meaningless when OpenClaw changes,
-run it against real OpenClaw. Do not encode assumed OpenClaw HTTP/SSE,
-cancellation, session, or event behavior in a fake backend or a recording and
-then treat the passing test as compatibility evidence.
+If an assertion could become meaningless when a shipped ACP adapter or harness
+changes, run it against that real pinned dependency. Routine gates use
+deterministic inference behind disposable real adapters with isolated HOME/XDG
+state. These gates prove transport, tools and lifecycle compatibility; selected
+real-model application runs separately prove useful composition.
 
-Use deterministic inference behind a disposable real OpenClaw service for
-routine compatibility tests. This exercises the real provider boundary without
-spending model allowance or depending on nondeterministic model choices. Keep a
-small selected subscription-runtime browser smoke for final composition evidence.
-The built-in-loop fixture does not prove native Codex compatibility.
-
-In-process doubles remain appropriate for Agent Connect-owned state-machine
-invariants and deliberate faults that are impractical to create through a real
-service, such as a failed disk write, an abruptly ended iterator, a wedged HTTP
-request, or an exact race schedule. Such doubles must be controllable contract
-fixtures: they must not synthesize events merely because OpenClaw happens to
-emit—or was once believed to emit—them. See
+Controlled doubles are appropriate for Agent Connect-owned invariants and
+faults such as failed disk writes, interrupted iterators, wedged requests and
+exact races. They must not manufacture assumed harness behavior. Never call
+stubbed inference proof of a subscription model. See
 [`docs/architecture/testing-strategy.md`](docs/architecture/testing-strategy.md).
 
 ## Protocol and reliability rules

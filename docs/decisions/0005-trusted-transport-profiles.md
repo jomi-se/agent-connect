@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # 0005: Bootstrap runtime identity through trusted transport profiles
 
 - Status: accepted security rationale; current Agent Connect plugin outcome noted below
@@ -117,7 +119,7 @@ const connection = await connectAgent({
   runtime: {
     profile: "tailscale-serve",
     runtimeId: "sha256:<gateway-key-thumbprint>",
-    endpoint: "https://device.tailnet.ts.net:8443",
+    endpoint: "https://gateway.example:8443",
   },
   applicationId: "example-app",
   tools,

@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Claude Code Remote Control — internals teardown (for agent-connect comparison)
 
 > 🎮 AI-authored (Claude Fable 5, 2026-07-24). Compiled from the official docs

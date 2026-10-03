@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-alpha.1
+## 0.0.1
 
 - First ACP prerelease: grant-scoped WebSocket gateway, resumable transport and
   container-per-session isolation.

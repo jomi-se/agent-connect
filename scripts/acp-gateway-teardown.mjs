@@ -506,7 +506,7 @@ try {
         "--entrypoint",
         "node",
         "--mount",
-        `type=bind,src=${join(repo, "experiments/acp-gateway/mock-model/server.mjs")},dst=/fixture.mjs,readonly`,
+        `type=bind,src=${join(repo, "deploy/acp-gateway/test/fixtures/mock-model/server.mjs")},dst=/fixture.mjs,readonly`,
         "--mount",
         `type=bind,src=${join(root, "logs")},dst=/log`,
         "-e",

@@ -1,13 +1,13 @@
 # Reader chat sample (unstable ACP alpha)
 
 Requires Node 24 LTS >=24.15 and <25. This standalone Vite application consumes
-the public `@open-agent-connect/web/acp` export. It has no repository aliases.
+the public `@open-agent-connect/web` export. It has no repository aliases.
 ACP, MCP-over-ACP and the resume extension remain experimental.
 
 Install the release SDK tarball, then build or start the application:
 
 ```sh
-npm install /path/to/open-agent-connect-web-0.1.0-alpha.1.tgz
+npm install /path/to/open-agent-connect-web-0.0.10.tgz
 npm run dev
 ```
 
@@ -41,9 +41,11 @@ approval. A rejected or expired grant never opens consent automatically.
 Ask the agent to read chapter 1 and highlight a phrase. The three fixed tools
 read a passage, mark exact text, and ask a question which waits for your answer.
 Stop cancels the active turn, including an unanswered reader question. After
-cancellation or a terminal failure, choose **New connection** to send a new
-message using the managed grant and approved tools. Previous messages stay
-visible but are never sent to the new harness session.
+cancellation or a recoverable adapter exit, the application restores the same
+conversation without repeating the interrupted prompt or tool result. Wait for
+the restored notice before deliberately sending another message. If recovery
+fails, choose **Retry recovery**. Owner-ended or superseded conversations require
+**New connection** instead. Previous messages stay visible and are never replayed.
 
 A real browser back/forward-cache restoration keeps the same chat, grant and
 pending tool answer. The page's cleanup handler preserves these when

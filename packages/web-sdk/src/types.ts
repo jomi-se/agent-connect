@@ -44,7 +44,7 @@ export interface AgentToolDefinition {
   readonly inputSchema: JsonSchema;
 }
 
-export interface AgentProviderTaskRequest {
+export interface AcpTaskRequest {
   readonly prompt: string;
   readonly tools: readonly AgentToolDefinition[];
   /** Opaque provider checkpoint for an explicit completed-task follow-up. */
@@ -67,7 +67,7 @@ export interface AcpToolUpdate {
   readonly output?: unknown;
   readonly content?: readonly unknown[];
 }
-export type AgentProviderEvent =
+export type AcpTaskEvent =
   | { readonly type: "task.admitted" }
   | { readonly type: "text.delta"; readonly delta: string }
   | { readonly type: "thought.delta"; readonly delta: string }
@@ -91,10 +91,8 @@ export type AgentProviderEvent =
     }
   | { readonly type: "task.cancelled" };
 
-export interface AgentProvider {
-  streamTask(
-    request: AgentProviderTaskRequest,
-  ): AsyncIterable<AgentProviderEvent>;
+export interface AcpTaskSource {
+  streamTask(request: AcpTaskRequest): AsyncIterable<AcpTaskEvent>;
   submitToolResult(
     requestToken: string,
     output: string,
@@ -105,12 +103,9 @@ export interface AgentProvider {
 }
 
 export type AgentConnectErrorCode =
-  | "http_error"
   | "protocol_error"
   | "frame_too_large"
-  | "runtime_identity_mismatch"
   | "authorization_denied"
-  | "authorization_expired"
   | "invalid_app_grant"
   | "session_capacity"
   | "session_expired"
@@ -121,17 +116,16 @@ export type AgentConnectErrorCode =
   | "tool_execution_failed"
   | "continuation_unavailable"
   | "task_busy"
-  | "agent_authentication_failed"
   | "agent_execution_failed"
   | "webmcp_unavailable"
   | "webmcp_snapshot_invalidated";
 
-export interface AgentTaskError {
+export interface AcpExecutionError {
   readonly code: AgentConnectErrorCode;
   readonly message: string;
 }
 
-export type AgentTaskEvent =
+export type AcpExecutionEvent =
   | { readonly type: "task.started" }
   | { readonly type: "text.delta"; readonly delta: string }
   | { readonly type: "thought.delta"; readonly delta: string }
@@ -148,36 +142,16 @@ export type AgentTaskEvent =
       readonly actionId: string;
       readonly name: string;
       readonly isError: boolean;
-      readonly error?: AgentTaskError;
+      readonly error?: AcpExecutionError;
     }
   | { readonly type: "task.completed"; readonly text: string }
-  | { readonly type: "task.failed"; readonly error: AgentTaskError }
+  | { readonly type: "task.failed"; readonly error: AcpExecutionError }
   | { readonly type: "task.cancelled" };
 
-export interface AgentTaskResult {
-  readonly text: string;
-}
-
-export interface AgentSessionOptions {
-  readonly provider: AgentProvider;
+export interface AcpToolExecutorOptions {
+  readonly provider: AcpTaskSource;
   readonly tools: readonly ApplicationTool[];
   readonly createSessionId?: () => string;
-}
-
-/** @deprecated Retained for Responses compatibility. For experimental ACP, use ConnectAgentOptions from @open-agent-connect/web/acp. */
-export interface ResponsesProviderOptions {
-  /**
-   * Gateway base URL before `/v1/responses`.
-   *
-   * OpenClaw integrations should use `createOpenClawResponsesProvider` instead
-   * of constructing this low-level provider directly.
-   */
-  readonly baseUrl: string;
-  /** Logical model/profile required by the selected gateway. */
-  readonly model: string;
-  readonly fetch?: typeof globalThis.fetch;
-  readonly headers?: Readonly<Record<string, string>>;
-  readonly credentials?: RequestCredentials;
 }
 
 export type ApplicationToolHandler<Arguments extends JsonObject = JsonObject> =

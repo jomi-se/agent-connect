@@ -20,11 +20,7 @@ if [[ ! "$chrome_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 tools_dir=$(mktemp -d "$RUNNER_TEMP/agent-connect-ci-tools.XXXXXX")
-node scripts/openclaw-install.mjs "$tools_dir/openclaw"
-printf '%s\n' "$tools_dir/openclaw/node_modules/.bin" >> "$GITHUB_PATH"
-printf 'OPENCLAW_TEST_BIN=%s\n' "$tools_dir/openclaw/node_modules/.bin/openclaw" >> "$GITHUB_ENV"
-
-# Canvas uses Playwright's bundled browser; WebMCP needs the separate native pin.
+# Browser gates use Playwright plus the pinned native WebMCP binding.
 npx playwright install --with-deps chromium
 chrome_archive="$tools_dir/chrome.zip"
 curl --fail --location --retry 3 --show-error \
@@ -38,4 +34,4 @@ if [[ ! "$actual_chrome" =~ ^Google[[:space:]]Chrome[[:space:]]for[[:space:]]Tes
   exit 1
 fi
 printf 'WEBMCP_CHROMIUM_EXECUTABLE=%s\n' "$chrome_executable" >> "$GITHUB_ENV"
-printf 'Installed pinned OpenClaw and %s\n' "$actual_chrome"
+printf 'Installed %s\n' "$actual_chrome"

@@ -20,20 +20,13 @@ test("missing local binary fails without downloading anything", () => {
   assert.match(result.stderr, /does not exist/);
 });
 
-test("published launcher accepts later Node majors while provider compatibility stays pinned", async () => {
+test("published launcher accepts later Node majors without a runtime installation", async () => {
   const { readFile } = await import("node:fs/promises");
   const { satisfies } = await import("semver");
   const manifest = JSON.parse(
     await readFile(resolve(import.meta.dirname, "../package.json"), "utf8"),
   );
-  const plugin = JSON.parse(
-    await readFile(
-      resolve(import.meta.dirname, "../../openclaw-plugin/package.json"),
-      "utf8",
-    ),
-  );
   assert.equal(satisfies("24.14.0", manifest.engines.node), false);
   assert.equal(satisfies("24.15.0", manifest.engines.node), true);
   assert.equal(satisfies("26.0.0", manifest.engines.node), true);
-  assert.equal(satisfies("26.0.0", plugin.engines.node), false);
 });

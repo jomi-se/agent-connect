@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # ADR 0012: Delegate runtime execution and Responses to OpenClaw
 
 Implementation prescription superseded after two experiments: ADR 0013 records

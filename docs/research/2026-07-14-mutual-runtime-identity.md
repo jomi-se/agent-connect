@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Mutual runtime identity without hardware attestation
 
 Date: 2026-07-14

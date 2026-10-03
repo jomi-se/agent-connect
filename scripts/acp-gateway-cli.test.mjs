@@ -64,7 +64,7 @@ test("help, version and invalid argument exit codes are stable", () => {
   assert.equal(spawnSync(binary, ["--help"]).status, 0);
   const version = spawnSync(binary, ["--version"], { encoding: "utf8" });
   assert.equal(version.status, 0);
-  assert.match(version.stdout, /0\.1\.0-alpha\.1/);
+  assert.match(version.stdout, /0\.0\.1/);
   const usage = spawnSync(binary, ["serve", "--unknown-option"], {
     encoding: "utf8",
   });
@@ -447,10 +447,10 @@ test("release-info reports the compiled default image independently of runtime o
   });
   assert.equal(result.status, 0, result.stderr);
   const release = JSON.parse(result.stdout);
-  assert.equal(release.version, "0.1.0-alpha.1");
+  assert.equal(release.version, "0.0.1");
   assert.match(
     release.sessionImage,
-    /^(agent-connect-session:0\.1\.0-alpha\.1|.+@sha256:[a-f0-9]{64})$/,
+    /^(agent-connect-session:0\.0\.1|.+@sha256:[a-f0-9]{64})$/,
   );
 });
 

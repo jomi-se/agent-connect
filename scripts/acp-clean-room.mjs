@@ -26,7 +26,7 @@ const suffix = run.split("-").at(-1).toLowerCase();
 const name = `acp-clean-room-${suffix}`;
 const image =
   process.env.ACP_CLEAN_ROOM_IMAGE ??
-  `agent-connect-clean-room:0.1.0-alpha.1-${suffix}`;
+  `agent-connect-clean-room:0.0.1-${suffix}`;
 let createdImageId;
 const children = new Set();
 async function command(binary, args, options = {}) {
@@ -167,7 +167,7 @@ try {
   for (const file of ["Dockerfile", "package.json", "run.mjs", "relay.mjs"])
     await copyFile(join(kit, file), join(run, "context", file));
   await copyFile(
-    join(repo, "experiments/acp-gateway/mock-model/server.mjs"),
+    join(repo, "deploy/acp-gateway/test/fixtures/mock-model/server.mjs"),
     join(run, "context/mock-model.mjs"),
   );
   const sessionImage =

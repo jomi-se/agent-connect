@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Multi-turn task continuation
 
 Status: promoted to active design work on 2026-08-30.

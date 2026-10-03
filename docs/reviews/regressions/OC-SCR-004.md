@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only.
+
 # OC-SCR-004: terminal publication after cancellation
 
 Targets: VAL-OC-002, VAL-OC-003. Source finding in `responses/engine.ts` mediate.

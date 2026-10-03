@@ -1,6 +1,6 @@
 {
   "name": "agent-connect-acp-chat-sample",
-  "version": "0.1.0-alpha.1",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -12,7 +12,10 @@
     "preview": "vite preview --host 127.0.0.1 --port 5173 --strictPort"
   },
   "dependencies": {
-    "@open-agent-connect/web": "0.1.0-alpha.1"
+    "@open-agent-connect/web": "0.0.10",
+    "@ai-sdk/react": "4.0.96",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "vite": "7.3.6"

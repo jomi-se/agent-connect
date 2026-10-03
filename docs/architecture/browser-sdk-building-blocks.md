@@ -1,46 +1,10 @@
 # Browser SDK building blocks
 
-Status: current contract for the framework-neutral headless chat helper and the
-WebMCP tool source in `@open-agent-connect/web`. Their implementation plans and
-dated validation evidence are archived in
-[headless chat](../archive/plans/headless-chat.md) and
-[WebMCP tool source](../archive/plans/webmcp-tool-source.md).
-
-## Headless chat
-
-`createAgentChat({ session })` is framework-neutral: no React, DOM, rendering,
-or new wire protocol. Optional UI/framework packages may consume it. The helper
-owns conversation consumption of the supplied session exclusively. Connection
-and authorization, WebMCP tool-source lifetime and persistence remain
-application responsibilities. There is no automatic reconnect, retry, replay,
-history-to-prompt reconstruction, editing/regeneration or branching.
-
-Input is text. Images and files are deferred: do not expose an upload that
-silently drops data or pretend transcript metadata is agent-visible. Actual
-multimodal delivery needs a separate contract.
-
-Public building blocks: stable immutable snapshots and subscription/unsubscribe;
-ordered user/assistant messages containing text and tool-activity parts; send
-(initial or explicit checkpoint continuation), stop and disposal. Assistant
-messages retain partial content and completion/failure/cancellation status.
-Tool failures are not whole-turn failures. Tool output bodies are not exposed by
-task events and must not be invented. The helper never calls a tool.
-
-The session exposes read-only send readiness without exposing checkpoint tokens
-and protects concurrent consumption. Known pre-admission refusal stays
-retryable; an unknown network outcome is not proof of non-admission.
-Cancellation has a local guard before invoking a requested tool and before
-submitting its late output, plus an optional tool-context `AbortSignal` for
-cooperative handlers. There is no forced interruption or rollback of
-JavaScript.
-
-Stop requests cancellation; it is not instant successful completion. Completion
-already observed wins. Cancellation failures remain observable and cannot
-enable a second turn while the first is active. Disposal detaches UI observers,
-rejects future operations and requests cancellation; it does not revoke
-authorization, delete a remote session, or dispose a caller-owned WebMCP
-snapshot. A noncooperative local handler may remain pending; the UI and docs
-must not promise otherwise.
+`@open-agent-connect/web` exposes the experimental ACP root API. Browser chat
+uses `connectAgent`, `createAcpChatTransport` and AI SDK `useChat`. The transport
+executes approved application tools internally, validates arguments using
+CSP-safe JSON Schema and presents harness updates without a second model loop.
+It accepts only an explicit latest user message, never replayed UI history.
 
 ## WebMCP tool source
 

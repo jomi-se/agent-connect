@@ -16,7 +16,7 @@ import { createServer as tcpServer } from "node:net";
 import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
 
 const repo = resolve(import.meta.dirname, "..");
-const spike = join(repo, "experiments/acp-gateway");
+const fixtures = join(repo, "deploy/acp-gateway/test/fixtures");
 const run = await mkdtemp(join(tmpdir(), "agent-connect-acp-"));
 const children = new Set();
 const dockerContainers = [];
@@ -137,7 +137,7 @@ try {
   for (const name of ["adapters", "web"]) {
     await mkdir(join(run, name));
     for (const file of ["package.json", "package-lock.json"])
-      await copyFile(join(spike, name, file), join(run, name, file));
+      await copyFile(join(fixtures, name, file), join(run, name, file));
     await command(
       "npm",
       [
@@ -151,13 +151,8 @@ try {
       { cwd: join(run, name) },
     );
   }
-  for (const file of [
-    "app.js",
-    "resumable-stream.js",
-    "tools.json",
-    "index.html",
-  ])
-    await copyFile(join(spike, "web", file), join(run, "web", file));
+  for (const file of ["app.js", "tools.json", "index.html"])
+    await copyFile(join(fixtures, "web", file), join(run, "web", file));
   await command("npm", [
     "run",
     "build",
@@ -165,7 +160,7 @@ try {
     "@open-agent-connect/web",
   ]);
   await command(join(run, "web/node_modules/.bin/esbuild"), [
-    join(spike, "web/app.js"),
+    join(fixtures, "web/app.js"),
     "--bundle",
     "--format=esm",
     "--platform=browser",
@@ -180,7 +175,7 @@ try {
     join(run, ".run/codex-home/config.toml"),
     `model = "mock-model"\nmodel_provider = "mock"\napproval_policy = "never"\n[model_providers.mock]\nname = "Deterministic compatibility fixture"\nbase_url = "${mockUrl}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`,
   );
-  const model = service("node", [join(spike, "mock-model/server.mjs")], {
+  const model = service("node", [join(fixtures, "mock-model/server.mjs")], {
     ...cleanEnv,
     MOCK_PORT: String(mockPort),
     MOCK_LOG: join(run, "model.jsonl"),
@@ -217,7 +212,7 @@ try {
       "--user",
       uid,
       "-v",
-      `${join(spike, "mock-model")}:/app:ro`,
+      `${join(fixtures, "mock-model")}:/app:ro`,
       "-v",
       `${join(run, "box-logs")}:/log`,
       "-e",
@@ -323,7 +318,7 @@ try {
           "--allow-origin",
           origin,
           "--tools",
-          join(spike, "web/tools.json"),
+          join(fixtures, "web/tools.json"),
           "--mock-url",
           `${mockUrl}/v1`,
           "--max-sessions",
@@ -339,7 +334,7 @@ try {
       const relayPort = await port(),
         controlPort = await port();
       const relay = mobile
-        ? service("node", [join(spike, "web/relay.mjs")], {
+        ? service("node", [join(fixtures, "web/relay.mjs")], {
             ...cleanEnv,
             RELAY_LISTEN: String(relayPort),
             RELAY_TARGET: String(gatewayPort),
@@ -354,7 +349,7 @@ try {
           scenario === "policy"
             ? join(repo, "scripts/acp-policy-browser.mjs")
             : join(
-                spike,
+                fixtures,
                 "web",
                 scenario === "use-chat"
                   ? "drive-use-chat.mjs"

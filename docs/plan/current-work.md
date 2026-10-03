@@ -2,8 +2,8 @@
 
 Updated: 2026-10-03
 
-The ACP product candidate is **0.1.0-alpha.1**: packaged browser SDK and Rust
-launcher/platform binaries, hosted owner sign-in/consent/grant management, dedicated login
+The ACP product candidates are gateway **0.0.1** and root browser SDK
+**0.0.10**: Rust launcher/platform binaries, hosted owner sign-in/consent/grant management, dedicated login
 helper (`agent-connect login`, harness selector and shared default homes), boxed sessions, resumable transport/recovery and AI SDK useChat.
 The [artifact install guide](../install/README.md) works without a checkout.
 The [release guide](../install/release.md) covers protected automation and local
@@ -19,11 +19,10 @@ cleanup; capacity remains held until cleanup completes. This is credential-free
 composition evidence, not live subscription evidence. Native plan conversion
 has contract coverage; the selected pinned harness fixtures expose no plan tool.
 
-The OpenClaw plugin is the previous published installation target and remains
-in the repository and on npm (`@open-agent-connect/openclaw-plugin@0.0.7`).
-Its existing SDK imports remain functional with declaration-level deprecation
-labels. No npm deprecation or plugin removal has occurred. Windows is not yet
-supported by the ACP release matrix.
+The browser SDK is **0.0.10** at `@open-agent-connect/web`; gateway, native
+platform packages and session image are **0.0.1**. Versions are independent and
+remain on 0.0.x until the shape is final. The root is ACP-only; there are no legacy
+SDK exports or ACP subpath. Historical implementation records are superseded.
 
 Local product parity is complete. `agent-connect setup` provides guided and
 unattended planning/application, `doctor` supplies actionable human/JSON diagnosis,
@@ -33,7 +32,7 @@ forget-browser, immutable supported profiles, multiple entry points and offline
 TOTP recovery. The sample automatically recovers interrupted transport without
 replaying uncertain prompts or application effects.
 
-`npm run verify` and `cargo test --locked --workspace` pass. The artifact-only
+Earlier parity qualification passed `npm run verify` and `cargo test --locked --workspace`; the ACP-only cleanup requires fresh qualification. The artifact-only
 clean-room passes 26 checks, including real browser pairing, setup/doctor,
 offline service lifecycle, sessions/end-session, revoke-all, app tools,
 reconnect/cancel and browser back/forward cache restoration. All six owned hosts
@@ -72,5 +71,9 @@ Owner-required work:
    shared-home credential boundary are acceptable, and accept the decision
    explicitly before the publication workflow can proceed.
 
-Earlier OpenClaw follow-ups retain their canonical architecture/future briefs;
-this status page does not schedule downstream app migrations or plugin retirement.
+4. **Owner-run retirement after publication.** After both gateway 0.0.1 and
+   web SDK 0.0.10 are published and public installation is verified, deprecate
+   all versions of `@open-agent-connect/openclaw-plugin` and
+   `@open-agent-connect/web@<0.0.10`, each pointing to the gateway install guide.
+   Exact commands are in [the release checklist](../install/release.md#owner-only-retirement-after-publication).
+   Agents never run npm deprecate; no unpublication is authorized.

@@ -1,7 +1,6 @@
 # ACP gateway builds and deterministic tests
 
-Unreleased implementation of proposed ADR 0016. The previous OpenClaw package
-remains available. ACP, MCP-over-ACP and the resume extension are unstable.
+Unreleased implementation of proposed ADR 0016. The product consists of the ACP gateway and root browser SDK. ACP, MCP-over-ACP and the resume extension are unstable.
 Operators start with the [artifact install guide](../../docs/install/README.md):
 `agent-connect setup` creates a local runtime, or use
 `agent-connect setup --origin https://gateway.example` behind your own HTTPS
@@ -52,9 +51,9 @@ validated before connecting; reset clients cannot terminate the proxy.
 
 ## Verification prerequisites
 
-`npm run verify` requires Node 24, Rust on PATH, the pinned OpenClaw fixture,
+`npm run verify` requires Node 24, Rust on PATH, the pinned ACP adapters,
 Chromium installed for Playwright, Docker and the locally built
-`agent-connect-session:0.1.0-alpha.1` image. Build the image with the command above
+`agent-connect-session:0.0.1` image. Build the image with the command above
 before the boxed gate. The runners create and remove only their own named
 containers and networks, with private temporary homes and a deterministic model.
 No credential/login or subscription-backed model is used. Run `cargo test

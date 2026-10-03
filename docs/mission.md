@@ -1,155 +1,39 @@
-# Mission: application-owned tools for user-owned agents
+# Mission
 
-## Objective
+Agent Connect lets applications lend a fixed, approved set of tools to a
+user-owned agent. Applications own their UI, data and effects. The user chooses
+the harness and model and keeps provider credentials in a dedicated harness
+home. Application contracts stay agent- and harness-neutral.
 
-Make **Connect your AI** a portable application capability: users choose their AI
-provider, approve scoped access on its trusted surface, and return to the app with
-an authorized application connection backed by their account/allowance.
-The [accepted north star](vision.md), recorded 2026-09-06, defines the long-term
-app/provider boundary and proposed interoperability direction. It is not a claim
-of an already published standard or completed implementation.
+The product is the ACP gateway (`agent-connect`) plus `@open-agent-connect/web`
+at the package root. The SDK pairs through owner-hosted OAuth consent, connects
+an ACP provider and supplies `createAcpChatTransport` for AI SDK `useChat`.
+ACP, MCP-over-ACP and the resume extension remain unstable under proposed
+[ADR 0016](decisions/0016-acp-application-boundary.md).
 
-Build a web-first SDK and a provider reference implementation to prove that
-contract. A separate Agent Connect gateway, OpenClaw, Tailscale, or a specific
-harness is not a requirement for every future provider. Normal application use
-must not require installing an MCP server, copying provider conversation IDs,
-or opening a terminal.
+## Authority and reliability
 
-Agent Connect is the application-delegation boundary, not another agent
-platform. The ACP candidate's [artifact installation path](install/README.md)
-uses a Rust gateway and Docker session image. It is implemented and locally
-qualified while [ADR 0016](decisions/0016-acp-application-boundary.md) remains
-proposed; implementation does not accept the decision or authorize publication.
-The [previous published OpenClaw plugin](decisions/0015-openclaw-plugin-host.md)
-remains intact and available, with retained deprecated SDK exports.
+Owner login, optional TOTP, exact-origin fixed-tool consent, rotating grants,
+profile choice, session inspection/end-session and revocation live in the
+gateway. Production sessions run in owned disposable boxes with dedicated
+shared harness homes and restricted owned egress. Owner state stays outside
+those homes. Per-app box isolation remains deferred; the accepted shared-home
+risks are recorded in [the credential plan](plan/acp-gateway-credentials.md).
 
-ACP now uses gateway-hosted owner sign-in, fixed-tool consent, exact-origin
-OAuth/PKCE grants, refresh and revocation. Optional TOTP protects owner sign-in
-and approval. Static bearers are an explicit headless escape hatch only. Its shared
-home includes credentials, configuration and transcripts with the documented
-[accepted risks](plan/acp-gateway-credentials.md). The provider/harness owns the
-loop; recovery never re-sends uncertain turns. See the
-[scope inventory](scope-inventory.md) for the evidence and platform boundaries.
-The plugin contract below records the previous implementation; its checkpoint and host-isolation guarantees must not be attributed to ACP;
-ACP authorization and boxed isolation have their own tests and boundaries.
+Each conversation admits one active request. Persist application actions before
+notifying the application. Stable action IDs require application-owned
+idempotency or deduplication; generic exactly-once effects are not promised.
+Transport reattachment and history recovery never replay uncertain prompts or
+effects. Capacity is released only after owned resource cleanup succeeds.
 
-## Previous plugin product contract
+## Evidence and scope
 
-The list below describes the previous plugin browser implementation contract, not the
-complete future interoperability profile. In particular, Origin-bound enrollment
-and our session capabilities must not silently become universal requirements.
+Routine gates exercise real pinned ACP adapters with deterministic inference,
+isolated state and packaged artifact installation. Real-model app acceptance is
+separate evidence. See [testing strategy](architecture/testing-strategy.md) and
+[current owner gates](plan/current-work.md).
 
-An application can:
-
-1. verify a gateway enrolled by its user before disclosing tools;
-2. obtain a revocable, Origin-bound grant through gateway-owned consent and PKCE;
-3. create an independent opaque session or reconnect using its explicit capability;
-4. send a prompt and consume streamed text and application function calls;
-5. execute application operations locally and return correlated results;
-6. follow up using the latest explicit response checkpoint;
-7. list recent process-local completed heads, inspect a bounded execution
-   history, and reopen an eligible head; and
-8. stop local delivery or revoke its grant.
-
-Stable call IDs and persistence before publication support application-owned
-idempotency. They do not guarantee exactly-once external side effects. An
-ambiguous output submission is never automatically replayed.
-
-## Previous plugin strategy
-
-The following describes the plugin-hosted implementation. Any changed reliability
-or consent guarantees must be made explicit.
-
-- Keep the bounded Open Responses profile as the sole application wire:
-  served by the Agent Connect plugin for OpenClaw at `POST /agent-connect/v1/responses`, with the SDK coordinating function outputs and linear
-  follow-up through `previous_response_id`.
-- Delegate inference, model history, compaction, runtime credentials and
-  process behavior to OpenClaw. Do not retain a parallel Omnigent backend,
-  custom retained-run protocol or agent event vocabulary.
-- Construct upstream requests from the approved tool snapshot and operator
-  configuration. Applications cannot choose upstream credentials, agent,
-  model, session routing or host tools.
-- Re-inject the immutable approved tools on every response segment. Inspect
-  native output before publishing a client call, and reject unapproved names.
-- Keep a bounded current-checkpoint map independent of OpenClaw's response cache.
-  It is intentionally process-local: restart/expiry interrupts continuation,
-  and an admitted failure is never automatically replayed.
-- Allow the active grant to list its recent terminal heads and read a bounded
-  projection of OpenClaw `chat.history`. Native user entries may be learner prompts
-  or application outputs, so expose them only as inputs, never as **You** or a
-  faithful human-chat transcript.
-- Keep transport ingress, owner authentication, gateway identity, application
-  grants and session authority separate. Tailscale Serve may supply private HTTPS
-  reachability, but owner consent requires the explicit enrollment-secret-backed
-  owner session; no forwarding header or tailnet membership is identity.
-- Initialize gateway identity once through the trusted operator channel.
-  Subsequent application approval happens on the gateway's OAuth/PKCE page,
-  without per-application SSH, terminal use or restart.
-- Treat applications as adversarial principals. Dedicated static policies can
-  expose only app tools, public web search, or sandboxed code execution; the
-  app-only default disables native tools.
-  The north star permits owner-approved native capabilities alongside app tools,
-  with explicit data/execution restrictions. Agent Connect's request allowlist
-  does not itself establish an OS sandbox or prevent prompt injection.
-- Keep native WebMCP and headless conversation controls harness-neutral.
-  Their contracts are in
-  [browser SDK building blocks](architecture/browser-sdk-building-blocks.md). Images/files remain deferred.
-
-## Previous plugin implementation and acceptance boundary
-
-The Agent Connect plugin for OpenClaw provides delegated OAuth/PAR/PKCE,
-rotating refresh, revocation and public AI SDK contract inside OpenClaw's managed
-service lifecycle. Its application issuer and Responses resource are namespaced
-under `/agent-connect`; native root Responses remains available to the owner.
-The plugin constrains requests, selects a dedicated restricted agent/private
-session, streams observed native events, binds one current response checkpoint
-to an application grant, and exposes recent grant-owned execution history and
-completed-head reopening while that process-local mapping remains live. The
-ADR 0014 standalone scoped proxy and the older replacement gateway have been
-removed. The current auth, grant, consent, owner-console, and tool-snapshot
-implementation is owned by the Agent Connect plugin for OpenClaw package.
-
-Real published OpenClaw tests using deterministic inference install the packed
-plugin and exercise OpenClaw deny-all enforcement, owner login -> OAuth -> two-tool
--> refresh -> follow-up/history -> revoke, disable/re-enable cleanup, unsafe
-policy refusal and coexistence with a native owner request. They are transport and policy
-evidence, not proof that the selected subscription-backed runtime usefully
-consumes an actual browser tool result. The [archived vertical-slice
-closeout](archive/plans/stock-openclaw-vertical-closeout.md) preserves the
-earlier owner-acceptance ledger and is not current setup or acceptance
-instructions.
-
-the owner selected the built-in OpenClaw subscription loop and, on 2026-09-09,
-reported the complete Bookhand vertical slice working through it. Known search,
-navigation and timeout-reporting defects remain open. This is owner-reported
-live success, not an independently replayed certification of every browser,
-provider, timeout, or edge-case behavior; detailed phone checklist items not
-independently reported are not marked passed.
-Published OpenClaw 2026.9.1's built-in loop supports the tested client-tool
-round trip; the separately packaged native Codex adapter drops client tools.
-Do not call built-in-loop evidence native Codex evidence. The built-in loop
-projects returned tool output as user text following a synthetic delegated
-result, rather than restoring native tool-role continuation. the owner's report is
-the current owner evidence for the selected runtime; it does not certify this
-projection or every edge case independently. See the
-[dated investigation](research/2026-09-05-openclaw-replacement.md).
-
-Cancellation aborts the active upstream request and prevents continuation, but
-generation stopping and already-started effects remain separate runtime-specific
-claims. The plugin does not offer restart recovery, usage accounting or an owner
-session console; it reports interruptions without replay. The historical
-Tailscale Serve + Omnigent + Codex browser demonstration remains earlier evidence,
-not current plugin acceptance. [ADR 0010](decisions/0010-open-responses-gateway-pivot.md)
-records the earlier bundled-runtime strategy. App-instance sender binding and
-recovery/key rotation remain future hardening.
-
-## Explicit non-goals
-
-- a finalized universal protocol or full MCP feature coverage;
-- multiple users, hosts or downstream agents, or concurrent tasks within one session;
-- arbitrary device/Android control, production multi-tenancy or billing;
-- importing or replaying ordinary Codex CLI history or every streamed token;
-- generic exactly-once side effects or automatic ambiguous-output redelivery;
-- production identity federation, account recovery or a public relay;
-- treating arbitrary custom URLs as verified user-owned runtimes;
-- silently choosing a replacement harness or model before runtime selection.
+No generalized agent orchestration, arbitrary MCP features, Android automation,
+second proprietary session protocol, production multi-tenancy or credential
+migration is included. Start with [installation](install/README.md); architectural
+and protocol changes need a decision record before implementation.

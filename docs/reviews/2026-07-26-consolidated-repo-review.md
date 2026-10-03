@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Consolidated repository review — 2026-07-26
 
 Produced by a Claude Code (Fable 5) session from three parallel deep-dive reviews:

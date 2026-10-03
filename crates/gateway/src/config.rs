@@ -16,7 +16,7 @@ use std::{
 
 pub const DEFAULT_SESSION_IMAGE: &str = match option_env!("AGENT_CONNECT_SESSION_IMAGE") {
     Some(image) => image,
-    None => "agent-connect-session:0.1.0-alpha.1",
+    None => "agent-connect-session:0.0.1",
 };
 
 #[derive(Debug)]

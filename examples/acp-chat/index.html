@@ -40,21 +40,13 @@
           beside the window.
         </p>
       </section>
-      <section aria-label="Agent chat">
-        <p id="chat-status" role="status">idle</p>
-        <div id="chat-messages" aria-live="polite"></div>
+      <div id="chat-root">
         <p id="error" role="alert"></p>
-        <p id="new-session-notice" role="status" hidden>
-          Restoring the conversation. Interrupted messages and application
-          actions will not be repeated.
-        </p>
-        <form id="chat-form">
-          <label>Message <input id="chat-input" required disabled /></label>
-          <button id="chat-send" disabled>Send</button>
-          <button id="chat-stop" type="button" disabled>Stop</button>
-          <button id="chat-new" type="button" disabled>New connection</button>
-        </form>
-      </section>
+        <input id="chat-input" disabled /><button id="chat-send" disabled>
+          Send</button
+        ><button id="chat-stop" disabled>Stop</button
+        ><button id="chat-new" disabled>New connection</button>
+      </div>
       <form id="ask-form" hidden>
         <label
           ><span id="ask-question"></span><input id="ask-input" required
@@ -62,6 +54,6 @@
         <button id="ask-answer">Answer</button>
       </form>
     </main>
-    <script type="module" src="/main.js"></script>
+    <script type="module" src="/main.jsx"></script>
   </body>
 </html>

@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Using frontier coding agents to remove AI-generated codebase debt
 
 Date: 2026-07-21

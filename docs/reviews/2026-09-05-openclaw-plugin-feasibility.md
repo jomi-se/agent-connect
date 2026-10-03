@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # OpenClaw plugin feasibility validation
 
 Date: 2026-09-05. Pin: published OpenClaw 2026.9.1.

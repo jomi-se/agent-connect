@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # ADR 0001: Use ACP as the application boundary
 
 Status: superseded as the application-facing direction by ADR 0010 and the

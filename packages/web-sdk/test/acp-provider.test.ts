@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectAgent, AcpProvider } from "../src/acp-provider.js";
-import { AgentSession } from "../src/agent-session.js";
-import { createAgentChat } from "../src/agent-chat.js";
+import { AcpToolExecutor } from "../src/acp-tool-executor.js";
 import type {
-  AgentProviderEvent,
-  AgentTaskEvent,
+  AcpTaskEvent,
+  AcpExecutionEvent,
   AgentToolDefinition,
 } from "../src/types.js";
 import { Peer } from "./acp-fixture.js";
@@ -35,7 +34,7 @@ async function connect(peer: Peer) {
   return provider;
 }
 async function collect(provider: AcpProvider, prompt = "hello") {
-  const events: AgentProviderEvent[] = [];
+  const events: AcpTaskEvent[] = [];
   for await (const event of provider.streamTask({ prompt, tools }))
     events.push(event);
   return events;
@@ -205,7 +204,7 @@ describe("ACP provider-owned contracts", () => {
       [{ type: "text", text: "next" }],
     ]);
   });
-  it("routes stable action IDs to AgentSession handlers, never into a second tool loop", async () => {
+  it("routes stable action IDs to AcpToolExecutor handlers, never into a second tool loop", async () => {
     const peer = new Peer();
     let toolResult: unknown;
     peer.onPrompt = (socket, _params, reply) => {
@@ -229,7 +228,7 @@ describe("ACP provider-owned contracts", () => {
     };
     const provider = await connect(peer);
     let executions = 0;
-    const session = new AgentSession({
+    const session = new AcpToolExecutor({
       provider,
       tools: [
         {
@@ -242,7 +241,7 @@ describe("ACP provider-owned contracts", () => {
         },
       ],
     });
-    const events: AgentTaskEvent[] = [];
+    const events: AcpExecutionEvent[] = [];
     for await (const event of session.streamTask("highlight"))
       events.push(event);
     expect(executions).toBe(1);
@@ -346,80 +345,6 @@ describe("ACP provider-owned contracts", () => {
       "task.completed",
     );
   });
-  it("allows a recovered conversation to attach a fresh chat presenter while retaining the interrupted transcript", async () => {
-    const peer = new Peer();
-    peer.onPrompt = (socket) => socket.disconnect(4404);
-    const provider = await connect(peer);
-    const applicationTools = [{ ...tools[0]!, execute: () => "done" }];
-    const previous = createAgentChat({
-      session: new AgentSession({ provider, tools: applicationTools }),
-    });
-    await expect(previous.send("uncertain turn")).rejects.toMatchObject({
-      code: "task_interrupted",
-    });
-    const transcript = previous.getSnapshot().messages;
-    expect(transcript.at(-1)?.error?.code).toBe("task_interrupted");
-    expect(previous.getSnapshot().needsNewSession).toBe(true);
-    const link = provider.transport;
-    await provider.recover();
-    await previous.dispose();
-    const next = createAgentChat({
-      session: new AgentSession({ provider, tools: applicationTools }),
-    });
-    expect(next.getSnapshot().canSend).toBe(true);
-    expect(provider.transport).toBe(link);
-    expect(transcript).toHaveLength(2);
-    expect(
-      peer.calls.filter((call) => call.method === "session/prompt"),
-    ).toHaveLength(1);
-    peer.onPrompt = (_socket, _params, reply) =>
-      reply({ stopReason: "end_turn" });
-    await next.send("deliberate follow-up");
-    expect(
-      peer.calls.filter((call) => call.method === "session/new"),
-    ).toHaveLength(1);
-    expect(
-      peer.calls.filter((call) => call.method === "session/load"),
-    ).toHaveLength(1);
-    expect(
-      peer.calls
-        .filter((call) => call.method === "session/prompt")
-        .map((call) => call.params["prompt"]),
-    ).toEqual([
-      [{ type: "text", text: "uncertain turn" }],
-      [{ type: "text", text: "deliberate follow-up" }],
-    ]);
-    await next.dispose();
-  });
-  it("retains immutable ACP presentation in createAgentChat", async () => {
-    const peer = new Peer();
-    peer.onPrompt = (socket, _p, reply) => {
-      peer.update(socket, {
-        sessionUpdate: "agent_thought_chunk",
-        content: { type: "text", text: "why" },
-      });
-      peer.update(socket, {
-        sessionUpdate: "plan",
-        entries: [{ content: "Read", priority: "low", status: "completed" }],
-      });
-      reply({ stopReason: "end_turn" });
-    };
-    const provider = await connect(peer);
-    const chat = createAgentChat({
-      session: new AgentSession({
-        provider,
-        tools: tools.map((t) => ({ ...t, execute: () => undefined })),
-      }),
-    });
-    await chat.send("read");
-    expect(
-      chat
-        .getSnapshot()
-        .messages.at(-1)
-        ?.parts.map((p) => p.type),
-    ).toEqual(["thought", "plan"]);
-    await chat.dispose();
-  });
   it("aborts cooperative held handlers before delivering an interrupted turn", async () => {
     const peer = new Peer();
     let executing!: () => void;
@@ -446,7 +371,7 @@ describe("ACP provider-owned contracts", () => {
     };
     const provider = await connect(peer);
     let aborted = false;
-    const session = new AgentSession({
+    const session = new AcpToolExecutor({
       provider,
       tools: [
         {
@@ -466,7 +391,7 @@ describe("ACP provider-owned contracts", () => {
         },
       ],
     });
-    const events: AgentTaskEvent[] = [];
+    const events: AcpExecutionEvent[] = [];
     const task = (async () => {
       for await (const event of session.streamTask("held")) events.push(event);
     })();
@@ -482,7 +407,7 @@ describe("ACP provider-owned contracts", () => {
       peer.calls.filter((c) => c.method === "session/prompt"),
     ).toHaveLength(1);
   });
-  it("preserves error, image and structured tool results through AgentSession", async () => {
+  it("preserves error, image and structured tool results through AcpToolExecutor", async () => {
     const peer = new Peer();
     let returned: unknown;
     peer.onPrompt = (socket, _params, reply) => {
@@ -516,11 +441,11 @@ describe("ACP provider-owned contracts", () => {
       isError: true,
       structuredContent: { reason: "application refused" },
     };
-    const session = new AgentSession({
+    const session = new AcpToolExecutor({
       provider,
       tools: [{ ...tools[0]!, execute: () => result }],
     });
-    const events: AgentTaskEvent[] = [];
+    const events: AcpExecutionEvent[] = [];
     for await (const event of session.streamTask("image")) events.push(event);
     expect(returned).toEqual(result);
     expect(

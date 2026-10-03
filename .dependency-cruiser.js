@@ -23,20 +23,6 @@ export default {
       to: { path: "^apps/" },
     },
     {
-      name: "browser-nonce-does-not-import-other-apps",
-      severity: "error",
-      comment: "Applications may consume packages, but not another app.",
-      from: { path: "^apps/browser-nonce/" },
-      to: { path: "^apps/(?!browser-nonce/)" },
-    },
-    {
-      name: "firebase-canvas-does-not-import-other-apps",
-      severity: "error",
-      comment: "Applications may consume packages, but not another app.",
-      from: { path: "^apps/firebase-canvas/" },
-      to: { path: "^apps/(?!firebase-canvas/)" },
-    },
-    {
       name: "production-does-not-import-tests",
       severity: "error",
       comment: "Production source must not depend on test or end-to-end code.",

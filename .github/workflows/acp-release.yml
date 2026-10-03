@@ -36,6 +36,7 @@ jobs:
       actions: read
     outputs:
       version: ${{ steps.authority.outputs.version }}
+      sdk_version: ${{ steps.authority.outputs.sdk_version }}
       tag: ${{ steps.authority.outputs.tag }}
       commit: ${{ steps.authority.outputs.commit }}
       image_registry: ${{ steps.authority.outputs.image_registry }}
@@ -61,14 +62,15 @@ jobs:
           import { readFileSync, appendFileSync } from "node:fs";
           import { execFileSync } from "node:child_process";
           const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
-          const version = JSON.parse(readFileSync("packages/web-sdk/package.json", "utf8")).version;
-          if (!/^\d+\.\d+\.\d+-alpha\.\d+$/.test(version)) throw new Error("ACP release must be an explicit alpha version");
+          const version = JSON.parse(readFileSync("packages/gateway-npm/package.json", "utf8")).version;
+          const sdkVersion = JSON.parse(readFileSync("packages/web-sdk/package.json", "utf8")).version;
+          if (![version, sdkVersion].every(value => /^0\.0\.\d+$/.test(value))) throw new Error("ACP packages must remain on independently versioned 0.0.x releases");
           const publishing = process.env.PUBLISH === "true";
           if (publishing === (process.env.DRY_RUN === "true")) throw new Error("Choose dry_run=true/publish=false or dry_run=false/publish=true");
           const tag = `v${version}`;
           const commit = git("rev-parse", "HEAD");
           if (commit !== process.env.GITHUB_SHA) throw new Error("Checkout must equal the dispatched revision");
-          if (process.env.REQUESTED_TAG && process.env.REQUESTED_TAG !== tag) throw new Error("Tag must match every release package version");
+          if (process.env.REQUESTED_TAG && process.env.REQUESTED_TAG !== tag) throw new Error("Tag must match the gateway release version");
           if (publishing) {
             const decision = readFileSync("docs/decisions/0016-acp-application-boundary.md", "utf8");
             if (decision.match(/\bStatus:\s*(?:\*\*)?([a-z]+)/i)?.[1]?.toLowerCase() !== "accepted") throw new Error("ADR 0016 is not ACCEPTED; publication is blocked");
@@ -81,10 +83,10 @@ jobs:
             if (!reviewers?.reviewers?.length) throw new Error("acp-first-release must exist with required reviewers");
           }
           const owner = process.env.GITHUB_REPOSITORY_OWNER.toLowerCase();
-          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\ntag=${tag}\ncommit=${commit}\nimage_registry=ghcr.io/${owner}/agent-connect-session\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nsdk_version=${sdkVersion}\ntag=${tag}\ncommit=${commit}\nimage_registry=ghcr.io/${owner}/agent-connect-session\n`);
           JS
       - run: npm ci
-      - name: Check shared versions and adapter pins
+      - name: Check package versions and adapter pins
         run: node scripts/acp-release.mjs check
       - name: Install pinned build, provider and browser tools
         run: |
@@ -303,7 +305,7 @@ jobs:
           node scripts/acp-release.mjs pack --image "$AGENT_CONNECT_SESSION_IMAGE" "${options[@]}" --artifacts target/distrib --directory dist/acp-release
       - name: Smoke-test the exact SDK tarball
         env:
-          VERSION: ${{ needs.checks.outputs.version }}
+          VERSION: ${{ needs.checks.outputs.sdk_version }}
         run: node scripts/smoke-web-sdk-package.mjs "dist/acp-release/open-agent-connect-web-$VERSION.tgz"
       - name: Preview npm publication without credentials or writes
         run: node scripts/acp-release.mjs publish-dry-run --directory dist/acp-release

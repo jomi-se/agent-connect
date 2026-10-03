@@ -1,10 +1,6 @@
+import type { AcpTaskSource, AcpTaskRequest } from "../src/types.js";
 import { expect, test } from "@playwright/test";
-import type {
-  AgentProvider,
-  AgentProviderTaskRequest,
-  ApplicationToolContext,
-  JsonObject,
-} from "../src/index.js";
+import type { ApplicationToolContext, JsonObject } from "../src/index.js";
 
 // The native Chromium 153 binding is intentionally distinct from the CG draft.
 interface NativeTool {
@@ -76,7 +72,7 @@ test("discovers and executes validated tools under restrictive CSP", async ({
   await page.addScriptTag({ url: "/csp-control.js" });
   expect(
     await page.evaluate(
-      () => (window as Window & { cspBlocked: boolean }).cspBlocked,
+      () => (window as Window & { cspBlocked?: boolean }).cspBlocked,
     ),
   ).toBe(true);
   await page.goto("/csp-fixture");
@@ -85,9 +81,12 @@ test("discovers and executes validated tools under restrictive CSP", async ({
     document.addEventListener("securitypolicyviolation", (event) =>
       violations.push(event.violatedDirective),
     );
-    const { AgentSession, createWebMcpToolSnapshot } = (await import(
+    const { createWebMcpToolSnapshot } = (await import(
       sdkPath
     )) as typeof import("../src/index.js");
+    const { AcpToolExecutor } = await import(
+      sdkPath.replace("index.ts", "acp-tool-executor.ts")
+    );
     let executions = 0;
     await (document as NativeDocument).modelContext.registerTool({
       name: "increment",
@@ -107,7 +106,7 @@ test("discovers and executes validated tools under restrictive CSP", async ({
     });
     const snapshot = await createWebMcpToolSnapshot();
     const outputs: string[] = [];
-    const session = new AgentSession({
+    const session = new AcpToolExecutor({
       tools: snapshot.tools,
       provider: {
         async *streamTask() {
@@ -128,13 +127,15 @@ test("discovers and executes validated tools under restrictive CSP", async ({
           yield { type: "text.delta", delta: "done" };
           yield { type: "task.completed" };
         },
-        async submitToolResult(_token, output) {
+        async submitToolResult(_token: string, output: string) {
           outputs.push(output);
         },
         async cancel() {},
       },
     });
-    const task = await session.runTask("Increment");
+    let task = { text: "" };
+    for await (const event of session.streamTask("Increment"))
+      if (event.type === "task.completed") task = { text: event.text };
     snapshot.dispose();
     // CSP violation events are queued, not delivered synchronously.
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -298,13 +299,16 @@ for (const scenario of [
   });
 }
 
-test("runs native tools through AgentSession, preserving results and validating arguments", async ({
+test("runs native tools through AcpToolExecutor, preserving results and validating arguments", async ({
   page,
 }) => {
   const result = await page.evaluate(async (sdkPath) => {
-    const { AgentSession, createWebMcpToolSnapshot } = (await import(
+    const { createWebMcpToolSnapshot } = (await import(
       sdkPath
     )) as typeof import("../src/index.js");
+    const { AcpToolExecutor } = await import(
+      sdkPath.replace("index.ts", "acp-tool-executor.ts")
+    );
     const mc = (document as NativeDocument).modelContext;
     let count = 0;
     await mc.registerTool({
@@ -329,8 +333,8 @@ test("runs native tools through AgentSession, preserving results and validating 
     });
     const snapshot = await createWebMcpToolSnapshot();
     const outputs: Array<{ token: string; output: string }> = [];
-    const requests: AgentProviderTaskRequest[] = [];
-    const provider: AgentProvider = {
+    const requests: AcpTaskRequest[] = [];
+    const provider: AcpTaskSource = {
       async *streamTask(request) {
         requests.push(request);
         for (const [token, name, arguments_] of [
@@ -354,7 +358,7 @@ test("runs native tools through AgentSession, preserving results and validating 
       },
       async cancel() {},
     };
-    const session = new AgentSession({
+    const session = new AcpToolExecutor({
       provider,
       tools: [
         ...snapshot.tools,
@@ -366,7 +370,11 @@ test("runs native tools through AgentSession, preserving results and validating 
         },
       ],
     });
-    await session.runTask("Exercise application tools");
+    for await (const event of session.streamTask(
+      "Exercise application tools",
+    )) {
+      if (event.type === "task.failed") throw new Error(event.error.message);
+    }
     snapshot.dispose();
     return {
       count,
@@ -383,112 +391,6 @@ test("runs native tools through AgentSession, preserving results and validating 
     token: "explicit",
     output: "explicit-result",
   });
-});
-
-test("chat stop aborts native execution without invalidating its borrowed snapshot", async ({
-  page,
-}) => {
-  const result = await page.evaluate(async (sdkPath) => {
-    const { AgentSession, createAgentChat, createWebMcpToolSnapshot } =
-      (await import(sdkPath)) as typeof import("../src/index.js");
-    const mc = (document as NativeDocument).modelContext;
-    let started!: () => void;
-    let aborted!: () => void;
-    const ready = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const nativeAbort = new Promise<void>((resolve) => {
-      aborted = resolve;
-    });
-    let calls = 0;
-    await mc.registerTool({
-      name: "pending",
-      description: "A cooperatively cancellable native tool",
-      execute: async (_, { signal }) => {
-        calls++;
-        if (calls > 1) return "reused";
-        return new Promise<string>((resolve) => {
-          signal.addEventListener(
-            "abort",
-            () => {
-              aborted();
-              resolve("late cancelled output");
-            },
-            { once: true },
-          );
-          started();
-        });
-      },
-    });
-    const snapshot = await createWebMcpToolSnapshot();
-    const outputs: string[] = [];
-    let cancellations = 0;
-    // A controlled Agent Connect lifecycle fixture, not a provider simulation.
-    const makeProvider = (cancelled: boolean): AgentProvider => ({
-      async *streamTask() {
-        yield {
-          type: "tool.requested",
-          requestToken: "call",
-          actionId: "action",
-          name: "pending",
-          arguments: {},
-        };
-        if (cancelled) yield { type: "task.cancelled" };
-        else yield { type: "task.completed" };
-      },
-      async submitToolResult(_token, output) {
-        outputs.push(output);
-      },
-      async cancel() {
-        cancellations++;
-      },
-    });
-    const chat = createAgentChat({
-      session: new AgentSession({
-        provider: makeProvider(true),
-        tools: snapshot.tools,
-      }),
-    });
-    const sending = chat.send("Start native tool");
-    await ready;
-    await chat.stop();
-    await nativeAbort;
-    const stopped = await sending;
-    const afterStop = chat.getSnapshot();
-    const cancelledOutputs = [...outputs];
-    await chat.dispose();
-    const snapshotStillActive = !snapshot.signal.aborted;
-    const reused = createAgentChat({
-      session: new AgentSession({
-        provider: makeProvider(false),
-        tools: snapshot.tools,
-      }),
-    });
-    const completed = await reused.send("Reuse approved snapshot");
-    await reused.dispose();
-    snapshot.dispose();
-    return {
-      calls,
-      cancellations,
-      cancelledOutputs,
-      outputs,
-      snapshotStillActive,
-      stopped,
-      afterStop,
-      completed,
-    };
-  }, sdkPath);
-  expect(result.calls).toBe(2);
-  expect(result.cancellations).toBe(1);
-  expect(result.cancelledOutputs).toEqual([]);
-  expect(result.outputs).toEqual(["reused"]);
-  expect(result.snapshotStillActive).toBe(true);
-  expect(result.stopped.status).toBe("cancelled");
-  expect(result.stopped.parts).toMatchObject([
-    { type: "tool", status: "interrupted" },
-  ]);
-  expect(result.afterStop.status).toBe("idle");
-  expect(result.completed.status).toBe("completed");
 });
 
 test("removal permanently invalidates consent even after same-name restoration", async ({

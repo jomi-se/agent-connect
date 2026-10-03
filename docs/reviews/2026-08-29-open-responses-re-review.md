@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Open Responses re-review: verifying the 2026-08-28 dispositions
 
 - Review date: 2026-08-29

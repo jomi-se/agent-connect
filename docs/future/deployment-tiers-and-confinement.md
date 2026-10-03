@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Future task: deployment tiers and their confinement requirements
 
 Status: discussion record, 2026-08-30. Nothing here is decided. It exists

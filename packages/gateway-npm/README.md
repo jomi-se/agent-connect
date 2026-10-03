@@ -1,7 +1,7 @@
 # Agent Connect gateway
 
 An owner-controlled gateway that lets applications use your agent through
-approved tools. ACP prerelease **0.1.0-alpha.1** remains an unpublished release
+approved tools. ACP prerelease **0.0.1** remains an unpublished release
 candidate; the commands below describe installation after the first approved
 release. ACP, MCP-over-ACP and transport resumption are unstable.
 
@@ -11,7 +11,7 @@ checks use Node 24 LTS (>=24.15, <25); the launcher's broader engine range does
 not claim every later Node major was tested.
 
 ```sh
-npm install --global @open-agent-connect/gateway@0.1.0-alpha.1
+npm install --global @open-agent-connect/gateway@0.0.1
 agent-connect setup
 agent-connect login
 agent-connect doctor
@@ -45,10 +45,7 @@ Keep the existing private runtime and harness home across upgrades. After stoppi
 active turns and installing the matching new version, `setup --upgrade` updates
 the release image and owned service/egress while preserving owner authentication,
 journals and dedicated login homes. Changed policy/image requires new app
-consent. Moving from
-the retained OpenClaw plugin starts a fresh ACP runtime and requires new pairing;
-plugin tokens, grants, histories and personal provider credentials are not
-imported. This package does not retire or deprecate the published plugin.
+consent. ACP setup creates a fresh runtime with dedicated login and application pairing.
 
 The shared home intentionally contains credentials, configuration and transcripts
 from all applications; consented tools can disclose its data. Read the

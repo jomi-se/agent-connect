@@ -1,11 +1,10 @@
 # Narrow experimental ACP/MCP-over-ACP profile
 
-Status: experimental and not used by the default application/gateway path.
+Status: experimental ACP implementation profile.
 
-This profile records the deliberately narrow browser ACP prototype. It is not a
-claim of full ACP or MCP-over-ACP conformance. The working MVP instead uses the
-provider-neutral browser API, Agent Connect gateway, and internal Omnigent
-adapter. Keep these draft-specific methods out of the normal application API.
+This profile describes the deliberately narrow ACP browser/gateway boundary.
+ACP and MCP-over-ACP remain unstable; it is not full protocol conformance.
+Applications use the root browser SDK and its AI SDK chat transport.
 
 ## Topology
 

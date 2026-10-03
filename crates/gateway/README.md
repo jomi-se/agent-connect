@@ -2,7 +2,7 @@
 
 Unreleased implementation of proposed [ADR 0016](../../docs/decisions/0016-acp-application-boundary.md).
 ACP, MCP-over-ACP and `agent-connect.resume.v1` surfaces are **unstable**.
-The OpenClaw plugin remains the current release and is retained.
+The product exposes the ACP gateway and root browser SDK.
 
 Build with `cargo build --locked --bin agent-connect-gateway`; run unit tests
 with `cargo test --locked`. `npm run verify` additionally runs the real pinned
@@ -18,7 +18,7 @@ uncertain effects after a crash; they are never automatically replayed. Applicat
 must deduplicate side effects with the stable `agent-connect/actionId`.
 
 The experimental browser fixture and deterministic model remain under
-`experiments/acp-gateway`. Host adapter launches are test-only and provide no
+`deploy/acp-gateway/test/fixtures`. Host adapter launches are test-only and provide no
 native-action isolation; container sessions provide that boundary.
 
 Production runs use `agent-connect-gateway serve --boxed --harness codex`, with

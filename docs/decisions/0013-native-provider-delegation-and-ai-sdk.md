@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # ADR 0013: Native provider delegation and AI SDK execution
 
 Date: 2026-09-06.

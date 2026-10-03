@@ -1,13 +1,14 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
-import { AgentSession, AgentConnectError } from "./agent-session.js";
+import { AcpToolExecutor } from "./acp-tool-executor.js";
+import { AgentConnectError } from "./errors.js";
 import type { AcpProvider } from "./acp-provider.js";
 import type {
   AcpToolUpdate,
-  AgentTaskEvent,
+  AcpExecutionEvent,
   ApplicationTool,
 } from "./types.js";
 
-/** @experimental Unstable ACP ChatTransport options; application handlers belong to AgentSession. */
+/** @experimental Unstable ACP ChatTransport options; application handlers belong to AcpToolExecutor. */
 export interface AcpChatTransportOptions {
   readonly provider: AcpProvider;
   readonly tools: readonly ApplicationTool[];
@@ -16,6 +17,8 @@ export interface AcpChatTransportOptions {
 export interface AcpChatTransport extends ChatTransport<UIMessage> {
   /** Opaque association of this UI chat with its harness session. */
   readonly sessionId: string | undefined;
+  /** Typed last streaming failure, retained when AI SDK projects errors as text. */
+  readonly error: AgentConnectError | undefined;
   /** Dispose UI consumption; the provider's connection remains explicitly owned by the caller. */
   close(): Promise<void>;
 }
@@ -30,17 +33,18 @@ export function createAcpChatTransport(
   options: AcpChatTransportOptions,
 ): AcpChatTransport {
   const { provider, tools } = options;
-  let session = new AgentSession({ provider, tools });
+  let session = new AcpToolExecutor({ provider, tools });
   let chatId: string | undefined;
   let active:
     | {
         stream: ReadableStream<UIMessageChunk>;
-        iterator: AsyncIterator<AgentTaskEvent>;
+        iterator: AsyncIterator<AcpExecutionEvent>;
         abort: () => Promise<void>;
         cleanup: () => void;
       }
     | undefined;
   let disposed = false;
+  let lastError: AgentConnectError | undefined;
   function bind(id: string) {
     if (!id)
       throw new AgentConnectError("protocol_error", "AI chatId is required");
@@ -61,6 +65,9 @@ export function createAcpChatTransport(
   return {
     get sessionId() {
       return provider.sessionId;
+    },
+    get error() {
+      return lastError;
     },
     async sendMessages(request) {
       requireOpen();
@@ -93,10 +100,11 @@ export function createAcpChatTransport(
           "ACP chat requires a non-empty user prompt",
         );
       bind(request.chatId);
+      lastError = undefined;
       if (!session.canStartTask && !session.canContinueTask) {
         // A recovered interrupted/cancelled conversation can receive a deliberate
         // new user prompt. It never retries the last message from AI history.
-        session = new AgentSession({ provider, tools });
+        session = new AcpToolExecutor({ provider, tools });
       }
       const iterator = (
         session.canContinueTask
@@ -132,7 +140,7 @@ export function createAcpChatTransport(
         void abort().catch(() => {});
       };
       request.abortSignal?.addEventListener("abort", onAbort, { once: true });
-      function map(event: AgentTaskEvent) {
+      function map(event: AcpExecutionEvent) {
         switch (event.type) {
           case "text.delta":
             if (thoughtId) {
@@ -221,7 +229,7 @@ export function createAcpChatTransport(
             }
             break;
           }
-          // AgentSession executes approved application handlers and returns MCP
+          // AcpToolExecutor executes approved application handlers and returns MCP
           // results. ACP native progress above supplies the UI tool parts; do
           // not add a second AI SDK execute/onToolCall loop or duplicate IDs.
           case "tool.requested":
@@ -243,6 +251,10 @@ export function createAcpChatTransport(
             ended = true;
             break;
           case "task.failed":
+            lastError = new AgentConnectError(
+              event.error.code,
+              event.error.message,
+            );
             closeParts();
             chunks.push({
               type: "error",
@@ -285,6 +297,14 @@ export function createAcpChatTransport(
             if (next) controller.enqueue(next);
             if (terminal) controller.close();
           } catch (error) {
+            lastError =
+              error instanceof AgentConnectError
+                ? error
+                : new AgentConnectError(
+                    "protocol_error",
+                    error instanceof Error ? error.message : String(error),
+                    { cause: error },
+                  );
             closeParts();
             chunks.push({
               type: "error",

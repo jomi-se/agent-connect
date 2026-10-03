@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # 0007: Bootstrap once with a runtime card, then authorize apps through the gateway
 
 - Status: superseded by ADR 0015; retained as historical security rationale
@@ -52,10 +54,10 @@ bearer credential:
 {
   "version": 1,
   "runtimeId": "<gateway identifier>",
-  "endpoint": "https://device.tailnet.ts.net:8443",
+  "endpoint": "https://gateway.example:8443",
   "connectorPublicKey": {},
   "transportProfile": "tailscale-serve",
-  "authorizationServer": "https://device.tailnet.ts.net:8443"
+  "authorizationServer": "https://gateway.example:8443"
 }
 ```
 

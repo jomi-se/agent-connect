@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # 0011: Model completed-task continuation as a linear response history
 
 - Status: accepted bounded continuation decision; implementation complete, with

@@ -115,6 +115,4 @@ another application's resources. Retrying the interrupted prompt can duplicate
 an application effect and is not cleanup.
 
 For unsupported or disputed provider authentication, consult the
-[credential and terms analysis](../plan/acp-gateway-credentials.md). The retained
-OpenClaw plugin has its own installation and recovery path; ACP setup never
-imports its secrets or personal provider login state.
+[credential and terms analysis](../plan/acp-gateway-credentials.md). ACP setup creates fresh grants and never imports personal provider login state.

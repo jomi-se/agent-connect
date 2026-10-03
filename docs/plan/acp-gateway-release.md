@@ -1,8 +1,8 @@
 # Plan: shipping the ACP gateway and its browser SDK
 
-Status: unreleased candidate 0.1.0-alpha.1; hosted authorization implementation updated 2026-10-03. Publication depends on accepting
+Status: unreleased candidate 0.0.1; hosted authorization implementation updated 2026-10-03. Publication depends on accepting
 [ADR 0016](../decisions/0016-acp-application-boundary.md). Nothing here is
-released; the previous published OpenClaw package remains available. Evidence comes from the
+released; the SDK candidate is independently versioned at 0.0.10. Evidence comes from the
 [ACP gateway spike](../experiments/acp-gateway.md) and its
 [mobile follow-up](../archive/plans/acp-gateway-mobile-resume.md).
 
@@ -11,7 +11,7 @@ The plan covers three questions:
 - how an application drives a chat over ACP;
 - what `@open-agent-connect/web` must add on top of the ACP SDK, including AI
   SDK support;
-- how the Rust gateway is packaged alongside the retained OpenClaw plugin.
+- how the Rust gateway is packaged with the ACP SDK.
 
 ## How a chat runs over ACP
 
@@ -64,97 +64,28 @@ Applications use the Agent Connect SDK, not the ACP SDK directly. The spike
 page used the ACP SDK directly, and needed about 280 lines of glue for one
 chat with three tools.
 
-**Kept as they are:** `AgentSession`, `createAgentChat`, `defineTool` and the
-CSP-safe schema validation, WebMCP snapshots, `SingleMcpServer` (already an
-MCP-over-ACP server) and `createBrowserAcpStream`.
+The root package exposes `connectAgent`, `createAcpPairing`,
+`createAcpChatTransport`, WebMCP snapshots and CSP-safe tool definitions. Tool
+execution is internal to the ACP chat transport. The generic session executor,
+headless chat presenter and previous model/authorization clients are removed.
 
-**Added:**
-
-1. **`connectAgent`.** It opens the gateway connection: a grant, the resumable
-   transport (`agent-connect.resume.v1`, moved from the spike's
-   `resumable-stream.js` and typed), Page Lifecycle listeners, and an ACP
-   client connection. Close codes become typed errors.
-2. **`AcpProvider`**, which implements the existing `AgentProvider` interface:
-   - `streamTask` sends `session/new` once, then `session/prompt`;
-   - `session/update` becomes `AgentProviderEvent`s (`text.delta` and the
-     rest), with new event types for thoughts and plans;
-   - an incoming `tools/call` becomes `tool.requested`, and
-     `submitToolResult` answers the pending MCP request;
-   - `cancel` sends `session/cancel`.
-
-   `AgentSession` and `createAgentChat` retain their interfaces and now forward
-   thought, plan and native-tool presentation events.
-
-3. **Recovery.** When a resumable session has ended, the SDK reconnects with
-   `session/load`, reports the interrupted turn as interrupted, and never
-   re-sends it.
-4. **Hosted authorization.** Normal `init` prompts for a hidden owner
-   passphrase and confirmation, creates private owner state outside the harness
-   home and configures the canonical public origin. No grant or tool file is
-   issued. The gateway hosts owner sign-in, optional TOTP enrollment, complete
-   tool consent and per-grant revocation. Apps use `gatewayUrl`, an explicit
-   popup/redirect action and a same-origin callback; the callback helper removes
-   code values from the URL at startup. Session-scoped credentials are keyed by
-   gateway, app origin and tool snapshot. Refresh rotation preserves grant ID
-   and transport ownership without replaying prompts. Static bearers require
-   explicit `--headless-static-bearer` mode. OpenClaw grants do not migrate.
-
-**Retained for this implementation:** the OpenClaw plugin, connection and
-conversation clients, `ResponsesProvider`, and the Open Responses AI SDK model.
-Any future retirement requires a separately approved release and migration;
-legacy SDK declarations are marked `@deprecated`, but no export is removed
-and no npm package is deprecated.
-
-Every ACP-facing export is labeled unstable while MCP-over-ACP is an unstable
-RFD.
+Pairing uses owner-hosted consent, exact-origin fixed-tool grants and rotating
+session credentials. Sequence reattachment preserves ongoing turns; explicit
+history recovery never retries an uncertain prompt or effect. Every ACP-facing
+export remains experimental while MCP-over-ACP is unstable.
 
 ## AI SDK
 
-**Today.** `createAiSdkOpenResponsesModel` presents the gateway as an AI SDK
-`LanguageModel`, and `createAiSdkApplicationTools` turns application tools
-into an AI SDK `ToolSet`. `streamText` therefore runs the tool loop in the
-browser. Bookhand uses this path.
-
-**Over ACP, the model layer no longer fits.** A harness is an agent with its
-own loop, conversation and tools, not a model. A `LanguageModel` adapter would
-have to:
-
-- ignore the history the AI SDK re-sends on every step;
-- ignore the system prompt and sampling settings;
-- report tool calls the agent has already executed.
-
-Agent Connect will not ship one.
-
-**The UI layer fits.** AI SDK 7's `useChat` accepts a custom `ChatTransport`.
-Its documentation names WebSockets as a use case. `createAcpChatTransport()`
-implements it on `AcpProvider`:
-
-| AI SDK `ChatTransport` / `UIMessageChunk`                                        | ACP                                                                                                                                                              |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sendMessages`, trigger `submit-message`                                         | `session/prompt` with the last user message only; `chatId` maps to the ACP `sessionId`                                                                           |
-| `text-start`, `text-delta`, `text-end`                                           | `agent_message_chunk`                                                                                                                                            |
-| `reasoning-start`, `reasoning-delta`, `reasoning-end`                            | `agent_thought_chunk`                                                                                                                                            |
-| `tool-input-available` and `tool-output-available` with `providerExecuted: true` | `tool_call` and `tool_call_update` (the agent ran the tool; for application tools, the page's handler ran through the SDK's MCP server, not an AI SDK `execute`) |
-| `data-*` part                                                                    | `plan`                                                                                                                                                           |
-| `finish`, `abort`, `error`                                                       | prompt stop reason, `session/cancel`, and failures                                                                                                               |
-| trigger `regenerate-message`                                                     | rejected: ACP cannot truncate a harness conversation                                                                                                             |
-| `reconnectToStream`                                                              | resumable reattach, or `session/load`                                                                                                                            |
-
-Separately approved downstream migrations may move Bookhand and Firebase
-Canvas to `useChat` with this transport, or to `createAgentChat`. The tool definitions stay the same. Applications that call
-a model provider directly keep using the AI SDK as before, outside Agent
-Connect.
-
-**Rejected alternative: translate ACP to Open Responses in the gateway.** This
-would keep the `LanguageModel` path: the gateway would park the harness's tool
-call and expose it as a turn-ending `function_call`. It brings back the
-turn-ending tool model that ADR 0016 leaves. It hides harness progress, and it
-adds a second application protocol for the gateway to own.
+Use AI SDK `useChat` with `createAcpChatTransport({ provider, tools })`.
+ACP exposes session/prompt and application tools rather than a LanguageModel.
+Send only the latest deliberate user message. The harness owns history and its
+tool loop; browser UI history is never replayed, and AI SDK tool callbacks must
+not execute the same application tools a second time.
 
 ## Packaging and installation
 
-The gateway, SDK, platform packages and session image share version
-`0.1.0-alpha.1`. Operators need only Node 24 and Docker, not a checkout or
+The gateway, platform packages and session image share version `0.0.1`;
+the root SDK is independently versioned at `0.0.10`. Operators need only Node 24 and Docker, not a checkout or
 compiler. The [install guide](../install/README.md) covers npm, checksum-verified
 GitHub archives/shell installer, sample SDK tarball, private setup, dedicated
 login, egress, upgrade, revoke and uninstall.
@@ -214,12 +145,12 @@ The first five phases implemented the product crate, dedicated homes/login,
 local packaging, resumable SDK/provider and AI SDK chat transport.
 The product-completion work then delivered, in order:
 
-1. ACP-first SDK prerelease/exports/types/docs and retained deprecated legacy APIs;
+1. ACP-only root SDK, transport and fixed-tool execution;
 2. packaged gateway CLI, private config/init and owned egress management;
 3. installation/operator instructions using release artifacts;
-4. locally validated release/PR workflows, unified versions, checksums and image builds;
+4. locally validated release/PR workflows, independent SDK/gateway versions, checksums and image builds;
 5. artifact-only clean-room sample acceptance wired into `npm run verify`;
-6. reconciled product/status guidance with the previous OpenClaw path retained.
+6. reconciled product/status guidance with the ACP-only product boundary.
 
 The clean-room test installs the packed launcher/platform package and SDK in a
 fresh container without a checkout, builds the sample through public exports,
@@ -237,23 +168,12 @@ subscription allowance. Both adapters also retain their host/boxed scenario gate
 Native plan UI conversion is contract-tested; pinned fixtures expose no native
 plan tool. Results are recorded in [the experiment](../experiments/acp-gateway.md).
 
-## Owner gates and retained compatibility
+## Owner gates
 
-The completed [product parity qualification](../archive/plans/acp-gateway-parity.md)
-records guided setup, doctor, user services, console controls, review outcomes
-and the 26-check artifact acceptance gate.
-[Current work](current-work.md) lists remaining live credential checks, the first
-real release/account/platform validation and ADR acceptance. The
-primary CLI is `agent-connect`, with `agent-connect-gateway` retained for compatibility.
-Hosted owner consent is the recommended product authorization path; the manual
-snapshot/bearer handoff remains an explicit headless escape hatch. Hosted pairing
-validation is recorded separately from the earlier static-bearer release evidence.
-
-The OpenClaw plugin stays in the repository and on npm as the previous published
-install target. Its SDK exports remain functional with `@deprecated` guidance.
-Retirement, npm deprecation, removal and downstream migrations require separate
-owner authorization; this plan does not schedule them. No local build authorizes
-push, tags, account changes, registry publication or interactive login.
+ADR 0016 acceptance, registry permissions, release workflow invocation,
+publication and retirement of old npm versions are owner-run actions. See
+[current work](current-work.md) and [release checklist](../install/release.md).
+The gateway/image and SDK have independent 0.0.x versions.
 
 ## Authorization quality gate and independent hardening (2026-10-03)
 
