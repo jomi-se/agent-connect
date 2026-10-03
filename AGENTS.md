@@ -1,72 +1,61 @@
 # Repository guidance
 
+This file holds durable rules only. Release status, open gates and deferred work
+live in `docs/plan/current-work.md`; decisions live in `docs/decisions/`.
+
 ## Product boundary
 
-Agent Connect is an application-to-user-owned-agent bridge. Keep the application-facing API agent- and harness-neutral. Codex, Omnigent, ACP adapters, and transport bridges belong behind internal adapter boundaries.
+Agent Connect lets web applications use an agent the user already owns. It ships
+two products:
 
-The ACP prerelease install path is the product Rust gateway in `crates/gateway`
-(CLI `agent-connect`, compatibility executable `agent-connect-gateway`), packaged as `@open-agent-connect/gateway`, plus
-its digest-pinned Docker session image and `@open-agent-connect/web` SDK.
-See `docs/install/README.md` and `docs/plan/acp-gateway-release.md`. ACP,
-MCP-over-ACP and the resume extension are unstable; ADR 0016 remains proposed.
-Local implementation and dry runs do not accept the ADR or authorize publication.
-Install/operation and owner-console parity completed local qualification; its
-checklist and limitations are recorded in
-`docs/archive/plans/acp-gateway-parity.md`. Current owner release gates are in
-`docs/plan/current-work.md`. Per-application box isolation is deferred.
+- the Rust gateway in `crates/gateway` (CLI `agent-connect`), packaged as
+  `@open-agent-connect/gateway` with a digest-pinned Docker session image;
+- the browser SDK `@open-agent-connect/web`, exported from its package root.
 
-`@open-agent-connect/web` is the ACP SDK at its package root. It has no ACP
-subpath, legacy re-exports, migration aliases, or Open Responses client. The
-removed plugin and browser client survive only in npm history and archived
-records. Agents never publish or run npm deprecate; owner release gates are
-recorded in `docs/install/release.md`.
-
-Production ACP sessions require boxed mode, a dedicated shared harness home and
-an owned egress proxy. `agent-connect setup` is the guided install/upgrade path;
-`doctor`, `/healthz` and user-service commands are the normal operating surface.
-Tests use isolated HOME/XDG state and service-manager contract fixtures, never
-the owner's service. Normal `init` creates private owner authentication state;
-the gateway hosts owner login, optional TOTP enrollment, exact-origin/fixed-tool
-OAuth consent, supported profile choice, sessions/end-session, individual/all
-grant revocation and browser sign-out. Offline `reset-totp` takes the exclusive
-owner-state lock and preserves grants/passphrase. Owner authentication and grant
-state must remain outside the harness home. The explicit
-`--headless-static-bearer` escape hatch is separate from normal pairing.
-Never forward API-key environment
-variables into boxes, change personal harness logins, or automatically replay an
-uncertain prompt/effect. Boxed capacity is released only after owned resource cleanup; unresolved Docker
-cleanup retains the slot until operator cleanup and process restart. Test this
-boundary with `npm run test:integration:acp:teardown` before relying on acceptance
-driver fallback cleanup. Never remove shared peers or prune unrelated resources.
-Live login checks are owner-run through `agent-connect login`, which selects
-an available harness and uses a dedicated per-harness platform-default home.
-New init/production serve share that convention; existing config homes retain
-precedence. Tests must isolate HOME/XDG_STATE_HOME and never invoke real login. Read the accepted shared-home risks in
-`docs/plan/acp-gateway-credentials.md`.
-
-## Terminology
-
-Use **gateway** for the Agent Connect component that applications reach and
-users operate. Public documentation, UI copy, deployment paths, and new APIs
-must not call it a connector. Historical documents may retain old names when
-they are clearly archival; current code and documentation must not introduce
-new connector terminology.
-
-## Current scope
+Keep the application-facing API agent- and harness-neutral. Codex, Claude Code
+and their ACP adapters stay behind internal adapter boundaries; harness-specific
+types never appear in shared application contracts. Use **gateway** for the
+component applications reach and users operate, never "connector".
 
 Keep independent app conversations, one active request per conversation, a fixed
-approved tool snapshot and an operator-selected restricted agent profile. Browser
-APIs never accept private harness session keys or operator credentials. Recent
-conversation ownership is process-local and expires; execution history is not a
-faithful human-chat transcript. See docs/architecture/target-architecture.md
-and docs/plan/current-work.md. Do not change personal services or credentials
-during tests, and never replay uncertain application effects automatically.
+approved tool snapshot and an operator-selected restricted profile. Record a
+decision under `docs/decisions/` before adding multi-agent orchestration,
+arbitrary MCP features, device automation or a second session protocol.
 
-Do not add generalized multi-agent orchestration, arbitrary MCP features, Android automation, or a second proprietary session protocol without recording a decision under `docs/decisions/`.
+Remove superseded code instead of keeping compatibility layers: no deprecated
+re-exports, aliases or shims. Old versions remain available in npm and git
+history.
+
+## Security invariants
+
+- Production sessions run boxed, with a dedicated harness home and an owned
+  egress proxy. Owner authentication and grant state stay outside the harness
+  home.
+- Browser APIs never accept harness session keys or operator credentials.
+- Never forward API-key environment variables into boxes.
+- Never change personal harness logins or services. Harness logins are run by
+  the owner through `agent-connect login`; tests never invoke a real login. The
+  accepted shared-home risks are in `docs/plan/acp-gateway-credentials.md`.
+- Never automatically replay an uncertain prompt or application effect.
+- Release boxed capacity only after owned resources are cleaned up. Never remove
+  shared peers or prune unrelated Docker resources.
+- Agents never push, publish, run the release workflow or `npm deprecate`
+  without explicit owner authorization.
+
+## Protocol and reliability rules
+
+- Persist an application tool request before notifying the application.
+- Do not claim generic exactly-once execution. Use stable action IDs and require
+  idempotent application operations or application-owned deduplication.
+- Conversation resumption and delivery of unresolved tool requests are separate
+  concerns.
+- Clearly label unstable ACP and MCP-over-ACP behavior in public APIs and
+  documentation, and do not describe a custom bridge as a stable ACP or MCP
+  standard implementation.
 
 ## Commands
 
-Use npm workspaces from the repository root:
+Use npm workspaces from the repository root with Node 24 LTS (>=24.15, <25):
 
 ```sh
 npm install
@@ -74,199 +63,43 @@ npm run format:check
 npm run typecheck
 npm test
 npm run build
-npm run verify
-npm run analyze
+npm run verify        # full gate, including real adapters and the clean-room sample
+cargo test --locked   # Rust workspace
+npm run analyze       # report-first metrics; boundary violations are hard failures
 ```
 
-`npm run verify` includes deterministic tests against the pinned real Codex and
-Claude ACP adapters on host/in boxes, plus the artifact-only clean-room sample
-(chat/app tools, ongoing reconnect and cancel). Prepare local session images and
-release artifacts using `docs/install/release.md`; no login is involved.
-`cargo test --locked` checks the Rust workspace. CI is read-only; the protected
-manual release workflow must not be run by an agent without owner authorization.
-Use Node 24 LTS >=24.15 and <25. The SDK is 0.0.10; the gateway, platform
-packages and session image are 0.0.1. They are independently versioned.
+Session images and release artifacts are built as described in
+`docs/install/release.md`. CI is read-only.
 
-`npm run analyze` is initially report-first. Treat its metrics as investigation
-inputs, not automatic refactoring instructions; dependency boundary violations
-remain hard failures.
+Run routine checks through `quiet-run` (on PATH; `scripts/quiet-run.sh` is the
+fallback), which prints one line on success and a bounded tail on failure. Use
+`--detach` for slow runs such as `npm run verify`, then collect with `--status`.
+Run the formatter once, just before final verification and commit.
 
-Add or update tests for public SDK behavior. Keep browser packages free of Node-only runtime imports.
-`npm run test:ui:acp-owner` checks actual owner pages at desktop, phone and narrow
-reflow widths, including keyboard/touch behavior, and saves screenshots in a
-private temporary fixture. It is part of verify and invokes no harness login.
-ACP fixtures remove dependency trees and per-run caches after their
-owned processes stop, on success and failure, while retaining diagnostic logs,
-reports and screenshots. `AGENT_CONNECT_KEEP_TEST_INSTALLS=1` is an explicit
-debugging opt-in; it retains large installs and must not be the default for checks.
+## Testing
 
-### Low-output command execution
-
-For routine non-interactive commands whose successful output carries no useful
-information beyond the exit code—builds, typechecks, tests, lint, and similar
-checks—use `scripts/quiet-run.sh` by default. When the shared `quiet-run`
-command is installed on PATH, this script delegates new runs to it. The shared
-runner caps failure log text at 16 KiB as well as 80 lines, confirms detached
-startup, preserves the caller's exported environment, and removes successful
-runs when their results are collected. Use the exact handle it prints; clean
-retained runs with `quiet-run --clean HANDLE` after investigation. Without the
-shared command, the repository-local implementation remains available. Existing
-legacy file handles continue to use that implementation.
-
-For example:
-
-```sh
-./scripts/quiet-run.sh "SDK tests" npm test --workspace @open-agent-connect/web
-./scripts/quiet-run.sh "build" npm run build
-```
-
-On success, the wrapper prints one short line. On failure, it prints a bounded
-tail and preserves the complete log under `/tmp` for focused follow-up. This
-keeps repetitive success logs out of the agent context: they consume tokens
-and displace useful evidence without improving a decision, while the full
-failure detail remains available when it is actually needed.
-
-Do not use the wrapper when a command needs interactive input, live progress is
-operationally important, or its normal output is itself the requested evidence.
-During implementation, prefer the narrowest relevant check. Run the formatter
-once after the code has stabilized and immediately before final verification,
-diff review, and commit; do not interleave repeated formatting passes with
-ordinary edit/test iterations.
-
-For anything slow enough to outlast a single tool call—`npm run verify`, the
-full test suite, browser end-to-end runs—start it detached and collect the
-result later instead of waiting on a blocked call:
-
-```sh
-./scripts/quiet-run.sh --detach "full verify" npm run verify
-# Copy the handle printed by the runner:
-HANDLE='<returned handle>'
-# do unrelated work here: read a file, plan the next edit
-./scripts/quiet-run.sh --status "$HANDLE"
-```
-
-`--status` prints `RUNNING` while the command is in flight and the usual
-`OK`/`FAILED` result with the bounded failure tail once it has exited. The
-wrapper is silent until the command finishes, so a foreground run of a
-multi-minute command yields nothing to read and forces a wait-and-retry loop.
-Detaching turns that loop into one call to start and one to collect.
-
-### Why these commands are shaped this way
-
-A model request re-sends the whole conversation, so what it costs is set by the
-context it carries, not by what it returns. Two consequences are worth reasoning
-from, because they are unintuitive and they dominate everything else.
-
-**A request that learns nothing costs what a request that learns something
-costs.** A one-line "has it finished yet?" is priced like a deep reasoning turn.
-This is why the wrapper grew `--detach`: a multi-minute command run in the
-foreground produces no readable output, so the only way to wait is a sequence of
-full-price requests that each return "still running." Ten of those buy nothing.
-Detaching converts the wait into one request to start and one to collect, and
-the interval becomes free time for work that does not depend on the result.
-
-**Anything read into context is re-paid on every later request in that
-conversation.** A 40k-character dump is not a one-time charge; it is a tax on
-the rest of the session, which is why reading the exact hunk beats paging
-through the file and `git diff --stat` before `git diff` beats the whole
-changeset. Batching several reads into one call is a real saving when the
-alternative is several round trips — trade freely between the two, but notice
-when a batch grows big enough to be truncated, because a truncated read costs
-full price and then has to be done again anyway. That has happened here.
-
-Neither of these is a prohibition. Read widely when you genuinely do not know
-where the answer lives; the cost of guessing wrong is higher. The point is to
-spend context on things that change what you do next.
-
-### Subagents
-
-The question worth asking is what the subagent would otherwise have to rebuild.
-A lane that inherits a finished piece of reconnaissance — the files that matter,
-the shape of the bug, the constraints already established — is usually cheaper
-than several lanes that each rediscover it, because that exploration gets paid
-for once instead of once per lane. Forking is the right call there, and
-splitting genuinely independent work across lanes that share a hard-won context
-is what it is for.
-
-It goes wrong when the fork happens before that context exists. Forking early
-copies the system prompt and playbook text the lane would have received anyway,
-adds it to every request the lane makes for its whole life, and still leaves each
-lane to explore the codebase separately. This repository has done exactly that:
-a mission forked three explorer lanes twenty seconds into a session, after two
-file reads, and the three then re-derived the same code map independently. It
-paid the inheritance cost with none of the benefit.
-
-So the useful judgment is about timing and content, not count. Fork when there is
-something expensive to inherit and the lanes will do substantial independent work
-from it. Otherwise brief the lane in writing — target ids, file paths, the
-question it must answer, the expected output shape — which is cheaper and, when
-the parent's context is mostly irrelevant to the lane, clearer as well.
-
-### Running the checks
-
-Verification is the cheapest work in a mission and routinely the most expensive
-to run, because the expense has nothing to do with the work. Running
-`npm run format:check` is not a hard problem, but run from a mature
-conversation it costs whatever that conversation weighs — in one session here,
-about 135k tokens per formatting check, eight times over. Prettier did not need
-any of that context. The request paid for it because the request carried it.
-
-So the lever is not which model runs the checks; it is how much conversation the
-check drags behind it. A hard model running a check from a small, purpose-built
-context is far cheaper than a cheap model running the same check from a full
-implementation transcript. Choosing a lighter model for mechanical work is
-reasonable on top of that, but it is the smaller effect and it is not the reason
-to separate the work.
-
-When verification is more than a quick targeted test, prefer to run it from a
-lane that holds only what running it requires: the repository, the commands, and
-where to report. Such a lane needs no design rationale, no diff review, and no
-history of what has already been tried.
-
-Give that lane a narrow contract: **run the named commands, report exit codes and
-the bounded failure output, change nothing else.** Two reasons it must not
-diagnose. First, a lane briefed only to run commands does not have the context to
-diagnose well, so whatever it concludes has to be re-derived by whoever does hold
-that context — the analysis is paid for twice and the second one is the only one
-that counts. Second, diagnosis is open-ended: it reads files, forms theories, and
-accumulates exactly the context the lane was created not to have. A runner that
-starts investigating stops being cheap within a few requests.
-
-Escalation is deliberately inexpensive. `quiet-run.sh` already reports
-`FAILED <label> (exit N)` with a bounded log tail and the full log path, so a
-failure comes back as a small payload that the conversation holding the
-implementation context can act on directly. Running `npm run format` to fix
-formatting is a fair exception, since the fix is deterministic and needs no
-judgment. Anything requiring a decision goes back up.
-
-### Test the dependency you actually ship
-
-If an assertion could become meaningless when a shipped ACP adapter or harness
-changes, run it against that real pinned dependency. Routine gates use
-deterministic inference behind disposable real adapters with isolated HOME/XDG
-state. These gates prove transport, tools and lifecycle compatibility; selected
-real-model application runs separately prove useful composition.
-
-Controlled doubles are appropriate for Agent Connect-owned invariants and
-faults such as failed disk writes, interrupted iterators, wedged requests and
-exact races. They must not manufacture assumed harness behavior. Never call
-stubbed inference proof of a subscription model. See
-[`docs/architecture/testing-strategy.md`](docs/architecture/testing-strategy.md).
-
-## Protocol and reliability rules
-
-- Persist an application tool request before notifying the application.
-- Do not claim generic exactly-once execution. Use stable action IDs and require idempotent application operations or application-owned deduplication.
-- Conversation resumption and delivery of unresolved tool requests are separate concerns.
-- Clearly label unstable ACP and MCP-over-ACP behavior in public APIs and documentation.
-- Do not describe a custom bridge as a stable ACP or MCP standard implementation.
+- Add or update tests for public SDK behavior. Keep browser packages free of
+  Node-only runtime imports.
+- Test against the dependency you ship. If an assertion could become meaningless
+  when a pinned ACP adapter or harness changes, run it against that real
+  dependency. Routine gates use deterministic inference behind real adapters;
+  real-model application runs prove useful behavior. Stubbed inference is never
+  evidence of real harness or model behavior.
+- Controlled doubles are fine for Agent Connect-owned invariants and hard-to-cause
+  faults (failed writes, wedged requests, exact races); they must not invent
+  harness behavior. See `docs/architecture/testing-strategy.md`.
+- Tests isolate HOME and XDG state, use service-manager fixtures rather than the
+  owner's services, and clean up their own installs and caches on success and
+  failure.
 
 ## Documentation
 
-- Current mission and boundaries: `docs/mission.md`
-- System architecture: `docs/architecture/`
-- Accepted decisions: `docs/decisions/`
-- Execution plans: `docs/plan/`
-- Time-stamped external research: `docs/research/`
+- Mission and boundaries: `docs/mission.md`
+- Architecture: `docs/architecture/`
+- Decisions: `docs/decisions/`
+- Install, configuration and release: `docs/install/`
+- Current work and owner gates: `docs/plan/current-work.md`
+- Dated research: `docs/research/`; superseded material: `docs/archive/`
 
-Update the earliest source of truth that changed; do not leave contradictory plans in different documents.
+Update the earliest source of truth that changed; do not leave contradictory
+plans in different documents.
