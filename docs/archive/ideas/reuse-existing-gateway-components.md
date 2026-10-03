@@ -1,9 +1,9 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../../install/README.md).
 
 # Deferred: reuse existing gateway components
 
 Status: promoted to an authorized OpenClaw replacement initiative on 2026-09-05.
-See [current investigation](../research/2026-09-05-openclaw-replacement.md).
+See [current investigation](../../research/2026-09-05-openclaw-replacement.md).
 The original rationale below remains useful; no live cutover has occurred.
 
 Agent Connect exists to bring the user's existing AI subscription into third-party

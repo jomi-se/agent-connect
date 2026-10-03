@@ -342,16 +342,16 @@ implemented replacement:
 Gate status as of 2026-08-29: gates 1 through 13 have implementation and
 pre-switch evidence. The protocol, authorization, durability, cancellation,
 and provider gates are covered by
-[VAL-RESP-001](../../contract/VAL-RESP-001.md),
-[VAL-RESP-002](../../contract/VAL-RESP-002.md),
-[VAL-RESP-003](../../contract/VAL-RESP-003.md),
-[VAL-RESP-004](../../contract/VAL-RESP-004.md),
-[VAL-RESP-005](../../contract/VAL-RESP-005.md),
-[VAL-RESP-006](../../contract/VAL-RESP-006.md), and
-[VAL-RESP-007](../../contract/VAL-RESP-007.md). The real browser/Codex flow
+[VAL-RESP-001](../archive/contracts/VAL-RESP-001.md),
+[VAL-RESP-002](../archive/contracts/VAL-RESP-002.md),
+[VAL-RESP-003](../archive/contracts/VAL-RESP-003.md),
+[VAL-RESP-004](../archive/contracts/VAL-RESP-004.md),
+[VAL-RESP-005](../archive/contracts/VAL-RESP-005.md),
+[VAL-RESP-006](../archive/contracts/VAL-RESP-006.md), and
+[VAL-RESP-007](../archive/contracts/VAL-RESP-007.md). The real browser/Codex flow
 passed twice on 2026-08-28, including fresh authorization. Open Responses is
 now the SDK default and the old public routes/provider are deleted under
-[VAL-RESP-008](../../contract/VAL-RESP-008.md). Repeat that private composition
+[VAL-RESP-008](../archive/contracts/VAL-RESP-008.md). Repeat that private composition
 once on the final single-wire build before changing this ADR to accepted.
 
 1. An ordinary Open Responses client can use the documented profile without
@@ -429,5 +429,5 @@ triggers a focused review of ADRs 0004, 0007, and 0009 to distinguish reusable
 OAuth machinery from Agent Connect-specific authorization policy.
 
 The design review at
-[An Ousterhout review of the Open Responses gateway pivot](../reviews/2026-08-26-ousterhout-open-responses-design-review.md)
+[An Ousterhout review of the Open Responses gateway pivot](../archive/reviews/2026-08-26-ousterhout-open-responses-design-review.md)
 remains supporting analysis rather than a competing source of truth.

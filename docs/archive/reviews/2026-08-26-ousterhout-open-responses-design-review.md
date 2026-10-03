@@ -1,9 +1,9 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../../install/README.md).
 
 # An Ousterhout review of the Open Responses gateway pivot
 
 - Review date: 2026-08-26
-- Primary target: [ADR 0010](../decisions/0010-open-responses-gateway-pivot.md)
+- Primary target: [ADR 0010](../../decisions/0010-open-responses-gateway-pivot.md)
 - Design lens: John Ousterhout, _A Philosophy of Software Design_, second
   edition
 - Repository state reviewed: the proposed pivot plus the current Omnigent
@@ -13,7 +13,7 @@
 ## Resolution status
 
 Resolved into the 2026-08-27 revision of
-[ADR 0010](../decisions/0010-open-responses-gateway-pivot.md). The ADR now
+[ADR 0010](../../decisions/0010-open-responses-gateway-pivot.md). The ADR now
 defines a bounded version 0 profile, limits the propagation of public request
 types, gives the response engine ownership of the durable unresolved-call
 ledger, distinguishes source boundaries from deployment boundaries, and keeps

@@ -208,7 +208,7 @@ that an already admitted upstream effect was undone.
 
 ## Deployment requirements
 
-The owner must follow the [plugin setup guide](../../deploy/openclaw-gateway/README.md):
+The owner must follow the plugin setup guide:
 published pinned OpenClaw and the Agent Connect plugin, explicit capability consent, loopback
 hosting, reviewed HTTPS ingress, and a dedicated restricted application agent.
 The current scope is one owner, one configured application policy, and bounded

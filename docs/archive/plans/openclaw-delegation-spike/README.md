@@ -32,7 +32,7 @@ test runtime gained an optional configure hook for isolated auth/plugin setup.
 Source scrutiny and an independent API run passed pairing/runtime; its first
 authority review caught missing hostile-header/body evidence. The amended probe
 passes those cases in a fresh independent reproduction: all three feasibility
-contracts now pass. See the [validation report](../../../reviews/2026-09-05-openclaw-plugin-feasibility.md).
+contracts now pass. See the [validation report](../../reviews/2026-09-05-openclaw-plugin-feasibility.md).
 The separate
 sandbox probe proves required policy fails closed before inference, with an
 unsandboxed positive control. See the research report for precise limits.

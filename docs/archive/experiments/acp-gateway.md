@@ -1,12 +1,12 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../../install/README.md).
 
 # ACP gateway spike: results
 
 Status: complete, 2026-09-30; mobile follow-up 2026-10-01
-([plan](../archive/plans/acp-gateway-mobile-resume.md)). Experimental evidence for the
-[spike plan](../archive/plans/acp-gateway-spike.md), not an accepted decision. The
-proposed decision is [ADR 0016](../decisions/0016-acp-application-boundary.md).
-Code: [`experiments/acp-gateway/`](../../experiments/acp-gateway/).
+([plan](../plans/acp-gateway-mobile-resume.md)). Experimental evidence for the
+[spike plan](../plans/acp-gateway-spike.md), not an accepted decision. The
+proposed decision is [ADR 0016](../../decisions/0016-acp-application-boundary.md).
+Code: `experiments/acp-gateway/`.
 
 ## Verdict
 
@@ -375,7 +375,7 @@ their grace period.
 
 ## Open problems for a follow-up
 
-- **Live credential validation.** The [credential plan](../plan/acp-gateway-credentials.md)
+- **Live credential validation.** The [credential plan](../../plan/acp-gateway-credentials.md)
   now chooses one dedicated shared home per harness, including credentials and
   transcripts. Its filesystem and command boundaries are implemented; live login,
   concurrent refresh, revocation and personal-login coexistence remain untested.
@@ -395,7 +395,7 @@ their grace period.
 
 ## Reproduce
 
-See [`experiments/acp-gateway/README.md`](../../experiments/acp-gateway/README.md).
+See `experiments/acp-gateway/README.md`.
 
 ## Product implementation (2026-10-02, unreleased)
 
@@ -790,5 +790,5 @@ host and native macOS service execution remain first-release platform checks.
 Windows and per-app box isolation remain outside this qualification. All automated
 inference was deterministic and credential-free; tests performed no harness login
 or subscription turn. The completed checklist is archived at
-[product parity](../archive/plans/acp-gateway-parity.md); current owner-only gates
-are in [current work](../plan/current-work.md).
+[product parity](../plans/acp-gateway-parity.md); current owner-only gates
+are in [current work](../../plan/current-work.md).

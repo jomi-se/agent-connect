@@ -1,4 +1,4 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../../install/README.md).
 
 # Open Responses re-review: verifying the 2026-08-28 dispositions
 
@@ -7,7 +7,7 @@
 - Method: each prior finding was reproduced independently rather than read off
   the regression test that claims to cover it
 - Companion probe:
-  [`support/2026-08-29-open-responses-probe.test.ts.txt`](support/2026-08-29-open-responses-probe.test.ts.txt)
+  `support/2026-08-29-open-responses-probe.test.ts.txt`
 
 ## How to reproduce every finding in this document
 

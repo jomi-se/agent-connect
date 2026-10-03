@@ -38,7 +38,7 @@ Executed the published pinned OpenClaw 2026.9.1 with the existing isolated test
 runtime and deterministic local inference. No real model allowance, personal
 credentials, Bookhand actions, or live gateway configuration were used or changed.
 
-The [probe](support/openclaw-delegation-probe.mjs) uses published internal pairing
+The probe uses published internal pairing
 functions to create/approve a disposable device and issue its token. This proves
 token issuance/verification and the actual HTTP boundary, **not a browser pairing
 ceremony or WebSocket handshake**. Internal chunk names and paths are pinned to
@@ -214,8 +214,8 @@ This retains native creator/sandbox enforcement without a separate process
 or a new response engine. The plugin declares an authenticated-dispatch contract;
 that is not a general grant of administrator authority to incoming app requests.
 
-The [plugin fixture](support/delegation-plugin/README.md) and
-[HTTP probe](support/openclaw-plugin-delegation-probe.mjs) demonstrate:
+The plugin fixture and
+HTTP probe demonstrate:
 
 - An explicitly unverified, originless installation requests access; only the
   owner approves it. Pending, denied and revoked credentials cannot execute.
@@ -227,7 +227,7 @@ The [plugin fixture](support/delegation-plugin/README.md) and
 - Native Responses rejects a sibling principal and a disallowed agent. Plugin
   forwarding reconstructs identity, scope and routing headers, rather than
   passing through the application's assertions.
-- The [sandbox probe](support/openclaw-plugin-sandbox-probe.mjs) records the
+- The sandbox probe records the
   required-sandbox stamp before Responses. With Docker deliberately unavailable
   to the disposable service, it fails before inference and does not execute a
   host command. A separate unsandboxed positive control executes that command.

@@ -24,9 +24,11 @@ subscription, ingress or mobile behavior by remaining in the tree.
 
 ## Agent Connect plugin for OpenClaw (ADR 0015)
 
-The plugin is the previous published installation target. Its current
-architecture is [agent-connect-openclaw-plugin.md](../architecture/agent-connect-openclaw-plugin.md);
-these are its completed build plans and ledgers.
+The plugin was the previous published installation target. Its source and
+tests were removed from the repository once the ACP gateway replaced it; the
+published versions remain on npm. Its architecture is
+[agent-connect-openclaw-plugin.md](agent-connect-openclaw-plugin.md); these are
+its completed build plans and ledgers.
 
 - [OpenClaw plugin host](plans/openclaw-plugin-host.md): packaging, setup,
   coexistence and stock-host validation.
@@ -66,7 +68,7 @@ The pre-plugin Omnigent/Open Responses gateway and its replacement engine.
 - [Parallel expiring sessions MVP](plans/parallel-expiring-sessions-mvp.md)
 - [Open Responses vertical slice](plans/open-responses-vertical-slice.md): its
   historical validation records and protocol pin remain under
-  [`contract/`](../../contract/) but are not current guarantees.
+  `contract/` but are not current guarantees.
 - [Multi-turn task continuation](plans/multi-turn-task-continuation.md)
 - [OpenClaw replacement](plans/openclaw-replacement.md)
 
@@ -84,3 +86,26 @@ The pre-plugin Omnigent/Open Responses gateway and its replacement engine.
   [documentation cleanup 2026-09-09](plans/documentation-cleanup-2026-09-09.md)
 - [Implementation brief](implementation-brief.md) and
   [hackathon handoff](hackathon-handoff.md): the earliest project documents.
+
+## Superseded experiments, proposals and reviews
+
+Moved here when the OpenClaw plugin and the legacy SDK were removed.
+
+- Experiments: [ACP gateway spike results](experiments/acp-gateway.md) and
+  [Omnigent–Codex composition](experiments/omnigent-codex-nonce.md).
+- Proposals written for the plugin era:
+  [deployment tiers](future/deployment-tiers-and-confinement.md),
+  [Firebase canvas plugin migration](future/firebase-canvas-plugin-migration.md),
+  [multi-turn task continuation](future/multi-turn-task-continuation.md),
+  [owner console and profiles](future/owner-console-and-profiles.md),
+  [provider-owned conversation recovery](future/provider-owned-conversation-recovery.md),
+  [setup quality candidates](future/setup-quality-candidates.md) and
+  [reusing existing gateway components](ideas/reuse-existing-gateway-components.md).
+- Reviews: [consolidated repository review](reviews/2026-07-26-consolidated-repo-review.md),
+  the Open Responses [design review](reviews/2026-08-26-ousterhout-open-responses-design-review.md),
+  [implementation review](reviews/2026-08-28-open-responses-implementation-review.md)
+  and [re-review](reviews/2026-08-29-open-responses-re-review.md),
+  [plugin feasibility](reviews/2026-09-05-openclaw-plugin-feasibility.md),
+  [OpenClaw replacement scrutiny](reviews/openclaw-replacement-scrutiny.md) and
+  regressions [OC-SCR-004](reviews/regressions/OC-SCR-004.md) and
+  [OC-SCR-005](reviews/regressions/OC-SCR-005.md).

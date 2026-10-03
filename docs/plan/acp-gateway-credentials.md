@@ -2,7 +2,7 @@
 
 Status: dedicated shared-home direction implemented; hosted owner authorization updated 2026-10-03, unreleased. It addresses the credential-boundary
 prerequisite of [ADR 0016](../decisions/0016-acp-application-boundary.md). It
-follows the [ACP gateway spike](../experiments/acp-gateway.md), whose boxed runs
+follows the [ACP gateway spike](../archive/experiments/acp-gateway.md), whose boxed runs
 used only a mock model.
 
 ## Problem
@@ -249,7 +249,7 @@ harness for a live release.
    1000), and file modes on the shared directory.
 
 Each live check spends a small amount of subscription allowance, so the owner
-starts it. Results go to `docs/experiments/acp-gateway.md`.
+starts it. Results go to `docs/archive/experiments/acp-gateway.md`.
 
 ## Kill criteria
 
