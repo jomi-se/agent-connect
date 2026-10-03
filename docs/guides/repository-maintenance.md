@@ -65,5 +65,5 @@ No mandatory external approval is added: requiring somebody else to approve
 the owner's own PR would deadlock this single-maintainer repository.
 
 Live activation and check evidence are recorded in
-[the maintenance ledger](../plan/repository-maintenance.md). A YAML file alone
+[the maintenance ledger](../archive/plans/repository-maintenance.md). A YAML file alone
 does not establish that GitHub settings were applied or that hosted CI passed.

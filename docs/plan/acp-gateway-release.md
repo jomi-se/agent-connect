@@ -4,7 +4,7 @@ Status: unreleased candidate 0.1.0-alpha.1; hosted authorization implementation 
 [ADR 0016](../decisions/0016-acp-application-boundary.md). Nothing here is
 released; the previous published OpenClaw package remains available. Evidence comes from the
 [ACP gateway spike](../experiments/acp-gateway.md) and its
-[mobile follow-up](acp-gateway-mobile-resume.md).
+[mobile follow-up](../archive/plans/acp-gateway-mobile-resume.md).
 
 The plan covers three questions:
 

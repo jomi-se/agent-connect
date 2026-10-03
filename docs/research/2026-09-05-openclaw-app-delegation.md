@@ -244,7 +244,7 @@ lives outside the public prefix. A disposable exact-route proxy verifies this
 boundary; actual Tailscale configuration has not been changed or validated.
 Local processes able to reach the trusted listener remain trusted.
 
-See [the feasibility scope and contracts](../plan/openclaw-delegation-spike/README.md).
+See [the feasibility scope and contracts](../archive/plans/openclaw-delegation-spike/README.md).
 The ordinary plugin SDK does not expose an arbitrary authority-minting Responses
 delegate; this proposal composes existing authenticated routes instead.
 

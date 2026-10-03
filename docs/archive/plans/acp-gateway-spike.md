@@ -2,9 +2,9 @@
 
 Status: completed spike plan, 2026-09-30. Experimental; not an accepted decision.
 Owner: gateway.
-Code: [`experiments/acp-gateway/`](../../experiments/acp-gateway/).
-Results: [`docs/experiments/acp-gateway.md`](../experiments/acp-gateway.md).
-Proposed decision: [ADR 0016](../decisions/0016-acp-application-boundary.md).
+Code: [`experiments/acp-gateway/`](../../../experiments/acp-gateway/).
+Results: [`docs/experiments/acp-gateway.md`](../../experiments/acp-gateway.md).
+Proposed decision: [ADR 0016](../../decisions/0016-acp-application-boundary.md).
 
 ## Why this spike exists
 
@@ -139,7 +139,7 @@ The application is untrusted. It can speak ACP only through this proxy, and
 the proxy owns every field that grants authority. The effective authority stays
 the intersection of the application grant, gateway profile, harness policy and
 container boundary (see the
-[threat model](../research/2026-07-14-malicious-application-runtime-threat-model.md)).
+[threat model](../../research/2026-07-14-malicious-application-runtime-threat-model.md)).
 
 | Message                                                        | Rule                                                                                                                                                                                                                                                   |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -161,7 +161,7 @@ The spike only has to show where the grant check plugs in.
 
 ## Deterministic inference
 
-Following the [testing strategy](../architecture/testing-strategy.md), the
+Following the [testing strategy](../../architecture/testing-strategy.md), the
 spike runs the real adapters and harnesses against scripted local model
 providers:
 
@@ -239,7 +239,7 @@ results doc as they land.
 8. **Write-up.** Results doc with answers, measurements, traces summarized,
    and what broke. If Q1–Q3 pass, draft ADR 0016 (status: proposed): "ACP
    application boundary". It would supersede ADR 0010's wire and ADR 0015's
-   execution host. Add a pointer from [current work](current-work.md).
+   execution host. Add a pointer from [current work](../../plan/current-work.md).
 
 ## Out of scope
 

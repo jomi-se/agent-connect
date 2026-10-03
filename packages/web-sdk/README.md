@@ -492,7 +492,7 @@ statuses; tool arguments/results are never included. Saving or copying the strin
 is application-owned. It is **not** a session restore/checkpoint format. Content
 is untrusted Markdown: sanitize it if you later render HTML.
 
-See [the implementation and validation contract](../../docs/plan/headless-chat.md).
+See [the headless chat contract](../../docs/architecture/browser-sdk-building-blocks.md#headless-chat).
 
 ## Content Security Policy and tool validation
 
@@ -563,7 +563,7 @@ with experimental web platform features enabled, whose discovery schemas and
 execution arguments use JSON strings. The current WebMCP CG draft uses objects;
 that binding is not claimed here. Browsers without native discovery/execution
 raise `webmcp_unavailable`. There is no testing API, navigator fallback, or
-polyfill installed by this SDK. See [the compatibility plan](../../docs/plan/webmcp-tool-source.md).
+polyfill installed by this SDK. See [the WebMCP contract](../../docs/architecture/browser-sdk-building-blocks.md#webmcp-tool-source).
 
 WebMCP descriptors identify tools by document/name, not immutable registration
 ID. Observed registry changes stop dispatch, but native same-name replacement

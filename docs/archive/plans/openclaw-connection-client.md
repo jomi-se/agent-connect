@@ -102,4 +102,4 @@ shape, validation, PKCE transaction behavior, token rotation, single-flight and
 the disconnect/refresh race; they are not evidence that a real OpenClaw runtime
 or owner-login experience works. Agent Connect plugin for OpenClaw compatibility is covered by the
 pinned OpenClaw plugin-host suite. Owner-reported Bookhand evidence and its
-remaining limitations are retained in the [archived closeout ledger](../archive/plans/stock-openclaw-vertical-closeout.md).
+remaining limitations are retained in the [archived closeout ledger](stock-openclaw-vertical-closeout.md).

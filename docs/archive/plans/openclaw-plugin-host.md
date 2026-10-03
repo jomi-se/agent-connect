@@ -3,7 +3,7 @@
 Date: 2026-09-08. Status: archived implementation plan; reviewed, merged,
 published, and followed by owner-authorized deployment. the owner's later complete
 Bookhand result is owner-reported evidence, not an exhaustive independent test.
-Decision: [ADR 0015](../decisions/0015-openclaw-plugin-host.md).
+Decision: [ADR 0015](../../decisions/0015-openclaw-plugin-host.md).
 
 ## Outcome and ownership
 

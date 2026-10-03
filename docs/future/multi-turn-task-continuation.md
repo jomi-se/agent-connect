@@ -13,7 +13,7 @@ task, with enough gateway validation to prevent stale branches and silent
 continuation after the provider session has been replaced.
 
 The bounded design, validation contracts, and implementation sequence now live
-in `docs/plan/multi-turn-task-continuation.md`.
+in `docs/archive/plans/multi-turn-task-continuation.md`.
 
 This work remains separate from recovery of a task parked on an unresolved
 application function call. Pending-call recovery needs stable action IDs and

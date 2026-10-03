@@ -1,6 +1,6 @@
 # ACP gateway spike
 
-Experimental code for the [ACP gateway spike](../../docs/plan/acp-gateway-spike.md).
+Experimental code for the [ACP gateway spike](../../docs/archive/plans/acp-gateway-spike.md).
 Results: [`docs/experiments/acp-gateway.md`](../../docs/experiments/acp-gateway.md).
 Not released. The gateway implementation now lives in `crates/gateway`;
 this directory retains deterministic fixtures and compatibility entry points.

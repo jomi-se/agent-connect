@@ -60,4 +60,4 @@ configuration confinement or arbitrary personal setups. OpenClaw 2026.9.1 is
 the exact deployed/test evidence pin, not an upper bound on hosts allowed to load
 the plugin; newer versions are admitted and compatibility fixes can arrive by PR.
 
-Implementation and evidence ledger: [plugin-host plan](../plan/openclaw-plugin-host.md).
+Implementation and evidence ledger: [plugin-host plan](../archive/plans/openclaw-plugin-host.md).

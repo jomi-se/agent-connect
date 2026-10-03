@@ -5,14 +5,14 @@ workflow are over; this file is retained for provenance and is not current
 installation, deployment, or product-status guidance.
 
 This document is the execution guide for presenting Agent Connect to OpenAI
-Build Week. It does not replace the [current backlog](current-work.md), the
-[mission](../mission.md), or the
+Build Week. It does not replace the [current backlog](../../plan/current-work.md), the
+[mission](../../mission.md), or the
 [official hackathon rules](https://openai.devpost.com/rules).
 
 Rule and submission details below were checked through the Devpost Hackathons
 plugin again at 2026-07-14 23:35 UTC. The timestamped structured refresh,
 including live field IDs, is in
-[`2026-07-14-openai-build-week-refresh.md`](../research/2026-07-14-openai-build-week-refresh.md).
+[`2026-07-14-openai-build-week-refresh.md`](../../research/2026-07-14-openai-build-week-refresh.md).
 Recheck the official rules and recent announcements before submitting.
 
 ## Submission decision

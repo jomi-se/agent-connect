@@ -92,8 +92,8 @@ or consent guarantees must be made explicit.
   with explicit data/execution restrictions. Agent Connect's request allowlist
   does not itself establish an OS sandbox or prevent prompt injection.
 - Keep native WebMCP and headless conversation controls harness-neutral.
-  Their contracts are [WebMCP](plan/webmcp-tool-source.md) and
-  [headless chat](plan/headless-chat.md). Images/files remain deferred.
+  Their contracts are in
+  [browser SDK building blocks](architecture/browser-sdk-building-blocks.md). Images/files remain deferred.
 
 ## Previous plugin implementation and acceptance boundary
 

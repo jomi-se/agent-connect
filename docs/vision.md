@@ -10,7 +10,7 @@ that the current implementation already satisfies it.
 ## The ambition
 
 Implementation refinement (2026-09-06): the accepted
-[OpenClaw-first plan](plan/connect-your-ai-openclaw.md) uses AI SDK for the
+[OpenClaw-first plan](archive/plans/connect-your-ai-openclaw.md) uses AI SDK for the
 application-side model/tool loop and Agent Connect for connection glue. Owner
 authentication may be Tailscale-flavored or ordinary HTTPS; grants and bearer
 verification are shared. Optional code execution means an isolated sandbox,
