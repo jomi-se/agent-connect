@@ -213,5 +213,11 @@ login: a consented application could read the dedicated credential and another
 application's transcripts, and could alter shared harness configuration.
 
 Command-contract tests use a disposable Docker stand-in; they never log in.
-Live subscription, concurrent refresh, personal-login coexistence and revocation
-checks remain owner-run and have not been performed. No allowance was spent.
+On 2026-10-03, the owner reported a successful dedicated Codex device login
+and a subscription-backed sample chat that completed `read_passage` and returned
+the chapter text. This establishes the basic live login/application-tool path
+for this candidate, based on the owner's report rather than automated evidence.
+Concurrent boxes, token refresh, personal-login coexistence and scoped revocation
+remain unverified and require separate owner-run checks. Claude subscription
+use remains unconfirmed against Anthropic terms. Deterministic implementation
+checks spent no allowance; the owner initiated the live turn.

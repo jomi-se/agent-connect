@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-02
+Updated: 2026-10-03
 
 The ACP product candidate is **0.1.0-alpha.1**: packaged browser SDK and Rust
 launcher/platform binaries, private setup/config/manual grants, dedicated login
@@ -27,11 +27,13 @@ supported by the ACP release matrix.
 
 Only owner-required work remains for this candidate:
 
-1. **Live dedicated login checks.** Run the prepared Codex device-login helper,
-   then explicitly authorize live/concurrent refresh, personal-session
-   coexistence and dedicated-login revocation checks. Claude subscription use
+1. **Remaining live credential checks.** The owner reported successful dedicated
+   Codex device login and a sample chat with a completed `read_passage` call.
+   Concurrent boxes, token refresh, personal-session coexistence and dedicated-login
+   revocation still require explicitly authorized owner-run checks. Claude subscription use
    remains unconfirmed against Anthropic terms; confirming that optional path
-   requires provider/owner action. No live turns have been spent.
+   requires provider/owner action. Automated checks remain credential-free;
+   the owner initiated the successful live turn.
 2. **First real release run.** Configure the protected GitHub environment,
    package ownership/trusted publishers and public GHCR visibility, push the
    reviewed source and version tag yourself, then inspect a manual dry run and

@@ -200,8 +200,8 @@ plan tool. Results are recorded in [the experiment](../experiments/acp-gateway.m
 
 ## Owner gates and retained compatibility
 
-Only [current-work.md](current-work.md)'s owner gates remain: live dedicated login
-checks, the first approved real release/account setup, and ADR acceptance. The
+Only [current-work.md](current-work.md)'s owner gates remain: the remaining live
+credential checks, the first approved real release/account setup, and ADR acceptance. The
 primary CLI is `agent-connect`, with `agent-connect-gateway` retained for compatibility; current grant issuance is the
 explicit operator snapshot/bearer handoff, not a deferred product implementation.
 
