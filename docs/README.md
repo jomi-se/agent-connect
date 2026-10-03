@@ -10,9 +10,6 @@ installation, SDK example, supported platforms, and verification commands.
 - [ACP release process](install/release.md): local acceptance artifacts and
   protected, owner-run OIDC/image publication.
 - [ACP SDK](../packages/web-sdk/README.md): unstable provider, recovery and useChat.
-- [ACP product parity](plan/acp-gateway-parity.md): active setup, operations and
-  owner-console work, including remaining independent-review findings.
-
 - [Mission](mission.md): product promise, current strategy, acceptance boundary,
   and explicit non-goals.
 - [Scope inventory](scope-inventory.md): implemented, deferred, and unsupported
@@ -64,7 +61,8 @@ not erased, but they do not define today's installation or application routes.
 
 The [north star](vision.md) is accepted product direction, not a finished
 standard or implementation promise. The [narrow protocol profile](architecture/narrow-protocol-profile.md)
-is an unstable ACP/MCP-over-ACP prototype, not the default browser/gateway path.
+records the unstable protocol boundary. The ACP prerelease install path is
+implemented; ADR 0016 remains proposed and publication remains owner-gated.
 Future deployment, native-client identity, and multi-turn documents are
 design exploration only. Dated research, reviews, experiments, and the
 historical Canvas/Build Week material remain under their existing directories;

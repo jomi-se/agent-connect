@@ -10,9 +10,10 @@ its digest-pinned Docker session image and `@open-agent-connect/web/acp` SDK.
 See `docs/install/README.md` and `docs/plan/acp-gateway-release.md`. ACP,
 MCP-over-ACP and the resume extension are unstable; ADR 0016 remains proposed.
 Local implementation and dry runs do not accept the ADR or authorize publication.
-Install/operation and owner-console parity is actively tracked in
-`docs/plan/acp-gateway-parity.md`; completed transport and pairing gates do not
-mean only owner approval remains. Per-application box isolation is deferred.
+Install/operation and owner-console parity completed local qualification; its
+checklist and limitations are recorded in
+`docs/archive/plans/acp-gateway-parity.md`. Current owner release gates are in
+`docs/plan/current-work.md`. Per-application box isolation is deferred.
 
 The Agent Connect plugin for OpenClaw (ADR 0015) is the previous published
 installation target. Keep its source, npm package, tests and compatibility exports.
@@ -22,9 +23,14 @@ The ADR 0014 standalone scoped proxy and older replacement gateway remain archiv
 Provider/plugin types stay outside shared application contracts.
 
 Production ACP sessions require boxed mode, a dedicated shared harness home and
-an owned egress proxy. Normal `init` creates private owner authentication state;
+an owned egress proxy. `agent-connect setup` is the guided install/upgrade path;
+`doctor`, `/healthz` and user-service commands are the normal operating surface.
+Tests use isolated HOME/XDG state and service-manager contract fixtures, never
+the owner's service. Normal `init` creates private owner authentication state;
 the gateway hosts owner login, optional TOTP enrollment, exact-origin/fixed-tool
-OAuth consent and individual grant revocation. Owner authentication and grant
+OAuth consent, supported profile choice, sessions/end-session, individual/all
+grant revocation and browser sign-out. Offline `reset-totp` takes the exclusive
+owner-state lock and preserves grants/passphrase. Owner authentication and grant
 state must remain outside the harness home. The explicit
 `--headless-static-bearer` escape hatch is separate from normal pairing.
 Never forward API-key environment

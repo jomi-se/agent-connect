@@ -15,6 +15,9 @@ subscription, ingress or mobile behavior by remaining in the tree.
 
 ## ACP gateway milestones
 
+- [ACP gateway product parity](plans/acp-gateway-parity.md): completed local
+  install, operation, owner-console and independent-review qualification.
+
 - [ACP gateway spike](plans/acp-gateway-spike.md) and
   [mobile resume](plans/acp-gateway-mobile-resume.md): completed experiments
   that led to the product gateway and ADR 0016 (proposed).
