@@ -37,3 +37,19 @@ export async function pruneTestInstallations(
   }
   await visit(directory);
 }
+
+// Keep independent cleanup attempts running even when one throws synchronously.
+// Report failures only once every attempted cleanup has settled.
+export async function runCleanupTasks(tasks) {
+  const results = await Promise.allSettled(
+    tasks.map((task) => Promise.resolve().then(task)),
+  );
+  const failures = results
+    .filter((result) => result.status === "rejected")
+    .map((result) => result.reason);
+  if (failures.length)
+    throw new AggregateError(
+      failures,
+      "Fixture cleanup failed after all owned cleanup tasks were attempted",
+    );
+}
