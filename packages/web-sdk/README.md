@@ -20,17 +20,17 @@ No existing import needs to change in this alpha.
 
 ## ACP quickstart (experimental)
 
-The gateway operator issues an application grant for an exact approved tool
-snapshot. Obtain that grant through your application's authorized flow before
-connecting; this SDK does not implement grant issuance or consent. Keep tokens
-in memory and use a secure WebSocket endpoint in production.
+Connect from a user gesture to open the gateway owner's login and consent page.
+The owner approves this application origin and its exact tool snapshot. The SDK
+uses PKCE and stores the application grant in session-scoped browser storage.
+Use HTTPS for the gateway and application; HTTP loopback is supported locally.
 
 ```ts
 import {
   connectAgent,
   defineTool,
   AgentSession,
-  type AcpGrant,
+  captureAcpPairingCallback,
 } from "@open-agent-connect/web/acp";
 
 const tools = [
@@ -45,9 +45,21 @@ const tools = [
   }),
 ];
 
-// Supplied by your authorized application flow; never hard-code a real token.
-async function readWithAgent(grant: AcpGrant) {
-  const provider = await connectAgent({ grant, tools });
+// Run at page startup before loading other app assets. A popup callback reports
+// to its opener, then closes; it must not exchange the same code itself.
+const callbackUrl = captureAcpPairingCallback();
+if (callbackUrl && window.opener) window.close();
+
+// Call directly from a click handler, before awaiting any other work.
+async function readWithAgent() {
+  const provider = await connectAgent({
+    gatewayUrl: "https://gateway.example",
+    tools,
+    pairing: {
+      mode: "popup",
+      redirectUri: `${location.origin}${location.pathname}`,
+    },
+  });
   const session = new AgentSession({ provider, tools });
   try {
     for await (const event of session.streamTask("Explain the selected text")) {
@@ -64,9 +76,39 @@ async function readWithAgent(grant: AcpGrant) {
 }
 ```
 
-The grant has `{ gatewayUrl: "wss://gateway.example/acp", token }`. The operator
-owns cwd, model, mode and the restricted agent profile; these are not browser
-options. One provider owns one ACP session and allows one active prompt.
+For mobile browsers, use explicit `pairing: { mode: "redirect", redirectUri }`.
+The SDK saves a finite-lived PKCE transaction before navigating to the gateway.
+After the callback reload, capture and remove OAuth values immediately, then use
+`pairing: { redirectUri, callbackUrl }` to complete pairing. Keep the captured
+callback in memory and consume it once. A resumed page with no callback can call
+`connectAgent({ gatewayUrl, tools, pairing: { redirectUri } })` to reuse its grant.
+The default mode never opens consent; it throws `AcpPairingError` with code
+`pairing_required` when the application needs an explicit Connect action.
+Redirect navigation reports `pairing_redirected`; popup failures report
+`popup_blocked`, `cancelled` or `timeout`.
+
+Managed grants rotate automatically before access expiry. The resumable transport
+detaches before rotation and reattaches the same session; it never resends an
+acknowledged prompt or tool result. Revocation and absolute grant expiry clear
+stored credentials and require explicit pairing again. A fresh provider starts
+an independent conversation unless you supply its previously saved `sessionId`;
+grants and conversation resumption are separate.
+
+`createAcpPairing({ gatewayUrl, tools, redirectUri })` exposes `getGrant()`,
+explicit `pair("popup" | "redirect")`, `clear()`, `revoke()` and `dispose()` for
+applications that own a connection UI. `clear()` removes local credentials;
+`revoke()` also calls the gateway's app-grant revocation endpoint. Disposal stops
+owned requests and popup observers but leaves a stored grant available for reuse.
+Storage is scoped to the exact gateway origin, application origin and approved
+tool snapshot. The default `sessionStorage` avoids sharing rotated refresh
+credentials between tabs. An injected storage adapter must preserve those
+session boundaries. Browser credentials remain accessible to application
+JavaScript: protect against XSS and do not log, publish, or place them in URLs.
+
+Headless compatibility remains available as
+`connectAgent({ grant: { gatewayUrl: "wss://gateway.example/acp", token }, tools })`.
+The operator owns cwd, model, mode and the restricted agent profile; these are not
+browser options. One provider owns one ACP session and allows one active prompt.
 `AgentSession` validates arguments against CSP-safe JSON Schema before executing
 an approved handler. Its tool definitions must match the provider's fixed snapshot.
 
@@ -186,8 +228,9 @@ provider before a deliberate follow-up. A saved session ID only helps while the
 gateway recognizes ownership under the same grant.
 
 AI SDK active-stream reconnect probes the same resumable connection. A locked UI
-stream cannot acquire a second reader. Cold reconnect loads history and returns
-`null`; it cannot safely reconstruct an interrupted UI stream. Let the user send
+stream cannot acquire a second reader. Idle reconnect preserves a healthy live
+host and returns `null`; an ended recoverable transport loads history. It cannot
+safely reconstruct an interrupted UI stream. Let the user send
 a new message deliberately. Do not automatically resend, regenerate or retry
 uncertain application effects.
 
@@ -199,10 +242,13 @@ uncertain application effects.
 | WebSocket close  | Error code               | Meaning / response                                                                  |
 | ---------------- | ------------------------ | ----------------------------------------------------------------------------------- |
 | 4400             | `protocol_error`         | Invalid frame; inspect client/gateway compatibility.                                |
-| 4401             | `invalid_app_grant`      | Obtain new authorized grant.                                                        |
+| 4401             | `invalid_app_grant`      | Explicitly reconnect to approve a new grant.                                        |
 | 4403             | `authorization_denied`   | Origin denied; authorization must be resolved.                                      |
 | 4404, 4410, 4413 | `session_expired`        | Expired, ended or overflowed transport; history load may recover the known session. |
 | 4409             | `session_superseded`     | Another attachment took over; do not take it back automatically.                    |
+| 1009             | `frame_too_large`        | Reduce the message or tool result; the frame was not queued or resent.              |
+| 4415             | `session_superseded`     | Host was evicted; start a new conversation explicitly.                              |
+| 4414             | `invalid_app_grant`      | Grant revoked, expired or policy changed; explicitly reconnect.                     |
 | 4418             | `session_capacity`       | Owner must release capacity.                                                        |
 | 4500             | `agent_execution_failed` | Gateway could not launch the adapter.                                               |
 
@@ -222,7 +268,7 @@ application conversation, one active request and a fixed approved tool snapshot.
 
 The retained OpenClaw plugin path uses discovery, delegated authorization,
 Open Responses and scoped execution history. Existing exports and behavior remain
-available at `@open-agent-connect/web`. ACP consumes a separately issued grant;
+available at `@open-agent-connect/web`. ACP uses its own browser pairing or an explicitly issued headless grant;
 there is no automatic OAuth-to-ACP migration. See the
 [OpenClaw integration guide](../../docs/guides/web-app-integration.md).
 

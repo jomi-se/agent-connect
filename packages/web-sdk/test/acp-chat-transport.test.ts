@@ -330,7 +330,7 @@ it("maps cancel to session/cancel and abort, with a cooperative held application
   expect((await result).at(-1)?.type).toBe("abort");
   expect(peer.calls.some((c) => c.method === "session/cancel")).toBe(true);
 });
-it("reconnects an unlocked active UI stream and cold-loads without another prompt", async () => {
+it("reconnects an unlocked UI stream and keeps a healthy idle host without another prompt", async () => {
   const peer = new Peer();
   const { provider, transport } = await setup(peer);
   const stream = await transport.sendMessages(request());
@@ -343,7 +343,13 @@ it("reconnects an unlocked active UI stream and cold-loads without another promp
   await chunks(stream);
   expect(transport.sessionId).toBe(provider.sessionId);
   expect(await transport.reconnectToStream({ chatId: "ui-chat" })).toBe(null);
-  expect(peer.calls.filter((c) => c.method === "session/load")).toHaveLength(1);
+  expect(peer.calls.filter((c) => c.method === "session/load")).toHaveLength(0);
+  expect(peer.sockets).toHaveLength(1);
+  expect(
+    peer.sockets[0]!.sent.some(
+      (frame) => (frame as { t?: string }).t === "bye",
+    ),
+  ).toBe(false);
   expect(peer.calls.filter((c) => c.method === "session/prompt")).toHaveLength(
     1,
   );

@@ -107,6 +107,7 @@ export interface AgentProvider {
 export type AgentConnectErrorCode =
   | "http_error"
   | "protocol_error"
+  | "frame_too_large"
   | "runtime_identity_mismatch"
   | "authorization_denied"
   | "authorization_expired"
