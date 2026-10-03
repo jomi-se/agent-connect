@@ -220,6 +220,30 @@ try {
     ],
     { inherit: true },
   );
+  const report = JSON.parse(
+    await readFile(join(run, "work/report.json"), "utf8"),
+  );
+  assert.equal(report.status, "passed");
+  assert.ok(
+    report.checks.length >= 26,
+    "baseline pairing/chat/tool/reconnect/cancel gates and operation parity gates must all run",
+  );
+  for (const capability of [
+    "setup-plan",
+    "setup-apply",
+    "doctor-json",
+    "service-offline",
+    "profile-readonly",
+    "sample-auto-recovery",
+    "sessions-end",
+    "forget-browser",
+    "revoke-all",
+    "runtime-problem",
+  ])
+    assert.ok(
+      report.parityCoverage?.includes(capability),
+      `missing artifact acceptance: ${capability}`,
+    );
   console.log(
     `PASS ACP clean-room acceptance (diagnostics: ${run}/work/report.json)`,
   );
