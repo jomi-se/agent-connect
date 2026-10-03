@@ -1,7 +1,15 @@
 // Produce local archives/tarballs only; --tag here labels artifacts, never Git refs.
 import { spawnSync } from "node:child_process";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import {
+  readFile,
+  mkdir,
+  writeFile,
+  mkdtemp,
+  chmod,
+  rm,
+} from "node:fs/promises";
 import { resolve, join } from "node:path";
+import { tmpdir } from "node:os";
 const repo = resolve(import.meta.dirname, "..");
 const { version } = JSON.parse(
   await readFile(join(repo, "packages/gateway-npm/package.json"), "utf8"),
@@ -40,30 +48,51 @@ const targets = process.argv.includes("--all-linux")
     ];
 if (targets.includes("unsupported"))
   throw new Error("Local builds support Apple Silicon and Linux x64/ARM64");
-run(dist, [
-  "build",
-  "--artifacts=local",
-  ...targets.flatMap((target) => ["--target", target]),
-  "--tag",
-  `v${version}`,
-]);
-run(dist, ["build", "--artifacts=global", "--tag", `v${version}`]);
-for (const target of targets) {
-  run(process.execPath, [
-    "scripts/acp-release-info.mjs",
-    "record",
-    "--target",
-    target,
-    "--version",
-    version,
-    "--image",
-    env.AGENT_CONNECT_SESSION_IMAGE,
+const compilers = await mkdtemp(join(tmpdir(), "acp-release-compilers-"));
+try {
+  for (const target of targets.filter((value) =>
+    value.endsWith("-linux-musl"),
+  )) {
+    const compiler = join(compilers, `${target}-gcc`);
+    // cc-rs detects Clang and adds a Rust target triple which Zig cannot parse.
+    // This compiler already fixes its target; omit that redundant override.
+    await writeFile(
+      compiler,
+      `#!/usr/bin/env bash\nargs=()\nfor arg in "$@"; do\n  case "$arg" in --target=*) ;; *) args+=("$arg");; esac\ndone\nexec zig cc -target ${target.replace("-unknown", "")} "\${args[@]}"\n`,
+    );
+    await chmod(compiler, 0o755);
+    const key = target.replaceAll("-", "_");
+    env[`CC_${key}`] ??= compiler;
+    // Rust's bundled LLD understands its musl CRT and architecture errata flags.
+    env[`CARGO_TARGET_${key.toUpperCase()}_LINKER`] ??= "rust-lld";
+  }
+  run(dist, [
+    "build",
+    "--artifacts=local",
+    ...targets.flatMap((target) => ["--target", target]),
+    "--tag",
+    `v${version}`,
   ]);
+  run(dist, ["build", "--artifacts=global", "--tag", `v${version}`]);
+  for (const target of targets) {
+    run(process.execPath, [
+      "scripts/acp-release-info.mjs",
+      "record",
+      "--target",
+      target,
+      "--version",
+      version,
+      "--image",
+      env.AGENT_CONNECT_SESSION_IMAGE,
+    ]);
+  }
+  run(process.execPath, [
+    "scripts/acp-release.mjs",
+    "pack",
+    "--local",
+    "--image",
+    `agent-connect-session:${version}`,
+  ]);
+} finally {
+  await rm(compilers, { recursive: true, force: true });
 }
-run(process.execPath, [
-  "scripts/acp-release.mjs",
-  "pack",
-  "--local",
-  "--image",
-  `agent-connect-session:${version}`,
-]);

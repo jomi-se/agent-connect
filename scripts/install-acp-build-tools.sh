@@ -57,6 +57,23 @@ python3 -m venv "$tools_dir/zig"
 "$tools_dir/zig/bin/python" -m pip install --disable-pip-version-check "ziglang==$zig_version"
 printf '#!/usr/bin/env bash\nexec "%s" -m ziglang "$@"\n' "$tools_dir/zig/bin/python" > "$tools_dir/bin/zig"
 chmod 755 "$tools_dir/bin/zig"
+# Native musl builds also compile C dependencies (for example rustls/ring).
+# cargo-dist can use plain cargo on the host architecture; give it a pinned
+# musl compiler and linker rather than relying on a host musl-gcc installation.
+for target in "${rust_targets[@]}"; do
+  case "$target" in
+    *-unknown-linux-musl)
+      compiler="$tools_dir/bin/$target-gcc"
+      zig_target=${target/-unknown/}
+      printf '#!/usr/bin/env bash\nargs=()\nfor arg in "$@"; do\n  case "$arg" in --target=*) ;; *) args+=("$arg");; esac\ndone\nexec "%s" cc -target "%s" "${args[@]}"\n' \
+        "$tools_dir/bin/zig" "$zig_target" > "$compiler"
+      chmod 755 "$compiler"
+      printf 'CC_%s=%s\n' "${target//-/_}" "$compiler" >> "$GITHUB_ENV"
+      linker_key=${target//-/_}
+      printf 'CARGO_TARGET_%s_LINKER=rust-lld\n' "${linker_key^^}" >> "$GITHUB_ENV"
+      ;;
+  esac
+done
 cargo install --locked --version "$zigbuild_version" --root "$tools_dir/cargo-tools" cargo-zigbuild
 export PATH="$tools_dir/bin:$tools_dir/cargo-tools/bin:$PATH"
 printf '%s\n' "$tools_dir/bin" "$tools_dir/cargo-tools/bin" >> "$GITHUB_PATH"
