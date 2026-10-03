@@ -290,13 +290,7 @@ pub fn setup_plan(cli: &SetupCli) -> anyhow::Result<SetupPlan> {
             "existing owner authentication state is missing or unsafe; setup never replaces it",
         )?;
     }
-    let login_required = !home
-        .join(match harness {
-            Harness::Codex => ".codex/auth.json",
-            Harness::Claude => ".claude/.credentials.json",
-        })
-        .symlink_metadata()
-        .is_ok_and(|m| m.is_file() && !m.file_type().is_symlink());
+    let login_required = !credentials::credential_file_present(&home, harness);
     let login_command = vec![
         "agent-connect".into(),
         "login".into(),
