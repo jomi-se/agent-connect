@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Future feature: owner console and managed agent profiles
 
 Status: in progress. The unified owner-authentication, consent, grant inspection,

@@ -62,8 +62,7 @@ assuming a folder convention captures it.
   excluded.
 - Knip has explicit workspace entry points. CSS-only font packages and the
   externally installed `omnigent` executable are documented exceptions.
-- jscpd scans production JavaScript and TypeScript under `apps/` and
-  `packages/`. Tests and end-to-end fixtures are excluded because repeated test
+- jscpd scans production JavaScript and TypeScript under `packages/`. Tests and end-to-end fixtures are excluded because repeated test
   setup is usually a different refactoring decision.
 
 When adding an application or package, add its entry points to `knip.json` and

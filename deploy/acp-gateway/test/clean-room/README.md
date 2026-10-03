@@ -9,7 +9,8 @@ The release's session image must already be built.
 The directory must contain `release.json`, npm tarballs for the gateway, the
 current Linux platform binary and the web SDK, and `acp-chat-sample.tgz` with a
 `package/` root. Packages are identified by their packed manifests and must
-match the manifest's release version. All manifest artifact sizes and SHA256
+match `release.version` for gateway/platform packages and `release.sdkVersion`
+for the independently versioned browser SDK. All manifest artifact sizes and SHA256
 checksums are checked before installation. The manifest's `sessionImage` is used
 when present.
 

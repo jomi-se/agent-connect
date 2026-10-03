@@ -3,20 +3,7 @@
   "workspaces": {
     ".": {
       "entry": ["scripts/**/*.{js,mjs,cjs,ts}"],
-      "project": ["*.{js,mjs,cjs,ts}", "scripts/**/*.{js,mjs,cjs,ts}"],
-      "ignoreBinaries": ["omnigent"]
-    },
-    "apps/firebase-canvas": {
-      "entry": ["e2e/**/*.spec.ts"],
-      "project": ["src/**/*.ts", "*.config.ts", "e2e/**/*.ts"],
-      "ignoreDependencies": [
-        "@fontsource-variable/figtree",
-        "@fontsource/ibm-plex-mono"
-      ]
-    },
-    "packages/openclaw-plugin": {
-      "entry": ["src/index.ts", "test/**/*.test.ts"],
-      "project": ["src/**/*.ts", "test/**/*.ts"]
+      "project": ["*.{js,mjs,cjs,ts}", "scripts/**/*.{js,mjs,cjs,ts}"]
     },
     "packages/web-sdk": {
       "entry": ["src/index.ts", "test/**/*.test.ts"],

@@ -1,6 +1,8 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # ADR 0015: OpenClaw owns Agent Connect installation and lifecycle
 
-Date: 2026-09-08. Status: accepted and implemented.
+Date: 2026-09-08. Status: superseded and implemented.
 
 ## Decision
 

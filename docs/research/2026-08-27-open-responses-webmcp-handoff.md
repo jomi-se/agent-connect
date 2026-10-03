@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Agent Connect: Open Responses and WebMCP conclusions
 
 **Date:** 2026-08-27

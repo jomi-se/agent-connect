@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # 0003: Put a loopback gateway behind Tailscale Serve
 
 - Status: accepted

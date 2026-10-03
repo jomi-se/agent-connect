@@ -1,4 +1,4 @@
-import { AgentConnectError } from "./agent-session.js";
+import { AgentConnectError } from "./errors.js";
 import { createToolValidator } from "./tool-schema.js";
 import type {
   ApplicationTool,
@@ -44,7 +44,7 @@ interface ChromiumModelContext extends EventTarget {
 
 /**
  * Discover tools before consent, then pass `.tools` to
- * beginOpenClawAuthorization and the resulting AgentSession. Validated with
+ * connectAgent and createAcpChatTransport. Validated with
  * Chrome 153's native JSON-string binding.
  * The current CG draft uses objects instead; do not auto-retry an invocation
  * in a second format, because the first call may already have side effects.
@@ -155,7 +155,7 @@ export async function createWebMcpToolSnapshot(
       if (schema.type !== undefined && schema.type !== "object") {
         throw new TypeError("Invalid WebMCP object input schema");
       }
-      // Match AgentSession's preflight before disclosing a candidate to consent.
+      // Match AcpToolExecutor's preflight before disclosing a candidate to consent.
       createToolValidator(schema);
       freezeJson(inputSchema);
       const handle = Object.freeze({ ...tool });

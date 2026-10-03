@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Future investigation: provider-owned conversation recovery and library
 
 Status: proposed, not started. Product intent captured 2026-09-09.

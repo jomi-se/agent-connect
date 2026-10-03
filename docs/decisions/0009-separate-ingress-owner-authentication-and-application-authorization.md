@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # 0009: Separate ingress, owner authentication, and application authorization
 
 - Status: proposed

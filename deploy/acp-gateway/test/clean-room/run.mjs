@@ -288,7 +288,10 @@ try {
   ]) {
     const packed = packages.get(name);
     assert.ok(packed, `Missing packed ${name}`);
-    assert.equal(packed.metadata.version, release.version);
+    assert.equal(
+      packed.metadata.version,
+      name === "@open-agent-connect/web" ? release.sdkVersion : release.version,
+    );
     report.packed[name] = packed.metadata.version;
   }
   const gatewayPackage = packages.get("@open-agent-connect/gateway");
@@ -336,8 +339,8 @@ try {
   assert.equal(manifest.name, "agent-connect-acp-chat-sample");
   assert.equal(manifest.version, release.version);
   assert.ok(
-    (await readFile(join(sample, "main.js"), "utf8")).includes(
-      'from "@open-agent-connect/web/acp"',
+    (await readFile(join(sample, "main.jsx"), "utf8")).includes(
+      'from "@open-agent-connect/web"',
     ),
   );
   manifest.dependencies["@open-agent-connect/web"] = `file:${sdkPackage.file}`;
@@ -347,18 +350,18 @@ try {
     ["install", "--ignore-scripts", "--no-audit", "--no-fund"],
     { cwd: sample },
   );
-  // Resolve the installed public subpath; no SDK source or aliases enter this build.
+  // Resolve the installed public root export; no SDK source or aliases enter this build.
   const resolved = await command(
     "node",
     [
       "--input-type=module",
       "-e",
-      'console.log(import.meta.resolve("@open-agent-connect/web/acp"))',
+      'console.log(import.meta.resolve("@open-agent-connect/web"))',
     ],
     { cwd: sample },
   );
   assert.ok(
-    resolved.includes("/node_modules/@open-agent-connect/web/dist/acp.js"),
+    resolved.includes("/node_modules/@open-agent-connect/web/dist/index.js"),
   );
   await command("npm", ["run", "build"], { cwd: sample });
   report.checks.push(

@@ -1,27 +1,17 @@
-# ACP alpha release process
+# ACP release process
 
-`0.1.0-alpha.1` is a prepared candidate. ADR 0016 is still proposed;
-publication remains blocked until its status is explicitly accepted. The
-OpenClaw plugin remains the previous published installation target and is not
-part of this ACP release's version bump or publication set.
-
+Gateway **0.0.1** and browser SDK **0.0.10** are unpublished candidates.
+ADR 0016 remains proposed; publication requires explicit owner acceptance.
 The [manual workflow](../../.github/workflows/acp-release.yml) is the only
-authorized automated ACP publication path. Ordinary PR/main CI has read-only
-permissions and never publishes. Existing standalone OpenClaw release scripts
-remain available for the operator's separate release process. The previous
-plugin's automatic publish job has been removed from ordinary CI; there is no
-automatic plugin publication path. Its currently published package stays
-available. Any future plugin release needs separate owner authorization and
-review of `release:prepare`, `release:smoke` and `release:publish`: those retained
-scripts prepare and publish the legacy SDK/plugin set, not the ACP set. In
-particular, the legacy SDK package shares its npm name with the new ACP SDK;
-do not run the old publisher against a newly prepared ACP SDK without an
-explicitly approved compatibility and version decision.
+approved automated publication path. Ordinary CI is read-only. Agents may
+prepare and verify artifacts but never push, publish, run this workflow or
+execute npm deprecation.
 
 ## Artifacts and pins
 
-The SDK, launcher, platform packages, Rust gateway and session-image manifest
-share one alpha version. `node scripts/acp-release.mjs check` verifies versions
+The launcher, platform packages, Rust gateway and session-image manifest share
+version 0.0.1. The SDK is independently versioned at 0.0.10. All packages remain
+on 0.0.x until the API shape is final. `node scripts/acp-release.mjs check` verifies versions
 and adapter pins before building. Adapter versions come from the launcher
 manifest and the session-image manifest/lockfile; floating adapter installs are
 not release inputs.
@@ -54,7 +44,7 @@ second cargo-dist npm installer. The collection contains:
 - three native gateway archives, checksum sidecars and hash-bound executable
   `release-info` evidence;
 - the shell installer and the standalone `acp-chat-sample.tgz`;
-- `release.json` with version, targets, adapter pins, image reference and artifact
+- `release.json` with gateway/SDK versions, targets, adapter pins, image reference and artifact
   hashes, plus aggregate `SHA256SUMS`.
 
 Before producing any npm package, the packer checks all available gateway
@@ -159,7 +149,7 @@ The operator must complete these external setup steps separately:
    GHCR package and that the resulting session image is publicly readable for
    installation. Initial GHCR package visibility is an operator-owned setting;
    a successful push alone does not prove anonymous pulls work.
-5. Commit and push the approved source and exact `v0.1.0-alpha.1` tag yourself.
+5. Commit and push the approved source and exact `v0.0.1` tag yourself.
    The workflow never pushes commits or creates tags.
 
 Trusted publishing binds OIDC credentials to the specified repository,
@@ -168,7 +158,7 @@ compatible npm CLI. The public packages' repository metadata must match.
 See [npm's trusted-publisher setup](https://docs.npmjs.com/trusted-publishers/)
 and [GitHub deployment environment protection](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
 
-Dispatch from that **exact tag**, set `tag=v0.1.0-alpha.1`, `dry_run=false`, and
+Dispatch from that **exact tag**, set `tag=v0.0.1`, `dry_run=false`, and
 `publish=true`. The workflow confirms that the tag already exists remotely and
 resolves to the dispatched checkout. Conflicting inputs fail before any write.
 Review the `acp-verified-local-<version>` candidate before approving the image job.
@@ -197,3 +187,18 @@ state before deciding how to resume. Do not automatically reissue an uncertain
 publication, move a tag, or replace an already published npm version. After a
 successful release, verify anonymous image pulls, platform installations,
 package provenance and the `next` dist-tag from the published artifacts.
+
+## Owner-only retirement after publication
+
+After **both** `@open-agent-connect/gateway@0.0.1` and
+`@open-agent-connect/web@0.0.10` are published and their public installation is
+verified, the owner runs these commands. Agents never execute them.
+
+```sh
+npm deprecate '@open-agent-connect/openclaw-plugin@*' 'Use @open-agent-connect/gateway and the ACP SDK. Install guide: https://github.com/jomi-se/agent-connect/blob/main/docs/install/README.md'
+npm deprecate '@open-agent-connect/web@<0.0.10' 'Use @open-agent-connect/web@0.0.10 with @open-agent-connect/gateway. Install guide: https://github.com/jomi-se/agent-connect/blob/main/docs/install/README.md'
+```
+
+Verify that deprecation covers every plugin version and only SDK versions below
+0.0.10. Do not unpublish packages; published artifacts and Git history preserve
+the previous implementation.

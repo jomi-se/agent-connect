@@ -8,8 +8,6 @@ package-lock.json
 .impeccable/hook.cache.json
 .playwright-mcp
 Architecture Story - Desktop.html
-contract/open-responses/openapi.json
-experiments/acp-gateway/target
-experiments/acp-gateway/.run
+docs/archive/contracts/open-responses/openapi.json
 
 /target

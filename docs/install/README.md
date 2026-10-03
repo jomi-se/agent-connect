@@ -1,7 +1,7 @@
 # Install Agent Connect (ACP prerelease)
 
 Install your gateway, run guided setup, and approve an application's exact
-origin and tools in your browser. **0.1.0-alpha.1 is an unpublished release
+origin and tools in your browser. **0.0.1 is an unpublished release
 candidate:** use supplied local artifacts until the owner approves the first
 release. The npm and release commands below describe the path after publication.
 ADR 0016 remains proposed. ACP, MCP-over-ACP and `agent-connect.resume.v1` are
@@ -18,7 +18,7 @@ is needed.
 After publication:
 
 ```sh
-npm install --global @open-agent-connect/gateway@0.1.0-alpha.1
+npm install --global @open-agent-connect/gateway@0.0.1
 agent-connect --help
 ```
 
@@ -26,8 +26,8 @@ For a local candidate, install the launcher and matching platform tarball
 together; substitute `linux-x64` or `darwin-arm64` for your host:
 
 ```sh
-npm install --global ./open-agent-connect-gateway-0.1.0-alpha.1.tgz \
-  ./open-agent-connect-gateway-linux-arm64-0.1.0-alpha.1.tgz
+npm install --global ./open-agent-connect-gateway-0.0.1.tgz \
+  ./open-agent-connect-gateway-linux-arm64-0.0.1.tgz
 ```
 
 Keep npm optional dependencies enabled: they select the native platform binary.
@@ -136,13 +136,13 @@ cannot expand on reconnect. Profile availability depends on the harness; the
 console describes the native authority that remains.
 
 To try the sample, obtain `acp-chat-sample.tgz` and
-`open-agent-connect-web-0.1.0-alpha.1.tgz` from the matching release or artifact
+`open-agent-connect-web-0.0.10.tgz` from the matching release or artifact
 producer:
 
 ```sh
 tar -xzf acp-chat-sample.tgz
 cd package
-npm install ../open-agent-connect-web-0.1.0-alpha.1.tgz
+npm install ../open-agent-connect-web-0.0.10.tgz
 npm run dev
 ```
 
@@ -229,13 +229,6 @@ To uninstall, stop and uninstall the service, stop its owned egress with
 archive-installed executables. These operations preserve private data. Revoke
 the dedicated provider login in the provider's account controls before choosing
 to delete it; leave personal logins alone. Never prune unrelated Docker resources.
-
-### Moving from the OpenClaw plugin
-
-The [OpenClaw plugin](../../deploy/openclaw-gateway/README.md) and npm package
-remain available. Trying ACP means a fresh ACP runtime, dedicated login and new
-pairing for each app. Plugin grants, tokens, histories and personal provider
-credentials are not imported. Plugin retirement is a separate owner decision.
 
 ## Claude Code
 

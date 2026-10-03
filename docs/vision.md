@@ -9,13 +9,11 @@ that the current implementation already satisfies it.
 
 ## The ambition
 
-Implementation refinement (2026-09-06): the accepted
-[OpenClaw-first plan](archive/plans/connect-your-ai-openclaw.md) uses AI SDK for the
-application-side model/tool loop and Agent Connect for connection glue. Owner
-authentication may be Tailscale-flavored or ordinary HTTPS; grants and bearer
-verification are shared. Optional code execution means an isolated sandbox,
-not ambient host filesystem access. Compatibility providers follow Bookhand's
-native app-scoped connection. These are planned changes, not completed support.
+Current implementation: the ACP gateway and root browser SDK connect a fixed,
+consented tool snapshot to a user-selected harness. AI SDK `useChat` owns browser
+presentation; the harness owns the model/tool loop. Native execution runs in
+owned boxes with dedicated harness homes and restricted egress. The
+[architecture](architecture/target-architecture.md) records the current boundary.
 
 Make **Connect your AI** an ordinary application capability, like connecting a
 calendar or payment account. A developer integrates once; the user chooses who
@@ -31,7 +29,7 @@ ease of use, not a requirement to clone Google login or confuse authentication
 with permission to spend inference allowance.
 
 The important boundary is the **portable application–provider contract**.
-OpenClaw is one possible implementation, not the definition of the product.
+A harness adapter is one possible implementation, not the definition of the product.
 
 ## The user and developer experience
 
@@ -48,7 +46,7 @@ Back to the app
 The app has an authorized Open Responses connection
 ```
 
-A provider could be a personal OpenClaw installation, another user-owned
+A provider could be a personal ACP gateway, another user-owned
 runtime, a hosted personal-agent service, or eventually an AI lab directly.
 Here, user-owned means selected and authorized by the user and backed by their
 account/resources; it need not mean the user physically operates the server.
@@ -174,7 +172,7 @@ preferable to standardizing every runtime's internal ACL or tool taxonomy.
 ### 4. Return an interchangeable Responses connection
 
 Use ordinary Open Responses for execution, including its client-tool round trip.
-Do not expose Omnigent, ACP, OpenClaw internal sessions, or a new proprietary
+Do not expose internal harness sessions, or a new proprietary
 task/event protocol to applications.
 
 Specify a small tested baseline rather than saying OpenAI-compatible and leaving
@@ -220,10 +218,10 @@ to an arbitrary replacement address.
 Ship three complementary deliverables:
 
 1. **A short public profile:** exact handshake, metadata, permission semantics and
-   mandatory Responses behavior, with explicit optional extensions.
+   mandatory session behavior, with explicit optional extensions.
 2. **An SDK:** selection, authorization, renewal and application-tool handling;
    no mandatory UI framework or runtime dependency.
-3. **A provider implementation:** initially OpenClaw integration, keeping its
+3. **A provider implementation:** initially ACP harness integration, keeping its
    operational details behind the public contract.
 
 Use Bookhand as a real application, then demonstrate the **same app integration
@@ -234,32 +232,19 @@ copying our gateway or adding provider-specific code to Bookhand.
 
 Make conformance tests exercise the public boundary, including isolation,
 revocation, errors and continuation, not just a successful text response. The
-second implementation is how we discover accidental OpenClaw assumptions before
+second implementation is how we discover accidental harness assumptions before
 turning them into supposed universal requirements.
 
-Take that working interoperability and the smallest remaining proposal to Open
-Responses, OAuth/MCP contributors and runtime maintainers. Seek reuse and common
+Take that working interoperability and the smallest remaining proposal to ACP, OAuth/MCP contributors and runtime maintainers. Seek reuse and common
 ownership; publishing our document alone does not create an industry standard.
 This direction authorizes neither external outreach nor submissions by itself.
 
-## What the current OpenClaw work proves—and does not
+## Implementation evidence
 
-The [delegation investigation](research/2026-09-05-openclaw-app-delegation.md) and
-[independent feasibility report](reviews/2026-09-05-openclaw-plugin-feasibility.md)
-show a plugin composition with native sessions, Responses, app/native tools and
-scoped enforcement. Its private routes, trusted headers, proxy restrictions and
-process layout are implementation details. They must not become requirements
-for all conforming providers.
-
-Plugin-plus-restricted-ingress packaging and a cleaner native delegation hook
-remain implementation options with different costs. This vision does not settle
-that choice, approve an upstream patch, or authorize a live migration. It also
-does not retrospectively turn the feasibility prototype into a complete consent,
-durability, transport or Bookhand release pass.
-
-Evaluate implementation work by whether it advances the app/provider contract.
-Do not preserve a separate Agent Connect gateway, custom response engine or
-provider-specific public session protocol merely because we built one earlier.
+Current compatibility and product qualification are described in
+[the testing strategy](architecture/testing-strategy.md) and
+[current work](plan/current-work.md). Historical feasibility investigations are
+superseded evidence, not current setup or acceptance instructions.
 
 ## Limits and decisions still open
 
@@ -294,6 +279,6 @@ context; draft status and provider support must be rechecked before implementati
 - [Device authorization, RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html).
 - [Native application identity investigation](future/native-client-identity.md).
 - [ADR 0010: existing Open Responses boundary](decisions/0010-open-responses-gateway-pivot.md).
-- [ADR 0012: current OpenClaw implementation direction](decisions/0012-openclaw-policy-gateway.md).
+- [ADR 0012: superseded implementation direction](decisions/0012-openclaw-policy-gateway.md).
 - [Current mission](mission.md), [implementation inventory](scope-inventory.md),
   and [current work](plan/current-work.md).

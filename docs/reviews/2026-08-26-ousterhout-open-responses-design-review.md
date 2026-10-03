@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # An Ousterhout review of the Open Responses gateway pivot
 
 - Review date: 2026-08-26

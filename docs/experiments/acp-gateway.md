@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # ACP gateway spike: results
 
 Status: complete, 2026-09-30; mobile follow-up 2026-10-01
@@ -474,7 +476,7 @@ retaining its AbortSignal listener.
 
 ## Product artifact qualification (2026-10-02)
 
-The ACP candidate is now version 0.1.0-alpha.1 across the SDK, Rust gateway,
+The ACP candidate is now version 0.0.1 across the SDK, Rust gateway,
 npm launcher/platform packages and session-image manifest. SDK tarball checks
 verify public ACP imports/types, retained deprecated legacy declarations, no
 tests/maps/local-path leaks and browser-safe output. The launcher no longer

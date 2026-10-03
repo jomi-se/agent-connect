@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # Deferred: reuse existing gateway components
 
 Status: promoted to an authorized OpenClaw replacement initiative on 2026-09-05.

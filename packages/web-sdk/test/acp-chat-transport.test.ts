@@ -171,7 +171,7 @@ it("maps thoughts, plans, native progress, text and finish into valid UI chunks;
       ),
   ).toBe(true);
 });
-it("executes application tools once through AgentSession while ACP supplies their UI progress", async () => {
+it("executes application tools once through AcpToolExecutor while ACP supplies their UI progress", async () => {
   const peer = new Peer();
   let executions = 0;
   peer.onPrompt = (socket, _params, reply) => {
@@ -363,6 +363,7 @@ it("reports interrupted turns as error and permits only a deliberate new prompt 
     type: "error",
     errorText: expect.stringContaining("task_interrupted"),
   });
+  expect(transport.error).toMatchObject({ code: "task_interrupted" });
   expect(peer.calls.filter((c) => c.method === "session/prompt")).toHaveLength(
     1,
   );
@@ -377,6 +378,7 @@ it("reports interrupted turns as error and permits only a deliberate new prompt 
       )
     ).at(-1)?.type,
   ).toBe("finish");
+  expect(transport.error).toBeUndefined();
 });
 
 it("refuses cold recovery of an authorization or superseded transport", async () => {

@@ -1,0 +1,9 @@
+# In-box Codex configuration: deterministic mock model on the internal network.
+model = "mock-model"
+model_provider = "mock"
+
+[model_providers.mock]
+name = "Deterministic ACP fixture"
+base_url = "http://mock:18931/v1"
+wire_api = "responses"
+requires_openai_auth = false

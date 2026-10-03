@@ -1,0 +1,14 @@
+{
+  "name": "acp-gateway-test-web",
+  "private": true,
+  "description": "Browser page for the ACP gateway compatibility gates. Not an npm workspace member.",
+  "scripts": {
+    "build": "esbuild app.js --bundle --format=esm --platform=browser --outfile=dist/app.js"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "1.5.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}

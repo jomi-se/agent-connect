@@ -18,7 +18,7 @@ import {
   releaseInfoFilename,
   verifyArchiveReleaseInfo,
 } from "./acp-release-info.mjs";
-const version = "0.1.0-alpha.1";
+const version = "0.0.1";
 const sessionImage = `agent-connect-session:${version}`;
 const hostTarget = Object.entries(releaseTargets).find(
   ([, [os, arch]]) => os === process.platform && arch === process.arch,
@@ -174,3 +174,56 @@ test(
     );
   },
 );
+
+test("release checks accept independent SDK versions and reject gateway/image drift", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "acp-version-contract-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  for (const folder of [
+    "scripts",
+    "packages/web-sdk",
+    "packages/gateway-npm",
+    "deploy/acp-gateway/session",
+    "crates/gateway",
+  ])
+    await mkdir(join(directory, folder), { recursive: true });
+  for (const script of ["acp-release.mjs", "acp-release-info.mjs"])
+    await writeFile(
+      join(directory, "scripts", script),
+      await readFile(new URL(script, import.meta.url)),
+    );
+  const manifest = async (file, value) =>
+    writeFile(join(directory, file), JSON.stringify(value));
+  await manifest("packages/web-sdk/package.json", { version: "0.0.10" });
+  await manifest("packages/gateway-npm/package.json", {
+    version: "0.0.1",
+    agentConnect: { adapterVersions: { "fixture-adapter": "2.0.1" } },
+    optionalDependencies: { "fixture-platform": "0.0.1" },
+  });
+  await manifest("deploy/acp-gateway/session/package.json", {
+    version: "0.0.1",
+    dependencies: { "fixture-adapter": "2.0.1" },
+  });
+  await writeFile(
+    join(directory, "crates/gateway/Cargo.toml"),
+    '[package]\nversion = "0.0.1"\n',
+  );
+  const check = () =>
+    spawnSync(
+      process.execPath,
+      [join(directory, "scripts/acp-release.mjs"), "check"],
+      { encoding: "utf8" },
+    );
+  assert.equal(check().status, 0);
+  await manifest("packages/web-sdk/package.json", { version: "1.0.0" });
+  const sdkDrift = check();
+  assert.notEqual(sdkDrift.status, 0);
+  assert.match(sdkDrift.stderr, /independently versioned 0.0.x/);
+  await manifest("packages/web-sdk/package.json", { version: "0.0.10" });
+  await manifest("deploy/acp-gateway/session/package.json", {
+    version: "0.0.2",
+    dependencies: { "fixture-adapter": "2.0.1" },
+  });
+  const imageDrift = check();
+  assert.notEqual(imageDrift.status, 0);
+  assert.match(imageDrift.stderr, /must share one version/);
+});

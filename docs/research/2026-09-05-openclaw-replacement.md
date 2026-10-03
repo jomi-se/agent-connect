@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # OpenClaw replacement investigation
 
 Status: historical investigation, superseded by accepted ADR 0015 and the

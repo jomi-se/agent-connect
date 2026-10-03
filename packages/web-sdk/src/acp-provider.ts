@@ -10,7 +10,7 @@ import {
   type AcpPairingOptions,
   type AcpPairing,
 } from "./acp-pairing.js";
-import { AgentConnectError } from "./agent-session.js";
+import { AgentConnectError } from "./errors.js";
 import { SingleMcpServer, McpOverAcpError } from "./single-mcp-server.js";
 import {
   createResumableAcpStream,
@@ -18,9 +18,9 @@ import {
   type ResumableAcpStreamOptions,
 } from "./resumable-acp-stream.js";
 import type {
-  AgentProvider,
-  AgentProviderEvent,
-  AgentProviderTaskRequest,
+  AcpTaskSource,
+  AcpTaskEvent,
+  AcpTaskRequest,
   AgentToolDefinition,
   ApplicationToolResult,
 } from "./types.js";
@@ -59,13 +59,13 @@ interface Pending {
   reject(error: Error): void;
   timer?: ReturnType<typeof setInterval>;
 }
-class Events implements AsyncIterable<AgentProviderEvent> {
-  private values: AgentProviderEvent[] = [];
+class Events implements AsyncIterable<AcpTaskEvent> {
+  private values: AcpTaskEvent[] = [];
   private wake: (() => void) | undefined;
   private ended = false;
   private bytes = 0;
   constructor(private readonly overflow: () => void) {}
-  push(value: AgentProviderEvent) {
+  push(value: AcpTaskEvent) {
     if (this.ended) return;
     this.bytes += new TextEncoder().encode(JSON.stringify(value)).length;
     if (this.values.length >= 8192 || this.bytes > 8 * 1024 * 1024) {
@@ -133,7 +133,7 @@ function observe(callback: (() => void) | undefined) {
 }
 
 /** @experimental ACP/MCP-over-ACP provider; neither extension is a stable API. */
-export class AcpProvider implements AgentProvider {
+export class AcpProvider implements AcpTaskSource {
   private readonly options: ConnectAgentOptions & { grant: AcpGrant };
   private readonly managed: AcpPairing | undefined;
   private readonly definitions: readonly AgentToolDefinition[];
@@ -246,7 +246,7 @@ export class AcpProvider implements AgentProvider {
     this.server = new SingleMcpServer({
       serverId: "application-tools",
       name: "app",
-      version: "0.1.0",
+      version: "0.0.10",
       tools: this.definitions.map((t) => ({
         ...t,
         execute: (args, ctx) => {
@@ -465,9 +465,7 @@ export class AcpProvider implements AgentProvider {
         break;
     }
   }
-  async *streamTask(
-    request: AgentProviderTaskRequest,
-  ): AsyncIterable<AgentProviderEvent> {
+  async *streamTask(request: AcpTaskRequest): AsyncIterable<AcpTaskEvent> {
     if (this.stopped)
       throw new AgentConnectError("session_expired", "ACP provider is closed");
     if (this.active)
@@ -592,7 +590,7 @@ export class AcpProvider implements AgentProvider {
         "protocol_error",
         "Unknown or already settled ACP tool result",
       );
-    // AgentProvider's existing contract returns a string: AgentSession flattens
+    // AcpTaskSource's existing contract returns a string: AcpToolExecutor flattens
     // text content and serializes structured data/errors. Preserve that contract.
     let parsed: unknown;
     try {

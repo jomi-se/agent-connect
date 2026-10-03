@@ -1,5 +1,5 @@
 import type { AnyMessage, Stream } from "@agentclientprotocol/sdk";
-import { AgentConnectError } from "./agent-session.js";
+import { AgentConnectError } from "./errors.js";
 import type { AgentConnectErrorCode } from "./types.js";
 
 /** @experimental Unstable ACP/Agent Connect resume transport error. */

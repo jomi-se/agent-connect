@@ -27,7 +27,7 @@ test("fixture teardown drops heavy installs and caches while retaining evidence 
       "state/extensions/plugin/node_modules/dependency",
       "cache",
       "npm-cache",
-      "node-compile-cache/openclaw",
+      "node-compile-cache/adapter",
       "state/cache",
       ".cache",
       ".npm",

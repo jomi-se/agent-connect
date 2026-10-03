@@ -1,136 +1,69 @@
 # Agent Connect
 
-Let a web app borrow **your own AI agent**. The app declares a small set of
-approved tools; your gateway runs the harness, and those tools execute in the app.
+Lend an application's tools to the user's own agent. The application owns its
+UI and effects; the user chooses the harness and model through their gateway.
 
-**ACP prerelease candidate: 0.1.0-alpha.1.** ACP, MCP-over-ACP and resumable
-transport APIs are unstable. Artifacts are validated locally and remain
-unpublished until the owner approves the first release. ADR 0016 remains proposed.
-The previous OpenClaw plugin remains in this repository and on npm.
+**Unpublished candidates:** gateway 0.0.1 and browser SDK 0.0.10. Versions remain
+on 0.0.x until the shape is final. ACP, MCP-over-ACP and resumable transport are
+unstable under [proposed ADR 0016](docs/decisions/0016-acp-application-boundary.md).
 
-## Install and try the ACP gateway
+## Install
 
-The gateway launcher requires Node >=24.15 and Docker. Development and
-provider compatibility checks use Node 24 LTS (>=24.15, <25). Supports Apple Silicon macOS,
-Linux x64 and Linux ARM64; Windows is not yet supported. After publication:
+Follow [the gateway install guide](docs/install/README.md). From a prepared
+artifact set, install the gateway launcher and matching native platform package,
+then run:
 
 ```sh
-npm install --global @open-agent-connect/gateway@0.1.0-alpha.1
-agent-connect --help
 agent-connect setup
+agent-connect doctor
 ```
 
-For current local candidates, install the launcher and matching platform tarballs.
-The [install guide](docs/install/README.md) is the complete path from release
-artifacts to a chat turn: install, run guided setup, complete your dedicated
-provider login, then connect through hosted owner consent. For your own HTTPS
-entry point, use `agent-connect setup --origin https://gateway.example`.
-`agent-connect doctor` checks the installation and `agent-connect service`
-manages its user service. No checkout or compiler is required. The guide covers
-the sample app, troubleshooting, upgrades, recovery and uninstalling.
+Production sessions run in disposable boxes with a dedicated shared harness
+home and owned restricted egress. Owner authentication/grants remain outside
+the harness home. Read [the shared-home risks](docs/plan/acp-gateway-credentials.md)
+before owner-run login. Setup never imports personal credentials.
 
 ```text
-Web app (@open-agent-connect/web/acp + approved application tools)
-   │ grant-authorized ACP WebSocket / resumable transport
-   ▼
-Your Rust gateway (agent-connect CLI)
-   │ filters browser authority; one container per session
-   ▼
-Pinned adapter + unmodified Codex or Claude Code CLI
-   │ dedicated shared login/home; constrained network egress
-   ▼
-Your provider
+Web app: @open-agent-connect/web + approved application tools
+    | owner consent, exact origin, fixed tools, unstable ACP WebSocket
+Agent Connect gateway: owner console, profiles, grants, session cleanup
+    | pinned ACP adapter, owned egress
+Disposable session box: dedicated harness home, user-selected agent/model
 ```
 
-The gateway hosts owner sign-in and OAuth consent. Each application requests
-access for its exact browser origin and fixed tool snapshot; the owner chooses
-the duration and can revoke individual grants without restarting. Owner
-passphrases and optional TOTP enrollment stay outside the harness home.
-A dedicated shared home
-holds credentials, configuration and transcripts. A consented application could
-induce the harness to disclose that dedicated credential through an allowed tool,
-or read another app's transcripts. Read the [accepted risks](docs/plan/acp-gateway-credentials.md)
-before logging in. Claude Code subscription use is unconfirmed against Anthropic
-terms. API-key variables are never forwarded into boxes.
+## Integrate
 
-## Integrate a web app
+Import from `@open-agent-connect/web` at the package root. Pair using
+`connectAgent`, then supply `createAcpChatTransport({ provider, tools })` to
+AI SDK `useChat`. The harness owns its history and tool loop; the transport
+validates and executes approved application tools internally. Applications
+must deduplicate consequential effects with stable action IDs. Recovery never
+replays uncertain prompts or actions.
 
-```sh
-npm install @open-agent-connect/web@0.1.0-alpha.1
-```
-
-```ts
-import {
-  captureAcpPairingCallback,
-  connectAgent,
-  defineTool,
-  AgentSession,
-} from "@open-agent-connect/web/acp";
-
-// Run at page startup to remove OAuth response values from the URL.
-const callbackUrl = captureAcpPairingCallback();
-if (callbackUrl && window.opener) window.close();
-
-const tools = [
-  defineTool({
-    name: "read_selection",
-    description: "Read the current selection",
-    inputSchema: { type: "object", additionalProperties: false },
-    execute: () => window.getSelection()?.toString() ?? "",
-  }),
-];
-// Invoke directly from a user click so the consent popup can open.
-const connectButton = document.querySelector<HTMLButtonElement>("#connect")!;
-connectButton.addEventListener("click", async () => {
-  const provider = await connectAgent({
-    gatewayUrl: "https://gateway.example",
-    tools,
-    pairing: {
-      mode: "popup",
-      redirectUri: location.origin + location.pathname,
-    },
-  });
-  const session = new AgentSession({ provider, tools });
-  await session.runTask("Explain the selected text");
-  provider.close();
-});
-```
-
-For mobile browsers use an explicit `pairing.mode: "redirect"` action and
-complete the callback on return. The default `resume` mode only reuses or
-completes a managed grant; it never opens consent automatically. Grants use
-session-scoped browser storage, rotating refresh tokens and stable grant IDs.
-A revoked grant requires a new explicit Connect action.
-
-See the [SDK quickstart](packages/web-sdk/README.md) for tools, typed errors,
-reconnect/recovery and the AI SDK `createAcpChatTransport`/`useChat` integration.
-Recovery never automatically re-sends interrupted prompts or uncertain effects.
-The [standalone sample](examples/acp-chat/) consumes only public packed exports.
-
-## Previous OpenClaw installation
-
-The published `@open-agent-connect/openclaw-plugin@0.0.7` remains available, with
-its [installation guide](deploy/openclaw-gateway/README.md) and Canvas demo in
-[apps/firebase-canvas](apps/firebase-canvas/). Its OAuth/Open Responses SDK
-exports are retained and marked deprecated for new integrations, not removed.
-Trying ACP starts a fresh private runtime and pairs apps again; plugin grants,
-histories and personal provider logins are never imported. ADR acceptance and
-any future plugin retirement remain separate owner decisions.
+See the [SDK API and React example](packages/web-sdk/README.md) and
+[standalone packed sample](examples/acp-chat/README.md).
 
 ## Develop and validate
 
+Use Node 24 LTS >=24.15 and <25, Docker and the pinned build/browser tools.
+Prepare local artifacts using [the release checklist](docs/install/release.md).
+
 ```sh
 npm install
-npm run verify
+npm run format:check
+npm run typecheck
+npm test
+npm run build
 cargo test --locked
+npm run verify
 ```
 
-The [build/release guide](docs/install/release.md) lists Rust, cargo-dist, Zig,
-pinned OpenClaw, Playwright and Docker prerequisites, local artifact generation
-and the credential-free clean-room test. Verification exercises real pinned
-adapters against deterministic inference and never spends subscription allowance.
-The release workflows are written; running them and publishing remain owner actions.
+Verification exercises real pinned ACP adapters with deterministic inference,
+isolated state and artifact-only browser composition. Real-model application
+acceptance is separate evidence. See [testing strategy](docs/architecture/testing-strategy.md).
+Agents stage named paths and commit checked work; pushing and publication remain
+owner-run actions. [Current work](docs/plan/current-work.md) records release gates.
 
 ## License
 
-[MIT](LICENSE)
+MIT

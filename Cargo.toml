@@ -1,6 +1,5 @@
 [workspace]
 members = ["crates/gateway"]
-exclude = ["experiments/acp-gateway"]
 resolver = "3"
 
 [profile.dist]

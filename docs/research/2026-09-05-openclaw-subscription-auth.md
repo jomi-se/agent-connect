@@ -1,3 +1,5 @@
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+
 # OpenClaw 2026.9.1: subscription auth for the built-in loop
 
 Update: this route was selected and a bounded live tool/follow-up test was

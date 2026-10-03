@@ -38,14 +38,16 @@ const session = await json("deploy/acp-gateway/session/package.json");
 const cargo = await readFile(join(repo, "crates/gateway/Cargo.toml"), "utf8");
 const version = gateway.version;
 if (
-  ![
-    sdk.version,
-    session.version,
-    cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1],
-  ].every((v) => v === version)
+  ![session.version, cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1]].every(
+    (v) => v === version,
+  )
 )
   throw new Error(
-    "ACP SDK, gateway, Cargo crate and session image manifest must share one version",
+    "Gateway, Cargo crate and session image manifest must share one version",
+  );
+if (!/^0\.0\.\d+$/.test(sdk.version) || !/^0\.0\.\d+$/.test(version))
+  throw new Error(
+    "SDK and gateway must remain on independently versioned 0.0.x releases",
   );
 for (const [name, pin] of Object.entries(gateway.agentConnect.adapterVersions))
   if (session.dependencies[name] !== pin)
@@ -107,6 +109,7 @@ async function writeMetadata() {
         version,
         sessionImage: imageRef(),
         adapterVersions: gateway.agentConnect.adapterVersions,
+        sdkVersion: sdk.version,
         targets,
         localOnly: values.local,
         artifacts,
@@ -234,7 +237,7 @@ if (command === "check") {
   const metadata = JSON.parse(
     await readFile(join(output, "release.json"), "utf8"),
   );
-  if (metadata.version !== version)
+  if (metadata.version !== version || metadata.sdkVersion !== sdk.version)
     throw new Error("Release metadata version mismatch");
   if (
     command === "publish" &&
