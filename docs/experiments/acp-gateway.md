@@ -745,3 +745,48 @@ the gateway's default capacity to 32 session hosts and removed the single-box
 release caveats. No refresh broker is introduced. Configuration regression
 coverage checks the default and an explicit capacity override. Terminal eviction
 (4415), oversized-frame handling (1009), and the 30-second connect timeout remain.
+
+## Product install, operation and console parity (2026-10-03)
+
+The artifact-installed candidate now provides guided/idempotent setup, unattended
+planning/application, origin/entry-point configuration, metadata-only doctor,
+user-service lifecycle and upgrade, readiness/preflight and offline TOTP recovery.
+The owner console includes health repair guidance, live sessions/end-session,
+revoke-all/forget-browser and immutable profile choice with explicit harness
+limits. The sample recovers interrupted transport automatically without replaying
+uncertain prompts or app effects. Plugin users start a fresh ACP runtime and pair
+again; plugin state and personal provider logins are not imported.
+
+Rechecked review findings 5, 6, 8–14 and 16–18 against current code and tests:
+profile enforcement/copy, asserted policy filtering, owned egress attachment,
+MCP metadata/progress, bounded metadata-only action journal and ownership,
+healthy idle recovery, concurrent shutdown, retained plugin release path,
+typed modes/stable volume names, egress resource bounds and forward-compatible
+launcher engines. Additional regressions cover executable-only upgrade restart,
+equivalent home paths, entry-point-bound socket authority and service Docker PATH.
+All fixture cleanup callbacks run even when one fails. Every OpenClaw fixture
+child now receives explicit isolated HOME/XDG state; no personal credential files
+were inspected. Owner UI tests observe fresh snapshots through physical adapter
+termination rather than waiting on a stale rendered session row.
+
+Final `npm run verify` and `cargo test --locked --workspace` pass. Verification
+includes 220 SDK tests, 84 plugin tests, real pinned host/boxed adapters,
+owned-resource teardown, twenty owner UI states at widths 1440/390/320 and the
+fresh artifact-only clean-room. Its 26 checks include setup/doctor, offline service
+install/uninstall and unavailable-manager errors, real consent denial/approval,
+refresh/revocation, app-tool turns, reconnect/cancel, back/forward cache,
+console end-session and revoke-all. All six owned session hosts are removed
+with no leftovers. The current native ARM64 Linux-musl binary and matching
+packed npm artifacts were built locally; no publication or release workflow ran.
+
+The nested Codex sandbox on the tested Docker environment refuses namespace
+creation before native execution. Correct read-only launch mode, app-tool
+completion and prevention of the native write are verified, but independent
+filesystem-policy enforcement is not. Consent, console and troubleshooting copy
+state this limitation; no container privilege was widened. A supported sandbox
+host and native macOS service execution remain first-release platform checks.
+Windows and per-app box isolation remain outside this qualification. All automated
+inference was deterministic and credential-free; tests performed no harness login
+or subscription turn. The completed checklist is archived at
+[product parity](../archive/plans/acp-gateway-parity.md); current owner-only gates
+are in [current work](../plan/current-work.md).

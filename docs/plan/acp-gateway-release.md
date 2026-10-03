@@ -239,8 +239,11 @@ plan tool. Results are recorded in [the experiment](../experiments/acp-gateway.m
 
 ## Owner gates and retained compatibility
 
-Only [current-work.md](current-work.md)'s owner gates remain: the remaining live
-credential checks, the first approved real release/account setup, and ADR acceptance. The
+The completed [product parity qualification](../archive/plans/acp-gateway-parity.md)
+records guided setup, doctor, user services, console controls, review outcomes
+and the 26-check artifact acceptance gate.
+[Current work](current-work.md) lists remaining live credential checks, the first
+real release/account/platform validation and ADR acceptance. The
 primary CLI is `agent-connect`, with `agent-connect-gateway` retained for compatibility.
 Hosted owner consent is the recommended product authorization path; the manual
 snapshot/bearer handoff remains an explicit headless escape hatch. Hosted pairing
@@ -260,6 +263,11 @@ PKCE/replay, refresh rotation/expiry/revocation, fixed full tool definitions,
 owner/app credential separation, CSRF, optional TOTP and safe page error states.
 The artifact-only browser test must complete real owner consent before its app
 connects; copied static tokens cannot satisfy this gate.
+The same artifact gate must exercise unattended setup planning/application,
+doctor, offline service definition lifecycle where a user manager is unavailable,
+real session/end-session controls, revoke-all and automatic uncertain-turn
+recovery without replay. User-systemd and launchd lifecycles have isolated
+manager-contract fixtures; native macOS release verification remains owner-run.
 
 The pre-auth review also requires terminal eviction and oversized-frame handling,
 bounded startup/shutdown, honest per-harness

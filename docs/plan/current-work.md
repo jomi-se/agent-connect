@@ -25,19 +25,32 @@ Its existing SDK imports remain functional with declaration-level deprecation
 labels. No npm deprecation or plugin removal has occurred. Windows is not yet
 supported by the ACP release matrix.
 
-Hosted authorization and review hardening pass targeted local gates: optional
-TOTP, exact-origin S256 PKCE, rotating grants, bounded policy state, terminal
-transport faults, egress preflight and release-image verification. The fresh
-artifact-only clean-room passes all 16 checks with actual browser owner approval,
-denial, refresh and revocation. Earlier static-bearer evidence remains separate.
-`npm run verify` and `cargo test --locked --workspace` pass, including the new
-consent-based clean-room gate. The owner-page browser gate additionally covers
-14 states at desktop, phone and 320 px reflow widths, with keyboard/touch checks
-and private screenshots. These completed gates do not establish install and
-operation parity with the plugin. The active
-[ACP gateway parity plan](acp-gateway-parity.md) tracks guided setup, doctor,
-service management, console sessions/profiles/recovery and expanded clean-room
-acceptance. That product work remains before the owner-required items below.
+Local product parity is complete. `agent-connect setup` provides guided and
+unattended planning/application, `doctor` supplies actionable human/JSON diagnosis,
+and user-service commands manage systemd/launchd definitions. The owner console
+includes health/problem guidance, live sessions/end-session, revoke-all,
+forget-browser, immutable supported profiles, multiple entry points and offline
+TOTP recovery. The sample automatically recovers interrupted transport without
+replaying uncertain prompts or application effects.
+
+`npm run verify` and `cargo test --locked --workspace` pass. The artifact-only
+clean-room passes 26 checks, including real browser pairing, setup/doctor,
+offline service lifecycle, sessions/end-session, revoke-all, app tools,
+reconnect/cancel and browser back/forward cache restoration. All six owned hosts
+are removed. The owner UI covers twenty states at desktop, phone and 320 px
+reflow widths, with keyboard/touch checks. The completed
+[parity checklist](../archive/plans/acp-gateway-parity.md) records each capability
+and independent-review outcome.
+
+Qualification limits remain explicit: native systemd/launchd operations have
+isolated manager-contract coverage and offline unit validation; macOS execution
+awaits first-release platform validation. Codex read-only mode is correctly
+configured and approved app tools succeed, but the tested Docker environment
+refuses nested namespace creation before native tool execution. A prevented
+write is fail-closed evidence, not independent filesystem-policy qualification;
+the first-release platform matrix must check a host supporting that sandbox.
+Per-app box isolation is deferred, Windows is unsupported, and mobile approval
+and recovery codes remain future work; owner TOTP and offline recovery exist.
 
 Owner-required work:
 
@@ -52,7 +65,8 @@ Owner-required work:
    package ownership/trusted publishers and public GHCR visibility, push the
    reviewed source and version tag yourself, then inspect a manual dry run and
    approve publication. Verify anonymous image pulls, the complete native
-   matrix (including macOS) and the public artifact installation path. None of
+   matrix (including native service operation on macOS and Codex filesystem
+   policy on a compatible sandbox host) and the public artifact installation path. None of
    these account/GitHub/registry actions has been performed locally.
 3. **ADR 0016 acceptance.** Decide whether the implemented hosted authorization and
    shared-home credential boundary are acceptable, and accept the decision
