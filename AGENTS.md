@@ -103,7 +103,16 @@ debugging opt-in; it retains large installs and must not be the default for chec
 
 For routine non-interactive commands whose successful output carries no useful
 information beyond the exit code—builds, typechecks, tests, lint, and similar
-checks—use `scripts/quiet-run.sh` by default:
+checks—use `scripts/quiet-run.sh` by default. When the shared `quiet-run`
+command is installed on PATH, this script delegates new runs to it. The shared
+runner caps failure log text at 16 KiB as well as 80 lines, confirms detached
+startup, preserves the caller's exported environment, and removes successful
+runs when their results are collected. Use the exact handle it prints; clean
+retained runs with `quiet-run --clean HANDLE` after investigation. Without the
+shared command, the repository-local implementation remains available. Existing
+legacy file handles continue to use that implementation.
+
+For example:
 
 ```sh
 ./scripts/quiet-run.sh "plugin tests" npm test --workspace @open-agent-connect/openclaw-plugin
@@ -129,9 +138,10 @@ result later instead of waiting on a blocked call:
 
 ```sh
 ./scripts/quiet-run.sh --detach "full verify" npm run verify
-# → STARTED full verify (handle /tmp/agent-connect-command-logs/quiet-run.Ab3xYz)
+# Copy the handle printed by the runner:
+HANDLE='<returned handle>'
 # do unrelated work here: read a file, plan the next edit
-./scripts/quiet-run.sh --status /tmp/agent-connect-command-logs/quiet-run.Ab3xYz
+./scripts/quiet-run.sh --status "$HANDLE"
 ```
 
 `--status` prints `RUNNING` while the command is in flight and the usual

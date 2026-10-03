@@ -2,6 +2,14 @@
 
 set -u
 
+# Prefer the shared runner when installed. Keep legacy workers and file handles
+# on this implementation so already-started runs remain collectable.
+if command -v quiet-run >/dev/null 2>&1 && test "${1:-}" != "--worker"; then
+  if test "${1:-}" != "--status" || ! test -f "${2:-}.label"; then
+    exec quiet-run "$@"
+  fi
+fi
+
 usage() {
   echo "usage: $0 [--detach|--status <handle>] <label> <command> [args ...]" >&2
   exit 64
