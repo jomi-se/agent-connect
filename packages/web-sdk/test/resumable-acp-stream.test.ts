@@ -272,14 +272,12 @@ it("rejects outgoing frames by UTF8 wire bytes before queueing or sending", asyn
     closeCode: 1009,
   });
   await expect(
-    handle.stream.writable
-      .getWriter()
-      .write({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "session/prompt",
-        params: { prompt: "🙂".repeat(262144) },
-      }),
+    handle.stream.writable.getWriter().write({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "session/prompt",
+      params: { prompt: "🙂".repeat(262144) },
+    }),
   ).rejects.toMatchObject({ code: "frame_too_large" });
   await failure;
   expect(handle.stats()).toMatchObject({ unacked: 0, outNext: 1 });

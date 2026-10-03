@@ -100,6 +100,39 @@ async function approved(extra: AcpPairingOptions = {}) {
   return controller;
 }
 describe("experimental browser ACP PKCE pairing", () => {
+  it("uses the browser global receiver for default fetch throughout the grant lifecycle", async () => {
+    vi.stubGlobal(
+      "fetch",
+      function (this: typeof globalThis, ...args: Parameters<typeof fetch>) {
+        if (this !== globalThis) throw new TypeError("Illegal invocation");
+        return fetchMock(...args);
+      },
+    );
+    const controller = await approved();
+    tokenReply = {
+      ...tokenReply,
+      access_token: "access-2",
+      refresh_token: "refresh-2",
+    };
+    expect((await controller.refresh()).token).toBe("access-2");
+    await controller.revoke();
+    expect(requests.map(({ url }) => url.split("/").at(-1))).toEqual([
+      "par",
+      "token",
+      "token",
+      "revoke",
+    ]);
+  });
+  it("preserves an explicitly injected fetch adapter", async () => {
+    const browserFetch = vi.fn(() => {
+      throw new TypeError("Browser fetch must not be used");
+    });
+    vi.stubGlobal("fetch", browserFetch);
+    const controller = await approved({ fetch: fetchMock });
+    await controller.revoke();
+    expect(browserFetch).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
   it("binds approval and exchange to app origin, resource and exact tool snapshot without exposing verifier", async () => {
     const controller = await begin();
     expect(par.get("client_id")).toBe(origin);
