@@ -75,6 +75,15 @@ resend prompts or uncertain tool results. Gateway restart loses process-local
 ownership and resumable transport handles; saved provider transcripts do not
 restore them. See the [SDK error and recovery contract](../../packages/web-sdk/README.md).
 
+## Read-only native command fails to start
+
+`bwrap: No permissions to create a new namespace` means the host blocked Codex's
+nested sandbox before the command ran. Native operations fail closed; approved
+application tools can still work. Keep the container security settings intact.
+Choose the documented sandboxed profile only if its wider native authority is
+acceptable, or use a host that supports the harness sandbox. This failure is not
+evidence that a write reached the filesystem and was rejected by read-only policy.
+
 ## Lost authenticator
 
 Recovery is a local owner operation, unavailable through a web recovery endpoint:

@@ -1431,6 +1431,11 @@ async fn profile_choice_is_fixed_in_grant_and_unoffered_profiles_are_rejected() 
         page.text
             .contains("Native reads and effects of approved application tools remain allowed")
     );
+    assert!(
+        page.text.contains(
+            "Native operations fail closed when the host cannot start the harness sandbox"
+        )
+    );
     let invalid = request(
         &auth,
         Method::POST,
