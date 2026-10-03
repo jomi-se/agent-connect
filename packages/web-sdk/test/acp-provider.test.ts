@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectAgent, AcpProvider } from "../src/acp-provider.js";
 import { AgentSession } from "../src/agent-session.js";
 import { createAgentChat } from "../src/agent-chat.js";
@@ -23,6 +23,7 @@ const tools: AgentToolDefinition[] = [
 const providers: AcpProvider[] = [];
 afterEach(() => {
   for (const provider of providers.splice(0)) provider.close();
+  vi.useRealTimers();
 });
 async function connect(peer: Peer) {
   const provider = await connectAgent({
@@ -40,6 +41,71 @@ async function collect(provider: AcpProvider, prompt = "hello") {
   return events;
 }
 describe("ACP provider-owned contracts", () => {
+  it.each(["adapter-progress", 17])(
+    "heartbeats a held application call using inner MCP progress token %s",
+    async (progressToken) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      const peer = new Peer();
+      peer.onPrompt = (socket, _params, reply) => {
+        void (async () => {
+          const { connectionId } = (await peer.request(socket, "mcp/connect", {
+            serverId: "application-tools",
+          })) as { connectionId: string };
+          await peer.request(socket, "mcp/message", {
+            connectionId,
+            method: "initialize",
+            params: { protocolVersion: "2025-06-18" },
+          });
+          await peer.request(socket, "mcp/message", {
+            connectionId,
+            method: "tools/call",
+            params: {
+              name: "highlight",
+              arguments: { text: "held" },
+              _meta: { progressToken },
+            },
+            _meta: {
+              "agent-connect/actionId": "progress-action",
+              progressToken: "outer-must-not-win",
+            },
+          });
+          reply({ stopReason: "end_turn" });
+        })();
+      };
+      const provider = await connect(peer);
+      const iterator = provider
+        .streamTask({ prompt: "hold", tools })
+        [Symbol.asyncIterator]();
+      expect((await iterator.next()).value?.type).toBe("task.admitted");
+      expect((await iterator.next()).value).toMatchObject({
+        type: "tool.requested",
+        actionId: "progress-action",
+      });
+      await vi.advanceTimersByTimeAsync(15000);
+      const progress = peer.calls.filter(
+        (call) =>
+          call.method === "mcp/message" &&
+          call.params["method"] === "notifications/progress",
+      );
+      expect(progress).toHaveLength(1);
+      expect(progress[0]!.params["params"]).toMatchObject({
+        progressToken,
+        progress: 1,
+      });
+      await provider.submitToolResult("progress-action", "done");
+      for await (const _event of { [Symbol.asyncIterator]: () => iterator }) {
+        /* drain the turn */
+      }
+      await vi.advanceTimersByTimeAsync(30000);
+      expect(
+        peer.calls.filter(
+          (call) =>
+            call.method === "mcp/message" &&
+            call.params["method"] === "notifications/progress",
+        ),
+      ).toHaveLength(1);
+    },
+  );
   it("allows a new explicit prompt after session creation is definitively rejected", async () => {
     const peer = new Peer();
     let attempts = 0;
@@ -247,6 +313,84 @@ describe("ACP provider-owned contracts", () => {
       expect(peer.calls.some((c) => c.method === "session/load")).toBe(false);
     }
   });
+  it("retries a failed load instead of adopting the live but unloaded replacement host", async () => {
+    const peer = new Peer();
+    let attempts = 0;
+    peer.onLoadSession = (_socket, _params, reply, fail) => {
+      if (++attempts === 1) fail(-32603, "History temporarily unavailable");
+      else reply({});
+    };
+    peer.onPrompt = (socket) => socket.disconnect(4404);
+    const provider = await connect(peer);
+    expect((await collect(provider, "uncertain turn")).at(-1)).toMatchObject({
+      type: "task.failed",
+      code: "task_interrupted",
+      message: expect.stringContaining("recovery failed"),
+    });
+    expect(peer.sockets[1]!.readyState).toBe(3);
+    expect(await provider.recover()).toEqual({
+      sessionId: "owned-session",
+      interrupted: false,
+    });
+    expect(attempts).toBe(2);
+    expect(peer.sockets).toHaveLength(3);
+    expect(
+      peer.calls.filter((call) => call.method === "session/new"),
+    ).toHaveLength(1);
+    expect(
+      peer.calls.filter((call) => call.method === "session/prompt"),
+    ).toHaveLength(1);
+    peer.onPrompt = (_socket, _params, reply) =>
+      reply({ stopReason: "end_turn" });
+    expect((await collect(provider, "deliberate follow-up")).at(-1)?.type).toBe(
+      "task.completed",
+    );
+  });
+  it("allows a recovered conversation to attach a fresh chat presenter while retaining the interrupted transcript", async () => {
+    const peer = new Peer();
+    peer.onPrompt = (socket) => socket.disconnect(4404);
+    const provider = await connect(peer);
+    const applicationTools = [{ ...tools[0]!, execute: () => "done" }];
+    const previous = createAgentChat({
+      session: new AgentSession({ provider, tools: applicationTools }),
+    });
+    await expect(previous.send("uncertain turn")).rejects.toMatchObject({
+      code: "task_interrupted",
+    });
+    const transcript = previous.getSnapshot().messages;
+    expect(transcript.at(-1)?.error?.code).toBe("task_interrupted");
+    expect(previous.getSnapshot().needsNewSession).toBe(true);
+    const link = provider.transport;
+    await provider.recover();
+    await previous.dispose();
+    const next = createAgentChat({
+      session: new AgentSession({ provider, tools: applicationTools }),
+    });
+    expect(next.getSnapshot().canSend).toBe(true);
+    expect(provider.transport).toBe(link);
+    expect(transcript).toHaveLength(2);
+    expect(
+      peer.calls.filter((call) => call.method === "session/prompt"),
+    ).toHaveLength(1);
+    peer.onPrompt = (_socket, _params, reply) =>
+      reply({ stopReason: "end_turn" });
+    await next.send("deliberate follow-up");
+    expect(
+      peer.calls.filter((call) => call.method === "session/new"),
+    ).toHaveLength(1);
+    expect(
+      peer.calls.filter((call) => call.method === "session/load"),
+    ).toHaveLength(1);
+    expect(
+      peer.calls
+        .filter((call) => call.method === "session/prompt")
+        .map((call) => call.params["prompt"]),
+    ).toEqual([
+      [{ type: "text", text: "uncertain turn" }],
+      [{ type: "text", text: "deliberate follow-up" }],
+    ]);
+    await next.dispose();
+  });
   it("retains immutable ACP presentation in createAgentChat", async () => {
     const peer = new Peer();
     peer.onPrompt = (socket, _p, reply) => {
@@ -401,6 +545,14 @@ it("keeps a healthy idle recovery on the same live host without bye or load", as
       (frame) => (frame as { t?: string }).t === "bye",
     ),
   ).toBe(false);
+  expect(
+    (await collect(provider, "explicit follow-up after idle reconnect")).at(-1)
+      ?.type,
+  ).toBe("task.completed");
+  expect(
+    peer.calls.filter((call) => call.method === "session/new"),
+  ).toHaveLength(1);
+  expect(peer.sockets).toHaveLength(1);
 });
 it("does not recover an evicted live conversation onto a replacement host", async () => {
   const peer = new Peer();

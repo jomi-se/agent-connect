@@ -398,6 +398,40 @@ it("refuses cold recovery of an authorization or superseded transport", async ()
   }
 });
 
+it("retries a rejected history load without returning or replaying an interrupted UI stream", async () => {
+  const peer = new Peer();
+  let attempts = 0;
+  peer.onLoadSession = (_socket, _params, reply, fail) => {
+    if (++attempts === 1) fail(-32603, "History temporarily unavailable");
+    else reply({});
+  };
+  peer.onPrompt = (socket) => socket.disconnect(4404);
+  const { transport } = await setup(peer);
+  expect(
+    (await chunks(await transport.sendMessages(request()))).at(-1),
+  ).toMatchObject({
+    type: "error",
+    errorText: expect.stringContaining("recovery failed"),
+  });
+  expect(await transport.reconnectToStream({ chatId: "ui-chat" })).toBe(null);
+  expect(attempts).toBe(2);
+  expect(
+    peer.calls.filter((call) => call.method === "session/new"),
+  ).toHaveLength(1);
+  expect(
+    peer.calls.filter((call) => call.method === "session/prompt"),
+  ).toHaveLength(1);
+  peer.onPrompt = (_socket, _params, reply) =>
+    reply({ stopReason: "end_turn" });
+  expect(
+    (
+      await chunks(
+        await transport.sendMessages(request([user("deliberate follow-up")])),
+      )
+    ).at(-1)?.type,
+  ).toBe("finish");
+});
+
 it("disposal removes the UI abort listener before an unread stream is consumed", async () => {
   const peer = new Peer();
   const { transport } = await setup(peer);
