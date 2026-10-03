@@ -28,7 +28,7 @@
     "release:prepare": "node scripts/prepare-npm-release.mjs",
     "release:publish": "node scripts/publish-npm-release.mjs",
     "release:smoke": "node scripts/smoke-npm-release.mjs",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && node --test scripts/test-fixture-cleanup.test.mjs",
     "test:package:web": "node scripts/smoke-web-sdk-package.mjs",
     "test:release": "node --test scripts/npm-release.test.mjs",
     "test:webmcp": "npm run test:webmcp --workspace @open-agent-connect/web",
@@ -38,7 +38,7 @@
     "test:integration:openclaw": "npm run test:openclaw:fixture && npm run test:openclaw:plugin-host && npm run test:integration:ai-sdk-openclaw",
     "pretypecheck": "npm run build --workspace @open-agent-connect/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "verify": "npm run format:check && npm run typecheck && npm test && npm run build && npm run test:integration:openclaw && npm run test:integration:acp && npm run test:integration:acp:boxed && npm run test:integration:acp:teardown && npm run test:integration:acp:clean-room",
+    "verify": "npm run format:check && npm run typecheck && npm test && npm run build && npm run test:ui:acp-owner && npm run test:integration:openclaw && npm run test:integration:acp && npm run test:integration:acp:boxed && npm run test:integration:acp:teardown && npm run test:integration:acp:clean-room",
     "verify:full": "npm run verify && npm run test:package:web && npm run test:release && npm run test:webmcp && npm run test:e2e --workspace @agent-connect/firebase-canvas",
     "test:integration:acp": "node scripts/acp-gateway-scenarios.mjs",
     "test:integration:acp:boxed": "ACP_BOXED=1 ACP_SCENARIOS=tools,policy,use-chat,shell,cancel,resume,slow-cut,ask-cut,answer-halfopen,expire,discard node scripts/acp-gateway-scenarios.mjs",
@@ -47,7 +47,8 @@
     "release:acp:dry-run": "node scripts/acp-release.mjs publish-dry-run",
     "build:acp:session": "./deploy/acp-gateway/session/build-local.sh",
     "test:integration:acp:clean-room": "node scripts/acp-clean-room.mjs",
-    "test:integration:acp:teardown": "node scripts/acp-gateway-teardown.mjs"
+    "test:integration:acp:teardown": "node scripts/acp-gateway-teardown.mjs",
+    "test:ui:acp-owner": "node scripts/acp-owner-ui.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
