@@ -2,8 +2,14 @@
 
 Unreleased implementation of proposed ADR 0016. The previous OpenClaw package
 remains available. ACP, MCP-over-ACP and the resume extension are unstable.
-Operators start with the [artifact install guide](../../docs/install/README.md);
-this page is for source-build/test tooling.
+Operators start with the [artifact install guide](../../docs/install/README.md):
+`agent-connect setup` creates a local runtime, or use
+`agent-connect setup --origin https://gateway.example` behind your own HTTPS
+proxy. Diagnose with `agent-connect doctor`, manage the user service with
+`agent-connect service`, and pair applications through hosted owner consent.
+The [configuration reference](../../docs/install/configuration.md#https-reverse-proxy)
+has portable Caddy/nginx examples; [troubleshooting](../../docs/install/troubleshooting.md)
+has recovery and doctor codes. This page covers source-build/test tooling.
 
 `dist-workspace.toml` pins cargo-dist 0.33.0 and the three initial targets.
 The cargo-dist configuration follows its [official reference](https://axodotdev.github.io/cargo-dist/book/reference/config.html).
@@ -36,7 +42,7 @@ operator-selected egress proxy container. Each session gets its own internal
 network; the egress proxy denies private and reserved destinations. The workspace
 is tmpfs. The shared home includes credentials, configuration and transcripts.
 Read the [accepted credential risk](../../docs/plan/acp-gateway-credentials.md)
-before the owner runs `agent-connect-gateway login`. Claude Code remains
+before the owner runs `agent-connect login`. Claude Code remains
 unconfirmed against Anthropic terms. Live login checks are never a build step.
 
 The proxy conservatively permits IPv6 only within the currently allocated

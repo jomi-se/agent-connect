@@ -58,7 +58,7 @@ pub struct AuthConfig {
     pub public_url: String,
     pub state_dir: PathBuf,
     pub policy_fingerprint: String,
-    /// Additional trusted origins for owner pages; OAuth issuer remains public_url.
+    /// Additional trusted origins; each grant uses its selected entry-point issuer.
     pub entry_points: Vec<String>,
     pub profiles: Vec<PermissionProfile>,
     pub default_profile: PermissionProfile,
