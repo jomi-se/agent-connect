@@ -33,7 +33,11 @@ denial, refresh and revocation. Earlier static-bearer evidence remains separate.
 `npm run verify` and `cargo test --locked --workspace` pass, including the new
 consent-based clean-room gate. The owner-page browser gate additionally covers
 14 states at desktop, phone and 320 px reflow widths, with keyboard/touch checks
-and private screenshots. Only the owner-required items below remain.
+and private screenshots. These completed gates do not establish install and
+operation parity with the plugin. The active
+[ACP gateway parity plan](acp-gateway-parity.md) tracks guided setup, doctor,
+service management, console sessions/profiles/recovery and expanded clean-room
+acceptance. That product work remains before the owner-required items below.
 
 Owner-required work:
 
