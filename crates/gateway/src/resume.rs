@@ -75,6 +75,7 @@ pub struct Host {
     pub token: String,
     pub label: String,
     grant: String,
+    started_at: u64,
     resumable: bool,
     config: ResumeConfig,
     state: Mutex<State>,
@@ -115,6 +116,16 @@ struct State {
 
 pub enum AttachError {
     Expired,
+}
+
+/// Owner-visible host identity. Resume credentials are deliberately omitted.
+#[derive(Clone, Debug)]
+pub struct SessionView {
+    pub id: String,
+    pub grant_id: String,
+    pub connected: bool,
+    pub started_at: u64,
+    pub state: &'static str,
 }
 
 impl Registry {
@@ -167,6 +178,10 @@ impl Registry {
             token: token.clone(),
             label,
             grant: grant.to_string(),
+            started_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
             resumable,
             config: self.config,
             state: Mutex::new(State {
@@ -348,6 +363,55 @@ impl Registry {
 
     pub fn live_hosts(&self) -> usize {
         self.hosts.lock().unwrap().len()
+    }
+
+    pub fn session_views(&self) -> Vec<SessionView> {
+        let mut sessions: Vec<_> = self
+            .hosts
+            .lock()
+            .unwrap()
+            .values()
+            .map(|host| {
+                let state = host.state.lock().unwrap();
+                SessionView {
+                    id: host.label.clone(),
+                    grant_id: host.grant.clone(),
+                    connected: state.attachment.is_some(),
+                    started_at: host.started_at,
+                    state: if state.cleanup == Cleanup::Failed {
+                        "cleanup-failed"
+                    } else if state.end_reason.is_some() {
+                        "stopping"
+                    } else if !state.ever_live {
+                        "starting"
+                    } else if state.attachment.is_some() {
+                        "connected"
+                    } else {
+                        "detached"
+                    },
+                }
+            })
+            .collect();
+        sessions.sort_by(|a, b| a.id.cmp(&b.id));
+        sessions
+    }
+
+    /// Ends a host by its public owner-console ID, never by a resume token.
+    /// Resource cleanup still owns capacity release, exactly as for transport bye.
+    pub fn end_session(&self, id: &str) -> bool {
+        let host = self
+            .hosts
+            .lock()
+            .unwrap()
+            .values()
+            .find(|host| host.label == id)
+            .cloned();
+        if let Some(host) = host {
+            host.kill("ended by owner");
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -567,7 +631,7 @@ impl Host {
     fn kill_locked(st: &mut State, reason: &'static str) {
         st.end_reason.get_or_insert(reason);
         let terminal = match reason {
-            "evicted" => Some(close::EVICTED),
+            "evicted" | "ended by owner" => Some(close::EVICTED),
             "grant revoked or expired" => Some(close::REVOKED),
             "frame too large" => Some(1009),
             _ => None,
@@ -652,7 +716,7 @@ impl Host {
             match reason {
                 "overflow" => close::OVERFLOW,
                 "expired" => close::EXPIRED,
-                "evicted" => close::EVICTED,
+                "evicted" | "ended by owner" => close::EVICTED,
                 "grant revoked or expired" => close::REVOKED,
                 "frame too large" => 1009,
                 _ => close::ENDED,
@@ -696,6 +760,35 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn owner_session_view_omits_credentials_and_end_is_terminal() {
+        let registry = Registry::new(ResumeConfig {
+            grace: Duration::from_secs(60),
+            max_retained_bytes: 4096,
+        });
+        let (host, io) = registry.create_with_cleanup("app-grant", true, "owner-visible-id".into());
+        let (_, mut messages) = host.attach(0).unwrap_or_else(|_| panic!("attach"));
+        assert!(matches!(messages.recv().await, Some(ToSocket::Text(_))));
+        let views = registry.session_views();
+        assert_eq!(views.len(), 1);
+        assert_eq!(views[0].id, "owner-visible-id");
+        assert_eq!(views[0].grant_id, "app-grant");
+        assert!(views[0].connected);
+        assert!(!format!("{views:?}").contains(&host.token));
+        assert!(!registry.end_session(&host.token));
+        assert!(registry.end_session("owner-visible-id"));
+        assert!(matches!(
+            messages.recv().await,
+            Some(ToSocket::Close(close::EVICTED, "ended by owner"))
+        ));
+        assert_eq!(registry.live_hosts(), 1, "cleanup still owns capacity");
+        drop(io);
+        host.complete_cleanup(true);
+        assert!(host.wait_for_completion(Duration::from_secs(1)).await);
+        assert!(registry.session_views().is_empty());
+        assert!(!registry.end_session("owner-visible-id"));
+    }
 
     #[tokio::test]
     async fn reattach_keeps_sequence_and_drops_duplicate_client_frames() {

@@ -2,6 +2,7 @@
 //!
 //! ACP and MCP-over-ACP remain unstable. Application bearers are never owner
 //! credentials. Keep this service's private state outside every harness home.
+use crate::{Harness, policy::PermissionProfile};
 use anyhow::{Result, anyhow, bail, ensure};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 use axum::{
@@ -57,6 +58,11 @@ pub struct AuthConfig {
     pub public_url: String,
     pub state_dir: PathBuf,
     pub policy_fingerprint: String,
+    /// Additional trusted origins for owner pages; OAuth issuer remains public_url.
+    pub entry_points: Vec<String>,
+    pub profiles: Vec<PermissionProfile>,
+    pub default_profile: PermissionProfile,
+    pub harness: Harness,
     /// Required only when bootstrapping a new state directory. Never persisted.
     pub owner_passphrase: Option<String>,
 }
@@ -64,6 +70,7 @@ pub struct AuthConfig {
 #[derive(Clone, Debug)]
 pub struct AuthorizedGrant {
     pub id: String,
+    pub permissions: PermissionProfile,
     pub snapshot: BTreeMap<String, Value>,
     pub tool_definitions: BTreeMap<String, Value>,
     pub access_expires_at: u64,
@@ -71,9 +78,34 @@ pub struct AuthorizedGrant {
     access_hash: String,
 }
 
+/// Runtime state exposed only after owner authentication. Values contain no tokens
+/// or provider credentials. Callbacks must not acquire the authorization lock.
+#[derive(Clone, Debug, Default)]
+pub struct OwnerRuntimeSnapshot {
+    pub problems: Vec<OwnerProblem>,
+    pub sessions: Vec<OwnerSession>,
+}
+#[derive(Clone, Debug)]
+pub struct OwnerProblem {
+    pub message: String,
+    pub repair: String,
+}
+#[derive(Clone, Debug)]
+pub struct OwnerSession {
+    pub id: String,
+    pub grant_id: String,
+    pub state: String,
+}
+pub trait OwnerRuntime: Send + Sync {
+    fn snapshot(&self) -> OwnerRuntimeSnapshot;
+    /// Queue termination and owned resource cleanup. A grant remains unchanged.
+    fn end_session(&self, id: &str) -> Result<()>;
+}
+
 pub struct AuthService {
     config: AuthConfig,
     inner: Mutex<Inner>,
+    runtime: Mutex<Option<Arc<dyn OwnerRuntime>>>,
     // Holding the file holds the exclusive process lock until service shutdown.
     _lock: File,
     requests: tokio::sync::Semaphore,
@@ -89,6 +121,10 @@ struct Stored {
     password_hash: String,
     totp_secret: Option<String>,
     last_totp_step: Option<u64>,
+    #[serde(default)]
+    totp_reset_count: u64,
+    #[serde(default)]
+    last_totp_reset_at: Option<u64>,
     grants: Vec<Grant>,
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -98,6 +134,12 @@ struct Grant {
     epoch: String,
     client: String,
     fingerprint: String,
+    /// Absent only in legacy grants, whose default authority is preserved on upgrade.
+    #[serde(default)]
+    profile: Option<PermissionProfile>,
+    /// Entry-point issuer approved with this grant; old grants use canonical issuer.
+    #[serde(default)]
+    issuer: Option<String>,
     tools: Vec<Tool>,
     expires: u64,
     revoked: bool,
@@ -116,6 +158,7 @@ struct Tool {
 }
 #[derive(Clone)]
 struct Pending {
+    issuer: String,
     client: String,
     client_name: String,
     redirect: String,
@@ -131,6 +174,7 @@ struct Code {
     expires: u64,
 }
 struct Session {
+    origin: String,
     expires: u64,
     owner: bool,
     enrollment: Option<(String, u64)>,
@@ -163,23 +207,42 @@ struct Inner {
 impl AuthService {
     pub fn open(mut config: AuthConfig) -> Result<Arc<Self>> {
         canonical_origin(&config.public_url)?;
+        ensure!(config.entry_points.len() <= 16, "too many entry points");
+        let mut origins = std::collections::HashSet::from([config.public_url.clone()]);
+        let mut authorities = std::collections::HashSet::from([Url::parse(&config.public_url)?
+            [url::Position::BeforeHost..url::Position::AfterPort]
+            .to_string()]);
+        for origin in &config.entry_points {
+            canonical_origin(origin)?;
+            ensure!(origins.insert(origin.clone()), "duplicate entry point");
+            ensure!(
+                authorities.insert(
+                    Url::parse(origin)?[url::Position::BeforeHost..url::Position::AfterPort]
+                        .to_string()
+                ),
+                "entry point host and port must be unique"
+            );
+        }
+        ensure!(
+            !config.profiles.is_empty()
+                && config.profiles.len() <= 4
+                && config.profiles.contains(&config.default_profile),
+            "invalid configured profiles"
+        );
+        let mut profiles = std::collections::HashSet::new();
+        for profile in &config.profiles {
+            ensure!(profiles.insert(profile.as_str()), "duplicate profile");
+            ensure!(
+                !(config.harness == Harness::Claude && *profile == PermissionProfile::ReadOnly),
+                "Claude read-only profile unavailable"
+            );
+        }
         ensure!(
             !config.policy_fingerprint.is_empty() && config.policy_fingerprint.len() <= 512,
             "invalid policy fingerprint"
         );
         private_directory(&config.state_dir)?;
-        let mut options = OpenOptions::new();
-        options.write(true).create(true);
-        #[cfg(unix)]
-        options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
-        let lock = options.open(config.state_dir.join("authorization.lock"))?;
-        #[cfg(unix)]
-        lock.set_permissions(fs::Permissions::from_mode(0o600))?;
-        #[cfg(unix)]
-        ensure!(
-            unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
-            "authorization state is already open"
-        );
+        let lock = authorization_lock(&config.state_dir)?;
         let path = config.state_dir.join("authorization.json");
         let stored = match fs::symlink_metadata(&path) {
             Ok(metadata) => {
@@ -208,6 +271,9 @@ impl AuthService {
                 }
                 for grant in &stored.grants {
                     canonical_origin(&grant.client)?;
+                    if let Some(issuer) = &grant.issuer {
+                        canonical_origin(issuer)?;
+                    }
                     validate_tools(&serde_json::to_value(&grant.tools)?)?;
                     ensure!(
                         grant.spent.len() <= MAX_SPENT_REFRESH,
@@ -236,6 +302,8 @@ impl AuthService {
                     password_hash: hash,
                     totp_secret: None,
                     last_totp_step: None,
+                    totp_reset_count: 0,
+                    last_totp_reset_at: None,
                     grants: Vec::new(),
                 };
                 save(&config.state_dir, &stored)?;
@@ -247,6 +315,7 @@ impl AuthService {
         Ok(Arc::new(Self {
             config,
             _lock: lock,
+            runtime: Mutex::new(None),
             requests: tokio::sync::Semaphore::new(32),
             inner: Mutex::new(Inner {
                 stored,
@@ -267,12 +336,136 @@ impl AuthService {
         }))
     }
 
+    /// Public readiness projection: never exposes owner or grant data.
+    pub fn healthy(&self) -> bool {
+        self.inner.lock().is_ok_and(|inner| !inner.broken)
+    }
+
+    pub fn set_runtime(&self, runtime: Arc<dyn OwnerRuntime>) -> Result<()> {
+        *self
+            .runtime
+            .lock()
+            .map_err(|_| anyhow!("runtime unavailable"))? = Some(runtime);
+        Ok(())
+    }
+
+    /// Owner-run recovery only: refuse active serving, never bootstrap missing state,
+    /// preserve the passphrase and all grants, and record bounded recovery metadata.
+    pub fn reset_totp(state_dir: &std::path::Path) -> Result<bool> {
+        let metadata = fs::symlink_metadata(state_dir)?;
+        ensure!(
+            metadata.is_dir() && !metadata.file_type().is_symlink(),
+            "invalid authorization state directory"
+        );
+        #[cfg(unix)]
+        ensure!(
+            metadata.permissions().mode() & 0o077 == 0,
+            "authorization state must be private"
+        );
+        let directory = state_dir.to_path_buf();
+        let _lock = authorization_lock(&directory)?;
+        let path = directory.join("authorization.json");
+        let metadata = fs::symlink_metadata(&path)?;
+        ensure!(
+            metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() <= MAX_STATE,
+            "invalid authorization state file"
+        );
+        #[cfg(unix)]
+        ensure!(
+            metadata.permissions().mode() & 0o077 == 0,
+            "authorization state must be private"
+        );
+        let mut stored: Stored = serde_json::from_slice(&fs::read(path)?)?;
+        ensure!(
+            stored.version == 1 && stored.grants.len() <= MAX_GRANTS,
+            "invalid authorization state"
+        );
+        canonical_origin(&stored.issuer)?;
+        PasswordHash::new(&stored.password_hash)
+            .map_err(|_| anyhow!("invalid stored owner hash"))?;
+        let enrolled = stored.totp_secret.is_some();
+        if enrolled {
+            stored.totp_secret = None;
+            stored.last_totp_step = None;
+            stored.totp_reset_count = stored
+                .totp_reset_count
+                .checked_add(1)
+                .ok_or_else(|| anyhow!("recovery audit capacity"))?;
+            stored.last_totp_reset_at = Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_secs(),
+            );
+            save(&directory, &stored)?;
+        }
+        Ok(enrolled)
+    }
+
+    fn profile_choices(&self) -> String {
+        let options = self
+            .config
+            .profiles
+            .iter()
+            .map(|profile| {
+                format!(
+                    "<option value='{}'{}>{}</option>",
+                    profile.as_str(),
+                    if *profile == self.config.default_profile {
+                        " selected"
+                    } else {
+                        ""
+                    },
+                    escape(profile_label(*profile))
+                )
+            })
+            .collect::<String>();
+        let descriptions = self
+            .config
+            .profiles
+            .iter()
+            .map(|profile| {
+                format!(
+                    "<p class='help'><strong>{}</strong>: {}</p>",
+                    escape(profile_label(*profile)),
+                    escape(profile_description(*profile, self.config.harness))
+                )
+            })
+            .collect::<String>();
+        format!(
+            "<div class='field'><label for='restricted-profile'>Restricted profile</label><select id='restricted-profile' name=profile required aria-describedby='profile-help'>{options}</select><div id='profile-help'>{descriptions}</div></div>"
+        )
+    }
+    fn grant_profile(&self, grant: &Grant) -> PermissionProfile {
+        grant.profile.unwrap_or(self.config.default_profile)
+    }
+    fn profile_fingerprint(&self, profile: PermissionProfile) -> String {
+        if profile == self.config.default_profile {
+            self.config.policy_fingerprint.clone()
+        } else {
+            hash(&format!(
+                "{}:{}",
+                self.config.policy_fingerprint,
+                profile.as_str()
+            ))
+        }
+    }
+    fn grant_active(&self, grant: &Grant, now: u64) -> bool {
+        active(
+            grant,
+            now,
+            &self.profile_fingerprint(self.grant_profile(grant)),
+        )
+    }
+
     pub fn router(self: Arc<Self>) -> Router {
         let mut router = Router::new();
         for path in [
             OWNER,
             LOGIN,
             "/agent-connect/owner/logout",
+            "/agent-connect/owner/forget-browser",
+            "/agent-connect/owner/grants/revoke-all",
+            "/agent-connect/owner/sessions/end",
             "/agent-connect/owner/grants/revoke",
             "/agent-connect/owner/totp",
             "/agent-connect/owner/totp/enroll",
@@ -310,12 +503,12 @@ impl AuthService {
             })
             .ok_or_else(|| anyhow!("invalid bearer"))?;
         ensure!(
-            active(grant, self.now(), &self.config.policy_fingerprint)
-                && grant.access_expires > self.now(),
+            self.grant_active(grant, self.now()) && grant.access_expires > self.now(),
             "grant inactive"
         );
         Ok(AuthorizedGrant {
             id: grant.id.clone(),
+            permissions: self.grant_profile(grant),
             snapshot: snapshot(&grant.tools),
             tool_definitions: tool_definitions(&grant.tools),
             access_expires_at: grant.access_expires,
@@ -332,7 +525,8 @@ impl AuthService {
             && inner.stored.grants.iter().any(|g| {
                 g.id == principal.id
                     && g.epoch == principal.epoch
-                    && active(g, self.now(), &self.config.policy_fingerprint)
+                    && self.grant_profile(g) == principal.permissions
+                    && self.grant_active(g, self.now())
                     && g.access_expires > self.now()
                     && g.access_expires == principal.access_expires_at
                     && g.access_hash.as_deref() == Some(&principal.access_hash)
@@ -347,9 +541,11 @@ impl AuthService {
             return false;
         };
         !inner.broken
-            && inner.stored.grants.iter().any(|grant| {
-                grant.id == id && active(grant, self.now(), &self.config.policy_fingerprint)
-            })
+            && inner
+                .stored
+                .grants
+                .iter()
+                .any(|grant| grant.id == id && self.grant_active(grant, self.now()))
     }
 
     fn now(&self) -> u64 {
@@ -387,6 +583,16 @@ impl AuthService {
         body: &[u8],
         peer: IpAddr,
     ) -> Result<Response> {
+        let runtime_view =
+            if method == Method::GET && (path == OWNER || path == "/agent-connect/owner/totp") {
+                self.runtime
+                    .lock()
+                    .map_err(|_| anyhow!("runtime unavailable"))?
+                    .clone()
+                    .map(|runtime| runtime.snapshot())
+            } else {
+                None
+            };
         let mut inner = self
             .inner
             .lock()
@@ -424,7 +630,7 @@ impl AuthService {
         }
         if method == Method::GET && path.starts_with("/.well-known/") {
             ensure!(query.is_empty(), "invalid_request");
-            let origin = &self.config.public_url;
+            let origin = self.request_origin(headers)?;
             return Ok(json_response(
                 StatusCode::OK,
                 if path.contains("authorization-server") {
@@ -448,7 +654,7 @@ impl AuthService {
                 "<div class='compact'><p class='eyebrow'>Gateway owner</p><h1>Sign in to Agent Connect</h1><p class='lede'>Review application requests and manage the access you have approved.</p><form method=post action='{LOGIN}'>{}<div class='field'><label for='owner-passphrase'>Owner passphrase</label><input id='owner-passphrase' type=password name=passphrase autocomplete=current-password required maxlength=1024 aria-describedby='passphrase-help'><p id='passphrase-help' class='help'>Use the passphrase you chose when setting up this gateway. Applications cannot sign in with their access tokens.</p></div>{factor}<div class='actions'><button>Sign in</button></div></form></div>",
                 hidden("csrf_token", &csrf) + &hidden("continue", &continuation)
             );
-            return Ok(self.with_cookie(html(&body), cookie));
+            return Ok(self.with_cookie(html(&body), cookie, &self.request_origin(headers)?));
         }
         if method == Method::POST && path == LOGIN {
             self.owner_origin(headers)?;
@@ -501,6 +707,7 @@ impl AuthService {
             inner.sessions.insert(
                 hash(&token),
                 Session {
+                    origin: self.request_origin(headers)?,
                     owner: true,
                     expires: now + 12 * 3600,
                     enrollment: None,
@@ -516,7 +723,11 @@ impl AuthService {
                 );
                 continuation
             };
-            return Ok(self.with_cookie(redirect(&target)?, Some(token)));
+            return Ok(self.with_cookie(
+                redirect(&target)?,
+                Some(token),
+                &self.request_origin(headers)?,
+            ));
         }
         if method == Method::GET && (path == OWNER || path == "/agent-connect/owner/totp") {
             let Ok(session) = self.session_id(&inner, headers, true) else {
@@ -527,11 +738,12 @@ impl AuthService {
                 .stored
                 .grants
                 .iter()
-                .filter(|g| active(g, now, &self.config.policy_fingerprint))
+                .filter(|g| self.grant_active(g, now))
                 .count();
             let mut body = format!(
-                "<header class='page-heading'><div><p class='eyebrow'>Gateway owner</p><h1>Application access</h1><p class='lede'>Review requests and manage the authority applications hold through your gateway.</p></div><div class='counts' role='group' aria-label='Access summary'><span><strong>{}</strong>Pending</span><span><strong>{active_count}</strong>Active</span></div></header><section class='management' aria-labelledby='pending-title'><header><h2 id='pending-title'>Pending requests</h2><p class='help'>Each request needs your decision and expires automatically.</p></header>",
-                inner.pending.len()
+                "<header class='page-heading'><div><p class='eyebrow'>Gateway owner</p><h1>Application access</h1><p class='lede'>Review requests and manage the authority applications hold through your gateway.</p></div><div class='counts' role='group' aria-label='Access summary'><span><strong>{}</strong>Pending</span><span><strong>{active_count}</strong>Active</span></div></header>{}<section class='management' aria-labelledby='pending-title'><header><h2 id='pending-title'>Pending requests</h2><p class='help'>Each request needs your decision and expires automatically.</p></header>",
+                inner.pending.len(),
+                runtime_view.as_ref().map(|view| view.problems.iter().map(|problem| format!("<div class='alert runtime-problem' role='status'><strong>{}</strong><p>{}</p></div>", escape(&problem.message), escape(&problem.repair))).collect::<String>()).unwrap_or_default()
             );
             if inner.pending.is_empty() {
                 body.push_str("<div class='empty'><strong>No decisions waiting</strong><p>When an application asks to connect, its request will appear here for you to review.</p></div>");
@@ -548,7 +760,7 @@ impl AuthService {
                     "Revoked"
                 } else if grant.expires <= now {
                     "Expired"
-                } else if grant.fingerprint != self.config.policy_fingerprint {
+                } else if !self.grant_active(&grant, now) {
                     "Policy changed"
                 } else {
                     "Active"
@@ -563,18 +775,85 @@ impl AuthService {
                 } else {
                     String::new()
                 };
-                body.push_str(&format!("<article class='record'><div class='record-heading'><h3 class='origin'>{}</h3><span class='status {}'>{status}</span></div><p class='help'>Expires {}{}</p><details class='authority'><summary>View approved tools ({} tool{})</summary>{}</details><div class='actions'>{action}</div></article>", escape(&grant.client), if status == "Active" { "active" } else { "inactive" }, utc_time(grant.expires), if status == "Active" { format!(" · {} remaining", duration_label(grant.expires.saturating_sub(now))) } else { String::new() }, grant.tools.len(), if grant.tools.len() == 1 { "" } else { "s" }, tool_cards(&grant.tools)));
+                body.push_str(&format!("<article class='record'><div class='record-heading'><h3 class='origin'>{}</h3><span class='status {}'>{status}</span></div><p class='help'>Profile: {} · Expires {}{}</p><details class='authority'><summary>View approved tools ({} tool{})</summary>{}</details><div class='actions'>{action}</div></article>", escape(&grant.client), if status == "Active" { "active" } else { "inactive" }, escape(profile_label(self.grant_profile(&grant))), utc_time(grant.expires), if status == "Active" { format!(" · {} remaining", duration_label(grant.expires.saturating_sub(now))) } else { String::new() }, grant.tools.len(), if grant.tools.len() == 1 { "" } else { "s" }, tool_cards(&grant.tools)));
             }
+            body.push_str("</section><section class='management' aria-labelledby='sessions-title'><header><h2 id='sessions-title'>Live sessions</h2><p class='help'>Ending a session stops its running host and cleans up its resources. The application grant stays active.</p></header>");
+            if let Some(view) = &runtime_view {
+                if view.sessions.is_empty() {
+                    body.push_str("<div class='empty'><strong>No live sessions</strong><p>Sessions appear here while their application hosts remain active.</p></div>");
+                }
+                for runtime_session in &view.sessions {
+                    let token = csrf(
+                        &mut inner,
+                        &session,
+                        &format!("end:{}", runtime_session.id),
+                        now,
+                    );
+                    body.push_str(&format!("<article class='record'><div class='record-heading'><h3 class='origin'>{}</h3><span class='status'>{}</span></div><p class='help origin'>Session {}</p><form method=post action='/agent-connect/owner/sessions/end'>{}{}<div class='actions'><button class='danger'>End session</button></div></form></article>", escape(inner.stored.grants.iter().find(|grant| grant.id == runtime_session.grant_id).map(|grant| grant.client.as_str()).unwrap_or("Application unavailable")), escape(&runtime_session.state), escape(&runtime_session.id), hidden("session_id", &runtime_session.id), hidden("csrf_token", &token)));
+                }
+            } else {
+                body.push_str("<div class='empty'><strong>Session status unavailable</strong><p>Check the gateway runtime before relying on session management.</p></div>");
+            }
+            body.push_str("</section><section class='management' aria-labelledby='profiles-title'><header><h2 id='profiles-title'>Restricted profiles</h2><p class='help'>Choose a configured profile when approving access. A grant keeps its chosen authority until expiry or revocation.</p></header>");
+            for profile in &self.config.profiles {
+                body.push_str(&format!(
+                    "<article class='record'><h3>{}</h3><p class='help'>{}</p></article>",
+                    escape(profile_label(*profile)),
+                    escape(profile_description(*profile, self.config.harness))
+                ));
+            }
+            if self.config.harness == Harness::Codex {
+                body.push_str("<p class='help record'>Deny-all and app-tools-only profiles are unavailable for boxed Codex: native actions can run without permission requests.</p>");
+            } else {
+                body.push_str("<p class='help record'>Codex read-only mode is unavailable for Claude. Claude profiles govern permission requests; they do not guarantee that every native action requests permission.</p>");
+            }
+            body.push_str("</section><section class='management' aria-labelledby='entry-points-title'><header><h2 id='entry-points-title'>Gateway entry points</h2><p class='help'>Use a configured entry point to reach the gateway. Pair applications with the exact entry-point origin they will use. Owner sign-in and consent stay on that origin.</p></header><div class='record'>");
+            for origin in
+                std::iter::once(&self.config.public_url).chain(self.config.entry_points.iter())
+            {
+                body.push_str(&format!(
+                    "<p class='origin'><a href='{}{OWNER}'>{}</a></p>",
+                    escape(origin),
+                    escape(origin)
+                ));
+            }
+            body.push_str("</div>");
             body.push_str("</section><section class='management' aria-labelledby='security-title'><header><h2 id='security-title'>Owner sign-in security</h2><p class='help'>These controls protect the gateway owner. Application tokens cannot approve new access.</p></header><div class='record'>");
             if inner.stored.totp_secret.is_none() {
                 let token = csrf(&mut inner, &session, "enroll", now);
                 body.push_str(&format!("<h3>Add an authenticator</h3><p class='help'>Require a fresh authenticator code for each owner sign-in and each access approval.</p><form method=post action='/agent-connect/owner/totp/enroll'>{}<div class='field'><label for='enroll-passphrase'>Confirm owner passphrase</label><input id='enroll-passphrase' type=password name=passphrase autocomplete=current-password required maxlength=1024></div><div class='actions'><button class='secondary'>Create enrollment secret</button></div></form>", hidden("csrf_token", &token)));
             } else {
-                body.push_str("<p class='status active'>Authenticator enrolled</p><p class='help'>A fresh code is required for every sign-in and access approval. Keep access to your authenticator; recovery is not available through this page.</p>");
+                body.push_str("<p class='status active'>Authenticator enrolled</p><p class='help'>A fresh code is required for every sign-in and access approval. Lost the authenticator? The gateway owner can stop the gateway and run agent-connect reset-totp, then sign in with the existing passphrase and enroll again. Application grants stay active.</p>");
             }
+            let forget_token = csrf(&mut inner, &session, "forget-browser", now);
+            let revoke_token = csrf(&mut inner, &session, "revoke-all", now);
+            body.push_str(&format!("</div><div class='record'><h3>Forget this browser</h3><p class='help'>End this owner-console session before leaving a shared device. Application grants stay active.</p><form method=post action='/agent-connect/owner/forget-browser'>{}<div class='actions'><button class='secondary'>Forget this browser</button></div></form></div><div class='record'><h3>Revoke all application access</h3><p class='help'>Revoke all application grants. This browser stays signed in. Completed effects cannot be undone.</p><form method=post action='/agent-connect/owner/grants/revoke-all'>{}<div class='actions'><button class='danger'{}>Revoke all active grants</button></div></form></div>", hidden("csrf_token", &forget_token), hidden("csrf_token", &revoke_token), if active_count == 0 { " disabled" } else { "" }));
             let token = csrf(&mut inner, &session, "logout", now);
-            body.push_str(&format!("</div><div class='record'><h3>End this owner session</h3><p class='help'>Sign out before leaving a shared device. Application grants stay active until they expire or are revoked.</p><form method=post action='/agent-connect/owner/logout'>{}<div class='actions'><button class='secondary'>Sign out</button></div></form></div></section>", hidden("csrf_token", &token)));
+            body.push_str(&format!("<div class='record'><h3>End this owner session</h3><p class='help'>Sign out before leaving a shared device. Application grants stay active until they expire or are revoked.</p><form method=post action='/agent-connect/owner/logout'>{}<div class='actions'><button class='secondary'>Sign out</button></div></form></div></section>", hidden("csrf_token", &token)));
             return Ok(html(&body));
+        }
+        if method == Method::POST && path == "/agent-connect/owner/sessions/end" {
+            self.owner_origin(headers)?;
+            let session = self.session_id(&inner, headers, true)?;
+            let form = form(headers, body, &["csrf_token", "session_id"])?;
+            let id = required(&form, "session_id")?;
+            bounded(id, 256)?;
+            consume_csrf(
+                &mut inner,
+                &session,
+                &format!("end:{id}"),
+                required(&form, "csrf_token")?,
+                now,
+            )?;
+            drop(inner);
+            let runtime = self
+                .runtime
+                .lock()
+                .map_err(|_| anyhow!("runtime unavailable"))?
+                .clone()
+                .ok_or_else(|| anyhow!("runtime unavailable"))?;
+            runtime.end_session(id)?;
+            return redirect(OWNER);
         }
         if method == Method::POST && path.starts_with("/agent-connect/owner/") {
             return self.owner_post(&mut inner, path, headers, body, peer);
@@ -600,8 +879,9 @@ impl AuthService {
             self.app_origin(headers, client)?;
             let redirect = required(&form, "redirect_uri")?;
             valid_redirect(redirect, client)?;
+            let issuer = self.request_origin(headers)?;
             ensure!(
-                required(&form, "resource")? == format!("{}/acp", self.config.public_url),
+                required(&form, "resource")? == format!("{issuer}/acp"),
                 "invalid_target"
             );
             ensure!(
@@ -652,6 +932,7 @@ impl AuthService {
             inner.pending.insert(
                 uri.clone(),
                 Pending {
+                    issuer,
                     client: client.to_string(),
                     client_name: name,
                     redirect: redirect.to_string(),
@@ -675,6 +956,10 @@ impl AuthService {
                 .filter(|p| Some(&p.client) == args.get("client_id"))
                 .cloned()
                 .ok_or_else(|| anyhow!("invalid_request"))?;
+            ensure!(
+                pending.issuer == self.request_origin(headers)?,
+                "invalid_target"
+            );
             let session = match self.session_id(&inner, headers, true) {
                 Ok(session) => session,
                 Err(_) => {
@@ -687,12 +972,13 @@ impl AuthService {
             };
             let token = csrf(&mut inner, &session, &format!("consent:{uri}"), now);
             let mut response = html(&format!(
-                "<p class='eyebrow'>Application request</p><h1>Allow {}?</h1><p class='lede'>Choose whether this application can use your selected harness through Agent Connect.</p><section class='origin-box' aria-label='Requesting application'><span class='help'>Exact application origin</span><strong class='origin'>{}</strong></section><section aria-labelledby='tools-title'><h2 id='tools-title'>Fixed application tools</h2><p class='help'>Only these tool names, descriptions and exact input schemas are approved by this request.</p>{}</section><section class='notice' aria-labelledby='authority-title'><h2 id='authority-title'>What this access allows</h2><p>The harness can use its native tools inside a disposable box. Sessions share a dedicated harness home: a consented application may obtain its dedicated login and read other applications’ transcripts.</p><p>Expiry and revocation stop further authorization; they cannot undo completed effects. ACP and MCP-over-ACP are unstable.</p></section><form method=post action='{AUTHORIZE}'>{}{}<div class='field'><label for='access-duration'>Access duration</label><select id='access-duration' name=duration aria-describedby='duration-help'><option value=3600>1 hour</option><option value=86400>1 day</option><option value=604800>7 days</option><option value=2592000>30 days</option></select><p id='duration-help' class='help'>You can revoke access at any time from the owner console.</p></div>{}<div class='actions'><button class='secondary' name=decision value=deny>Deny</button><button name=decision value=approve>Approve</button></div></form>",
+                "<p class='eyebrow'>Application request</p><h1>Allow {}?</h1><p class='lede'>Choose whether this application can use your selected harness through Agent Connect.</p><section class='origin-box' aria-label='Requesting application'><span class='help'>Exact application origin</span><strong class='origin'>{}</strong></section><section aria-labelledby='tools-title'><h2 id='tools-title'>Fixed application tools</h2><p class='help'>Only these tool names, descriptions and exact input schemas are approved by this request.</p>{}</section><section class='notice' aria-labelledby='authority-title'><h2 id='authority-title'>What this access allows</h2><p>The selected profile below bounds native authority inside a disposable box. Application tool effects follow the fixed tool approval. Sessions share a dedicated harness home: a consented application may obtain its dedicated login and read other applications’ transcripts.</p><p>Expiry and revocation stop further authorization; they cannot undo completed effects. ACP and MCP-over-ACP are unstable.</p></section><form method=post action='{AUTHORIZE}'>{}{}<div class='field'><label for='access-duration'>Access duration</label><select id='access-duration' name=duration aria-describedby='duration-help'><option value=3600>1 hour</option><option value=86400>1 day</option><option value=604800>7 days</option><option value=2592000>30 days</option></select><p id='duration-help' class='help'>You can revoke access at any time from the owner console.</p></div>{}{}<div class='actions'><button class='secondary' name=decision value=deny>Deny</button><button name=decision value=approve>Approve</button></div></form>",
                 escape(&pending.client_name),
                 escape(&pending.client),
                 tool_cards(&pending.tools),
                 hidden("request_uri", uri),
                 hidden("csrf_token", &token),
+                self.profile_choices(),
                 if inner.stored.totp_secret.is_some() {
                     "<div class='field'><label for='approval-totp'>Fresh authenticator code</label><input id='approval-totp' name=totp inputmode=numeric autocomplete=one-time-code pattern='[0-9]{6}' aria-describedby='approval-help'><p id='approval-help' class='help'>A fresh code is required to approve access. You can deny this request without a code.</p></div>"
                 } else {
@@ -710,7 +996,14 @@ impl AuthService {
             let form = form(
                 headers,
                 body,
-                &["request_uri", "csrf_token", "decision", "duration", "totp"],
+                &[
+                    "request_uri",
+                    "csrf_token",
+                    "decision",
+                    "duration",
+                    "totp",
+                    "profile",
+                ],
             )?;
             let session = self.session_id(&inner, headers, true)?;
             let uri = required(&form, "request_uri")?;
@@ -726,12 +1019,28 @@ impl AuthService {
                 .get(uri)
                 .cloned()
                 .ok_or_else(|| anyhow!("invalid_request"))?;
+            ensure!(
+                pending.issuer == self.request_origin(headers)?,
+                "invalid_target"
+            );
             let decision = required(&form, "decision")?;
             ensure!(["approve", "deny"].contains(&decision), "invalid_request");
             if decision == "deny" {
                 inner.pending.remove(uri);
                 return self.callback(&pending, "error", "access_denied");
             }
+            let profile = if let Some(value) = form.get("profile") {
+                self.config
+                    .profiles
+                    .iter()
+                    .copied()
+                    .find(|profile| profile.as_str() == value)
+                    .ok_or_else(|| anyhow!("invalid_profile"))?
+            } else if self.config.profiles.len() == 1 {
+                self.config.default_profile
+            } else {
+                bail!("invalid_profile")
+            };
             self.verify_factor(
                 &mut inner,
                 form.get("totp").map(String::as_str).unwrap_or(""),
@@ -748,7 +1057,9 @@ impl AuthService {
                 id: id.clone(),
                 epoch: random("epoch_"),
                 client: pending.client.clone(),
-                fingerprint: self.config.policy_fingerprint.clone(),
+                fingerprint: self.profile_fingerprint(profile),
+                profile: Some(profile),
+                issuer: Some(pending.issuer.clone()),
                 tools: pending.tools.clone(),
                 expires: now + duration,
                 revoked: false,
@@ -786,8 +1097,9 @@ impl AuthService {
             )?;
             let client = required(&form, "client_id")?;
             self.app_origin(headers, client)?;
+            let issuer = self.request_origin(headers)?;
             ensure!(
-                required(&form, "resource")? == format!("{}/acp", self.config.public_url),
+                required(&form, "resource")? == format!("{issuer}/acp"),
                 "invalid_target"
             );
             let grant_id = match required(&form, "grant_type")? {
@@ -801,7 +1113,8 @@ impl AuthService {
                         .ok_or_else(|| anyhow!("invalid_grant"))?;
                     let verifier = required(&form, "code_verifier")?;
                     ensure!(
-                        record.request.client == client
+                        record.request.issuer == issuer
+                            && record.request.client == client
                             && record.request.redirect == required(&form, "redirect_uri")?
                             && pkce_verifier(verifier)
                             && equal(&hash(verifier), &record.request.challenge),
@@ -824,7 +1137,11 @@ impl AuthService {
                         .stored
                         .grants
                         .iter()
-                        .find(|g| g.client == client && g.spent.iter().any(|h| equal(h, &hashed)))
+                        .find(|g| {
+                            self.grant_issuer(g) == issuer
+                                && g.client == client
+                                && g.spent.iter().any(|h| equal(h, &hashed))
+                        })
                         .cloned()
                     {
                         if !grant.revoked {
@@ -837,7 +1154,8 @@ impl AuthService {
                         .grants
                         .iter()
                         .find(|g| {
-                            g.client == client
+                            self.grant_issuer(g) == issuer
+                                && g.client == client
                                 && g.refresh_hash.as_deref().is_some_and(|h| equal(h, &hashed))
                         })
                         .map(|g| g.id.clone())
@@ -852,12 +1170,14 @@ impl AuthService {
             let client = required(&form, "client_id")?;
             self.app_origin(headers, client)?;
             let hashed = hash(required(&form, "token")?);
+            let issuer = self.request_origin(headers)?;
             let id = inner
                 .stored
                 .grants
                 .iter()
                 .find(|g| {
-                    g.client == client
+                    self.grant_issuer(g) == issuer
+                        && g.client == client
                         && (g.access_hash.as_deref() == Some(&hashed)
                             || g.refresh_hash.as_deref() == Some(&hashed)
                             || g.spent.contains(&hashed))
@@ -881,10 +1201,7 @@ impl AuthService {
             .iter_mut()
             .find(|g| g.id == id)
             .ok_or_else(|| anyhow!("invalid_grant"))?;
-        ensure!(
-            active(grant, self.now(), &self.config.policy_fingerprint),
-            "invalid_grant"
-        );
+        ensure!(self.grant_active(grant, self.now()), "invalid_grant");
         // At the history bound fail closed rather than forget a replayable token.
         ensure!(grant.spent.len() < MAX_SPENT_REFRESH, "invalid_grant");
         let access = random("ac_access_");
@@ -897,7 +1214,7 @@ impl AuthService {
         grant.access_expires = grant.expires.min(self.now() + ACCESS_TTL);
         let response = json_response(
             StatusCode::OK,
-            json!({"access_token":access,"refresh_token":refresh,"token_type":"Bearer","expires_in":grant.access_expires-self.now(),"refresh_token_expires_in":grant.expires-self.now(),"grant_id":grant.id,"gateway_url":format!("{}/acp",self.config.public_url.replacen("https:","wss:",1).replacen("http:","ws:",1))}),
+            json!({"access_token":access,"refresh_token":refresh,"token_type":"Bearer","expires_in":grant.access_expires-self.now(),"refresh_token_expires_in":grant.expires-self.now(),"grant_id":grant.id,"gateway_url":format!("{}/acp",self.grant_issuer(grant).replacen("https:","wss:",1).replacen("http:","ws:",1))}),
         );
         self.commit(inner, next)?;
         Ok(response)
@@ -949,22 +1266,27 @@ impl AuthService {
         let session = self.session_id(inner, headers, true)?;
         let now = self.now();
         match path {
-            "/agent-connect/owner/logout" => {
+            "/agent-connect/owner/logout" | "/agent-connect/owner/forget-browser" => {
                 let form = form(headers, body, &["csrf_token"])?;
                 consume_csrf(
                     inner,
                     &session,
-                    "logout",
+                    if path.ends_with("forget-browser") {
+                        "forget-browser"
+                    } else {
+                        "logout"
+                    },
                     required(&form, "csrf_token")?,
                     now,
                 )?;
                 inner.sessions.remove(&session);
+                inner.csrf.retain(|_, token| token.session != session);
                 let mut response = redirect(LOGIN)?;
                 response.headers_mut().insert(
                     header::SET_COOKIE,
                     HeaderValue::from_str(&format!(
                         "{COOKIE}=; Path=/agent-connect; HttpOnly; SameSite=Lax; Max-Age=0{}",
-                        self.secure_cookie()
+                        self.secure_cookie(&self.request_origin(headers)?)
                     ))?,
                 );
                 Ok(response)
@@ -980,6 +1302,28 @@ impl AuthService {
                     now,
                 )?;
                 self.revoke_id(inner, id)?;
+                redirect(OWNER)
+            }
+            "/agent-connect/owner/grants/revoke-all" => {
+                let form = form(headers, body, &["csrf_token"])?;
+                consume_csrf(
+                    inner,
+                    &session,
+                    "revoke-all",
+                    required(&form, "csrf_token")?,
+                    now,
+                )?;
+                let mut next = inner.stored.clone();
+                for grant in &mut next.grants {
+                    if !grant.revoked {
+                        grant.revoked = true;
+                        grant.access_hash = None;
+                        grant.refresh_hash = None;
+                        grant.access_expires = 0;
+                    }
+                }
+                self.commit(inner, next)?;
+                inner.codes.clear();
                 redirect(OWNER)
             }
             "/agent-connect/owner/totp/enroll" => {
@@ -1085,15 +1429,38 @@ impl AuthService {
             .extend_pairs(query)
             .append_pair(key, value)
             .append_pair("state", &pending.state)
-            .append_pair("iss", &self.config.public_url);
+            .append_pair("iss", &pending.issuer);
         redirect(url.as_str())
     }
     fn owner_origin(&self, headers: &HeaderMap) -> Result<()> {
         ensure!(
-            single_header(headers, "origin")? == self.config.public_url,
+            single_header(headers, "origin")? == self.request_origin(headers)?,
             "invalid_owner_origin"
         );
         Ok(())
+    }
+    fn request_origin(&self, headers: &HeaderMap) -> Result<String> {
+        // HTTP Host identifies a configured ingress. Never trust forwarded routing
+        // headers; proxies must preserve the configured public Host.
+        let hosts = headers.get_all(header::HOST).iter().collect::<Vec<_>>();
+        if hosts.is_empty() {
+            // In-process contract fixtures have no HTTP transport/Host.
+            return Ok(self.config.public_url.clone());
+        }
+        ensure!(hosts.len() == 1, "invalid_target");
+        let host = hosts[0].to_str()?;
+        let origin = std::iter::once(&self.config.public_url)
+            .chain(self.config.entry_points.iter())
+            .find(|origin| {
+                Url::parse(origin).is_ok_and(|url| {
+                    &url[url::Position::BeforeHost..url::Position::AfterPort] == host
+                })
+            })
+            .ok_or_else(|| anyhow!("invalid_target"))?;
+        Ok(origin.clone())
+    }
+    fn grant_issuer<'a>(&'a self, grant: &'a Grant) -> &'a str {
+        grant.issuer.as_deref().unwrap_or(&self.config.public_url)
     }
     fn app_origin(&self, headers: &HeaderMap, client: &str) -> Result<()> {
         canonical_origin(client)?;
@@ -1126,7 +1493,11 @@ impl AuthService {
                 } else {
                     inner.anonymous.get(&id)
                 })
-                .is_some_and(|s| s.expires > self.now() && (!owner || s.owner)),
+                .is_some_and(|s| s.expires > self.now()
+                    && (!owner || s.owner)
+                    && self
+                        .request_origin(headers)
+                        .is_ok_and(|origin| origin == s.origin)),
             "owner_login_required"
         );
         Ok(id)
@@ -1156,6 +1527,7 @@ impl AuthService {
         inner.anonymous.insert(
             id.clone(),
             Session {
+                origin: self.request_origin(headers)?,
                 owner: false,
                 expires: self.now() + 600,
                 enrollment: None,
@@ -1163,16 +1535,21 @@ impl AuthService {
         );
         Ok((id, Some(token)))
     }
-    fn secure_cookie(&self) -> &str {
-        if self.config.public_url.starts_with("https:") {
+    fn secure_cookie(&self, origin: &str) -> &str {
+        if origin.starts_with("https:") {
             "; Secure"
         } else {
             ""
         }
     }
-    fn with_cookie(&self, mut response: Response, cookie: Option<String>) -> Response {
+    fn with_cookie(
+        &self,
+        mut response: Response,
+        cookie: Option<String>,
+        origin: &str,
+    ) -> Response {
         if let Some(cookie) = cookie {
-            response.headers_mut().insert(header::SET_COOKIE,HeaderValue::from_str(&format!("{COOKIE}={cookie}; Path=/agent-connect; HttpOnly; SameSite=Lax; Max-Age=43200{}",self.secure_cookie())).unwrap());
+            response.headers_mut().insert(header::SET_COOKIE,HeaderValue::from_str(&format!("{COOKIE}={cookie}; Path=/agent-connect; HttpOnly; SameSite=Lax; Max-Age=43200{}",self.secure_cookie(origin))).unwrap());
         }
         response
     }
@@ -1287,6 +1664,21 @@ async fn endpoint(State(service): State<Arc<AuthService>>, request: Request) -> 
     response
 }
 
+fn authorization_lock(directory: &PathBuf) -> Result<File> {
+    let mut options = OpenOptions::new();
+    options.write(true).create(true);
+    #[cfg(unix)]
+    options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+    let lock = options.open(directory.join("authorization.lock"))?;
+    #[cfg(unix)]
+    lock.set_permissions(fs::Permissions::from_mode(0o600))?;
+    #[cfg(unix)]
+    ensure!(
+        unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
+        "authorization state is already open; stop the gateway before recovery"
+    );
+    Ok(lock)
+}
 fn private_directory(path: &PathBuf) -> Result<()> {
     if let Ok(metadata) = fs::symlink_metadata(path) {
         ensure!(
@@ -1441,6 +1833,36 @@ fn snapshot(tools: &[Tool]) -> BTreeMap<String, Value> {
         .map(|t| (t.name.clone(), t.schema.clone()))
         .collect()
 }
+fn profile_label(profile: PermissionProfile) -> &'static str {
+    match profile {
+        PermissionProfile::Sandboxed => "Sandboxed native tools",
+        PermissionProfile::ReadOnly => "Read-only native tools",
+        PermissionProfile::DenyAll => "Deny permission requests",
+        PermissionProfile::AppToolsOnly => "Application tool permission requests only",
+    }
+}
+fn profile_description(profile: PermissionProfile, harness: Harness) -> &'static str {
+    match profile {
+        PermissionProfile::Sandboxed => {
+            "Allows native tools within the disposable box and all approved application tools. Shared harness login and transcripts remain readable."
+        }
+        PermissionProfile::ReadOnly => {
+            "Codex read-only mode restricts native writes. Native reads and effects of approved application tools remain allowed; unexpected permission requests are denied."
+        }
+        PermissionProfile::DenyAll if harness == Harness::Claude => {
+            "Denies Claude permission requests. Native actions that do not request permission may still run; this is not a guarantee of native-tool denial."
+        }
+        PermissionProfile::AppToolsOnly if harness == Harness::Claude => {
+            "Allows permission requests attributed to approved application tools; denies other requests. Attribution depends on the adapter, and native actions without requests may still run."
+        }
+        PermissionProfile::DenyAll => {
+            "Denies all permission requests. Native actions that do not request permission may still run."
+        }
+        PermissionProfile::AppToolsOnly => {
+            "Allows only permission requests attributed to approved application tools. Native actions without requests may still run."
+        }
+    }
+}
 fn active(g: &Grant, now: u64, fingerprint: &str) -> bool {
     !g.revoked && g.expires > now && g.fingerprint == fingerprint
 }
@@ -1578,6 +2000,10 @@ fn owner_error(status: StatusCode, reason: &str, path: &str) -> Response {
         "login_rate_limited" | "factor_rate_limited" => (
             "Too many attempts",
             "Wait before trying again. Sign-in attempts are limited for your connection; clients behind the same proxy may share that limit.",
+        ),
+        "invalid_profile" => (
+            "Choose an available profile",
+            "Reload this request and select one of the profiles configured by the gateway owner before approving access.",
         ),
         "invalid_enrollment" => (
             "Enrollment expired",

@@ -27,6 +27,8 @@ pub enum PermissionProfile {
     /// Allow everything the harness asks for. Only safe when the harness runs
     /// inside a disposable sandbox with nothing valuable in it.
     Sandboxed,
+    /// Codex native read-only mode; approved application tool effects remain allowed.
+    ReadOnly,
     /// Deny every prompt.
     DenyAll,
     /// Allow only prompts attributable to a granted application tool; deny
@@ -35,6 +37,25 @@ pub enum PermissionProfile {
     /// which is harness-specific: acceptable for a host-run smoke test, not as
     /// a production boundary.
     AppToolsOnly,
+}
+
+impl PermissionProfile {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Sandboxed => "sandboxed",
+            Self::ReadOnly => "read-only",
+            Self::DenyAll => "deny-all",
+            Self::AppToolsOnly => "app-tools-only",
+        }
+    }
+    /// Restrict launch mode before the adapter starts; application messages cannot change it.
+    pub fn codex_mode(self, configured: crate::config::CodexMode) -> crate::config::CodexMode {
+        if self == Self::ReadOnly {
+            crate::config::CodexMode::ReadOnly
+        } else {
+            configured
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -551,11 +572,21 @@ impl PolicyHandler {
             .and_then(|id| self.state.lock().unwrap().tool_titles.get(id).cloned())
             .unwrap_or_default();
         let app = &self.config.app_server_name;
-        let is_app_tool = [own_title, seen_title.as_str()].iter().any(|t| {
-            t.starts_with(&format!("mcp.{app}.")) || t.starts_with(&format!("mcp__{app}__"))
+        let is_app_tool = [own_title, seen_title.as_str()].iter().any(|title| {
+            title
+                .strip_prefix(&format!("mcp.{app}."))
+                .or_else(|| title.strip_prefix(&format!("mcp__{app}__")))
+                .is_some_and(|name| {
+                    self.config
+                        .snapshot
+                        .as_ref()
+                        .is_some_and(|tools| tools.contains_key(name))
+                })
         });
         let wanted = match self.config.permissions {
             PermissionProfile::Sandboxed => ALLOW,
+            PermissionProfile::ReadOnly if is_app_tool => ALLOW,
+            PermissionProfile::ReadOnly => REJECT,
             PermissionProfile::DenyAll => REJECT,
             PermissionProfile::AppToolsOnly if is_app_tool => ALLOW,
             PermissionProfile::AppToolsOnly => REJECT,
