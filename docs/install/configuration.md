@@ -149,6 +149,14 @@ not guarantee denial of actions performed without permission requests. Docker
 remains the execution boundary. The gateway supplies cwd/mode/model policy, and
 a fixed approved tool snapshot cannot expand on reconnect.
 
+Codex read-only native operations require its nested sandbox to start. A Docker
+host that prohibits the required namespace can reject native commands with
+`bwrap: No permissions to create a new namespace`; those commands fail closed,
+while approved application tools remain available. Do not relax container
+security to bypass this error. Local acceptance observes this namespace refusal
+and absence of a filesystem effect; it does not independently qualify the
+native filesystem policy on a namespace-capable host.
+
 `RUST_LOG` controls diagnostics. `AGENT_CONNECT_GATEWAY_BIN` overrides the npm
 launcher's executable for local testing. Image selection is also available to
 init/login/egress as `AGENT_CONNECT_SESSION_IMAGE`; egress name as

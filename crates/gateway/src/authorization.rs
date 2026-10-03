@@ -1872,7 +1872,7 @@ fn profile_description(profile: PermissionProfile, harness: Harness) -> &'static
             "Allows native tools within the disposable box and all approved application tools. Shared harness login and transcripts remain readable."
         }
         PermissionProfile::ReadOnly => {
-            "Codex read-only mode restricts native writes. Native reads and effects of approved application tools remain allowed; unexpected permission requests are denied."
+            "Codex read-only mode restricts native writes. Native reads and effects of approved application tools remain allowed; unexpected permission requests are denied. Native operations fail closed when the host cannot start the harness sandbox."
         }
         PermissionProfile::DenyAll if harness == Harness::Claude => {
             "Denies Claude permission requests. Native actions that do not request permission may still run; this is not a guarantee of native-tool denial."
