@@ -384,3 +384,32 @@ describe("ACP provider-owned contracts", () => {
     ).toMatchObject({ isError: true });
   });
 });
+it("keeps a healthy idle recovery on the same live host without bye or load", async () => {
+  const peer = new Peer();
+  const provider = await connect(peer);
+  await collect(provider);
+  const link = provider.transport;
+  const sessionId = provider.sessionId;
+  expect(await provider.recover()).toEqual({ sessionId, interrupted: false });
+  expect(provider.transport).toBe(link);
+  expect(peer.sockets).toHaveLength(1);
+  expect(
+    peer.calls.filter((call) => call.method === "session/load"),
+  ).toHaveLength(0);
+  expect(
+    peer.sockets[0]!.sent.some(
+      (frame) => (frame as { t?: string }).t === "bye",
+    ),
+  ).toBe(false);
+});
+it("does not recover an evicted live conversation onto a replacement host", async () => {
+  const peer = new Peer();
+  peer.onPrompt = (socket) => socket.disconnect(4415);
+  const provider = await connect(peer);
+  expect((await collect(provider)).at(-1)).toMatchObject({
+    type: "task.failed",
+    code: "session_superseded",
+  });
+  expect(peer.calls.some((call) => call.method === "session/load")).toBe(false);
+  expect(peer.sockets).toHaveLength(1);
+});

@@ -196,3 +196,39 @@ describe("SingleMcpServer", () => {
     ).toThrow(/Duplicate application tool/);
   });
 });
+it("preserves inner MCP progress tokens while the gateway supplies the authoritative action ID", async () => {
+  const { server, execute } = createServer();
+  server.connect({ serverId: "spreadsheet" });
+  await server.message({
+    connectionId: "mcp-connection-1",
+    method: "initialize",
+    params: { protocolVersion: "2025-06-18" },
+  });
+  await server.message({
+    connectionId: "mcp-connection-1",
+    method: "tools/call",
+    params: {
+      name: "read_range",
+      arguments: { range: "A1" },
+      _meta: {
+        progressToken: "adapter-progress",
+        "agent-connect/actionId": "untrusted-inner",
+      },
+    },
+    _meta: {
+      "agent-connect/actionId": "durable-gateway-action",
+      trace: "retained",
+    },
+  });
+  expect(execute).toHaveBeenCalledWith(
+    { range: "A1" },
+    expect.objectContaining({
+      actionId: "durable-gateway-action",
+      meta: {
+        progressToken: "adapter-progress",
+        "agent-connect/actionId": "durable-gateway-action",
+        trace: "retained",
+      },
+    }),
+  );
+});

@@ -135,7 +135,12 @@ export class SingleMcpServer {
         return this.listTools();
       case "tools/call":
         this.requireInitialized(connection);
-        return this.callTool(connection, request.params, request._meta ?? null);
+        return this.callTool(connection, request.params, {
+          ...(isJsonObject(request.params?.["_meta"])
+            ? request.params["_meta"]
+            : {}),
+          ...(request._meta ?? {}),
+        });
       default:
         throw new McpOverAcpError(
           METHOD_NOT_FOUND,

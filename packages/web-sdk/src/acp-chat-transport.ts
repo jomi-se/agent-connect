@@ -325,8 +325,8 @@ export function createAcpChatTransport(
           );
         return active.stream;
       }
-      // Cold reattachment restores history through session/load, with no
-      // fabricated in-flight UI stream and no prompt re-send.
+      // Healthy idle connections keep their live host; ended transports may
+      // restore history through session/load, without fabricating a UI stream.
       if (provider.sessionId) await provider.recover();
       return null;
     },

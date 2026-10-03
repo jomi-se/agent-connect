@@ -74,3 +74,16 @@ export type {
   McpContent,
   SingleMcpServerOptions,
 } from "./types.js";
+
+export {
+  createAcpPairing,
+  AcpPairing,
+  AcpPairingError,
+  captureAcpPairingCallback,
+} from "./acp-pairing.js";
+export type {
+  AcpPairingOptions,
+  AcpPairingStorage,
+  AcpPairingErrorCode,
+  AcpManagedGrant,
+} from "./acp-pairing.js";

@@ -4,6 +4,12 @@ import {
   type ClientConnection,
   type SessionNotification,
 } from "@agentclientprotocol/sdk";
+import {
+  AcpPairingError,
+  createAcpPairing,
+  type AcpPairingOptions,
+  type AcpPairing,
+} from "./acp-pairing.js";
 import { AgentConnectError } from "./agent-session.js";
 import { SingleMcpServer, McpOverAcpError } from "./single-mcp-server.js";
 import {
@@ -26,10 +32,16 @@ export interface AcpGrant {
 }
 /** @experimental Unstable ACP connection options. The gateway owns cwd/mode/model. */
 export interface ConnectAgentOptions {
-  readonly grant: AcpGrant;
+  /** Explicit headless grant compatibility. Browser applications should use pairing. */
+  readonly grant?: AcpGrant;
+  readonly gatewayUrl?: string;
+  readonly pairing?: AcpPairingOptions;
   readonly tools: readonly AgentToolDefinition[];
   readonly sessionId?: string;
-  readonly transport?: Omit<ResumableAcpStreamOptions, "token">;
+  readonly transport?: Omit<
+    ResumableAcpStreamOptions,
+    "token" | "tokenExpiresAt"
+  >;
   readonly onSession?: (sessionId: string) => void;
   readonly onUpdate?: (
     notification: SessionNotification,
@@ -122,7 +134,8 @@ function observe(callback: (() => void) | undefined) {
 
 /** @experimental ACP/MCP-over-ACP provider; neither extension is a stable API. */
 export class AcpProvider implements AgentProvider {
-  private readonly options: ConnectAgentOptions;
+  private readonly options: ConnectAgentOptions & { grant: AcpGrant };
+  private readonly managed: AcpPairing | undefined;
   private readonly definitions: readonly AgentToolDefinition[];
   private connection!: ClientConnection;
   private link!: ResumableAcpStream;
@@ -136,7 +149,11 @@ export class AcpProvider implements AgentProvider {
   private newSession: Promise<string> | undefined;
   private loadSupported = false;
   private server!: SingleMcpServer;
-  private constructor(options: ConnectAgentOptions) {
+  private constructor(
+    options: ConnectAgentOptions & { grant: AcpGrant },
+    managed?: AcpPairing,
+  ) {
+    this.managed = managed;
     this.options = {
       ...options,
       grant: { ...options.grant },
@@ -163,7 +180,53 @@ export class AcpProvider implements AgentProvider {
       throw new TypeError("Invalid ACP grant token");
   }
   static async connect(options: ConnectAgentOptions): Promise<AcpProvider> {
-    const provider = new AcpProvider(options);
+    options = {
+      ...options,
+      tools: structuredClone(
+        options.tools.map(({ name, description, inputSchema }) => ({
+          name,
+          description,
+          inputSchema,
+        })),
+      ),
+    };
+    if (options.grant && (options.gatewayUrl || options.pairing))
+      throw new TypeError("Choose an explicit ACP grant or browser pairing");
+    let managed: AcpPairing | undefined;
+    let grant = options.grant;
+    if (!grant) {
+      if (!options.gatewayUrl)
+        throw new TypeError("ACP connection requires gatewayUrl or a grant");
+      managed = createAcpPairing({
+        ...options.pairing,
+        gatewayUrl: options.gatewayUrl,
+        tools: options.tools,
+      });
+      try {
+        // Open synchronously on an explicit popup action, before any await.
+        if (options.pairing?.mode === "popup" && !options.pairing.callbackUrl)
+          grant = await managed.pair("popup");
+        else {
+          try {
+            grant = await managed.getGrant();
+          } catch (error) {
+            if (
+              error instanceof AcpPairingError &&
+              ["pairing_required", "expired", "invalid_grant"].includes(
+                error.code,
+              ) &&
+              options.pairing?.mode === "redirect"
+            )
+              grant = await managed.pair("redirect");
+            else throw error;
+          }
+        }
+      } catch (error) {
+        managed.dispose();
+        throw error;
+      }
+    }
+    const provider = new AcpProvider({ ...options, grant }, managed);
     try {
       await provider.open(options.sessionId);
       return provider;
@@ -249,7 +312,17 @@ export class AcpProvider implements AgentProvider {
     };
     this.link = createResumableAcpStream(this.options.grant.gatewayUrl, {
       ...this.options.transport,
-      token: this.options.grant.token,
+      token: this.managed
+        ? async () => (await this.managed!.getGrant(undefined)).token
+        : this.options.grant.token,
+      ...(this.managed
+        ? { tokenExpiresAt: () => this.managed!.expiresAt }
+        : {}),
+      onState: (state, reason) => {
+        if (state === "ended:unauthorized" || state === "ended:grant-revoked")
+          void this.managed?.clear();
+        observe(() => this.options.transport?.onState?.(state, reason));
+      },
     });
     const app = client({ name: "agent-connect-web" })
       .onRequest(
@@ -605,6 +678,10 @@ export class AcpProvider implements AgentProvider {
         ),
       );
     const sessionId = this.id;
+    if (!this.link.error && this.link.stats().ended === null) {
+      this.link.checkLiveness("ACP recover");
+      return Promise.resolve({ sessionId, interrupted: false });
+    }
     this.loading = true;
     this.connection.close();
     this.link.close();
@@ -628,9 +705,10 @@ export class AcpProvider implements AgentProvider {
     );
     this.connection?.close();
     this.link?.close();
+    this.managed?.dispose();
   }
 }
-/** @experimental Connect to an unstable ACP gateway using an already-issued grant. */
+/** @experimental Connect through browser consent or an explicit headless ACP grant. */
 export function connectAgent(
   options: ConnectAgentOptions,
 ): Promise<AcpProvider> {
