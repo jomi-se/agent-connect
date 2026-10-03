@@ -19,6 +19,8 @@ installation, SDK example, supported platforms, and verification commands.
   layout, trust boundaries, lifecycle, and supported host policy.
 - [Target architecture](architecture/target-architecture.md): component and
   trust boundaries and future adapter seams.
+- [Browser SDK building blocks](architecture/browser-sdk-building-blocks.md):
+  headless chat and WebMCP tool-source contracts.
 - [Testing strategy](architecture/testing-strategy.md): provider truth and the
   three evidence layers.
 - [Current work](plan/current-work.md): the small set of genuine unfinished work
@@ -37,9 +39,10 @@ installation, SDK example, supported platforms, and verification commands.
 - [Local code-quality analysis](guides/code-quality-analysis.md): ESLint,
   dependency-cruiser, Knip, and jscpd commands and baseline policy.
 
-The [archive index](archive/README.md) lists completed and superseded execution
-plans, dated evidence ledgers, and design material. Archived documents remain
-useful provenance, but their commands and gates are not current instructions.
+[`plan/`](plan/) holds only active execution plans. Completed and superseded
+plans, dated evidence ledgers and design material live under
+[`archive/`](archive/README.md); they are provenance, and their commands and
+gates are not current instructions.
 
 ## Accepted decisions
 

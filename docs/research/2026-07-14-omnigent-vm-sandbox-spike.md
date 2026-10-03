@@ -124,6 +124,6 @@ No application-supplied parameter may disable the sandbox, add mounts, or
 select the fallback. Runtime posture remains a gateway/operator choice.
 
 The whole-runner option is now tracked as a broader
-[containerized gateway deployment](../plan/containerized-gateway-deployment.md)
+[containerized gateway deployment](../archive/plans/containerized-gateway-deployment.md)
 exploration, including a simple shared-container installation profile and a
 stronger per-session runner-container target.

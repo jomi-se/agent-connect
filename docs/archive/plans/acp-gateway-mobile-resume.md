@@ -3,7 +3,7 @@
 Status: complete (2026-10-01): M1–M8 pass on both harnesses; the iOS Safari
 check is not done. Follows the
 [ACP gateway spike](acp-gateway-spike.md); results go to
-[`docs/experiments/acp-gateway.md`](../experiments/acp-gateway.md).
+[`docs/experiments/acp-gateway.md`](../../experiments/acp-gateway.md).
 
 ## Problem
 

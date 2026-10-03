@@ -18,7 +18,7 @@ current accepted method remains listener-proven Tailscale WhoIs.
 
 ## Decision
 
-Follow the [OpenClaw-first plan](../plan/connect-your-ai-openclaw.md). Replace
+Follow the [OpenClaw-first plan](../archive/plans/connect-your-ai-openclaw.md). Replace
 the application-facing custom conversation/model loop with AI SDK and its Open
 Responses provider. Put application grant verification inside OpenClaw through
 a narrow native extension, not another permanently required proxy or Responses

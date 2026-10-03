@@ -3,7 +3,7 @@ name = "acp-gateway-spike"
 version = "0.0.0"
 edition = "2024"
 publish = false
-description = "Experimental ACP gateway spike; see docs/plan/acp-gateway-spike.md"
+description = "Experimental ACP gateway spike; see docs/archive/plans/acp-gateway-spike.md"
 
 [dependencies]
 agent-client-protocol = { version = "=2.2.0", features = ["unstable_mcp_over_acp"] }

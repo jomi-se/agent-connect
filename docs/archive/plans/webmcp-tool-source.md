@@ -2,7 +2,7 @@
 
 Status: archived completed SDK building block; independently reviewed and
 validated 2026-09-04. Bookhand composition was subsequently reported working by
-the owner; see [current work](current-work.md). This document preserves the
+the owner; see [current work](../../plan/current-work.md). This document preserves the
 implementation contract and evidence, not an active milestone.
 Owner: browser SDK.
 

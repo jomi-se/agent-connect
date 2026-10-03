@@ -8,7 +8,7 @@ layer is no longer a requirement for the next implementation.
 Status: historical implementation evidence from `work/openclaw-gateway`. The
 supported path is now the Agent Connect plugin for OpenClaw, with earlier standalone proof
 and owner acceptance retained in the
-[archived vertical-slice closeout](../archive/plans/stock-openclaw-vertical-closeout.md). The native patch
+[archived vertical-slice closeout](stock-openclaw-vertical-closeout.md). The native patch
 and custom replacement engine described below are preserved experiments, not
 default build/deployment instructions. Superseded executable code is recoverable
 from git history rather than retained in the active tree.
@@ -20,7 +20,7 @@ Responses machinery, keeps the easy application SDK, and lets users lend their
 AI subscription to third-party applications. Document choices and prove the
 actual browser/tool/conversation flow. A second permanent backend is not success.
 
-See [dependency investigation](../research/2026-09-05-openclaw-replacement.md).
+See [dependency investigation](../../research/2026-09-05-openclaw-replacement.md).
 Published OpenClaw 2026.9.1's built-in loop passes a real-gateway deterministic
 client-tool round trip. Its separately pinned native Codex plugin drops client
 tools. The user has been asked whether OpenClaw's subscription-backed loop is

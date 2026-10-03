@@ -22,7 +22,7 @@ sha256sum contract/open-responses/openapi.json
 ```
 
 Then update the checksum here, in
-[the vertical-slice plan](../../docs/plan/open-responses-vertical-slice.md), and in
+[the vertical-slice plan](../../docs/archive/plans/open-responses-vertical-slice.md), and in
 the archived vertical-slice evidence. The executable checksum test was removed
 with the replacement gateway; this pin is retained only to make that historical
 evidence independently inspectable.

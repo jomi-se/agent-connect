@@ -1,7 +1,7 @@
 # OpenClaw plugin feasibility validation
 
 Date: 2026-09-05. Pin: published OpenClaw 2026.9.1.
-Scope: [three bounded contracts](../plan/openclaw-delegation-spike/README.md),
+Scope: [three bounded contracts](../archive/plans/openclaw-delegation-spike/README.md),
 not production authorization or a Bookhand release gate.
 
 Final verdict: **VAL-PAIR-001, VAL-RUNTIME-001 and VAL-AUTHORITY-001 pass**

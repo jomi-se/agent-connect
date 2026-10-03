@@ -1,7 +1,7 @@
 # Multi-turn task continuation
 
 Status: archived implementation ledger; owner-reported subscription-runtime
-continuation is recorded in [current work](current-work.md). Written 2026-08-30.
+continuation is recorded in [current work](../../plan/current-work.md). Written 2026-08-30.
 
 ## Outcome
 

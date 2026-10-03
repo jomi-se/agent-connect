@@ -74,4 +74,4 @@ replay.
   first-turn-only information.
 
 The executable contracts and evidence plan are in
-[`docs/plan/multi-turn-task-continuation.md`](../plan/multi-turn-task-continuation.md).
+[`docs/archive/plans/multi-turn-task-continuation.md`](../archive/plans/multi-turn-task-continuation.md).

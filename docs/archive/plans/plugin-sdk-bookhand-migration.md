@@ -2,7 +2,7 @@
 
 2026-09-08. Status: archived; SDK ownership migration completed. the owner's later
 live Bookhand result is recorded as owner-reported evidence in
-[current work](current-work.md), not as an exhaustive independent test.
+[current work](../../plan/current-work.md), not as an exhaustive independent test.
 
 ## Boundary
 

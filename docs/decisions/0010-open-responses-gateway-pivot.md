@@ -248,7 +248,7 @@ mutation. Dynamic application tools are not a current product requirement.
 ### WebMCP is an optional source of candidate tools
 
 WebMCP is available as an experimental browser SDK tool source under the
-[WebMCP tool-source plan](../plan/webmcp-tool-source.md). It is not part of the
+[WebMCP tool-source plan](../archive/plans/webmcp-tool-source.md). It is not part of the
 gateway protocol and does not weaken the fixed snapshot rule.
 
 The SDK uses `createWebMcpToolSnapshot()` to return ordinary application tools;

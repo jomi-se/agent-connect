@@ -104,8 +104,8 @@ Resume from the lane artifacts and current diff, not the earlier separate-gatewa
 demo's success claims. Compatibility providers remain deferred.
 
 This records the owner's refinements to the
-[implementation brief](../archive/implementation-brief.md) and
-[north star](../vision.md). Where their implementation ordering differs, this
+[implementation brief](../implementation-brief.md) and
+[north star](../../vision.md). Where their implementation ordering differs, this
 plan takes precedence. No push, live runtime change or deployment is authorized
 by documenting this plan.
 
@@ -165,7 +165,7 @@ app supplies larger data remain implementation decisions, not settled APIs.
 
 ### 1. Establish the smallest upstreamable OpenClaw extension
 
-Start from the existing [delegation research](../research/2026-09-05-openclaw-app-delegation.md)
+Start from the existing [delegation research](../../research/2026-09-05-openclaw-app-delegation.md)
 and [plugin spike](openclaw-delegation-spike/README.md), not another broad survey.
 Trace owner authentication, consent, credential verification, application
 principal propagation, native session ownership and runtime policy enforcement.

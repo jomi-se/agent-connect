@@ -1,8 +1,8 @@
 # ACP gateway spike: results
 
 Status: complete, 2026-09-30; mobile follow-up 2026-10-01
-([plan](../plan/acp-gateway-mobile-resume.md)). Experimental evidence for the
-[spike plan](../plan/acp-gateway-spike.md), not an accepted decision. The
+([plan](../archive/plans/acp-gateway-mobile-resume.md)). Experimental evidence for the
+[spike plan](../archive/plans/acp-gateway-spike.md), not an accepted decision. The
 proposed decision is [ADR 0016](../decisions/0016-acp-application-boundary.md).
 Code: [`experiments/acp-gateway/`](../../experiments/acp-gateway/).
 

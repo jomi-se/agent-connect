@@ -41,7 +41,7 @@ for the nesting denial. Fix the nesting and the reason for full access goes with
 it.
 
 So the containerized runner — already designed in
-`docs/plan/containerized-gateway-deployment.md` — is not merely a packaging
+`docs/archive/plans/containerized-gateway-deployment.md` — is not merely a packaging
 convenience. It avoids nesting two bubblewrap policies rather than trying to
 make them compose, which is the mechanism that is actually failing. It also
 gives the MCP relay a reproducible dependency layout instead of a user-specific
@@ -173,7 +173,7 @@ built, because it decides whether that runner needs to host a workspace at all.
 
 ## References
 
-- `docs/plan/containerized-gateway-deployment.md` — the design this argument
+- `docs/archive/plans/containerized-gateway-deployment.md` — the design this argument
   converges on
 - `docs/scope-inventory.md:54` — the row these three tiers would replace
 - ADR 0008 — posture vocabulary and the honesty rule for evidence sources
