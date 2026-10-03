@@ -102,6 +102,13 @@ publishable candidates. The clean-room gate installs the packed launcher/SDK
 and sample into a fresh container and exercises the real adapter using a
 deterministic provider. It uses no subscription login or personal model key.
 The native WebMCP/provider gates install their separate compatibility pins.
+The extended artifact driver also exercises no-mutation JSON setup planning,
+explicit unattended setup/reruns with synthetic owner credentials, doctor JSON,
+owned offline service definition lifecycle, owner live-session ending and
+revoke-all. It verifies setup/service operations preserve private state and do
+not invoke provider login. Disposable Linux containers lack a running desktop
+user manager: offline definition checks and actionable unsupported-manager
+errors are not native macOS launchd acceptance evidence.
 The artifact-only driver currently requires Linux temporary paths and a Linux
 platform package. The sequence above is not a macOS verification command:
 Apple Silicon native installation and public-artifact composition remain part

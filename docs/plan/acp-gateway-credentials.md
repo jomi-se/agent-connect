@@ -54,6 +54,20 @@ this direction.
 
 ## Gateway owner authentication and application consent (2026-10-03)
 
+Guided `agent-connect setup` orchestrates private owner initialization, the
+existing owner-run harness login helper, owned egress and user-service installation
+and start. Persistent setup choices include the configured gateway entry points,
+offered restricted profiles and default permission profile. Explicit
+`setup --upgrade` updates the release image and owned service executable without
+replacing private owner state, grants, journals or dedicated login homes. Changed
+image or harness policy invalidates grants and requires application reapproval.
+Unattended setup never starts provider login. Owner credential presence is
+checked through metadata by `doctor`; validity remains an owner-run live check.
+Lost gateway TOTP is recovered with `agent-connect reset-totp` after stopping
+the gateway. The exclusive state lock prevents concurrent reset; passphrase and
+grant records remain intact, and bounded recovery metadata records the reset.
+There is no app-grant or remote factor-reset authority.
+
 Normal setup now creates gateway-owned sign-in and authorization state, separate
 from the dedicated provider login. `agent-connect init` prompts for a hidden
 owner passphrase of at least 12 characters and confirmation; unattended setup
@@ -64,7 +78,8 @@ The owner passphrase is not an application bearer and is never sent to a box.
 
 The gateway hosts owner sign-in, optional TOTP enrollment and a consent page
 showing the exact requesting application origin, full fixed tools, native boxed
-harness authority and access duration. Enrolled TOTP is required at login and
+harness authority, supported restricted profiles and access duration. The selected
+profile is immutable grant authority. Enrolled TOTP is required at login and
 again with a fresh code for each approval. Owner sessions use a separate
 HttpOnly, SameSite=Lax cookie, Secure on HTTPS. Owner forms use CSRF protection;
 CSP and frame headers prevent embedding the approval UI in an application.
@@ -81,8 +96,9 @@ reconnects transport without changing ownership or replaying a prompt.
 Refresh-token reuse revokes the grant; uncertain rotation is not automatically
 retried. SDK default resume only reuses/completes a grant and never opens consent.
 
-The hosted owner grant list revokes individual applications without a gateway
-restart. Active and detached authority ends within one second, and per-frame
+The hosted owner console can end a live session without revoking its grant,
+revoke one or all grants and forget its owner browser session. Active and detached
+revoked authority ends within one second, and per-frame
 checks prevent forwarding newly unauthorized effects. Revocation cannot undo
 completed effects. App consent renewal requires another explicit Connect action;
 provider-login revocation remains a separate provider-account action affecting
@@ -90,9 +106,12 @@ only the dedicated login. Optional TOTP adds protection to owner login and new
 approvals; a stolen active application token remains authority until expiry or
 revocation. This design does not require a code for every harness session.
 
-The canonical HTTPS `public_url` origin serves owner pages, OAuth metadata and
-endpoints, and the `/acp` socket; reverse proxies must preserve that single-origin
-layout. HTTP loopback is permitted for local use. Normal setup issues no grant
+The HTTPS `public_url` and explicitly configured entry-point origins serve owner
+pages, OAuth metadata/endpoints and the `/acp` socket. A grant is bound to the
+exact entry point used for pairing, including its issuer and socket authority.
+Owner cookies and CSRF checks are origin-specific; cross-entry-point owner
+requests are rejected. Proxies preserve the public Host, browser Origin and
+WebSocket subprotocol headers. HTTP loopback is permitted locally. Normal setup issues no grant
 file. The explicit `--headless-static-bearer` mode retains manual origin/tool
 approval for headless integrations without owner pages or managed refresh.
 These changes do not establish live pairing or provider-refresh acceptance;

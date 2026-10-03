@@ -1,77 +1,143 @@
 # Install Agent Connect (ACP prerelease)
 
-Version **0.1.0-alpha.1** is an unpublished release candidate. The instructions
-below describe the artifact installation path; use locally supplied tarballs
-until the owner approves and runs the first release. No checkout, Rust compiler
-or personal harness installation is needed. ADR 0016 remains proposed.
-ACP, MCP-over-ACP and `agent-connect.resume.v1` are unstable.
+Install your gateway, run guided setup, and approve an application's exact
+origin and tools in your browser. **0.1.0-alpha.1 is an unpublished release
+candidate:** use supplied local artifacts until the owner approves the first
+release. The npm and release commands below describe the path after publication.
+ADR 0016 remains proposed. ACP, MCP-over-ACP and `agent-connect.resume.v1` are
+unstable.
 
-The gateway launcher needs Node >=24.15, a running Docker engine and a browser.
-Node 24 LTS (>=24.15, <25) remains the repository and provider-validation baseline;
-the launcher's broader range does not establish testing of every later major.
-Supported hosts: Apple Silicon macOS, Linux x64 and Linux ARM64. Docker Desktop
-provides Linux containers on macOS. Windows is not yet supported. Codex is the
-first supported login path; live subscription checks remain owner-run.
+## 1. Install
 
-## Install the gateway
+You need Node >=24.15, a working Docker engine and a browser. The tested baseline
+is Node 24 LTS (>=24.15, <25). Supported hosts are Apple Silicon macOS, Linux x64
+and Linux ARM64. On macOS, use Docker Desktop with Linux containers. Windows is
+not yet supported. No checkout, Rust compiler or personal harness installation
+is needed.
 
-After publication, choose npm:
+After publication:
 
 ```sh
 npm install --global @open-agent-connect/gateway@0.1.0-alpha.1
 agent-connect --help
-# Without a global installation:
-npx @open-agent-connect/gateway@0.1.0-alpha.1 --help
 ```
 
-Keep optional dependencies enabled: npm selects a platform binary. Adapters and
-harness CLIs are pinned inside the session image, rather than duplicated on the
-host. The launcher does not download executables at runtime.
-
-For locally supplied release artifacts, install the launcher and matching
-platform tarball together (use `linux-x64` or `darwin-arm64` when appropriate):
+For a local candidate, install the launcher and matching platform tarball
+together; substitute `linux-x64` or `darwin-arm64` for your host:
 
 ```sh
 npm install --global ./open-agent-connect-gateway-0.1.0-alpha.1.tgz \
   ./open-agent-connect-gateway-linux-arm64-0.1.0-alpha.1.tgz
-agent-connect --help
 ```
 
-Alternatively download the archive for your host and `SHA256SUMS` from the
-[GitHub Release](https://github.com/jomi-se/agent-connect/releases), verify its
-checksum, extract it and place `agent-connect` on PATH (the archive also includes `agent-connect-gateway` for compatibility). Artifact names:
+Keep npm optional dependencies enabled: they select the native platform binary.
+The launcher does not download executables at runtime. Adapters and harness CLIs
+are pinned in the Docker session image. `agent-connect-gateway` remains a
+compatibility alias.
 
-| Host          | Archive                                                   |
-| ------------- | --------------------------------------------------------- |
-| Apple Silicon | `agent-connect-gateway-aarch64-apple-darwin.tar.xz`       |
-| Linux x64     | `agent-connect-gateway-x86_64-unknown-linux-musl.tar.xz`  |
-| Linux ARM64   | `agent-connect-gateway-aarch64-unknown-linux-musl.tar.xz` |
+Archive and checksum-verified shell installers are also available from the
+[versioned release](https://github.com/jomi-se/agent-connect/releases) after
+publication. Archive targets are `aarch64-apple-darwin`,
+`x86_64-unknown-linux-musl` and `aarch64-unknown-linux-musl`, named
+`agent-connect-gateway-<target>.tar.xz`. Verify the matching `SHA256SUMS` before
+extracting an archive or running its downloaded installer. There is no Windows
+installer. `agent-connect release-info` reports the installed version and default
+session image; published binaries pin that image by digest. Local candidates
+need the matching native Docker image supplied by the artifact producer.
+
+## 2. Run guided setup
+
+For local use:
 
 ```sh
-# Linux: validates downloaded assets in the current directory.
-sha256sum --ignore-missing --check SHA256SUMS
-# macOS: shasum -a 256 <archive>; compare with its SHA256SUMS entry.
-tar -xf agent-connect-gateway-aarch64-unknown-linux-musl.tar.xz
+agent-connect setup
 ```
 
-The release also supplies `agent-connect-gateway-installer.sh`. Download it
-from the **same versioned release**, verify the checksum, inspect it and run
-`sh agent-connect-gateway-installer.sh`. The cargo-dist installer downloads the
-matching archive from that release and installs the executable. There is no
-PowerShell/Windows installer in this release.
+For a gateway behind your HTTPS reverse proxy:
 
-`agent-connect release-info` prints the version and default session
-image. Released binaries pin the image by immutable digest; Docker pulls it
-when needed. Local candidates use `agent-connect-session:0.1.0-alpha.1`: load
-the supplied native Docker image with `docker load --input <image.tar>` or ask
-the artifact producer to load it. A multi-architecture OCI archive is build
-evidence, not a Docker-load archive.
+```sh
+agent-connect setup --origin https://gateway.example
+```
 
-## Run the sample web app
+For additional routed gateway origins or a smaller consent-profile menu, supply
+the choices during first setup; they are saved for the managed service:
 
-Download `acp-chat-sample.tgz` and
-`open-agent-connect-web-0.1.0-alpha.1.tgz` from that same release. From the
-directory containing both:
+```sh
+agent-connect setup --origin https://gateway.example \
+  --entry-point https://gateway.example.test \
+  --profile sandboxed --profile read-only
+```
+
+`--permissions read-only` selects the default Codex profile. Every offered menu
+must include its default. Setup reruns preserve these choices and reject
+incompatible changes instead of silently expanding application authority.
+
+The default origin is `http://127.0.0.1:18940`. Setup creates private owner
+configuration, checks the image and owned Docker egress, and installs and starts
+the user service. It prompts for a hidden owner passphrase of at least 12 characters and
+confirmation. This passphrase signs you in to Agent Connect; provider login is
+separate. Use `--harness codex` to select Codex explicitly.
+
+Run `agent-connect login` yourself to authenticate the dedicated harness home.
+The interactive selector defaults to Codex, whose release image runs unmodified
+`codex login --device-auth`. Guided setup asks whether to run this interactive
+step; `--login` requests it explicitly. Neither command imports personal harness
+credentials. Read the
+[shared-home credential risks](../plan/acp-gateway-credentials.md) before login,
+and [Claude Code](#claude-code) before selecting Claude.
+
+Setup prints the runtime location and next actions. Rerun it to continue an
+interrupted setup. Existing runtime configuration and owner state are preserved;
+conflicting requested values fail rather than silently changing your runtime.
+Use `--directory <private-runtime>` to select a different runtime,
+`login --config <config>` to honor its dedicated home, or `--no-service` when
+another supervisor will run it. Setup does not configure DNS, TLS or firewall
+ingress. Remote access needs your own
+[HTTPS reverse proxy](configuration.md#https-reverse-proxy).
+
+Owner state, grants and action journals remain outside the dedicated harness
+home. Private directories use mode 0700 and files 0600. Normal setup creates no
+bearer or tool-snapshot handoff file: applications request browser consent.
+
+### Automated setup
+
+Preview the plan without making changes:
+
+```sh
+agent-connect setup --origin https://gateway.example --json
+```
+
+Explicit unattended application uses `--apply --non-interactive` and
+`--owner-passphrase-file <private-file>`. The file must be an owned regular file
+with mode 0600 or stricter. Keep it outside the harness home and remove it when
+provisioning no longer needs it. Never put the passphrase in CLI arguments,
+environment variables or app code. Automation never performs provider login;
+the owner runs `agent-connect login --config <config> --harness codex` separately.
+Use `setup --help` for the complete option list.
+
+```sh
+agent-connect setup --origin https://gateway.example --apply --non-interactive \
+  --owner-passphrase-file /path/to/private-passphrase
+```
+
+## 3. Connect an application
+
+Open `http://127.0.0.1:18940/agent-connect/owner`, or
+`https://gateway.example/agent-connect/owner` remotely. Sign in with the owner
+passphrase. The console shows runtime health, configured entry points, grants
+and live sessions. Connect apps through a configured entry point. Optional TOTP
+enrollment requires fresh authenticator codes at sign-in and each approval.
+
+In your app, enter the gateway origin and choose **Connect**. Review the exact
+application origin, complete tool schemas, available restricted profile, native
+harness authority and access duration before approving. Duration choices are
+one hour (default), one day, seven days or thirty days. The approved tool snapshot
+cannot expand on reconnect. Profile availability depends on the harness; the
+console describes the native authority that remains.
+
+To try the sample, obtain `acp-chat-sample.tgz` and
+`open-agent-connect-web-0.1.0-alpha.1.tgz` from the matching release or artifact
+producer:
 
 ```sh
 tar -xzf acp-chat-sample.tgz
@@ -80,245 +146,128 @@ npm install ../open-agent-connect-web-0.1.0-alpha.1.tgz
 npm run dev
 ```
 
-This builds against the packed SDK, without repository aliases. Open
-`http://127.0.0.1:5173`. Keep this terminal running and use another terminal
-in the sample directory for gateway setup.
+Open `http://127.0.0.1:5173`, enter the gateway origin and choose **Connect**.
+Ask “Read chapter 1 and highlight its first sentence.” The highlight and chat
+reply verify a model turn and an approved application tool.
 
-## Initialize owner sign-in
-
-Create a private runtime outside the dedicated harness home:
+## 4. Verify and diagnose
 
 ```sh
-runtime_dir="${XDG_STATE_HOME:-$HOME/.local/state}/agent-connect/sample-codex"
-mkdir -p "$(dirname "$runtime_dir")"
-agent-connect init --directory "$runtime_dir" --harness codex
+agent-connect doctor
+agent-connect service status
 ```
 
-For a remotely hosted gateway, add `--public-url https://gateway.example`.
-The URL is a canonical HTTPS origin without a path or trailing slash. With the
-default loopback listener, omission selects `http://127.0.0.1:18940`; HTTP is
-permitted only for local loopback use.
+Doctor reports actionable checks and stable problem codes;
+`agent-connect doctor --json` supports automation. `/healthz` supplies HTTP
+health without credentials, and the owner console offers additional repair
+guidance. Health success does not prove provider authentication or a model turn.
 
-Setup prompts for a hidden owner passphrase of at least 12 characters and a
-confirmation. This authenticates you to the gateway; provider login is a
-separate step. Unattended setup requires `--owner-passphrase-file <private-file>`
-with an owned regular file, mode 0600 or stricter. Do not put the passphrase in
-arguments, environment variables, app code or the harness home.
+Start with [troubleshooting](troubleshooting.md), doctor and
+`agent-connect service logs`. No manual state-file inspection is needed for
+normal diagnosis. Keep bearer credentials, cookies and login data out of issues.
 
-Setup refuses an existing destination and creates:
+## Operate the gateway
 
-| Path under the runtime directory | Purpose                                                                       |
-| -------------------------------- | ----------------------------------------------------------------------------- |
-| `config.json`                    | Private operator configuration, canonical public URL and boxed harness policy |
-| `state/auth/`                    | Owner passphrase hash, optional TOTP secret and application grant state       |
-| `state/`                         | Private application-action journals and runtime state                         |
-
-Directories are mode 0700 and files 0600. Normal setup creates no `grant.json`
-or `tools.json`: each application requests its tools at the gateway consent
-page. Keep the entire runtime private and outside the home mounted into boxes.
-Owner authentication state is separate from application bearer credentials.
-
-## One-time Codex login
-
-Run this **one interactive command yourself**:
+Services use user systemd on Linux and launchd on macOS:
 
 ```sh
-agent-connect login
+agent-connect service install
+agent-connect service start
+agent-connect service status
+agent-connect service logs --lines 100
+agent-connect service stop
+agent-connect service uninstall
 ```
 
-It shows the available harnesses. Press Enter to choose Codex, select Claude
-Code explicitly, or enter `q` to cancel. It then starts the provider's login
-inside the release image: Codex uses unmodified `codex login --device-auth`.
-Follow the provider's login instructions. The helper never reads, copies
-or logs your credentials. Use this dedicated home, never your existing personal
-Codex home. Login and new runtime setup share these defaults:
+Use `service --config <config> <operation>` for another runtime. Use the same
+operating-system account for setup, login and service operation. Service install
+does not require root, and uninstall preserves private runtime and harness data.
+The managed user service has one identity per account; additional entry points
+share that gateway. It refuses to replace a service owned by another runtime.
+For foreground operation, `serve --config <config>` remains available; avoid
+running it alongside the service on the same listener.
 
-| Platform                          | Dedicated home per harness                                            |
-| --------------------------------- | --------------------------------------------------------------------- |
-| Linux                             | `$HOME/.local/state/agent-connect/harnesses/<harness>`                |
-| macOS                             | `$HOME/Library/Application Support/agent-connect/harnesses/<harness>` |
-| Either, with `XDG_STATE_HOME` set | `$XDG_STATE_HOME/agent-connect/harnesses/<harness>`                   |
+The console can end a live session without revoking its grant, revoke one or all
+grants, and forget the owner browser session. Revocation affects active and
+detached authority within one second; completed effects cannot be undone. A
+revoked app must explicitly Connect for new consent.
 
-The CLI prints the chosen home. `<harness>` is `codex` or `claude`; homes are
-private (0700), and a login is shared across that harness's application runtimes.
-It is not copied into each runtime. `init` records the selected home in its
-private config; production `serve` also uses this default when none is configured.
-Existing configs retain their home. For one of those, use
-`agent-connect login --config "$runtime_dir/config.json"`; the selector defaults
-to its configured harness, and selecting a different harness is refused.
-Use `--harness codex` to skip the selector and `--harness-home <absolute-dir>`
-to override the home. These overrides are available on login and setup.
-The provider's interactive login still needs a terminal.
+Brief socket loss may resume the same session within its grace and output
+budget. Expired sessions and gateway restarts require deliberate recovery. The
+sample retains its transcript and reports interruption without automatically
+replaying prompts or uncertain effects. Provider transcripts do not create a
+general restoration API. See the [SDK recovery contract](../../packages/web-sdk/README.md).
 
-Every session mounts the whole directory read-write at `/home/node`,
-running as your host UID/GID, including when it differs from node UID 1000.
-Codex stores file credentials under `codex-home/` inside that dedicated home; Claude configuration uses
-`claude-config/`. Credentials and data are intentionally kept together.
+Lost authenticator access has a local owner-run
+[`reset-totp` recovery](troubleshooting.md#lost-authenticator). Stop the gateway
+before recovery; provider authentication is separate.
 
-## Start egress and serve
+## Upgrade or uninstall
+
+Stop active turns and the service, read the target release's changelog, then
+install its matching gateway version. Retain the private runtime, owner state,
+action journals and dedicated harness home:
 
 ```sh
-agent-connect egress start
-agent-connect serve --config "$runtime_dir/config.json"
+agent-connect service stop
+# Install the target gateway version using the same artifact method as before.
+agent-connect setup --upgrade
+agent-connect doctor
 ```
 
-Egress is a gateway-owned Docker container, with no published host port.
-Each session has its own internal network, a temporary workspace, a read-only
-image, dropped capabilities and resource limits. Only the selected proxy and
-deterministic-test model, when explicitly configured, join that network.
-Production sessions require Docker, this proxy and a dedicated home.
+Use `--directory <private-runtime>` when upgrading a non-default runtime, and its
+config for service/doctor commands. Upgrade uses the new installed release's
+session image, updates the owned service executable even when its image is
+unchanged, recreates owned egress when needed, and preserves owner
+passphrase, TOTP, grant records, journals and login homes. Image or harness-policy
+changes invalidate existing application authority: pair affected apps again.
+Retaining a grant record does not keep it valid under a changed policy. Never
+replay interrupted turns or initialize over existing state.
 
-Open `http://127.0.0.1:18940/agent-connect/owner` and sign in with the owner
-passphrase. Optionally enroll a TOTP authenticator under the owner page's
-factor enrollment form. Keep a secure authenticator backup; this alpha has no
-recovery-code or remote factor-reset flow. A lost factor requires stopping the
-old gateway and initializing a new private runtime, then pairing apps again.
-Once enrolled, both sign-in and each approval require
-a fresh authenticator code. The owner cookie is HttpOnly and SameSite=Lax,
-with Secure required on HTTPS; it is never an application grant. Owner forms
-use CSRF protection, and hosted pages forbid framing with CSP and frame headers.
+To uninstall, stop and uninstall the service, stop its owned egress with
+`agent-connect egress stop`, then uninstall the npm package or remove both
+archive-installed executables. These operations preserve private data. Revoke
+the dedicated provider login in the provider's account controls before choosing
+to delete it; leave personal logins alone. Never prune unrelated Docker resources.
 
-In the sample, enter the gateway origin (`http://127.0.0.1:18940` locally or
-`https://gateway.example` remotely), then choose **Connect**. The explicit
-browser action opens gateway consent. Sign in if needed, review the exact
-application origin, complete tool schemas, requested access duration and native
-boxed harness authority, then approve or deny. The sample requests reading a
-chapter, highlighting exact text and asking the reader a question. A grant
-approves that fixed snapshot; reconnect cannot expand it. Duration choices are
-1 hour (the default), 1 day, 7 days or 30 days.
+### Moving from the OpenClaw plugin
 
-Ask: “Read chapter 1 and highlight its first sentence.” The highlight should
-appear in the sample and the chat should explain its result. Stop cancels a
-running turn, including an unanswered reader question. After Stop or a terminal
-failure, choose **New connection** before sending another message. The sample
-retains the transcript and starts a fresh harness session without re-sending
-earlier prompts or effects. If capacity remains full during box teardown, wait
-a moment and choose **New connection** again.
+The [OpenClaw plugin](../../deploy/openclaw-gateway/README.md) and npm package
+remain available. Trying ACP means a fresh ACP runtime, dedicated login and new
+pairing for each app. Plugin grants, tokens, histories and personal provider
+credentials are not imported. Plugin retirement is a separate owner decision.
 
-The default listener is loopback `127.0.0.1:18940`. Remote use requires a single
-operator-managed HTTPS origin matching `public_url`: forward `/acp`, all
-`/agent-connect/owner` and `/agent-connect/oauth` routes, and the `/.well-known`
-metadata routes through the same reverse proxy. For example,
-`https://gateway.example` serves owner pages and OAuth, while
-`wss://gateway.example/acp` serves the socket. Keep Docker's API and egress
-ports private. The package does not configure DNS, TLS or firewall ingress.
+## Claude Code
 
-## Claude Code and the API-key alternative
+Claude Code subscription use remains **unconfirmed against Anthropic's terms**.
+It is not a confirmed substitute for Codex. An owner who chooses to investigate
+it must use a separate Claude runtime and dedicated login; the helper invokes
+`claude /login`. `claude setup-token` is not a gateway login method. See the
+[credential and terms analysis](../plan/acp-gateway-credentials.md).
 
-Claude Code subscription usage through Agent Connect is **unconfirmed against
-Anthropic's terms**. It is not a confirmed alternative to Codex. If the owner
-chooses to investigate it, initialize a separate `--harness claude` runtime and
-run `login --harness claude --harness-home <dedicated-home>`; this invokes
-`claude /login`. `claude setup-token` is a compared variant, not a gateway login
-method, and the gateway does not collect that token.
+API-key authentication belongs in a separate application-server integration with
+API billing. The gateway does not forward `ANTHROPIC_API_KEY` or other API-key
+variables into boxes. Never put API keys into a browser application.
 
-Anthropic's [authentication guidance](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use)
-describes API-key authentication as the product integration alternative,
-with API billing. This gateway does **not** forward `ANTHROPIC_API_KEY` or other
-API-key variables into boxes. Use a separate application-server Claude API
-integration if API authentication is required; never put an API key in this
-browser sample. See the [credential/terms analysis](../plan/acp-gateway-credentials.md).
+## Security boundaries and advanced configuration
 
-## Reconnect and recovery
+Docker isolates execution and the owned egress proxy constrains destinations.
+The shared harness home intentionally includes credentials, configuration and
+all application transcripts. A consented app could induce the harness to disclose
+its dedicated credential through an allowed tool, read another app's transcript
+or change shared configuration. Per-app home isolation is deferred. Use trusted
+apps and a separately revocable login; network restrictions cannot prevent
+disclosure through an approved tool.
 
-Brief socket loss or Page Lifecycle suspension reattaches to the same resumable
-transport while its grace period and retained-output budget permit it. A lost
-attachment is distinct from a new harness session. After expiry, the SDK may
-load the owned session's history; it reports an interrupted turn and never
-automatically re-sends the prompt or an uncertain application-tool result.
-Authorization failures and attachment takeover do not trigger recovery.
-Access tokens last five minutes; the SDK rotates refresh tokens and briefly
-detaches/reconnects while retaining the same grant and session ownership.
-It never replays a prompt to renew authorization. Refresh-token reuse revokes
-the grant; uncertain refresh results require explicit recovery rather than retry.
-The default pairing mode never opens another consent popup.
+Application effects require idempotency or action-ID deduplication; cancellation
+cannot undo a completed effect. Owner secrets and grants remain outside the home
+mounted into sessions. Box cleanup failures retain capacity until owned cleanup
+and gateway restart; doctor and service logs identify failures without broad
+Docker deletion.
 
-A gateway restart loses process-local ownership/resume handles. Saved transcripts
-in the shared home do not create a general cross-restart conversation API.
-Reconnect deliberately, then send a new user message. Managed grants default to
-`sessionStorage`, scoped to gateway origin, application origin and tool snapshot.
-A page reload can reuse that grant within the same tab; this does not restore a
-harness conversation automatically. An actual browser back/forward-cache
-restoration retains the chat and pending app question; the application must
-preserve them on `pagehide.persisted`. This is
-conditional on browser caching, not a promise that every Back navigation resumes.
-
-## Upgrade, revoke and uninstall
-
-Stop the gateway and active turns before upgrading. Install the matching gateway
-and SDK version, read its changelog, and use `release-info`/`release.json` to
-update `session_image` in the private config. Recreate the egress container with
-that image (`egress stop`, then `egress start`). Keep the private dedicated home;
-do not copy its credential files between boxes or into a repository. Existing
-interrupted turns must not be replayed during an upgrade.
-
-To revoke an application grant, open `/agent-connect/owner` on the gateway,
-sign in and choose **Revoke access** for that application. No restart is needed.
-Revocation ends active and detached authority within one second, and the gateway
-checks authorization before forwarding each frame; completed effects cannot be
-undone. The application must explicitly Connect again for new consent. Gateway
-policy changes invalidate grants through the policy fingerprint.
-
-To revoke the harness login, use the provider's account controls for **that dedicated login**.
-Do not log out or change your personal harness session.
-
-To uninstall: stop the gateway; run `agent-connect egress stop`; uninstall
-`@open-agent-connect/gateway` globally, or remove both archive-installed executables (`agent-connect` and its compatibility command).
-The helper only removes containers bearing its egress ownership label. Private
-homes and journals are left for the owner to retain or delete after revoking the
-dedicated login. Do not prune unrelated Docker resources.
-
-## Explicit headless static bearer mode
-
-For an intentionally headless integration, `init --headless-static-bearer`
-requires `--allow-origin <exact-origin>` and `--tools <snapshot.json>`. It creates
-a static bearer in private config and a `grant.json` for the application. Serve
-also requires `--headless-static-bearer` (or that explicit config setting), the
-exact origin, tool snapshot and token. This mode hosts no owner or OAuth pages
-and has no managed refresh or individual hosted revocation. Treat grant files as
-secrets. It is disabled by default; use hosted consent for normal installation.
-
-Existing manual-bearer configs must explicitly opt into this headless mode or
-initialize a new owner runtime. There is no automatic grant migration.
-
-## Troubleshooting and accepted risks
-
-- `docker info` must work for the invoking user. Keep the same user for init,
-  login and serve; ownership/mode errors require fixing that dedicated runtime,
-  not changing personal credential permissions.
-- An unpublished package/image is not an authentication failure. Use the local
-  tarballs/native image, or wait for the first approved release.
-- Close 4401 means an invalid or expired application grant; revoked grants need
-  a new explicit Connect action. Close 4403 means an origin mismatch. Match
-  `http://127.0.0.1:5173` exactly; `localhost` is a different origin.
-- Close 4409 means another attachment owns the session; 4418 means capacity;
-  4500 means a harness/container launch failed. See
-  [configuration and error reference](configuration.md) for all codes.
-- A boxed session retains its capacity slot until its container and private
-  network are removed. Cleanup retries are bounded; if Docker cleanup fails,
-  that slot stays reserved for this gateway process. Inspect the cleanup error
-  and the resources' `org.agent-connect.component=acp-session` and
-  `org.agent-connect.session` labels before removing only that session's
-  immutable IDs. Shared egress/model peers must stay running. Stop active turns
-  before restarting; restart loses resume ownership and does not itself clean
-  resources left by an earlier process. Allow at least 30 seconds for graceful
-  shutdown while allocation is in progress; SIGKILL or daemon outages can leave
-  resources requiring operator inspection. Never use a broad Docker prune.
-- Missing platform binary: reinstall with optional dependencies enabled or
-  install its platform tarball alongside the launcher.
-- `RUST_LOG=info` enables diagnostics. Inspect Docker errors and proxy denials;
-  do not paste grants, login files or credential-bearing logs into issues.
-
-The shared home intentionally includes credentials, configuration and all app
-transcripts. A consented application's prompt could induce the harness to read
-the dedicated credential and send it through an allowed app tool. The egress
-proxy cannot prevent that. Sessions can also read other apps' transcripts or
-alter shared configuration. Use only trusted/consented apps and a separately
-revocable login. This is the [accepted credential risk](../plan/acp-gateway-credentials.md),
-not a promise of credential isolation. Application effects require idempotency
-or action-ID deduplication; cancellation cannot undo a completed effect.
-
-The [previous OpenClaw installation](../../deploy/openclaw-gateway/README.md)
-and npm package remain available. Their grants and histories do not migrate
-automatically. See [release operator instructions](release.md) for the first
-approved publication and local artifact validation.
+The explicit `init --headless-static-bearer` path remains available for headless
+integrations. It requires an exact app origin, fixed tools and private bearer
+handoff, and has no hosted owner/OAuth flow. It is off by default. See
+[configuration](configuration.md) for this path and full policy reference, or
+[release operations](release.md) for artifact production and owner-controlled
+publication.

@@ -17,14 +17,17 @@ Linux x64 and Linux ARM64; Windows is not yet supported. After publication:
 ```sh
 npm install --global @open-agent-connect/gateway@0.1.0-alpha.1
 agent-connect --help
+agent-connect setup
 ```
 
 For current local candidates, install the launcher and matching platform tarballs.
 The [install guide](docs/install/README.md) is the complete path from release
-artifacts to a chat turn: install, run the standalone sample using the packed SDK,
-create private owner configuration, perform one dedicated Codex login, start the
-Docker egress proxy and gateway, then connect through hosted owner consent. No checkout or compiler
-is required. The guide also covers upgrades, revocation and uninstalling.
+artifacts to a chat turn: install, run guided setup, complete your dedicated
+provider login, then connect through hosted owner consent. For your own HTTPS
+entry point, use `agent-connect setup --origin https://gateway.example`.
+`agent-connect doctor` checks the installation and `agent-connect service`
+manages its user service. No checkout or compiler is required. The guide covers
+the sample app, troubleshooting, upgrades, recovery and uninstalling.
 
 ```text
 Web app (@open-agent-connect/web/acp + approved application tools)
@@ -110,8 +113,9 @@ The published `@open-agent-connect/openclaw-plugin@0.0.7` remains available, wit
 its [installation guide](deploy/openclaw-gateway/README.md) and Canvas demo in
 [apps/firebase-canvas](apps/firebase-canvas/). Its OAuth/Open Responses SDK
 exports are retained and marked deprecated for new integrations, not removed.
-There is no automatic grant/history migration. ADR acceptance and any future
-plugin retirement remain separate owner decisions.
+Trying ACP starts a fresh private runtime and pairs apps again; plugin grants,
+histories and personal provider logins are never imported. ADR acceptance and
+any future plugin retirement remain separate owner decisions.
 
 ## Develop and validate
 

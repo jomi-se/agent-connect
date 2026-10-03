@@ -1,70 +1,71 @@
 # Agent Connect gateway
 
-ACP prerelease **0.1.0-alpha.1**. ACP, MCP-over-ACP and transport resumption are
-unstable. Release artifacts have not yet been published; these commands describe
-the approved-release installation path.
+An owner-controlled gateway that lets applications use your agent through
+approved tools. ACP prerelease **0.1.0-alpha.1** remains an unpublished release
+candidate; the commands below describe installation after the first approved
+release. ACP, MCP-over-ACP and transport resumption are unstable.
 
-Requires Node >=24.15 and Docker. The launcher only selects and spawns the
-pinned native executable, so its npm engine range permits later Node majors.
-Repository development and provider compatibility checks continue to use
-Node 24 LTS; this range does not claim every later major has been tested. Supports Apple Silicon, Linux x64
-and Linux ARM64. Windows is not yet supported.
+Requires Node >=24.15, Docker and a browser. Supports Apple Silicon macOS, Linux
+x64 and Linux ARM64. Windows is not yet supported. Repository and compatibility
+checks use Node 24 LTS (>=24.15, <25); the launcher's broader engine range does
+not claim every later Node major was tested.
 
 ```sh
 npm install --global @open-agent-connect/gateway@0.1.0-alpha.1
-agent-connect --help
+agent-connect setup
 agent-connect login
-# Or, without a global installation:
-npx @open-agent-connect/gateway@0.1.0-alpha.1 --help
+agent-connect doctor
 ```
 
-Start with the [install and operator guide](https://github.com/jomi-se/agent-connect/blob/main/docs/install/README.md).
-It covers the sample app, hosted owner sign-in and tool consent, private config, Docker egress,
-one-time Codex device login, recovery, upgrades and uninstalling. Claude Code
-subscription use is unconfirmed against Anthropic terms; no API-key environment
-variables are forwarded to session containers.
+For your own HTTPS entry point, use
+`agent-connect setup --origin https://gateway.example`. Guided setup creates a
+private owner runtime, checks the matching image and owned egress, and installs
+and starts the platform user service. Provider login is owner-run and uses a dedicated
+harness home. It does not import personal credentials. The owner passphrase and
+optional TOTP protect browser sign-in; apps request exact-origin, fixed-tool
+consent through the hosted owner page.
 
-Normal setup uses `agent-connect init --directory <private-runtime> --harness codex`
-(or adds `--public-url https://gateway.example` for remote use). It prompts for
-a hidden owner passphrase and confirmation. Unattended setup uses a private
-`--owner-passphrase-file`; keep owner state outside the dedicated harness home.
-Start egress, then `agent-connect serve --config <private-runtime>/config.json`.
-Applications request their own exact origin and fixed tools through hosted OAuth
-consent; no normal `grant.json` or `tools.json` handoff is required.
+Start with the [install and operator guide](https://github.com/jomi-se/agent-connect/blob/main/docs/install/README.md)
+for sample pairing, verification, upgrade, authenticator recovery and uninstall.
+[Troubleshooting](https://github.com/jomi-se/agent-connect/blob/main/docs/install/troubleshooting.md)
+covers stable doctor codes and recovery. `doctor --json` supports automation;
+`setup --json` previews a plan without changes. Unattended application requires
+explicit `--apply --non-interactive` with a protected owner-passphrase file and
+never performs provider login.
 
-The owner page at `/agent-connect/owner` provides optional TOTP enrollment and
-individual grant revocation without restarting. Once enrolled, TOTP is required
-at sign-in and approval. Remote owner pages, OAuth routes, metadata and `/acp`
-must share the configured HTTPS origin through the reverse proxy. Owner sign-in
-is separate from provider login. `--headless-static-bearer` explicitly retains
-the manual origin/tool/token path for headless integrations and is off by default.
+`agent-connect service install|uninstall|start|stop|status|logs` manages user
+systemd on Linux or launchd on macOS. `service --config <config> <operation>`
+selects another runtime. The owner console shows health and configured entry
+points, offers immutable restricted profiles at consent, ends individual live
+sessions, revokes one or all grants, and can forget its browser session.
+`/healthz` provides credential-free HTTP health. Service uninstall preserves
+runtime, grants, journals and the dedicated shared home.
 
-`agent-connect login` offers Codex and Claude Code, defaults to Codex, then
-uses a dedicated home without requiring flags. Linux uses
-`$HOME/.local/state/agent-connect/harnesses/<harness>`; macOS uses
-`$HOME/Library/Application Support/agent-connect/harnesses/<harness>`.
-`XDG_STATE_HOME` overrides the state root. New setup uses the same home.
-Existing runtime homes work with `login --config <file>`. Explicit `--harness`
-and `--harness-home` remain available. `agent-connect-gateway` is a compatibility
-alias; both npm commands launch the same pinned platform executable.
+Keep the existing private runtime and harness home across upgrades. After stopping
+active turns and installing the matching new version, `setup --upgrade` updates
+the release image and owned service/egress while preserving owner authentication,
+journals and dedicated login homes. Changed policy/image requires new app
+consent. Moving from
+the retained OpenClaw plugin starts a fresh ACP runtime and requires new pairing;
+plugin tokens, grants, histories and personal provider credentials are not
+imported. This package does not retire or deprecate the published plugin.
 
-The launcher selects one platform package through `optionalDependencies`.
-Keep optional dependencies enabled. It performs no downloads during launch.
-Adapters and harness CLIs live in the session image, so the npm installation does
-not duplicate them on the host. Exact tested versions are recorded under
-`agentConnect.adapterVersions` in package.json and checked against the image.
-Each released binary defaults to that release's immutable image digest.
+The shared home intentionally contains credentials, configuration and transcripts
+from all applications; consented tools can disclose its data. Read the
+[accepted credential risks](https://github.com/jomi-se/agent-connect/blob/main/docs/plan/acp-gateway-credentials.md)
+before login. Claude Code subscription use remains unconfirmed against
+Anthropic's terms. API-key environment variables are never forwarded into boxes.
+The explicit `--headless-static-bearer` path is separate from normal pairing.
 
-The release uses per-platform packages instead of cargo-dist's npm installer:
-npm selects the host artifact and records its integrity without an install-time
-binary download script. cargo-dist still produces archive and shell installers.
-This choice does not claim a smaller total installed size than every alternative.
+The launcher selects its native binary through per-platform optional npm
+dependencies. Keep them enabled. It performs no executable downloads at launch;
+pinned adapters and harness CLIs live in the matching session image. Exact pins
+are recorded in `agentConnect.adapterVersions`, and released binaries default to
+an immutable image digest. `agent-connect-gateway` remains a compatibility alias.
 
-Exit codes: 0 success/help; 2 invalid arguments, configuration or unsupported platform;
-1 runtime, Docker or provider-login failure. Signals shut down
-session containers. `RUST_LOG` controls diagnostic verbosity. Bearers and harness
-credentials must not be logged or committed.
-
-For a local artifact test, install the launcher tarball and the matching
+For local artifact installation, install the launcher tarball and matching
 platform tarball together. `AGENT_CONNECT_GATEWAY_BIN` is a development-only
-executable override; it is never an application-controlled setting.
+binary override. `release-info` reports version and image. Exit codes are 0 for
+success/help, 2 for invalid arguments/configuration or unsupported npm platforms,
+and 1 for runtime, Docker or provider-login failure. `RUST_LOG` controls diagnostic
+verbosity; keep secrets out of logs and issues.

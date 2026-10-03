@@ -59,7 +59,9 @@ gained what a web application needs:
      grants. An application grant cannot create owner authority or approve grants.
      Owner state and configuration must remain outside the shared harness home.
    - WebSocket access checks the exact `Origin` and grant-bound access token
-     offered as a subprotocol. Static bearer setup is an explicit headless/CI
+     offered as a subprotocol and the configured entry point used for pairing.
+     Each configured entry point has origin-bound issuer, owner session and
+     grant authority; proxy forwarding cannot mix them. Static bearer setup is an explicit headless/CI
      escape hatch, outside hosted pairing and individual grant management.
    - Its policy proxy is default-deny in both directions. It uses only generic
      ACP and MCP-over-ACP messages, and owns every authority-bearing field:
@@ -68,6 +70,20 @@ gained what a web application needs:
    - It answers harness permission prompts from the gateway profile, never
      through the application.
    - It restricts session load and resume to sessions the grant created.
+   - Installation and operation belong to the product CLI: guided `setup`,
+     read-only `doctor`, user-service lifecycle commands and anonymous minimal
+     `/healthz`. Explicit setup upgrade replaces the release image and owned
+     service executable while preserving private state; changed harness authority
+     requires application reapproval. Plugin users initialize a fresh ACP runtime.
+   - The owner console manages live sessions, individual/all grants, browser
+     sign-out and configured entry points. Consent fixes a supported profile as
+     well as the tools: Codex native read-only restricts native writes but still
+     permits native reads and approved application-tool effects. Unsupported
+     permission policies cannot be presented as native confinement.
+   - Lost TOTP recovery is an explicit offline owner CLI operation under the
+     exclusive authorization-state lock. It preserves the passphrase and grants
+     and records bounded recovery metadata. App credentials provide no recovery
+     authority. Remote recovery codes and mobile push approval remain deferred.
 3. **Execution: unmodified ACP adapters.** The owner selects the harness.
    Adapters run behind the official MCP-over-ACP polyfill. No adapter is
    forked or patched.
