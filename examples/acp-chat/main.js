@@ -7,7 +7,10 @@ import {
 } from "@open-agent-connect/web/acp";
 import definitions from "./tools.json";
 import toolsUrl from "./tools.json?url";
-import { getConversationRecoveryAction } from "./recovery-policy.js";
+import {
+  getConversationRecoveryAction,
+  getConversationRecoveryState,
+} from "./recovery-policy.js";
 import "./style.css";
 
 const element = (id) => document.getElementById(id);
@@ -24,6 +27,7 @@ const storedGateway = sessionStorage.getItem("reader-chat-gateway");
 if (storedGateway) element("gateway-url").value = storedGateway;
 let archivedChat;
 let connecting = false;
+let connectionGeneration = 0;
 let recovering = false;
 let recoveryAttemptedChat;
 let recoveryNotice = "";
@@ -97,26 +101,36 @@ function recoveryAction(error) {
   });
 }
 
+function recoveryState() {
+  const snapshot = chat.getSnapshot();
+  return getConversationRecoveryState({
+    ...snapshot,
+    sessionId: provider?.sessionId,
+    closeCode: provider?.transport.error?.closeCode,
+    errorCode:
+      recoveryErrorCode ??
+      snapshot.error?.code ??
+      provider?.transport.error?.code,
+  });
+}
+
 function render() {
   const snapshot = chat.getSnapshot();
-  const action = recoveryAction();
+  const { action, canSend, needsNewSession } = recoveryState();
   element("chat-status").textContent = recovering
     ? "Recovering conversation"
     : snapshot.status;
-  element("chat-input").disabled =
-    !gatewayUrl || recovering || !snapshot.canSend;
-  element("chat-send").disabled =
-    !gatewayUrl || recovering || !snapshot.canSend;
+  element("chat-input").disabled = !gatewayUrl || recovering || !canSend;
+  element("chat-send").disabled = !gatewayUrl || recovering || !canSend;
   element("chat-stop").disabled = !gatewayUrl || !snapshot.canStop;
   element("chat-new").disabled =
-    !gatewayUrl || connecting || recovering || !snapshot.needsNewSession;
+    !gatewayUrl || connecting || recovering || !needsNewSession;
   element("chat-new").textContent =
     action === "recover" ? "Retry recovery" : "New connection";
-  element("new-session-notice").hidden =
-    !snapshot.needsNewSession && !recoveryNotice;
+  element("new-session-notice").hidden = !needsNewSession && !recoveryNotice;
   element("new-session-notice").textContent = recovering
     ? "Restoring the conversation. The interrupted message and application actions will not be repeated."
-    : snapshot.needsNewSession
+    : needsNewSession
       ? action === "recover"
         ? "Recovery is unavailable. Retry recovery to restore the conversation. Your previous message will not be repeated."
         : "This conversation ended. Start a new connection to send another message. Previous messages remain visible and will not be repeated."
@@ -229,6 +243,7 @@ async function recoverConversation() {
 async function clearAuthorization() {
   if (clearingAuthorization) return;
   clearingAuthorization = true;
+  connectionGeneration++;
   connectionError =
     "Gateway approval ended or could not authorize this application. Connect again to request approval. Your previous messages will not be replayed.";
   element("error").textContent = connectionError;
@@ -254,6 +269,7 @@ async function clearAuthorization() {
 async function startConnection(mode = "resume") {
   if (connecting) return;
   connecting = true;
+  const generation = ++connectionGeneration;
   clearingAuthorization = false;
   connectionError = "";
   recoveryNotice = "";
@@ -293,15 +309,18 @@ async function startConnection(mode = "resume") {
       tools: definitions,
       pairing: { mode, redirectUri, callbackUrl, clientName: "Reader chat" },
       onSession(id) {
+        if (generation !== connectionGeneration) return;
         element("connection-status").dataset.sessionId = id;
       },
       onRecovery({ interrupted }) {
+        if (generation !== connectionGeneration) return;
         recoveryNotice = interrupted
           ? "Conversation restored after an interruption. The previous turn was not repeated."
           : "Conversation restored.";
       },
       transport: {
         onState(state, reason) {
+          if (generation !== connectionGeneration) return;
           if (
             state === "ended:unauthorized" ||
             state === "ended:grant-revoked" ||
@@ -312,11 +331,19 @@ async function startConnection(mode = "resume") {
             return;
           }
           element("connection-status").textContent = state;
+          // An idle presenter has no in-flight request to observe this error.
+          // Update its controls immediately when the transport ends.
+          if (state.startsWith("ended:") && chat && chat !== archivedChat)
+            render();
         },
       },
     });
     callbackUrl = undefined;
     const nextProvider = await pendingProvider;
+    if (generation !== connectionGeneration) {
+      nextProvider.close();
+      return;
+    }
     provider = nextProvider;
     clearingAuthorization = false;
     chat = createAgentChat({ session: new AgentSession({ provider, tools }) });
@@ -375,7 +402,8 @@ element("connect-form").addEventListener("submit", (event) => {
   void startConnection(mode).catch(showConnectionError);
 });
 element("chat-new").addEventListener("click", async () => {
-  if (connecting || !gatewayUrl || !chat?.getSnapshot().needsNewSession) return;
+  if (connecting || !gatewayUrl || !chat || !recoveryState().needsNewSession)
+    return;
   element("chat-new").disabled = true;
   if (recoveryAction() === "recover") {
     await recoverConversation();
@@ -395,7 +423,7 @@ element("chat-new").addEventListener("click", async () => {
 element("chat-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const prompt = element("chat-input").value.trim();
-  if (!prompt || !chat?.getSnapshot().canSend) return;
+  if (!prompt || !chat || !recoveryState().canSend) return;
   element("chat-input").value = "";
   void chat.send(prompt).catch((error) => {
     element("error").textContent = error.message;
