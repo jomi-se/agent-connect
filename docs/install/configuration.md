@@ -35,7 +35,7 @@ config, defaults**. Each key supports `AGENT_CONNECT_<UPPER_SNAKE_KEY>`;
 | `permissions` / `--permissions`                       | `sandboxed`, `app-tools-only` or `deny-all`; default `sandboxed`                                                     |
 | `codex_mode` / `--codex-mode`                         | Operator mode; boxed default `agent-full-access`, host fixture `workspace-write`                                     |
 | `state_dir` / `--state-dir`                           | Private action journals and `auth/` owner/grant state; default `.agent-connect/gateway`; keep outside harness home   |
-| `max_sessions` / `--max-sessions`                     | Positive capacity, default 1; shared login refresh concurrency is unverified                                         |
+| `max_sessions` / `--max-sessions`                     | Positive capacity, default 32                                                                                        |
 | `resume_grace_secs` / `--resume-grace-secs`           | Detached session grace, default 600 seconds                                                                          |
 | `resume_max_bytes` / `--resume-max-bytes`             | Unacknowledged output budget, default 8388608 bytes                                                                  |
 | `mock_root` / `--mock-root`                           | Isolated deterministic fixture root; never a production host-mode switch                                             |
