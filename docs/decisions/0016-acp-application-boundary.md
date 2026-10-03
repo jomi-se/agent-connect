@@ -6,7 +6,7 @@ as the product direction and retired the superseded plugin implementation on
 [ADR 0015](0015-openclaw-plugin-host.md) preserve historical context.
 Formal acceptance of the ACP decision and publication remain owner gates.
 
-Evidence: [ACP gateway spike results](../experiments/acp-gateway.md).
+Evidence: [ACP gateway spike results](../archive/experiments/acp-gateway.md).
 
 ## Context
 

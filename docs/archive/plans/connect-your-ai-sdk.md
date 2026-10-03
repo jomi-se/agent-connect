@@ -80,7 +80,7 @@ on that substitution.
 
 The required change belongs in `@ai-sdk/open-responses`, not in an Agent Connect
 fetch-body interceptor or a second tool loop. The reviewed patch is persisted as
-[`patches/@ai-sdk+open-responses+2.0.39.patch`](../../../patches/@ai-sdk+open-responses+2.0.39.patch)
+`patches/@ai-sdk+open-responses+2.0.39.patch`
 and applies these two upstream-compatible additions:
 
 1. Add nullable/optional `previousResponseId` to

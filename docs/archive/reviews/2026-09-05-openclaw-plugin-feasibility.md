@@ -1,9 +1,9 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../../install/README.md).
 
 # OpenClaw plugin feasibility validation
 
 Date: 2026-09-05. Pin: published OpenClaw 2026.9.1.
-Scope: [three bounded contracts](../archive/plans/openclaw-delegation-spike/README.md),
+Scope: [three bounded contracts](../plans/openclaw-delegation-spike/README.md),
 not production authorization or a Bookhand release gate.
 
 Final verdict: **VAL-PAIR-001, VAL-RUNTIME-001 and VAL-AUTHORITY-001 pass**
@@ -57,4 +57,4 @@ tools remain available; unrestricted host-file tools can still expose secrets.
 
 Memory-only grants/session maps, missing consent UI/CORS, expiry/quotas, fixed-tool
 snapshots and concurrency/disconnect handling prevent calling this a shippable
-authorization implementation. See the [research verdict](../research/2026-09-05-openclaw-app-delegation.md).
+authorization implementation. See the [research verdict](../../research/2026-09-05-openclaw-app-delegation.md).

@@ -1,4 +1,4 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../../install/README.md).
 
 # Open Responses implementation review disposition
 
@@ -80,7 +80,7 @@ The review exposed a systemic test problem: the fake backend generated a
 tests agree while the real busy-cancellation path could hang.
 
 The permanent correction is documented in
-[the testing strategy](../architecture/testing-strategy.md): Omnigent-sensitive
+[the testing strategy](../../architecture/testing-strategy.md): Omnigent-sensitive
 assertions use a disposable real Omnigent service and deterministic ACP agent.
 Pure fixtures remain for Agent Connect-owned state machines and deliberate
 fault injection, but are forbidden from serving as a compatibility oracle.

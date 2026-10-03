@@ -1,4 +1,4 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../../install/README.md).
 
 # Consolidated repository review — 2026-07-26
 

@@ -180,7 +180,7 @@ separate checkbox; `grantAllowsNonBrowserClients` gates the standard-client
 profile. An originless request reaches only `matchResponseRoute` targets, still
 requires a transport principal, and is refused when the grant withholds
 consent. Dynamic enrollment and the public-demo profile stay closed to it.
-Covered by [VAL-RESP-005](../../contract/VAL-RESP-005.md).
+Covered by [VAL-RESP-005](../archive/contracts/VAL-RESP-005.md).
 
 ## Semantic route access classes
 

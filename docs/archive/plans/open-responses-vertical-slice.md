@@ -678,8 +678,8 @@ its checksum asserted. `packages/gateway/src/responses/` holds `profile.ts`,
 matrix is `test/responses-profile.test.ts`, and produced resources and events
 are validated against the pinned schemas by the evaluator in
 `test/support/openapi-schema.ts`. See
-[VAL-RESP-001](../../../contract/VAL-RESP-001.md) and
-[VAL-RESP-002](../../../contract/VAL-RESP-002.md).
+[VAL-RESP-001](../contracts/VAL-RESP-001.md) and
+[VAL-RESP-002](../contracts/VAL-RESP-002.md).
 
 ### Milestone 2: in-memory protocol-fit slice
 
@@ -774,7 +774,7 @@ it on the callback only. The second run explicitly cleared both local and
 session storage, completed consent once, returned directly on Open Responses,
 then completed three real Codex function calls and the visible board mutation
 with no fallback reconnect, console error, or page error. See
-[VAL-RESP-004](../../../contract/VAL-RESP-004.md).
+[VAL-RESP-004](../contracts/VAL-RESP-004.md).
 
 Run the complete private deployment flow before investing in the durability
 layer:
@@ -863,7 +863,7 @@ sessions that chains belong to from those records alone, including terminal
 chains, so a capability for an existing chain no longer gets a bare 401 that
 hides whether the chain is recoverable, complete, or interrupted. The response
 routes never call `ensureHealthy`, so no active chain is handed a replacement
-provider session. See [VAL-RESP-006](../../../contract/VAL-RESP-006.md).
+provider session. See [VAL-RESP-006](../contracts/VAL-RESP-006.md).
 
 Step 5 is done by making the existing capability refresh safe rather than by
 adding a new mechanism: `POST /v1/app-sessions` already re-issues a capability
@@ -953,7 +953,7 @@ In rough dependency order:
 1. **Milestone 6 final composition**: repeat the private browser-to-real-Codex
    flow on the single-wire build, then accept ADR 0010 and close VAL-RESP-008.
 2. **Bounded follow-ups from implementation review**, tracked in the dated
-   [review disposition](../../reviews/2026-08-28-open-responses-implementation-review.md):
+   [review disposition](../reviews/2026-08-28-open-responses-implementation-review.md):
    HTTP backpressure and last-resort post-header SSE errors, browser handler
    deadlines, malformed-argument correction semantics, and an SDK consumer for
    the recovery control routes. These do not reopen the resolved silent

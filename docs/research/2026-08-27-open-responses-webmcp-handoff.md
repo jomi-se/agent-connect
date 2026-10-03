@@ -14,7 +14,7 @@ preserves the research handoff, not the current decision.
 **Related documents:**
 
 - docs/decisions/0010-open-responses-gateway-pivot.md
-- docs/reviews/2026-08-26-ousterhout-open-responses-design-review.md
+- docs/archive/reviews/2026-08-26-ousterhout-open-responses-design-review.md
 
 ## Executive conclusion
 

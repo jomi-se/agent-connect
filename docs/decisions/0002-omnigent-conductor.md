@@ -28,7 +28,7 @@ The spike passed on 2026-07-13 with Omnigent 0.5.1 and published
 application schema into the top-level session message event because
 `SessionsChat` 0.5.1 does not expose that wire field. No Omnigent or Codex ACP
 fork was required. The captured result is documented in
-[the nonce experiment](../experiments/omnigent-codex-nonce.md).
+[the nonce experiment](../archive/experiments/omnigent-codex-nonce.md).
 
 On 2026-07-20, the read-only reference profile exposed a second narrow adapter
 gap. Codex correctly requested approval for the dynamically relayed MCP tools,

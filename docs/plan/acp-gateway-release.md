@@ -3,7 +3,7 @@
 Status: unreleased candidate 0.0.1; hosted authorization implementation updated 2026-10-03. Publication depends on accepting
 [ADR 0016](../decisions/0016-acp-application-boundary.md). Nothing here is
 released; the SDK candidate is independently versioned at 0.0.10. Evidence comes from the
-[ACP gateway spike](../experiments/acp-gateway.md) and its
+[ACP gateway spike](../archive/experiments/acp-gateway.md) and its
 [mobile follow-up](../archive/plans/acp-gateway-mobile-resume.md).
 
 The plan covers three questions:
@@ -166,7 +166,7 @@ responses. Release hashes are verified before installation.
 It uses a deterministic model and temporary homes; it never logs in or spends
 subscription allowance. Both adapters also retain their host/boxed scenario gates.
 Native plan UI conversion is contract-tested; pinned fixtures expose no native
-plan tool. Results are recorded in [the experiment](../experiments/acp-gateway.md).
+plan tool. Results are recorded in [the experiment](../archive/experiments/acp-gateway.md).
 
 ## Owner gates
 

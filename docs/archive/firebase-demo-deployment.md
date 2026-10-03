@@ -26,7 +26,7 @@ the gateway, or an application grant.
 ## Connect a gateway
 
 Configure the Agent Connect plugin for OpenClaw using the
-[OpenClaw setup guide](../../deploy/openclaw-gateway/README.md), and give the
+OpenClaw setup guide, and give the
 Canvas the browser-reachable HTTPS address for its Agent Connect gateway. A bare
 Origin is accepted and normalized to the plugin's `/agent-connect` provider
 base. The gateway's allowed application Origins must include the exact Firebase
