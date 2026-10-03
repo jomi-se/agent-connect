@@ -700,3 +700,40 @@ the 14-case teardown gate and a fresh consent-based clean-room run. Independent
 final source review reports no remaining confirmed auth/UI/lifecycle blocker;
 it does not claim a separate full audit of the earlier 18-item checklist.
 All inference remains deterministic, with disposable homes and no provider login.
+
+## Owner-page visual qualification (2026-10-03)
+
+Reviewed actual gateway-served owner pages against the retained plugin's calm
+visual language, using isolated synthetic owner state. Screenshots cover desktop
+(1440 px), phone (390 px), and narrow reflow (320 px): sign-in and its error,
+empty/pending grants, consent and expanded schemas, active/revoked grants, long
+valid app names/origins/tool names, TOTP enrollment/status, approval and sign-in.
+Screenshots and synthetic factor state remain in private temporary test output;
+no screenshots or credentials are checked into this product repository.
+
+The pass tightened sign-in/enrollment/error panels, kept the wider management
+surface, and corrected horizontal overflow from valid unbroken app/tool names.
+Access-summary counters now have an explicit accessible group role. Schema
+disclosures have at least 44 px touch targets; schema regions are named,
+keyboard-focusable and scrollable with visible focus. Successful TOTP enrollment
+returns the verified owner to grant management rather than asking them to sign
+in again. Owner/session/CSRF semantics and the hashed-style CSP remain intact.
+
+`npm run test:ui:acp-owner` runs the real HTTP gateway and a local app callback,
+asserts 14 states at all three widths, checks keyboard order/focus, disclosure
+activation and schema scrolling, and writes 42 screenshots for review. It builds
+the locked gateway, isolates HOME/XDG state and never starts a harness or Docker.
+The gate passes with no page errors and is included in `npm run verify`.
+Manual axe checks of the sign-in and grants pages report no violations or
+incomplete checks. This is Chromium evidence, not a cross-browser certificate.
+
+### Verification fixture retention
+
+Repeated verification exposed excessive fixture retention: stopping processes
+left the ACP adapter/browser installs and OpenClaw per-run installs/caches on
+disk. Teardown now prunes dependency trees and per-run caches after services stop
+on success and failure; diagnostic logs, screenshots and synthetic state remain.
+The clean-room driver applies the same policy after owned Docker cleanup.
+Regression coverage protects retained evidence and linked external data.
+`AGENT_CONNECT_KEEP_TEST_INSTALLS=1` explicitly opts into retaining full installs
+for debugging. Shared tool caches and operator/harness homes are untouched.

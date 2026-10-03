@@ -751,6 +751,7 @@ async fn authenticator_enrollment_login_approval_and_replay() {
     )
     .await;
     assert_eq!(response.status, StatusCode::FOUND);
+    assert_eq!(response.headers["location"], OWNER);
     assert_eq!(
         request(auth, Method::GET, OWNER, None, Some(&owner), &[])
             .await
@@ -976,7 +977,7 @@ async fn owner_ui_has_labels_empty_states_and_hashed_styles() {
         page.text
             .contains("id='owner-passphrase' type=password name=passphrase")
     );
-    assert!(page.text.contains("<main class='page'>"));
+    assert!(page.text.contains("<main class='page page--compact'>"));
     let styles = page
         .text
         .split("<style>")
@@ -993,8 +994,14 @@ async fn owner_ui_has_labels_empty_states_and_hashed_styles() {
     assert!(policy.contains("frame-ancestors 'none'"));
     assert!(styles.contains("@media(max-width:600px)"));
     assert!(styles.contains(":focus-visible"));
+    assert!(styles.contains("h1,h2,h3{overflow-wrap:anywhere}"));
     let owner = login(auth, "").await;
     let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+    assert!(page.text.contains("<main class='page'>"));
+    assert!(
+        page.text
+            .contains("role='group' aria-label='Access summary'")
+    );
     assert!(page.text.contains("No decisions waiting"));
     assert!(page.text.contains("No applications approved yet"));
     assert!(

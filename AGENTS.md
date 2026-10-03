@@ -88,6 +88,13 @@ inputs, not automatic refactoring instructions; dependency boundary violations
 remain hard failures.
 
 Add or update tests for public SDK behavior. Keep browser packages free of Node-only runtime imports.
+`npm run test:ui:acp-owner` checks actual owner pages at desktop, phone and narrow
+reflow widths, including keyboard/touch behavior, and saves screenshots in a
+private temporary fixture. It is part of verify and invokes no harness login.
+ACP and OpenClaw fixtures remove dependency trees and per-run caches after their
+owned processes stop, on success and failure, while retaining diagnostic logs,
+reports and screenshots. `AGENT_CONNECT_KEEP_TEST_INSTALLS=1` is an explicit
+debugging opt-in; it retains large installs and must not be the default for checks.
 
 ### Low-output command execution
 

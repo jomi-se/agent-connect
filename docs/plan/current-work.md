@@ -31,7 +31,9 @@ transport faults, egress preflight and release-image verification. The fresh
 artifact-only clean-room passes all 16 checks with actual browser owner approval,
 denial, refresh and revocation. Earlier static-bearer evidence remains separate.
 `npm run verify` and `cargo test --locked --workspace` pass, including the new
-consent-based clean-room gate. Only the owner-required items below remain.
+consent-based clean-room gate. The owner-page browser gate additionally covers
+14 states at desktop, phone and 320 px reflow widths, with keyboard/touch checks
+and private screenshots. Only the owner-required items below remain.
 
 Owner-required work:
 
