@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { startOpenClawTestRuntime } from "./openclaw-test-runtime.mjs";
 
 const tool = {
@@ -31,6 +32,11 @@ test(
   { timeout: 150000 },
   async (t) => {
     const runtime = await startOpenClawTestRuntime({
+      prepare({ directory, env }) {
+        assert.equal(env.HOME, join(directory, "home"));
+        assert.equal(env.XDG_STATE_HOME, join(directory, "xdg-state"));
+        assert.equal(env.XDG_CONFIG_HOME, join(directory, "xdg-config"));
+      },
       onModelRequest(body, inference) {
         assert.deepEqual(
           body.tools.map((entry) => entry.function.name),
