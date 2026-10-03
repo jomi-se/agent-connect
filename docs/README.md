@@ -6,10 +6,12 @@ installation, SDK example, supported platforms, and verification commands.
 ## Current sources of truth
 
 - [ACP artifact installation](install/README.md): checkout-free setup, dedicated
-  login, manual grant, Docker egress, sample chat and operator maintenance.
+  login, hosted app consent, Docker egress, sample chat and operator maintenance.
 - [ACP release process](install/release.md): local acceptance artifacts and
   protected, owner-run OIDC/image publication.
 - [ACP SDK](../packages/web-sdk/README.md): unstable provider, recovery and useChat.
+- [ACP product parity](plan/acp-gateway-parity.md): active setup, operations and
+  owner-console work, including remaining independent-review findings.
 
 - [Mission](mission.md): product promise, current strategy, acceptance boundary,
   and explicit non-goals.

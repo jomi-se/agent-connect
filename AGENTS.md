@@ -10,6 +10,9 @@ its digest-pinned Docker session image and `@open-agent-connect/web/acp` SDK.
 See `docs/install/README.md` and `docs/plan/acp-gateway-release.md`. ACP,
 MCP-over-ACP and the resume extension are unstable; ADR 0016 remains proposed.
 Local implementation and dry runs do not accept the ADR or authorize publication.
+Install/operation and owner-console parity is actively tracked in
+`docs/plan/acp-gateway-parity.md`; completed transport and pairing gates do not
+mean only owner approval remains. Per-application box isolation is deferred.
 
 The Agent Connect plugin for OpenClaw (ADR 0015) is the previous published
 installation target. Keep its source, npm package, tests and compatibility exports.
