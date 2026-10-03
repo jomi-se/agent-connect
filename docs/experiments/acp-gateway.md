@@ -627,3 +627,22 @@ archive command names also pass help checks. Final `npm run verify`,
 smoke all pass. Clean-room acceptance now invokes the installed `agent-connect`
 command and checks the default home remains inside its isolated test mount.
 No interactive provider login or live model turn was performed.
+
+## Owner-reported live Codex application-tool check (2026-10-03)
+
+The owner completed the dedicated Codex device-login helper and subsequently
+reported a successful subscription-backed turn in the sample built against the
+packed SDK. The app displayed a completed `read_passage` call, and the assistant
+returned the sample's chapter text. This confirms the basic live path from
+dedicated login through the gateway and adapter to an application tool, based
+on the owner's report. The owner initiated the prompt; automated tests did not
+spend subscription allowance.
+
+This check does not establish concurrent credential use, refresh, coexistence
+with personal logins, dedicated-login revocation, or browser reconnect/cancel
+under live inference. Those credential checks remain owner-run; reconnect and
+cancel retain their separate deterministic coverage. A read-only call also does
+not demonstrate a visible highlighting effect. The assistant's general claims
+about native capabilities are not security evidence: the gateway/container
+boundary, rather than model self-description, controls authority. Claude terms,
+first publication and ADR 0016 acceptance remain unchanged.
