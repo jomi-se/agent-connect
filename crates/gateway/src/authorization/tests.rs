@@ -1594,7 +1594,23 @@ async fn entry_points_pair_with_exact_issuer_and_bind_owner_sessions_to_origin()
     let mut configuration = config(dir.clone(), Some(PASSWORD));
     configuration.entry_points.push(SECOND.into());
     let auth = AuthService::open(configuration).unwrap();
+    let mut host_headers = HeaderMap::new();
+    assert!(auth.entry_point(&host_headers).is_err());
+    host_headers.insert(header::HOST, HeaderValue::from_static(SECOND_HOST));
+    assert_eq!(auth.entry_point(&host_headers).unwrap(), SECOND);
+    host_headers.append(header::HOST, HeaderValue::from_static("gateway.example"));
+    assert!(auth.entry_point(&host_headers).is_err());
+    host_headers.insert(
+        header::HOST,
+        HeaderValue::from_static("unconfigured.example"),
+    );
+    host_headers.insert("x-forwarded-host", HeaderValue::from_static(SECOND_HOST));
+    assert!(auth.entry_point(&host_headers).is_err());
     let primary_owner = login(&auth, "").await;
+    let canonical_tokens = pair(&auth, &primary_owner, "3600").await;
+    let canonical_bearer = canonical_tokens["access_token"].as_str().unwrap();
+    assert!(auth.authenticate_at(canonical_bearer, APP, ISSUER).is_ok());
+    assert!(auth.authenticate_at(canonical_bearer, APP, SECOND).is_err());
     let cross = request_at(
         &auth,
         Method::GET,
@@ -1765,6 +1781,19 @@ async fn entry_points_pair_with_exact_issuer_and_bind_owner_sessions_to_origin()
     .await;
     assert_eq!(issued.status, StatusCode::OK, "{}", issued.text);
     assert_eq!(issued.json()["gateway_url"], "ws://localhost:19840/acp");
+    let alias_tokens = issued.json();
+    let alias_bearer = alias_tokens["access_token"].as_str().unwrap();
+    let principal = auth.authenticate_at(alias_bearer, APP, SECOND).unwrap();
+    assert_eq!(principal.issuer, SECOND);
+    assert!(auth.recheck(&principal));
+    assert!(auth.authenticate_at(alias_bearer, APP, ISSUER).is_err());
+    assert!(
+        auth.authenticate_at(alias_bearer, APP, "https://unconfigured.example")
+            .is_err()
+    );
+    let mut changed_audience = principal.clone();
+    changed_audience.issuer = ISSUER.into();
+    assert!(!auth.recheck(&changed_audience));
     let refresh_token = issued.json()["refresh_token"].as_str().unwrap().to_string();
     let primary_refresh = request_at(
         &auth,

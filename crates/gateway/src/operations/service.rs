@@ -183,18 +183,23 @@ pub(super) async fn service_run(cli: ServiceCli) -> anyhow::Result<String> {
     let paths = ServicePaths::from_cli(&cli)?;
     service_with(&cli.command, &paths, &mut NativeRunner).await
 }
-pub(super) fn service_installed(config: &Path) -> anyhow::Result<bool> {
+pub(super) async fn stop_service_for_upgrade(config: &Path) -> anyhow::Result<()> {
     let paths = ServicePaths::from_cli(&ServiceCli {
         config: Some(config.to_owned()),
         manager: None,
         command: ServiceAction::Status,
     })?;
+    stop_installed_for_upgrade(&paths, &mut NativeRunner).await
+}
+async fn stop_installed_for_upgrade(
+    paths: &ServicePaths,
+    runner: &mut impl Runner,
+) -> anyhow::Result<()> {
     if paths.unit.exists() || paths.unit.is_symlink() {
         paths.verify_owned()?;
-        Ok(true)
-    } else {
-        Ok(false)
+        service_with(&ServiceAction::Stop, paths, runner).await?;
     }
+    Ok(())
 }
 
 async fn run(runner: &mut impl Runner, program: &str, args: &[&str]) -> anyhow::Result<String> {
@@ -603,6 +608,102 @@ mod tests {
         );
         assert!(fixture.commands.is_empty());
         std::fs::remove_dir_all(paths.unit.parent().unwrap()).unwrap();
+    }
+    #[tokio::test]
+    async fn upgrade_restarts_owned_running_service_when_only_executable_changes() {
+        struct RunningService {
+            commands: Vec<CommandSpec>,
+            running: bool,
+        }
+        impl Runner for RunningService {
+            async fn run(&mut self, command: CommandSpec) -> anyhow::Result<CommandOutput> {
+                let code = if command.program == "launchctl"
+                    && command.args == ["print", "gui/123/org.agent-connect.gateway"]
+                    && !self.running
+                {
+                    1
+                } else {
+                    0
+                };
+                if command
+                    .args
+                    .iter()
+                    .any(|arg| matches!(arg.as_str(), "stop" | "bootout"))
+                {
+                    self.running = false;
+                }
+                if command
+                    .args
+                    .iter()
+                    .any(|arg| matches!(arg.as_str(), "start" | "bootstrap"))
+                {
+                    self.running = true;
+                }
+                self.commands.push(command);
+                Ok(CommandOutput {
+                    code,
+                    output: String::new(),
+                })
+            }
+        }
+        for manager in [ServiceManager::Systemd, ServiceManager::Launchd] {
+            let mut paths = paths(manager);
+            let mut runner = RunningService {
+                commands: Vec::new(),
+                running: true,
+            };
+            service_with(
+                &ServiceAction::Install { offline: true },
+                &paths,
+                &mut runner,
+            )
+            .await
+            .unwrap();
+            // No image/egress change is required to stop the old gateway process.
+            stop_installed_for_upgrade(&paths, &mut runner)
+                .await
+                .unwrap();
+            assert!(!runner.running);
+            paths.executable = "/example/upgraded/agent-connect".into();
+            service_with(
+                &ServiceAction::Install { offline: false },
+                &paths,
+                &mut runner,
+            )
+            .await
+            .unwrap();
+            service_with(&ServiceAction::Start, &paths, &mut runner)
+                .await
+                .unwrap();
+            assert!(runner.running);
+            let stop = runner
+                .commands
+                .iter()
+                .position(|command| {
+                    command
+                        .args
+                        .iter()
+                        .any(|arg| matches!(arg.as_str(), "stop" | "bootout"))
+                })
+                .unwrap();
+            let start = runner
+                .commands
+                .iter()
+                .position(|command| {
+                    command
+                        .args
+                        .iter()
+                        .any(|arg| matches!(arg.as_str(), "start" | "bootstrap"))
+                })
+                .unwrap();
+            assert!(stop < start);
+            assert!(
+                std::fs::read_to_string(&paths.unit)
+                    .unwrap()
+                    .contains("/example/upgraded/agent-connect")
+            );
+            std::fs::remove_dir_all(paths.unit.parent().unwrap()).unwrap();
+        }
     }
     #[test]
     fn service_templates_escape_expansions_and_xml() {

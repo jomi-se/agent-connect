@@ -214,6 +214,16 @@ pub fn setup_plan(cli: &SetupCli) -> anyhow::Result<SetupPlan> {
     };
     validate_argument(&session_image)?;
     let home = absolute(&home)?;
+    let home = if home.exists() || home.is_symlink() {
+        anyhow::ensure!(
+            !std::fs::symlink_metadata(&home)?.file_type().is_symlink(),
+            "harness home must be a directory, not a symlink"
+        );
+        home.canonicalize()
+            .context("resolve existing dedicated harness home")?
+    } else {
+        home
+    };
     if directory.starts_with(&home) {
         return Err(usage(
             "runtime and owner state must be outside the mounted harness home",
@@ -432,6 +442,11 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
                 && fresh.permissions == plan.permissions,
             "configuration changed during upgrade preparation; rerun from the new private state"
         );
+        // Binary-only upgrades must replace the running process even when the
+        // selected image and existing egress already match this release.
+        if plan.service {
+            service::stop_service_for_upgrade(&plan.config).await?;
+        }
         let same_image = plan.previous_session_image.as_deref() == Some(&plan.session_image);
         let image = plan.session_image.clone();
         let egress = plan.egress_container.clone();
@@ -440,14 +455,6 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
                 .await?
                 .is_ok();
         if !already_ready {
-            if plan.service && service::service_installed(&plan.config)? {
-                service::service_run(ServiceCli {
-                    config: Some(plan.config.clone()),
-                    manager: None,
-                    command: ServiceAction::Stop,
-                })
-                .await?;
-            }
             let listener = tokio::net::TcpListener::bind(plan.listen).await.context(
                 "stop the running gateway before an image upgrade; its listener is still occupied",
             )?;
@@ -761,6 +768,9 @@ mod tests {
         let passphrase = dir.join("owner-passphrase.txt");
         private_write(&passphrase, b"fixture-only-owner-passphrase").unwrap();
         let mut cli = options(dir.clone());
+        let parent_component = dir.join("existing-parent");
+        create_private_directory(&parent_component).unwrap();
+        cli.harness_home = Some(parent_component.join("../dedicated-home"));
         cli.entry_points = Some(vec!["https://alternate.example".into()]);
         cli.profiles = Some(vec![PermissionProfile::ReadOnly]);
         cli.permissions = Some(PermissionProfile::ReadOnly);
@@ -788,6 +798,10 @@ mod tests {
         }
         .resolve()
         .unwrap();
+        assert_eq!(
+            config.harness_home,
+            Some(dir.join("dedicated-home").canonicalize().unwrap())
+        );
         assert_eq!(config.entry_points, plan.entry_points);
         assert_eq!(config.profiles, plan.profiles);
         assert_eq!(config.permissions, PermissionProfile::ReadOnly);
@@ -798,7 +812,16 @@ mod tests {
         assert_eq!(std::fs::read(&owner_path).unwrap(), owner_state);
         let resumed = setup_plan(&cli).unwrap();
         assert!(resumed.existing);
+        assert_eq!(resumed.harness_home, config.harness_home.unwrap());
         assert_eq!(resumed.profiles, plan.profiles);
+        #[cfg(unix)]
+        {
+            let ancestor_alias = dir.join("ancestor-alias");
+            std::os::unix::fs::symlink(&dir, &ancestor_alias).unwrap();
+            cli.harness_home = Some(ancestor_alias.join("dedicated-home"));
+            assert_eq!(setup_plan(&cli).unwrap().harness_home, resumed.harness_home);
+            assert_eq!(std::fs::read(&owner_path).unwrap(), owner_state);
+        }
         cli.entry_points = None;
         cli.profiles = None;
         cli.permissions = None;
