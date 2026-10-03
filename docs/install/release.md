@@ -8,7 +8,15 @@ part of this ACP release's version bump or publication set.
 The [manual workflow](../../.github/workflows/acp-release.yml) is the only
 authorized automated ACP publication path. Ordinary PR/main CI has read-only
 permissions and never publishes. Existing standalone OpenClaw release scripts
-remain available for the operator's separate release process.
+remain available for the operator's separate release process. The previous
+plugin's automatic publish job has been removed from ordinary CI; there is no
+automatic plugin publication path. Its currently published package stays
+available. Any future plugin release needs separate owner authorization and
+review of `release:prepare`, `release:smoke` and `release:publish`: those retained
+scripts prepare and publish the legacy SDK/plugin set, not the ACP set. In
+particular, the legacy SDK package shares its npm name with the new ACP SDK;
+do not run the old publisher against a newly prepared ACP SDK without an
+explicitly approved compatibility and version decision.
 
 ## Artifacts and pins
 
@@ -43,10 +51,22 @@ second cargo-dist npm installer. The collection contains:
 
 - `@open-agent-connect/web`;
 - `@open-agent-connect/gateway` and its three platform packages;
-- three native gateway archives and their checksum sidecars;
+- three native gateway archives, checksum sidecars and hash-bound executable
+  `release-info` evidence;
 - the shell installer and the standalone `acp-chat-sample.tgz`;
 - `release.json` with version, targets, adapter pins, image reference and artifact
   hashes, plus aggregate `SHA256SUMS`.
+
+Before producing any npm package, the packer checks all available gateway
+archives against the requested version and `--image`. On the host target it
+executes both `agent-connect release-info` and the compatibility executable
+freshly, comparing their compiled defaults. Native CI build runners record the
+same checks for foreign targets in `<archive-stem>.release-info.json`, bound to
+the target and SHA-256 of both archived executables. The collector rejects
+missing, stale or mismatched evidence; copying an image label into `release.json`
+is not sufficient. These sidecars are included in release metadata and aggregate
+checksums. Their trust comes from the selected build workflow artifacts; they
+are hash-bound build evidence, not independent cryptographic signatures.
 
 The manually authored workflow uses cargo-dist's local/global artifact split
 and SHA-256/archive settings. Its `ci = []` disables generated release automation;
@@ -70,7 +90,13 @@ cargo test --locked --workspace
 ```
 
 The local builder packages the host target; `--all-linux` packages both Linux
-targets when supported. It embeds the explicitly local session-image tag and
+targets when supported. A cross-target local build must execute the foreign
+Linux binary through QEMU when recording its evidence; no validation is skipped.
+Use `ACP_RELEASE_RUNNER_X86_64` or `ACP_RELEASE_RUNNER_ARM64` to select an
+isolated runner executable, or provide `qemu-x86_64`/`qemu-aarch64` on PATH.
+The helper is `node scripts/acp-release-info.mjs record --target <target>
+--version <version> --image <image-ref>`; native targets run directly. Missing
+execution support fails the build before packing. It embeds the explicitly local session-image tag and
 sets `release.json.localOnly = true`. These are acceptance artifacts, not
 publishable candidates. The clean-room gate installs the packed launcher/SDK
 and sample into a fresh container and exercises the real adapter using a

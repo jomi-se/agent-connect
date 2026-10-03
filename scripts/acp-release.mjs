@@ -12,6 +12,10 @@ import { resolve, join, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { parseArgs } from "node:util";
+import {
+  verifyArchiveReleaseInfo,
+  releaseInfoFilename,
+} from "./acp-release-info.mjs";
 
 const repo = resolve(import.meta.dirname, "..");
 const { values, positionals } = parseArgs({
@@ -86,7 +90,8 @@ function imageRef() {
 async function writeMetadata() {
   const artifacts = {};
   for (const filename of (await readdir(output)).sort()) {
-    if (!/\.(?:tgz|tar\.xz|sh|sha256)$/.test(filename)) continue;
+    if (!/\.(?:tgz|tar\.xz|sh|sha256|release-info\.json)$/.test(filename))
+      continue;
     const bytes = await readFile(join(output, filename));
     artifacts[filename] = {
       sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -133,7 +138,6 @@ if (command === "check") {
   console.log(`ACP release versions and adapter pins agree: ${version}`);
 } else if (command === "pack") {
   imageRef();
-  await mkdir(output, { recursive: true });
   const artifacts = resolve(repo, values.artifacts);
   const available = await readdir(artifacts);
   if (
@@ -144,6 +148,25 @@ if (command === "check") {
   )
     throw new Error(
       "A publishable release requires archives for all three supported targets",
+    );
+  // Validate every available executable before producing any npm artifacts.
+  const releaseEvidence = [];
+  for (const target of targets) {
+    const filename = `agent-connect-gateway-${target}.tar.xz`;
+    if (!available.includes(filename)) continue;
+    const evidence = await verifyArchiveReleaseInfo({
+      archive: join(artifacts, filename),
+      target,
+      version,
+      sessionImage: imageRef(),
+    });
+    releaseEvidence.push([target, evidence]);
+  }
+  await mkdir(output, { recursive: true });
+  for (const [target, evidence] of releaseEvidence)
+    await writeFile(
+      join(output, releaseInfoFilename(target)),
+      JSON.stringify(evidence, null, 2) + "\n",
     );
   for (const target of targets) {
     const filename = `agent-connect-gateway-${target}.tar.xz`;

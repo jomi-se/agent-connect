@@ -101,3 +101,6 @@ test("ordinary CI cannot publish and ACP publication requires explicit protected
   assert.match(release, /id-token: write/);
   assert.doesNotMatch(release, /NODE_AUTH_TOKEN|NPM_TOKEN|git push/);
 });
+
+// ACP packer checks are part of the existing release verification gate.
+import "./acp-release.test.mjs";

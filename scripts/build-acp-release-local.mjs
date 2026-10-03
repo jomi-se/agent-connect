@@ -48,6 +48,18 @@ run(dist, [
   `v${version}`,
 ]);
 run(dist, ["build", "--artifacts=global", "--tag", `v${version}`]);
+for (const target of targets) {
+  run(process.execPath, [
+    "scripts/acp-release-info.mjs",
+    "record",
+    "--target",
+    target,
+    "--version",
+    version,
+    "--image",
+    env.AGENT_CONNECT_SESSION_IMAGE,
+  ]);
+}
 run(process.execPath, [
   "scripts/acp-release.mjs",
   "pack",
