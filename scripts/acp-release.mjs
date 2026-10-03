@@ -7,6 +7,7 @@ import {
   readdir,
   cp,
   mkdtemp,
+  rm,
 } from "node:fs/promises";
 import { resolve, join, basename } from "node:path";
 import { tmpdir } from "node:os";
@@ -173,49 +174,57 @@ if (command === "check") {
     if (!(await readdir(artifacts)).includes(filename)) continue;
     const archive = join(artifacts, filename);
     const staging = await mkdtemp(join(tmpdir(), "acp-platform-pack-"));
-    const entries = run("tar", ["-tf", archive]).trim().split("\n");
-    if (
-      entries.some(
-        (entry) => entry.startsWith("/") || entry.split("/").includes(".."),
+    try {
+      const entries = run("tar", ["-tf", archive]).trim().split("\n");
+      if (
+        entries.some(
+          (entry) => entry.startsWith("/") || entry.split("/").includes(".."),
+        )
       )
-    )
-      throw new Error("Unsafe release archive paths");
-    run("tar", ["-xf", archive, "-C", staging]);
-    if (!entries.some((entry) => /(?:^|\/)agent-connect$/.test(entry)))
-      throw new Error(`No primary agent-connect executable in ${filename}`);
-    const executable = entries.find((entry) =>
-      /(?:^|\/)agent-connect-gateway$/.test(entry),
-    );
-    if (!executable) throw new Error(`No gateway executable in ${filename}`);
-    run(process.execPath, [
-      "scripts/package-acp-gateway.mjs",
-      target,
-      join(staging, executable),
-    ]);
-    const platform = target.startsWith("aarch64-apple")
-      ? "darwin-arm64"
-      : target.startsWith("aarch64")
-        ? "linux-arm64"
-        : "linux-x64";
-    await pack(`./dist/acp-gateway/${platform}`);
-    await cp(archive, join(output, filename));
+        throw new Error("Unsafe release archive paths");
+      run("tar", ["-xf", archive, "-C", staging]);
+      if (!entries.some((entry) => /(?:^|\/)agent-connect$/.test(entry)))
+        throw new Error(`No primary agent-connect executable in ${filename}`);
+      const executable = entries.find((entry) =>
+        /(?:^|\/)agent-connect-gateway$/.test(entry),
+      );
+      if (!executable) throw new Error(`No gateway executable in ${filename}`);
+      run(process.execPath, [
+        "scripts/package-acp-gateway.mjs",
+        target,
+        join(staging, executable),
+      ]);
+      const platform = target.startsWith("aarch64-apple")
+        ? "darwin-arm64"
+        : target.startsWith("aarch64")
+          ? "linux-arm64"
+          : "linux-x64";
+      await pack(`./dist/acp-gateway/${platform}`);
+      await cp(archive, join(output, filename));
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
   }
   run("npm", ["run", "build", "--workspace", "@open-agent-connect/web"]);
   await pack("./packages/web-sdk");
   await pack("./packages/gateway-npm");
   const sample = await mkdtemp(join(tmpdir(), "acp-sample-pack-"));
-  await cp(join(repo, "examples/acp-chat"), join(sample, "package"), {
-    recursive: true,
-    filter: (path) =>
-      !path.split(/[\\/]/).some((p) => ["node_modules", "dist"].includes(p)),
-  });
-  run("tar", [
-    "-czf",
-    join(output, "acp-chat-sample.tgz"),
-    "-C",
-    sample,
-    "package",
-  ]);
+  try {
+    await cp(join(repo, "examples/acp-chat"), join(sample, "package"), {
+      recursive: true,
+      filter: (path) =>
+        !path.split(/[\\/]/).some((p) => ["node_modules", "dist"].includes(p)),
+    });
+    run("tar", [
+      "-czf",
+      join(output, "acp-chat-sample.tgz"),
+      "-C",
+      sample,
+      "package",
+    ]);
+  } finally {
+    await rm(sample, { recursive: true, force: true });
+  }
   for (const file of ["agent-connect-gateway-installer.sh"])
     if ((await readdir(artifacts)).includes(file))
       await cp(join(artifacts, file), join(output, file));
