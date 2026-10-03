@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use agent_client_protocol::schema::METHOD_INITIALIZE_PROXY;
 use agent_client_protocol::util::MatchDispatchFrom;
@@ -45,17 +46,58 @@ pub struct PolicyConfig {
     /// Consented tool snapshot: tool name -> exact input schema. `None` runs
     /// in record mode, which admits and prints whatever the app lists.
     pub snapshot: Option<BTreeMap<String, Value>>,
+    /// Approved public tool definitions; no unapproved descriptions or annotations.
+    pub tool_definitions: Option<BTreeMap<String, Value>>,
     pub permissions: PermissionProfile,
-    /// Sessions created under this grant (session id -> workspace), shared by
+    /// Recent sessions created under this grant (session id -> workspace), shared by
     /// every connection that presents the same grant. `session/load` and
     /// `session/resume` are admitted only for these ids, pinned to their
     /// original workspace because harnesses key stored sessions by `cwd`.
+    /// Ownership expires after 24 hours of inactivity; at most 256 sessions remain.
     pub grant_sessions: GrantSessions,
     /// Gateway-owned journal, written before an application action is delivered.
     pub actions_dir: Option<PathBuf>,
 }
 
-pub type GrantSessions = Arc<Mutex<BTreeMap<String, PathBuf>>>;
+pub type GrantSessions = Arc<Mutex<RecentSessions>>;
+
+const SESSION_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+const MAX_SESSIONS: usize = 256;
+const MAX_TOOL_TITLES: usize = 256;
+
+/// Process-local ownership only: eviction never resumes or replays a session.
+#[derive(Debug, Default)]
+pub struct RecentSessions {
+    entries: BTreeMap<String, (PathBuf, Instant)>,
+}
+impl RecentSessions {
+    fn prune(&mut self, now: Instant) {
+        self.entries
+            .retain(|_, (_, seen)| now.saturating_duration_since(*seen) < SESSION_TTL);
+    }
+    fn insert(&mut self, id: String, workspace: PathBuf) {
+        let now = Instant::now();
+        self.prune(now);
+        if !self.entries.contains_key(&id) && self.entries.len() >= MAX_SESSIONS {
+            if let Some(oldest) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, (_, seen))| *seen)
+                .map(|(id, _)| id.clone())
+            {
+                self.entries.remove(&oldest);
+            }
+        }
+        self.entries.insert(id, (workspace, now));
+    }
+    fn get(&mut self, id: &str) -> Option<PathBuf> {
+        let now = Instant::now();
+        self.prune(now);
+        let (workspace, seen) = self.entries.get_mut(id)?;
+        *seen = now;
+        Some(workspace.clone())
+    }
+}
 
 #[derive(Default, Debug)]
 struct PolicyState {
@@ -112,7 +154,7 @@ impl HandleDispatchFrom<Conductor> for PolicyHandler {
         MatchDispatchFrom::new(message, &cx)
             .if_dispatch_from(Client, async |m: Dispatch| self.handle_app(m, &cx))
             .await
-            .if_dispatch_from(Agent, async |m: Dispatch| self.handle_agent(m, &cx))
+            .if_dispatch_from(Agent, async |m: Dispatch| self.handle_agent(m, &cx).await)
             .await
             .done()
     }
@@ -190,8 +232,7 @@ impl PolicyHandler {
                         .and_then(Value::as_str)
                         .unwrap_or("")
                         .to_string();
-                    let Some(workspace) =
-                        self.config.grant_sessions.lock().unwrap().get(&id).cloned()
+                    let Some(workspace) = self.config.grant_sessions.lock().unwrap().get(&id)
                     else {
                         return deny(
                             responder,
@@ -217,13 +258,30 @@ impl PolicyHandler {
                             "unknown session or active prompt",
                         );
                     }
+                    if self
+                        .config
+                        .grant_sessions
+                        .lock()
+                        .unwrap()
+                        .get(id.unwrap())
+                        .is_none()
+                    {
+                        return deny(
+                            responder,
+                            agent_client_protocol::Error::invalid_params(),
+                            "expired session ownership",
+                        );
+                    }
                     state.prompting = true;
                     drop(state);
                     let state = self.state.clone();
                     cx.send_request_to(Agent, request)
                         .forward_cancellation_from(responder.cancellation())
                         .on_receiving_result(async move |result| {
-                            state.lock().unwrap().prompting = false;
+                            let mut state = state.lock().unwrap();
+                            state.prompting = false;
+                            state.tool_titles.clear();
+                            drop(state);
                             responder.respond_with_result(result)
                         })?;
                     Ok(Handled::Yes)
@@ -275,6 +333,7 @@ impl PolicyHandler {
             .remove("mcpServers")
             .and_then(|v| v.as_array().cloned())
             .unwrap_or_default();
+        self.state.lock().unwrap().declared_servers.clear();
         let mut admitted = Vec::new();
         for server in requested {
             let is_app = server.get("type").and_then(Value::as_str) == Some("acp")
@@ -298,7 +357,7 @@ impl PolicyHandler {
 
     // ------------------------------------------------ agent -> application ---
 
-    fn handle_agent(&self, message: Dispatch, cx: &ConnectionTo<Conductor>) -> Outcome {
+    async fn handle_agent(&self, message: Dispatch, cx: &ConnectionTo<Conductor>) -> Outcome {
         match message {
             Dispatch::Request(request, responder) => match request.method() {
                 "mcp/connect" => {
@@ -318,7 +377,7 @@ impl PolicyHandler {
                     }
                 }
                 "mcp/disconnect" => pass(Dispatch::Request(request, responder)),
-                "mcp/message" => self.mcp_request_to_app(request, responder, cx),
+                "mcp/message" => self.mcp_request_to_app(request, responder, cx).await,
                 "session/request_permission" => self.answer_permission(&request.params, responder),
                 method => {
                     let why = format!("agent request {method}");
@@ -332,18 +391,26 @@ impl PolicyHandler {
             Dispatch::Notification(notification) => match notification.method() {
                 "session/update" => {
                     let update = &notification.params["update"];
-                    if let (Some(id), Some(title)) = (
-                        update.get("toolCallId").and_then(Value::as_str),
-                        update
+                    if let Some(id) = update.get("toolCallId").and_then(Value::as_str) {
+                        let mut state = self.state.lock().unwrap();
+                        if matches!(
+                            update.get("status").and_then(Value::as_str),
+                            Some("completed" | "failed")
+                        ) {
+                            state.tool_titles.remove(id);
+                        } else if let Some(title) = update
                             .get("title")
                             .and_then(Value::as_str)
-                            .filter(|t| !t.is_empty()),
-                    ) {
-                        self.state
-                            .lock()
-                            .unwrap()
-                            .tool_titles
-                            .insert(id.to_string(), title.to_string());
+                            .filter(|t| !t.is_empty())
+                        {
+                            if state.tool_titles.len() >= MAX_TOOL_TITLES
+                                && !state.tool_titles.contains_key(id)
+                            {
+                                // Only an attribution hint. Dropping hints fails closed for AppToolsOnly.
+                                state.tool_titles.clear();
+                            }
+                            state.tool_titles.insert(id.to_string(), title.to_string());
+                        }
                     }
                     pass(Dispatch::Notification(notification))
                 }
@@ -365,7 +432,7 @@ impl PolicyHandler {
         }
     }
 
-    fn mcp_request_to_app(
+    async fn mcp_request_to_app(
         &self,
         mut request: UntypedMessage,
         responder: Responder,
@@ -397,17 +464,57 @@ impl PolicyHandler {
                 if admitted {
                     eprintln!("[policy] tools/call {name}");
                     let action_id = uuid::Uuid::new_v4().to_string();
-                    request.params["_meta"] = json!({"agent-connect/actionId": action_id});
+                    let Some(object) = request.params.as_object_mut() else {
+                        return deny(
+                            responder,
+                            agent_client_protocol::Error::invalid_params(),
+                            "invalid MCP request",
+                        );
+                    };
+                    let metadata = object.entry("_meta").or_insert_with(|| json!({}));
+                    let Some(metadata) = metadata.as_object_mut() else {
+                        return deny(
+                            responder,
+                            agent_client_protocol::Error::invalid_params(),
+                            "invalid MCP metadata",
+                        );
+                    };
+                    metadata.insert("agent-connect/actionId".into(), json!(action_id));
                     if let Some(dir) = &self.config.actions_dir {
-                        if let Err(error) = persist_action(dir, &action_id, &request.params) {
+                        let dir = dir.clone();
+                        let pending_id = action_id.clone();
+                        let persisted =
+                            tokio::task::spawn_blocking(move || persist_action(&dir, &pending_id))
+                                .await;
+                        if !matches!(persisted, Ok(Ok(()))) {
                             return deny(
                                 responder,
                                 agent_client_protocol::Error::internal_error(),
-                                &format!("action journal: {error}"),
+                                "action journal unavailable or unresolved capacity exhausted",
                             );
                         }
                     }
-                    pass(Dispatch::Request(request, responder))
+                    let actions_dir = self.config.actions_dir.clone();
+                    cx.send_request_to(Client, request)
+                        .forward_cancellation_from(responder.cancellation())
+                        .on_receiving_result(async move |result| {
+                            if let Some(dir) = actions_dir {
+                                let status = match &result {
+                                    Ok(value) if value.get("isError").and_then(Value::as_bool) == Some(true) => ActionStatus::Failed,
+                                    Ok(_) => ActionStatus::Completed,
+                                    Err(_) => ActionStatus::Uncertain,
+                                };
+                                let recorded = tokio::task::spawn_blocking(move || finish_action(&dir, &action_id, status)).await;
+                                if !matches!(recorded, Ok(Ok(()))) {
+                                    // The application may already have changed state. Preserve
+                                    // its known outcome instead of fabricating a retryable error.
+                                    // Initial pending evidence remains if completion could not persist.
+                                    eprintln!("[policy] action lifecycle write failed; durable action evidence remains");
+                                }
+                            }
+                            responder.respond_with_result(result)
+                        })?;
+                    Ok(Handled::Yes)
                 } else {
                     deny(
                         responder,
@@ -522,13 +629,21 @@ fn filter_tool_list(mut listed: Value, config: &PolicyConfig) -> Value {
                 serde_json::to_string(&recorded).unwrap_or_default()
             );
         }
-        Some(snapshot) => tools.retain(|tool| {
+        Some(snapshot) => tools.retain_mut(|tool| {
             let name = tool.get("name").and_then(Value::as_str).unwrap_or("");
             let ok = snapshot
                 .get(name)
                 .is_some_and(|schema| Some(schema) == tool.get("inputSchema"));
             if !ok {
                 eprintln!("[policy] tools/list dropped {name} (not in snapshot or schema drift)");
+            }
+            if ok {
+                if let Some(definitions) = &config.tool_definitions {
+                    let Some(approved) = definitions.get(name) else {
+                        return false;
+                    };
+                    *tool = approved.clone();
+                }
             }
             ok
         }),
@@ -590,26 +705,153 @@ impl HandleDispatchFrom<Conductor> for SpyHandler {
     }
 }
 
-/// No journal entry is automatically replayed. A crash leaves an uncertain action.
-fn persist_action(dir: &std::path::Path, id: &str, value: &Value) -> std::io::Result<()> {
+/// Journals contain lifecycle evidence only, never application arguments/results.
+/// No entry is replayed. Pending/uncertain entries survive cleanup and consume capacity.
+const ACTION_TTL_MILLIS: u64 = 24 * 60 * 60 * 1000;
+const MAX_TERMINAL_ACTIONS: usize = 1024;
+const MAX_UNRESOLVED_ACTIONS: usize = 1024;
+static JOURNAL_LOCK: Mutex<()> = Mutex::new(());
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ActionStatus {
+    Pending,
+    Completed,
+    Failed,
+    Uncertain,
+}
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ActionRecord {
+    version: u8,
+    action_id: String,
+    created_at_millis: u64,
+    updated_at_millis: u64,
+    status: ActionStatus,
+}
+fn now_millis() -> std::io::Result<u64> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .map_err(std::io::Error::other)
+}
+fn write_action(
+    dir: &std::path::Path,
+    record: &ActionRecord,
+    replace: bool,
+) -> std::io::Result<()> {
     use std::io::Write;
-    std::fs::create_dir_all(dir)?;
+    let target = dir.join(format!("{}.json", record.action_id));
+    let path = if replace {
+        dir.join(format!("{}.tmp", uuid::Uuid::new_v4()))
+    } else {
+        target.clone()
+    };
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
     {
-        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+        use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options.open(dir.join(format!("{id}.json")))?;
-    file.write_all(serde_json::to_string(value)?.as_bytes())?;
-    file.sync_all()?;
-    std::fs::File::open(dir)?.sync_all()
+    let mut file = options.open(&path)?;
+    let written = (|| {
+        file.write_all(&serde_json::to_vec(record)?)?;
+        file.sync_all()?;
+        if replace {
+            std::fs::rename(&path, &target)?;
+        }
+        std::fs::File::open(dir)?.sync_all()
+    })();
+    if written.is_err() {
+        let _ = std::fs::remove_file(path);
+    }
+    written
+}
+fn prune_actions(dir: &std::path::Path, now: u64) -> std::io::Result<usize> {
+    let mut terminal = Vec::new();
+    let mut unresolved = 0;
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        if !entry.file_type()?.is_file() {
+            return Err(std::io::Error::other("invalid action journal entry"));
+        }
+        let record: ActionRecord = serde_json::from_slice(&std::fs::read(&path)?)?;
+        if record.version != 1
+            || path.file_stem().and_then(|p| p.to_str()) != Some(record.action_id.as_str())
+        {
+            return Err(std::io::Error::other("invalid action journal record"));
+        }
+        match record.status {
+            ActionStatus::Pending | ActionStatus::Uncertain => unresolved += 1,
+            ActionStatus::Completed | ActionStatus::Failed => {
+                terminal.push((record.updated_at_millis, path))
+            }
+        }
+    }
+    terminal.sort_by_key(|(updated, _)| *updated);
+    let excess = terminal.len().saturating_sub(MAX_TERMINAL_ACTIONS);
+    for (index, (updated, path)) in terminal.into_iter().enumerate() {
+        if index < excess || now.saturating_sub(updated) >= ACTION_TTL_MILLIS {
+            std::fs::remove_file(path)?;
+        }
+    }
+    std::fs::File::open(dir)?.sync_all()?;
+    Ok(unresolved)
+}
+fn persist_action(dir: &std::path::Path, id: &str) -> std::io::Result<()> {
+    let _guard = JOURNAL_LOCK
+        .lock()
+        .map_err(|_| std::io::Error::other("action journal lock"))?;
+    std::fs::create_dir_all(dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    let now = now_millis()?;
+    if prune_actions(dir, now)? >= MAX_UNRESOLVED_ACTIONS {
+        return Err(std::io::Error::other(
+            "unresolved action capacity exhausted",
+        ));
+    }
+    write_action(
+        dir,
+        &ActionRecord {
+            version: 1,
+            action_id: id.into(),
+            created_at_millis: now,
+            updated_at_millis: now,
+            status: ActionStatus::Pending,
+        },
+        false,
+    )
+}
+fn finish_action(dir: &std::path::Path, id: &str, status: ActionStatus) -> std::io::Result<()> {
+    let _guard = JOURNAL_LOCK
+        .lock()
+        .map_err(|_| std::io::Error::other("action journal lock"))?;
+    let mut record: ActionRecord =
+        serde_json::from_slice(&std::fs::read(dir.join(format!("{id}.json")))?)?;
+    if record.version != 1 || record.action_id != id {
+        return Err(std::io::Error::other("invalid action journal record"));
+    }
+    record.status = status;
+    record.updated_at_millis = now_millis()?;
+    write_action(dir, &record, true)?;
+    prune_actions(dir, record.updated_at_millis)?;
+    Ok(())
 }
 
 #[cfg(test)]
-mod tests {
+mod tests;
+
+#[cfg(test)]
+mod unit_tests {
     use super::*;
     #[test]
     fn setup_removes_authority_and_foreign_servers() {
@@ -618,6 +860,7 @@ mod tests {
                 workspace: "/safe".into(),
                 app_server_name: "app".into(),
                 snapshot: Some(BTreeMap::new()),
+                tool_definitions: None,
                 permissions: PermissionProfile::DenyAll,
                 grant_sessions: Default::default(),
                 actions_dir: None,
@@ -634,8 +877,10 @@ mod tests {
     #[test]
     fn journal_never_overwrites_an_action() {
         let dir = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
-        persist_action(&dir, "action", &json!({"name":"highlight"})).unwrap();
-        assert!(persist_action(&dir, "action", &json!({})).is_err());
+        persist_action(&dir, "action").unwrap();
+        let original = std::fs::read(dir.join("action.json")).unwrap();
+        assert!(persist_action(&dir, "action").is_err());
+        assert_eq!(std::fs::read(dir.join("action.json")).unwrap(), original);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

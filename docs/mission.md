@@ -23,14 +23,15 @@ proposed; implementation does not accept the decision or authorize publication.
 The [previous published OpenClaw plugin](decisions/0015-openclaw-plugin-host.md)
 remains intact and available, with retained deprecated SDK exports.
 
-ACP currently uses explicit operator snapshot review and one exact-origin bearer
-handoff per instance, rather than the plugin's OAuth consent service. Its shared
+ACP now uses gateway-hosted owner sign-in, fixed-tool consent, exact-origin
+OAuth/PKCE grants, refresh and revocation. Optional TOTP protects owner sign-in
+and approval. Static bearers are an explicit headless escape hatch only. Its shared
 home includes credentials, configuration and transcripts with the documented
 [accepted risks](plan/acp-gateway-credentials.md). The provider/harness owns the
 loop; recovery never re-sends uncertain turns. See the
 [scope inventory](scope-inventory.md) for the evidence and platform boundaries.
-The plugin contract below records the previous implementation; its OAuth,
-checkpoint and host-isolation guarantees must not be attributed to ACP.
+The plugin contract below records the previous implementation; its checkpoint and host-isolation guarantees must not be attributed to ACP;
+ACP authorization and boxed isolation have their own tests and boundaries.
 
 ## Previous plugin product contract
 

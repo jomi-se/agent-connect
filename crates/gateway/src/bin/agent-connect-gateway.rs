@@ -23,8 +23,9 @@ use agent_client_protocol::AcpAgent;
 use agent_client_protocol::{ConnectTo, Lines};
 use agent_client_protocol_conductor::{ConductorImpl, ProxiesAndAgent};
 use agent_client_protocol_polyfill::mcp_over_acp::McpOverAcpPolyfill;
+use agent_connect_gateway::authorization::{AuthConfig, AuthService, AuthorizedGrant};
 use agent_connect_gateway::config::{
-    self, DEFAULT_SESSION_IMAGE, InitCli, ServeCli, ServeOptions, UsageError,
+    self, CodexMode, DEFAULT_SESSION_IMAGE, InitCli, ServeCli, ServeOptions, UsageError,
 };
 use agent_connect_gateway::credentials::{HarnessHome, default_home, login_args, select_harness};
 use agent_connect_gateway::policy::{GrantSessions, PolicyConfig, PolicyProxy};
@@ -45,13 +46,14 @@ use serde_json::Value;
 
 const ACP_SUBPROTOCOL: &str = "acp.v1";
 const BEARER_PREFIX: &str = "bearer.";
+const MAX_CLIENT_FRAME_BYTES: usize = 1024 * 1024;
 
 #[derive(Parser)]
 #[command(
     name = "agent-connect",
     version,
     about = "Unreleased, unstable ACP application gateway",
-    after_help = "Example:\n  agent-connect login\n  agent-connect init --directory ./runtime --harness codex --allow-origin https://app.example --tools ./tools.json\n  agent-connect serve --config ./runtime/config.json\n\nExit codes: 0 success; 1 runtime failure; 2 invalid arguments or configuration."
+    after_help = "Example:\n  agent-connect login\n  agent-connect init --directory ./runtime --harness codex --public-url https://gateway.example\n  agent-connect serve --config ./runtime/config.json\n\nExit codes: 0 success; 1 runtime failure; 2 invalid arguments or configuration."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -59,9 +61,9 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
-    /// Serve the unstable ACP WebSocket API with an exact-origin bearer grant.
+    /// Serve owner sign-in, app consent, grant management and unstable ACP.
     Serve(ServeOptions),
-    /// Create a private runtime directory, tool snapshot and operator-issued grant.
+    /// Create a private runtime and owner sign-in for browser pairing.
     Init(InitCli),
     /// Sign in using the provider CLI in the dedicated harness home.
     Login(LoginCli),
@@ -120,11 +122,63 @@ struct Gateway {
     capacity: Arc<tokio::sync::Semaphore>,
     sessions: Mutex<tokio::task::JoinSet<()>>,
     shutdown: tokio::sync::watch::Sender<bool>,
-    /// The spike has one development grant, so one session registry.
-    grant_sessions: GrantSessions,
+    /// Session ownership is partitioned by the stable grant, not an access token.
+    grant_sessions: Mutex<BTreeMap<String, GrantSessions>>,
+    authorization: Option<Arc<AuthService>>,
     snapshot: BTreeMap<String, Value>,
     paths: SpikePaths,
     hosts: Arc<Registry>,
+}
+
+#[derive(Clone)]
+struct GrantContext {
+    id: String,
+    snapshot: BTreeMap<String, Value>,
+    tool_definitions: Option<BTreeMap<String, Value>>,
+    sessions: GrantSessions,
+    access: Option<AuthorizedGrant>,
+}
+impl Gateway {
+    fn authenticate(&self, token: &str, origin: &str) -> Option<GrantContext> {
+        let (id, snapshot, tool_definitions, access) = if let Some(service) = &self.authorization {
+            let access = service.authenticate(token, origin).ok()?;
+            (
+                access.id.clone(),
+                access.snapshot.clone(),
+                Some(access.tool_definitions.clone()),
+                Some(access),
+            )
+        } else {
+            if origin != self.cli.allow_origin
+                || !resume::constant_time_eq(token.as_bytes(), self.cli.token.as_bytes())
+            {
+                return None;
+            }
+            ("headless".to_string(), self.snapshot.clone(), None, None)
+        };
+        let mut ownership = self.grant_sessions.lock().unwrap();
+        ownership.retain(|grant_id, _| self.grant_active(grant_id));
+        let sessions = ownership.entry(id.clone()).or_default().clone();
+        Some(GrantContext {
+            id,
+            snapshot,
+            tool_definitions,
+            sessions,
+            access,
+        })
+    }
+    fn grant_active(&self, id: &str) -> bool {
+        self.authorization
+            .as_ref()
+            .is_none_or(|service| service.is_grant_active(id))
+    }
+    fn access_active(&self, grant: &GrantContext) -> bool {
+        match (&self.authorization, &grant.access) {
+            (Some(service), Some(access)) => service.recheck(access),
+            (None, None) => true,
+            _ => false,
+        }
+    }
 }
 
 #[tokio::main]
@@ -229,12 +283,16 @@ async fn run() -> anyhow::Result<()> {
     };
     cli.codex_mode.get_or_insert_with(|| {
         if cli.boxed {
-            "agent-full-access".into()
+            CodexMode::AgentFullAccess
         } else {
-            "workspace-write".into()
+            CodexMode::WorkspaceWrite
         }
     });
-    let snapshot = config::load_snapshot(&cli.tools)?;
+    let snapshot = if cli.headless_static_bearer {
+        config::load_snapshot(&cli.tools)?
+    } else {
+        BTreeMap::new()
+    };
     let home = cli
         .harness_home
         .as_deref()
@@ -247,6 +305,26 @@ async fn run() -> anyhow::Result<()> {
         std::fs::set_permissions(&cli.state_dir, std::fs::Permissions::from_mode(0o700))?;
     }
     cli.state_dir = cli.state_dir.canonicalize()?;
+    if !cli.headless_static_bearer
+        && let Some(home) = &home
+    {
+        if cli.state_dir.starts_with(&home.path)
+            || cli
+                .config_path
+                .as_ref()
+                .is_some_and(|path| path.starts_with(&home.path))
+        {
+            return Err(UsageError("owner configuration and authorization state must be outside the mounted harness home".into()).into());
+        }
+    }
+    if cli.boxed {
+        let image = cli.session_image.clone();
+        let egress = cli.egress_container.clone().unwrap();
+        tokio::task::spawn_blocking(move || {
+            agent_connect_gateway::sandbox::preflight(&image, &egress)
+        })
+        .await??;
+    }
     let paths = SpikePaths {
         root: cli
             .mock_root
@@ -258,6 +336,23 @@ async fn run() -> anyhow::Result<()> {
         grace: Duration::from_secs(cli.resume_grace_secs),
         max_retained_bytes: cli.resume_max_bytes,
     });
+    let authorization = if let Some(public_url) = &cli.public_url {
+        use sha2::{Digest, Sha256};
+        let profile = serde_json::json!({
+            "harness": cli.harness, "mode": cli.codex_mode, "permissions": cli.permissions,
+            "boxed": cli.boxed, "image": cli.session_image, "home": cli.harness_home,
+            "egress": cli.egress_container, "public_url": public_url,
+        });
+        let fingerprint = format!("{:x}", Sha256::digest(serde_json::to_vec(&profile)?));
+        Some(AuthService::open(AuthConfig {
+            public_url: public_url.clone(),
+            state_dir: cli.state_dir.join("auth"),
+            policy_fingerprint: fingerprint,
+            owner_passphrase: None,
+        })?)
+    } else {
+        None
+    };
     let gateway = Arc::new(Gateway {
         hosts,
         home,
@@ -268,11 +363,15 @@ async fn run() -> anyhow::Result<()> {
         snapshot,
         paths,
         grant_sessions: Default::default(),
+        authorization: authorization.clone(),
     });
     let shutdown_gateway = gateway.clone();
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/acp", get(upgrade))
         .with_state(gateway);
+    if let Some(authorization) = authorization {
+        app = app.merge(authorization.router());
+    }
     eprintln!("[gateway] listening on ws://{listen}/acp");
     let listener = tokio::net::TcpListener::bind(listen).await?;
     axum::serve(
@@ -296,14 +395,18 @@ async fn run() -> anyhow::Result<()> {
             shutdown_gateway.capacity.close();
             shutdown_gateway.shutdown.send_replace(true);
         }
-        shutdown_gateway.hosts.shutdown().await;
-        // Registry completion tracks ACP output. Session tasks also await owned
-        // Docker cleanup, so shutdown must collect both before exiting.
         let mut sessions = std::mem::take(&mut *shutdown_gateway.sessions.lock().unwrap());
-        while let Some(result) = sessions.join_next().await {
-            if let Err(error) = result {
-                tracing::error!(%error, "session task failed during shutdown");
+        let drain = async {
+            shutdown_gateway.hosts.shutdown().await;
+            while let Some(result) = sessions.join_next().await {
+                if let Err(error) = result {
+                    tracing::error!(%error, "session task failed during shutdown");
+                }
             }
+        };
+        if tokio::time::timeout(Duration::from_secs(20), drain).await.is_err() {
+            tracing::error!("session shutdown deadline exceeded; aborting remaining tasks with owned-resource cleanup");
+            sessions.abort_all();
         }
     })
     .await?;
@@ -316,12 +419,14 @@ async fn upgrade(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
-    let ws = ws.max_message_size(1024 * 1024).max_frame_size(1024 * 1024);
+    let ws = ws
+        .max_message_size(MAX_CLIENT_FRAME_BYTES)
+        .max_frame_size(MAX_CLIENT_FRAME_BYTES);
     let origin = headers
         .get("origin")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    if origin != gateway.cli.allow_origin {
+    if gateway.authorization.is_none() && origin != gateway.cli.allow_origin {
         eprintln!("[gateway] reject {peer}: origin {origin:?}");
         return ws
             .protocols([RESUME_SUBPROTOCOL, ACP_SUBPROTOCOL])
@@ -335,12 +440,13 @@ async fn upgrade(
         .filter_map(|v| v.to_str().ok())
         .flat_map(|v| v.split(',').map(str::trim))
         .collect();
-    let grant = offered.iter().find_map(|p| {
-        p.strip_prefix(BEARER_PREFIX)
-            .filter(|t| resume::constant_time_eq(t.as_bytes(), gateway.cli.token.as_bytes()))
+    let grant = offered.iter().find_map(|protocol| {
+        protocol
+            .strip_prefix(BEARER_PREFIX)
+            .and_then(|token| gateway.authenticate(token, origin))
     });
-    let Some(grant) = grant.map(str::to_string) else {
-        eprintln!("[gateway] reject {peer}: bad bearer");
+    let Some(grant) = grant else {
+        eprintln!("[gateway] reject {peer}: invalid or expired app grant");
         return ws
             .protocols([RESUME_SUBPROTOCOL, ACP_SUBPROTOCOL])
             .on_upgrade(|mut socket| async move {
@@ -369,19 +475,38 @@ async fn upgrade(
         })
 }
 
+fn frame_capacity_error(error: &(dyn std::error::Error + 'static)) -> bool {
+    let mut current = Some(error);
+    while let Some(error) = current {
+        if error
+            .downcast_ref::<tungstenite::Error>()
+            .is_some_and(|error| matches!(error, tungstenite::Error::Capacity(_)))
+        {
+            return true;
+        }
+        current = error.source();
+    }
+    false
+}
+
 /// One WebSocket: attach it to a new or existing host and pump frames until
 /// either side goes away.
 async fn serve_socket(
     mut socket: WebSocket,
     gateway: Arc<Gateway>,
     peer: SocketAddr,
-    grant: String,
+    grant: GrantContext,
     resumable: bool,
 ) -> anyhow::Result<()> {
     let (host, ack) = if resumable {
         let first = tokio::time::timeout(Duration::from_secs(10), socket.recv()).await;
-        let Ok(Some(Ok(Message::Text(text)))) = first else {
-            return Ok(());
+        let text = match first {
+            Ok(Some(Ok(Message::Text(text)))) => text,
+            Ok(Some(Err(error))) if frame_capacity_error(&error) => {
+                close_with(&mut socket, 1009, "client frame exceeds 1 MiB").await;
+                return Ok(());
+            }
+            _ => return Ok(()),
         };
         let attach: Value = serde_json::from_str(&text).unwrap_or_default();
         if attach.get("t").and_then(Value::as_str) != Some("attach") {
@@ -390,7 +515,7 @@ async fn serve_socket(
         }
         let ack = attach.get("ack").and_then(Value::as_u64).unwrap_or(0);
         match attach.get("resume").and_then(Value::as_str) {
-            Some(token) => match gateway.hosts.find(token, &grant) {
+            Some(token) => match gateway.hosts.find(token, &grant.id) {
                 Some(host) => (host, ack),
                 None => {
                     eprintln!("[gateway] {peer} reattach refused: unknown or ended host");
@@ -419,14 +544,19 @@ async fn serve_socket(
     let (generation, mut outbound) = match host.attach(ack) {
         Ok(attached) => attached,
         Err(AttachError::Expired) => {
-            let _ = socket
-                .send(Message::Text(r#"{"t":"expired"}"#.into()))
-                .await;
-            close_with(&mut socket, close::EXPIRED, "expired").await;
+            if host.wait_for_completion(Duration::from_secs(15)).await {
+                let _ = socket
+                    .send(Message::Text(r#"{"t":"expired"}"#.into()))
+                    .await;
+                close_with(&mut socket, close::EXPIRED, "expired").await;
+            } else {
+                close_with(&mut socket, close::EVICTED, "session cleanup unconfirmed").await;
+            }
             return Ok(());
         }
     };
 
+    let mut authorization_check = tokio::time::interval(Duration::from_secs(1));
     let mut ping = tokio::time::interval(Duration::from_secs(10));
     let mut last_heard = Instant::now();
     let mut replies = Vec::new();
@@ -434,6 +564,11 @@ async fn serve_socket(
         tokio::select! {
             frame = socket.recv() => {
                 last_heard = Instant::now();
+                if !gateway.access_active(&grant) {
+                    let code = if gateway.grant_active(&grant.id) { 4401 } else { 4414 };
+                    close_with(&mut socket, code, "authorization ended").await;
+                    break "authorization ended";
+                }
                 match frame {
                     Some(Ok(Message::Text(text))) => {
                         if let Err(code) = host.client_text(&gateway.hosts, generation, &text, &mut replies).await {
@@ -446,11 +581,21 @@ async fn serve_socket(
                             }
                         }
                     }
+                    Some(Err(error)) if frame_capacity_error(&error) => {
+                        host.kill("frame too large");
+                        close_with(&mut socket, 1009, "client frame exceeds 1 MiB").await;
+                        break "frame too large";
+                    }
                     Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break "socket closed",
                     Some(Ok(_)) => {}
                 }
             }
             out = outbound.recv() => match out {
+                _ if !gateway.access_active(&grant) => {
+                    let code = if gateway.grant_active(&grant.id) { 4401 } else { 4414 };
+                    close_with(&mut socket, code, "authorization ended").await;
+                    break "authorization ended";
+                },
                 Some(ToSocket::Text(text)) => {
                     if socket.send(Message::Text(text.into())).await.is_err() {
                         break "send failed";
@@ -462,6 +607,13 @@ async fn serve_socket(
                 }
                 None => break "host gone",
             },
+            _ = authorization_check.tick() => {
+                if !gateway.access_active(&grant) {
+                    let code = if gateway.grant_active(&grant.id) { 4401 } else { 4414 };
+                    close_with(&mut socket, code, "authorization ended").await;
+                    break "authorization ended";
+                }
+            }
             _ = ping.tick() => {
                 if last_heard.elapsed() > Duration::from_secs(25) {
                     break "no pong";
@@ -493,7 +645,7 @@ async fn close_with(socket: &mut WebSocket, code: u16, reason: &'static str) {
 /// sessions whose Docker resources exist before their ACP host is registered.
 async fn start_host(
     gateway: &Arc<Gateway>,
-    grant: &str,
+    grant: &GrantContext,
     resumable: bool,
     peer: SocketAddr,
 ) -> anyhow::Result<Arc<Host>> {
@@ -514,7 +666,7 @@ async fn start_host(
             }
         }
         let gateway = gateway.clone();
-        let grant = grant.to_string();
+        let grant = grant.clone();
         sessions.spawn(async move {
             let mut ready = Some(ready_tx);
             if let Err(error) = run_host(gateway, grant, resumable, peer, permit, &mut ready).await
@@ -532,7 +684,7 @@ async fn start_host(
 
 async fn run_host(
     gateway: Arc<Gateway>,
-    grant: String,
+    grant: GrantContext,
     resumable: bool,
     peer: SocketAddr,
     permit: tokio::sync::OwnedSemaphorePermit,
@@ -555,15 +707,16 @@ async fn run_host(
         let image = gateway.cli.session_image.clone();
         let harness = gateway.cli.harness;
         let home = gateway.home.clone();
-        let volume = gateway.cli.durable_home.then(|| home_volume(&grant));
+        let volume = gateway.cli.durable_home.then(|| home_volume(&grant.id));
         let mocked = gateway.cli.mock_root.is_some();
         // Startup rollback and Docker CLI calls belong off the async executor.
         let (network, args) = tokio::task::spawn_blocking(move || {
-            let mut network = SessionNetwork::create(&session, &egress, mock.as_deref(), permit)?;
+            let mut network =
+                SessionNetwork::create(&session, &egress, mock.as_deref(), &image, permit)?;
             let args = box_args(
                 harness,
                 &session,
-                &mode,
+                mode.as_str(),
                 volume.as_deref(),
                 home.as_ref(),
                 &image,
@@ -597,7 +750,7 @@ async fn run_host(
                 &gateway.paths,
                 gateway.cli.harness,
                 &gateway.cli.mock_url,
-                gateway.cli.codex_mode.as_deref().unwrap(),
+                gateway.cli.codex_mode.unwrap().as_str(),
             ),
             Some(permit),
         )
@@ -609,10 +762,11 @@ async fn run_host(
             session_dir.clone()
         },
         app_server_name: "app".into(),
-        snapshot: Some(gateway.snapshot.clone()),
+        snapshot: Some(grant.snapshot.clone()),
+        tool_definitions: grant.tool_definitions.clone(),
         permissions: gateway.cli.permissions,
-        grant_sessions: gateway.grant_sessions.clone(),
-        actions_dir: Some(session_dir.join("actions")),
+        grant_sessions: grant.sessions.clone(),
+        actions_dir: Some(gateway.cli.state_dir.join("actions")),
     });
     let mut components = ProxiesAndAgent::new(agent).proxy(policy);
     if !boxed {
@@ -624,7 +778,11 @@ async fn run_host(
         if gateway.capacity.is_closed() {
             None
         } else {
-            Some(gateway.hosts.create(&grant, resumable, label.clone()))
+            Some(
+                gateway
+                    .hosts
+                    .create_with_cleanup(&grant.id, resumable, label.clone()),
+            )
         }
     };
     let Some((host, io)) = host else {
@@ -644,32 +802,48 @@ async fn run_host(
     let result = tokio::select! {
         result = chain.connect_to(Lines::new(io.outgoing, io.incoming)) => Some(result),
         _ = shutdown.wait_for(|stopped| *stopped) => None,
+        _ = async {
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
+            loop {
+                interval.tick().await;
+                if !gateway.grant_active(&grant.id) {
+                    host.kill("grant revoked or expired");
+                    break;
+                }
+            }
+        } => None,
     };
     eprintln!(
         "[gateway] chain {label} ended after {:?}: {:?}",
         started.elapsed(),
         result.as_ref().and_then(|result| result.as_ref().err())
     );
-    if let Some(network) = network.take() {
-        if let Err(error) = network.cleanup().await {
-            tracing::error!(%error, "session Docker cleanup failed");
+    let cleanup_ok = if let Some(network) = network.take() {
+        match network.cleanup().await {
+            Ok(()) => true,
+            Err(error) => {
+                tracing::error!(%error, "session Docker cleanup failed");
+                false
+            }
         }
-    }
+    } else {
+        true
+    };
+    drop(_permit);
+    host.complete_cleanup(cleanup_ok);
     Ok(())
 }
 
 /// A volume name derived from the grant, never containing the token itself.
 fn home_volume(grant: &str) -> String {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    grant.hash(&mut hasher);
-    format!("acp-home-{:016x}", hasher.finish())
+    use sha2::{Digest, Sha256};
+    format!("acp-home-{:x}", Sha256::digest(grant.as_bytes()))
 }
 
 async fn start_or_close(
     socket: &mut WebSocket,
     gateway: &Arc<Gateway>,
-    grant: &str,
+    grant: &GrantContext,
     resumable: bool,
     peer: SocketAddr,
 ) -> Option<Arc<Host>> {
@@ -685,5 +859,17 @@ async fn start_or_close(
             close_with(socket, code, "session unavailable").await;
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn grant_volume_name_is_release_stable_sha256() {
+        assert_eq!(
+            super::home_volume("abc"),
+            "acp-home-ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_ne!(super::home_volume("abc"), super::home_volume("abd"));
     }
 }

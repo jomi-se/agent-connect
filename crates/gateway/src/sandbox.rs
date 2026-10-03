@@ -19,6 +19,12 @@ pub fn egress_start_args(name: &str, image: &str) -> Vec<String> {
         name,
         "--label",
         &format!("{EGRESS_LABEL}={EGRESS_OWNER}"),
+        "--restart=unless-stopped",
+        "--log-driver=json-file",
+        "--log-opt",
+        "max-size=10m",
+        "--log-opt",
+        "max-file=3",
         "--read-only",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
@@ -37,8 +43,241 @@ pub fn egress_start_args(name: &str, image: &str) -> Vec<String> {
 
 pub fn egress_start(name: &str, image: &str) -> anyhow::Result<()> {
     crate::config::validate_container_name(name)?;
-    let args = egress_start_args(name, image);
-    docker(&args.iter().map(String::as_str).collect::<Vec<_>>())
+    egress_start_with(name, image, &mut Docker)
+}
+
+fn egress_start_with(
+    name: &str,
+    image: &str,
+    docker: &mut impl DockerCommand,
+) -> anyhow::Result<()> {
+    let deadline = Instant::now() + STARTUP_TIMEOUT;
+    let image = inspect_image(image, docker, deadline)?;
+    match inspect_container(name, docker, deadline)? {
+        Some(container) => {
+            let id = validate_egress(&container, &image, false)?;
+            if container
+                .pointer("/State/Running")
+                .and_then(|v| v.as_bool())
+                != Some(true)
+            {
+                docker.run(&["start", &id], deadline).context(
+                    "could not start owned egress proxy; inspect Docker state before retrying",
+                )?;
+            }
+            // Inspect the captured ID, never the possibly reused name.
+            let running = inspect_container(&id, docker, deadline)?.ok_or_else(|| {
+                anyhow::anyhow!("owned egress proxy disappeared while starting; rerun egress start")
+            })?;
+            validate_egress(&running, &image, true)?;
+        }
+        None => {
+            let args = egress_start_args(name, &image.id);
+            docker.run(&args.iter().map(String::as_str).collect::<Vec<_>>(), deadline)
+                .context("could not create egress proxy; check Docker and any conflicting container name")?;
+        }
+    }
+    Ok(())
+}
+
+/// Read-only production prerequisite check. Call from a blocking lane before
+/// listening; serve never starts a missing/stopped proxy implicitly.
+pub fn preflight(image: &str, egress: &str) -> anyhow::Result<()> {
+    crate::config::validate_container_name(egress)?;
+    preflight_with(image, egress, &mut Docker)
+}
+fn preflight_with(
+    image: &str,
+    egress: &str,
+    docker: &mut impl DockerCommand,
+) -> anyhow::Result<()> {
+    let deadline = Instant::now() + STARTUP_TIMEOUT;
+    let image = inspect_image(image, docker, deadline)?;
+    checked_egress(egress, &image, docker, deadline)?;
+    Ok(())
+}
+
+struct SessionImage {
+    id: String,
+    env: serde_json::Value,
+    user: serde_json::Value,
+}
+fn inspect_image(
+    image: &str,
+    docker: &mut impl DockerCommand,
+    deadline: Instant,
+) -> anyhow::Result<SessionImage> {
+    let output = docker.run(&["image", "inspect", "--format", "{{json .}}", image], deadline)
+        .context("selected session image is unavailable; Docker must be running and the selected image installed before egress start or serve")?;
+    let value: serde_json::Value =
+        serde_json::from_str(&output).context("invalid Docker image inspection")?;
+    let id = value
+        .get("Id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("missing inspected image ID"))?;
+    docker_id(id.strip_prefix("sha256:").unwrap_or(id))?;
+    Ok(SessionImage {
+        id: id.into(),
+        env: value
+            .pointer("/Config/Env")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null),
+        user: value
+            .pointer("/Config/User")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null),
+    })
+}
+fn inspect_container(
+    name: &str,
+    docker: &mut impl DockerCommand,
+    deadline: Instant,
+) -> anyhow::Result<Option<serde_json::Value>> {
+    match docker.run(
+        &[
+            "inspect",
+            "--type",
+            "container",
+            "--format",
+            "{{json .}}",
+            name,
+        ],
+        deadline,
+    ) {
+        Ok(output) => Ok(Some(
+            serde_json::from_str(&output).context("invalid Docker egress inspection")?,
+        )),
+        Err(error) if missing_resource(&error) => Ok(None),
+        Err(error) => Err(error)
+            .context("cannot inspect egress proxy; check that Docker is running and accessible"),
+    }
+}
+fn checked_egress(
+    name: &str,
+    image: &SessionImage,
+    docker: &mut impl DockerCommand,
+    deadline: Instant,
+) -> anyhow::Result<String> {
+    let container = inspect_container(name, docker, deadline)?
+        .ok_or_else(|| anyhow::anyhow!("egress proxy is absent; run agent-connect egress start with the configured name and session image"))?;
+    validate_egress(&container, image, true)
+}
+fn validate_egress(
+    container: &serde_json::Value,
+    image: &SessionImage,
+    running: bool,
+) -> anyhow::Result<String> {
+    use serde_json::json;
+    if container
+        .pointer("/Config/Labels")
+        .and_then(|v| v.get(EGRESS_LABEL))
+        .and_then(|v| v.as_str())
+        != Some(EGRESS_OWNER)
+    {
+        bail!("container is not labelled as an Agent Connect egress proxy; nothing was changed");
+    }
+    let id = docker_id(
+        container
+            .get("Id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("missing egress container ID"))?,
+    )?;
+    let empty = |value: Option<&serde_json::Value>| {
+        value.is_none_or(|v| {
+            v.is_null()
+                || v.as_array().is_some_and(Vec::is_empty)
+                || v.as_object().is_some_and(serde_json::Map::is_empty)
+        })
+    };
+    let trusted = container.get("Image").and_then(|v| v.as_str()) == Some(image.id.as_str())
+        && container.pointer("/Config/Entrypoint") == Some(&json!(["node"]))
+        && container.pointer("/Config/Cmd")
+            == Some(&json!(["/opt/agent-connect/egress-proxy.mjs"]))
+        && container.pointer("/Config/Env") == Some(&image.env)
+        && container
+            .pointer("/Config/User")
+            .unwrap_or(&serde_json::Value::Null)
+            == &image.user
+        && container
+            .pointer("/HostConfig/ReadonlyRootfs")
+            .and_then(|v| v.as_bool())
+            == Some(true)
+        && container
+            .pointer("/HostConfig/Privileged")
+            .and_then(|v| v.as_bool())
+            == Some(false)
+        && container
+            .pointer("/HostConfig/Memory")
+            .and_then(|v| v.as_u64())
+            == Some(256 * 1024 * 1024)
+        && container
+            .pointer("/HostConfig/NanoCpus")
+            .and_then(|v| v.as_u64())
+            == Some(1_000_000_000)
+        && container
+            .pointer("/HostConfig/PidsLimit")
+            .and_then(|v| v.as_u64())
+            == Some(64)
+        && container.pointer("/HostConfig/CapDrop") == Some(&json!(["ALL"]))
+        && container.pointer("/HostConfig/SecurityOpt") == Some(&json!(["no-new-privileges"]))
+        && empty(container.pointer("/HostConfig/CapAdd"))
+        && empty(container.pointer("/HostConfig/Devices"))
+        && empty(container.pointer("/HostConfig/DeviceRequests"))
+        && container
+            .pointer("/HostConfig/PidMode")
+            .and_then(|v| v.as_str())
+            != Some("host")
+        && container
+            .pointer("/HostConfig/IpcMode")
+            .and_then(|v| v.as_str())
+            != Some("host")
+        && empty(container.pointer("/HostConfig/Binds"))
+        && empty(container.get("Mounts"))
+        && empty(container.pointer("/HostConfig/PortBindings"))
+        && container
+            .pointer("/HostConfig/NetworkMode")
+            .and_then(|v| v.as_str())
+            != Some("host")
+        && container
+            .pointer("/HostConfig/RestartPolicy/Name")
+            .and_then(|v| v.as_str())
+            == Some("unless-stopped")
+        && container
+            .pointer("/HostConfig/LogConfig/Type")
+            .and_then(|v| v.as_str())
+            == Some("json-file")
+        && container
+            .pointer("/HostConfig/LogConfig/Config/max-size")
+            .and_then(|v| v.as_str())
+            == Some("10m")
+        && container
+            .pointer("/HostConfig/LogConfig/Config/max-file")
+            .and_then(|v| v.as_str())
+            == Some("3");
+    if !trusted {
+        bail!(
+            "owned egress proxy does not match the selected image and restricted proxy configuration; explicitly stop it and recreate it with agent-connect egress start"
+        );
+    }
+    if running
+        && (container
+            .pointer("/State/Running")
+            .and_then(|v| v.as_bool())
+            != Some(true)
+            || container
+                .pointer("/State/Restarting")
+                .and_then(|v| v.as_bool())
+                == Some(true)
+            || container
+                .pointer("/State/Health/Status")
+                .and_then(|v| v.as_str())
+                == Some("unhealthy"))
+    {
+        bail!(
+            "owned egress proxy is stopped, restarting or unhealthy; run agent-connect egress start and inspect its bounded Docker logs"
+        );
+    }
+    Ok(id)
 }
 
 pub fn egress_stop(name: &str) -> anyhow::Result<()> {
@@ -175,21 +414,24 @@ pub struct SessionNetwork {
     cleanup_on_drop: bool,
     capacity: Option<tokio::sync::OwnedSemaphorePermit>,
     startup_deadline: Instant,
+    image_id: Option<String>,
 }
 impl SessionNetwork {
     pub fn create(
         session: &str,
         egress: &str,
         mock: Option<&str>,
+        image: &str,
         capacity: tokio::sync::OwnedSemaphorePermit,
     ) -> anyhow::Result<Self> {
-        Self::create_with(session, egress, mock, Some(capacity), &mut Docker)
+        Self::create_with(session, egress, mock, image, Some(capacity), &mut Docker)
     }
 
     fn create_with(
         session: &str,
         egress: &str,
         mock: Option<&str>,
+        image: &str,
         capacity: Option<tokio::sync::OwnedSemaphorePermit>,
         docker: &mut impl DockerCommand,
     ) -> anyhow::Result<Self> {
@@ -204,6 +446,7 @@ impl SessionNetwork {
             cleanup_on_drop: true,
             capacity,
             startup_deadline: deadline,
+            image_id: None,
         };
         let result = (|| {
             match docker
@@ -231,17 +474,27 @@ impl SessionNetwork {
             for (peer, alias) in
                 std::iter::once((egress, "egress")).chain(mock.map(|m| (m, "mock")))
             {
-                let id = docker_id(&docker.run(
-                    &[
-                        "inspect",
-                        "--type",
-                        "container",
-                        "--format",
-                        "{{.Id}}",
-                        peer,
-                    ],
-                    deadline,
-                )?)?;
+                let (id, selected_image) = if alias == "egress" {
+                    let image = inspect_image(image, docker, deadline)?;
+                    let id = checked_egress(peer, &image, docker, deadline)?;
+                    network.image_id = Some(image.id.clone());
+                    (id, Some(image))
+                } else {
+                    (
+                        docker_id(&docker.run(
+                            &[
+                                "inspect",
+                                "--type",
+                                "container",
+                                "--format",
+                                "{{.Id}}",
+                                peer,
+                            ],
+                            deadline,
+                        )?)?,
+                        None,
+                    )
+                };
                 // Record before connecting: even an uncertain connect failure must
                 // roll back this exact peer, never a later replacement of its name.
                 network.peers.push(id.clone());
@@ -256,6 +509,9 @@ impl SessionNetwork {
                     ],
                     deadline,
                 )?;
+                if let Some(image) = selected_image {
+                    checked_egress(&id, &image, docker, deadline)?;
+                }
             }
             Ok(())
         })();
@@ -284,6 +540,10 @@ impl SessionNetwork {
         // Use the captured network ID; a name can be reused concurrently.
         let network_arg = args.iter().position(|arg| arg == "--network").unwrap() + 1;
         args[network_arg] = self.id.as_ref().unwrap().clone();
+        if let Some(image) = &self.image_id {
+            let image_arg = args.len() - 3; // box_args ends with image, --harness, name.
+            args[image_arg] = image.clone();
+        }
         match docker
             .run(
                 &args[1..].iter().map(String::as_str).collect::<Vec<_>>(),
@@ -417,6 +677,7 @@ impl Drop for SessionNetwork {
             cleanup_on_drop: false,
             capacity: self.capacity.take(),
             startup_deadline: self.startup_deadline,
+            image_id: self.image_id.clone(),
         };
         if let Err(error) = std::thread::Builder::new()
             .name("acp-session-cleanup".into())
@@ -579,7 +840,100 @@ mod tests {
             cleanup_on_drop: false,
             capacity: None,
             startup_deadline: Instant::now() + STARTUP_TIMEOUT,
+            image_id: None,
         }
+    }
+
+    fn image_fixture() -> String {
+        serde_json::json!({ "Id": format!("sha256:{}", "d".repeat(64)), "Config": { "Env": ["PATH=/usr/bin"] } }).to_string()
+    }
+    fn egress_fixture(id: &str, running: bool) -> serde_json::Value {
+        serde_json::json!({
+            "Id": id, "Image": format!("sha256:{}", "d".repeat(64)),
+            "Config": { "Labels": { EGRESS_LABEL: EGRESS_OWNER }, "Entrypoint": ["node"],
+                "Cmd": ["/opt/agent-connect/egress-proxy.mjs"], "Env": ["PATH=/usr/bin"] },
+            "HostConfig": { "ReadonlyRootfs": true, "Privileged": false, "CapDrop": ["ALL"],
+                "SecurityOpt": ["no-new-privileges"], "Memory": 268435456,
+                "NanoCpus": 1000000000, "PidsLimit": 64, "NetworkMode": "bridge",
+                "RestartPolicy": { "Name": "unless-stopped" },
+                "LogConfig": { "Type": "json-file", "Config": { "max-size": "10m", "max-file": "3" } } },
+            "State": { "Running": running, "Restarting": false }, "Mounts": []
+        })
+    }
+
+    #[test]
+    fn egress_start_reuses_running_and_starts_stopped_by_owned_id() {
+        let id = "a".repeat(64);
+        let image = image_fixture();
+        for running in [true, false] {
+            let mut steps = VecDeque::from([
+                step(
+                    &["image", "inspect", "--format", "{{json .}}", "session:test"],
+                    Ok(&image),
+                ),
+                step(
+                    &[
+                        "inspect",
+                        "--type",
+                        "container",
+                        "--format",
+                        "{{json .}}",
+                        "owned-egress",
+                    ],
+                    Ok(&egress_fixture(&id, running).to_string()),
+                ),
+            ]);
+            if !running {
+                steps.push_back(step(&["start", &id], Ok(&id)));
+            }
+            steps.push_back(step(
+                &[
+                    "inspect",
+                    "--type",
+                    "container",
+                    "--format",
+                    "{{json .}}",
+                    &id,
+                ],
+                Ok(&egress_fixture(&id, true).to_string()),
+            ));
+            let mut docker = Fixture(steps);
+            egress_start_with("owned-egress", "session:test", &mut docker).unwrap();
+            assert!(docker.0.is_empty());
+        }
+    }
+
+    #[test]
+    fn egress_refuses_unowned_wrong_image_or_modified_proxy() {
+        let image = SessionImage {
+            id: format!("sha256:{}", "d".repeat(64)),
+            env: serde_json::json!(["PATH=/usr/bin"]),
+            user: serde_json::Value::Null,
+        };
+        for pointer in [
+            "/Config/Labels/org.agent-connect.component",
+            "/Image",
+            "/Config/Cmd",
+            "/Config/Env",
+            "/HostConfig/ReadonlyRootfs",
+            "/HostConfig/Privileged",
+            "/HostConfig/PortBindings",
+            "/HostConfig/LogConfig/Config/max-size",
+            "/HostConfig/RestartPolicy/Name",
+        ] {
+            let mut container = egress_fixture(&"a".repeat(64), true);
+            if pointer == "/HostConfig/PortBindings" {
+                container["HostConfig"]["PortBindings"] =
+                    serde_json::json!({"3128/tcp": [{"HostPort":"3128"}]});
+            } else {
+                *container.pointer_mut(pointer).unwrap() = serde_json::json!("modified");
+            }
+            assert!(
+                validate_egress(&container, &image, true).is_err(),
+                "{pointer}"
+            );
+        }
+        assert!(validate_egress(&egress_fixture(&"a".repeat(64), false), &image, true).is_err());
     }
 
     #[test]
@@ -649,15 +1003,19 @@ mod tests {
                 Ok(&network),
             ),
             step(
+                &["image", "inspect", "--format", "{{json .}}", "session:test"],
+                Ok(&image_fixture()),
+            ),
+            step(
                 &[
                     "inspect",
                     "--type",
                     "container",
                     "--format",
-                    "{{.Id}}",
+                    "{{json .}}",
                     "egress-name",
                 ],
-                Ok(&peer),
+                Ok(&egress_fixture(&peer, true).to_string()),
             ),
             step(
                 &["network", "connect", "--alias", "egress", &network, &peer],
@@ -669,11 +1027,177 @@ mod tests {
             ),
             step(&["network", "rm", &network], Ok("")),
         ]));
-        let error = SessionNetwork::create_with("test", "egress-name", None, None, &mut docker)
-            .err()
-            .unwrap();
+        let error = SessionNetwork::create_with(
+            "test",
+            "egress-name",
+            None,
+            "session:test",
+            None,
+            &mut docker,
+        )
+        .err()
+        .unwrap();
         assert!(error.to_string().contains("injected connect failure"));
         assert!(docker.0.is_empty());
+    }
+
+    #[test]
+    fn session_refuses_unowned_egress_before_connect_and_rolls_back_network() {
+        let network = "a".repeat(64);
+        let mut unowned = egress_fixture(&"b".repeat(64), true);
+        unowned["Config"]["Labels"][EGRESS_LABEL] = serde_json::json!("unrelated");
+        let mut docker = Fixture(VecDeque::from([
+            step(
+                &[
+                    "network",
+                    "create",
+                    "--internal",
+                    "--label",
+                    "org.agent-connect.component=acp-session",
+                    "--label",
+                    "org.agent-connect.session=test",
+                    "acp-sess-net-test",
+                ],
+                Ok(&network),
+            ),
+            step(
+                &["image", "inspect", "--format", "{{json .}}", "session:test"],
+                Ok(&image_fixture()),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "container",
+                    "--format",
+                    "{{json .}}",
+                    "egress-name",
+                ],
+                Ok(&unowned.to_string()),
+            ),
+            step(&["network", "rm", &network], Ok("")),
+        ]));
+        let error = SessionNetwork::create_with(
+            "test",
+            "egress-name",
+            None,
+            "session:test",
+            None,
+            &mut docker,
+        )
+        .err()
+        .unwrap();
+        assert!(error.to_string().contains("not labelled"));
+        assert!(docker.0.is_empty());
+    }
+
+    #[test]
+    fn session_rechecks_running_owned_egress_by_captured_id_after_connect() {
+        let network = "a".repeat(64);
+        let peer = "b".repeat(64);
+        let mut docker = Fixture(VecDeque::from([
+            step(
+                &[
+                    "network",
+                    "create",
+                    "--internal",
+                    "--label",
+                    "org.agent-connect.component=acp-session",
+                    "--label",
+                    "org.agent-connect.session=test",
+                    "acp-sess-net-test",
+                ],
+                Ok(&network),
+            ),
+            step(
+                &["image", "inspect", "--format", "{{json .}}", "session:test"],
+                Ok(&image_fixture()),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "container",
+                    "--format",
+                    "{{json .}}",
+                    "egress-name",
+                ],
+                Ok(&egress_fixture(&peer, true).to_string()),
+            ),
+            step(
+                &["network", "connect", "--alias", "egress", &network, &peer],
+                Ok(""),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "container",
+                    "--format",
+                    "{{json .}}",
+                    &peer,
+                ],
+                Ok(&egress_fixture(&peer, false).to_string()),
+            ),
+            step(
+                &["network", "disconnect", "--force", &network, &peer],
+                Ok(""),
+            ),
+            step(&["network", "rm", &network], Ok("")),
+        ]));
+        let error = SessionNetwork::create_with(
+            "test",
+            "egress-name",
+            None,
+            "session:test",
+            None,
+            &mut docker,
+        )
+        .err()
+        .unwrap();
+        assert!(error.to_string().contains("stopped"));
+        assert!(docker.0.is_empty());
+    }
+
+    #[test]
+    fn preflight_is_read_only_and_rejects_absent_image_or_stopped_proxy() {
+        let image = image_fixture();
+        let id = "a".repeat(64);
+        let mut absent = Fixture(VecDeque::from([step(
+            &["image", "inspect", "--format", "{{json .}}", "session:test"],
+            Err("Docker daemon is unavailable"),
+        )]));
+        assert!(
+            preflight_with("session:test", "egress-name", &mut absent)
+                .unwrap_err()
+                .to_string()
+                .contains("image is unavailable")
+        );
+        assert!(absent.0.is_empty());
+        let mut stopped = Fixture(VecDeque::from([
+            step(
+                &["image", "inspect", "--format", "{{json .}}", "session:test"],
+                Ok(&image),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "container",
+                    "--format",
+                    "{{json .}}",
+                    "egress-name",
+                ],
+                Ok(&egress_fixture(&id, false).to_string()),
+            ),
+        ]));
+        assert!(
+            preflight_with("session:test", "egress-name", &mut stopped)
+                .unwrap_err()
+                .to_string()
+                .contains("stopped")
+        );
+        assert!(stopped.0.is_empty());
     }
 
     #[test]
@@ -841,12 +1365,16 @@ mod tests {
                 Ok(&network),
             ),
             step(
+                &["image", "inspect", "--format", "{{json .}}", "session:test"],
+                Ok(&image_fixture()),
+            ),
+            step(
                 &[
                     "inspect",
                     "--type",
                     "container",
                     "--format",
-                    "{{.Id}}",
+                    "{{json .}}",
                     "egress-name",
                 ],
                 Err("missing test egress"),
@@ -856,8 +1384,15 @@ mod tests {
         let capacity = std::sync::Arc::new(tokio::sync::Semaphore::new(1));
         let permit = capacity.clone().try_acquire_owned().unwrap();
         assert!(
-            SessionNetwork::create_with("test", "egress-name", None, Some(permit), &mut docker)
-                .is_err()
+            SessionNetwork::create_with(
+                "test",
+                "egress-name",
+                None,
+                "session:test",
+                Some(permit),
+                &mut docker
+            )
+            .is_err()
         );
         assert_eq!(capacity.available_permits(), 1);
         assert!(docker.0.is_empty());
@@ -870,6 +1405,7 @@ mod tests {
             fn run(&mut self, args: &[&str], deadline: Instant) -> anyhow::Result<String> {
                 match args {
                     ["network", "create", ..] => Ok("a".repeat(64)),
+                    ["image", "inspect", ..] => Ok(image_fixture()),
                     ["inspect", ..] => anyhow::bail!("injected startup failure"),
                     ["network", "rm", id] => {
                         assert_eq!(*id, "a".repeat(64));
@@ -888,12 +1424,13 @@ mod tests {
             "test",
             "egress-name",
             None,
+            "session:test",
             Some(permit),
             &mut FailedRollback,
         )
         .err()
         .unwrap();
-        assert!(error.to_string().contains("injected startup failure"));
+        assert!(format!("{error:#}").contains("injected startup failure"));
         assert_eq!(capacity.available_permits(), 0);
     }
 
@@ -901,6 +1438,9 @@ mod tests {
     fn egress_uses_same_image_without_host_port_or_credentials() {
         let args = egress_start_args("owned-egress", "session:test");
         assert!(args.contains(&"--read-only".into()));
+        assert!(args.contains(&"--restart=unless-stopped".into()));
+        assert!(args.contains(&"max-size=10m".into()));
+        assert!(args.contains(&"max-file=3".into()));
         assert!(args.contains(&format!("{EGRESS_LABEL}={EGRESS_OWNER}")));
         assert!(args.ends_with(&[
             "node".into(),

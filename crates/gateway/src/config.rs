@@ -31,6 +31,24 @@ fn usage(message: impl Into<String>) -> anyhow::Error {
     UsageError(message.into()).into()
 }
 
+/// Modes supported by the pinned Codex ACP adapter; arbitrary mode strings fail at setup.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CodexMode {
+    ReadOnly,
+    WorkspaceWrite,
+    AgentFullAccess,
+}
+impl CodexMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read-only",
+            Self::WorkspaceWrite => "workspace-write",
+            Self::AgentFullAccess => "agent-full-access",
+        }
+    }
+}
+
 /// CLI and environment fields remain optional so explicit values can override
 /// configuration without default CLI values accidentally masking it.
 #[derive(Args, Default, Deserialize, Serialize)]
@@ -53,6 +71,14 @@ pub struct ServeOptions {
     #[arg(long, env = "AGENT_CONNECT_LISTEN", hide_env_values = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub listen: Option<SocketAddr>,
+    /// Canonical external gateway origin for owner pages and browser pairing.
+    #[arg(long, env = "AGENT_CONNECT_PUBLIC_URL", hide_env_values = true)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_url: Option<String>,
+    /// Explicit headless/CI escape hatch; disables owner pages and browser pairing.
+    #[arg(long, env = "AGENT_CONNECT_HEADLESS_STATIC_BEARER", hide_env_values = true, num_args = 0..=1, default_missing_value = "true", require_equals = true)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub headless_static_bearer: Option<bool>,
     /// Exact browser origin allowed to connect (scheme, host and optional port).
     #[arg(long, env = "AGENT_CONNECT_ALLOW_ORIGIN", hide_env_values = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -70,9 +96,14 @@ pub struct ServeOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mock_url: Option<String>,
     /// Operator-selected codex-acp mode.
-    #[arg(long, env = "AGENT_CONNECT_CODEX_MODE", hide_env_values = true)]
+    #[arg(
+        long,
+        env = "AGENT_CONNECT_CODEX_MODE",
+        hide_env_values = true,
+        value_enum
+    )]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub codex_mode: Option<String>,
+    pub codex_mode: Option<CodexMode>,
     /// Permission profile; native authority is bounded by the container.
     #[arg(
         long,
@@ -130,13 +161,16 @@ pub struct ServeOptions {
 
 #[derive(Clone)]
 pub struct ServeCli {
+    pub config_path: Option<PathBuf>,
     pub harness: Harness,
     pub listen: SocketAddr,
+    pub public_url: Option<String>,
+    pub headless_static_bearer: bool,
     pub allow_origin: String,
     pub token: String,
     pub tools: PathBuf,
     pub mock_url: String,
-    pub codex_mode: Option<String>,
+    pub codex_mode: Option<CodexMode>,
     pub permissions: PermissionProfile,
     pub harness_home: Option<PathBuf>,
     pub session_image: String,
@@ -173,11 +207,18 @@ impl ServeOptions {
             };
         }
         let mut cli = ServeCli {
+            config_path: self
+                .config
+                .as_ref()
+                .map(std::fs::canonicalize)
+                .transpose()?,
             harness: required!(harness),
             listen: merged!(listen).unwrap_or_else(|| "127.0.0.1:18940".parse().unwrap()),
-            allow_origin: required!(allow_origin),
-            token: required!(token),
-            tools: required!(tools),
+            public_url: merged!(public_url),
+            headless_static_bearer: merged!(headless_static_bearer).unwrap_or(false),
+            allow_origin: merged!(allow_origin).unwrap_or_default(),
+            token: merged!(token).unwrap_or_default(),
+            tools: merged!(tools).unwrap_or_default(),
             mock_url: merged!(mock_url).unwrap_or_else(|| "http://127.0.0.1:18931/v1".into()),
             codex_mode: merged!(codex_mode),
             permissions: merged!(permissions).unwrap_or_else(|| PermissionProfile::Sandboxed),
@@ -188,21 +229,50 @@ impl ServeOptions {
             mock_container: merged!(mock_container),
             state_dir: merged!(state_dir)
                 .unwrap_or_else(|| PathBuf::from(".agent-connect/gateway")),
-            max_sessions: merged!(max_sessions).unwrap_or_else(|| 32),
+            max_sessions: merged!(max_sessions).unwrap_or_else(|| 1),
             boxed: merged!(boxed).unwrap_or_else(|| false),
             resume_grace_secs: merged!(resume_grace_secs).unwrap_or_else(|| 600),
             durable_home: merged!(durable_home).unwrap_or_else(|| false),
             resume_max_bytes: merged!(resume_max_bytes).unwrap_or_else(|| 8 * 1024 * 1024),
         };
-        validate_origin(&cli.allow_origin)?;
-        if cli.token.is_empty()
-            || !cli
-                .token
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b"-._~".contains(&b))
+        if cli.headless_static_bearer {
+            validate_origin(&cli.allow_origin)?;
+            if cli.token.is_empty()
+                || !cli
+                    .token
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-._~".contains(&b))
+            {
+                return Err(usage(
+                    "headless grant token must be nonempty and use only letters, digits, - . _ ~",
+                ));
+            }
+            if cli.tools.as_os_str().is_empty() {
+                return Err(usage("headless static bearer requires --tools"));
+            }
+            if cli.public_url.is_some() {
+                return Err(usage(
+                    "--public-url pairing and --headless-static-bearer are mutually exclusive",
+                ));
+            }
+        } else {
+            if !cli.token.is_empty()
+                || !cli.allow_origin.is_empty()
+                || !cli.tools.as_os_str().is_empty()
+            {
+                return Err(usage(
+                    "static token, origin and tools require explicit --headless-static-bearer; use browser pairing for normal operation",
+                ));
+            }
+            let public_url = cli.public_url.as_ref().ok_or_else(|| usage("pairing requires --public-url (canonical external HTTPS origin, or HTTP loopback for local use)"))?;
+            validate_public_url(public_url)?;
+        }
+        if cli.boxed
+            && matches!(cli.harness, Harness::Codex)
+            && !matches!(cli.permissions, PermissionProfile::Sandboxed)
         {
             return Err(usage(
-                "grant token must be nonempty and use only letters, digits, - . _ ~",
+                "boxed Codex supports only --permissions sandboxed: deny-all/app-tools-only cannot restrict native actions that the pinned adapter runs without permission prompts",
             ));
         }
         if cli.max_sessions == 0 || cli.resume_max_bytes == 0 {
@@ -307,7 +377,7 @@ pub fn load_snapshot(path: &Path) -> anyhow::Result<BTreeMap<String, Value>> {
     snapshot_from_bytes(&source)
 }
 
-fn snapshot_from_bytes(source: &[u8]) -> anyhow::Result<BTreeMap<String, Value>> {
+pub(crate) fn snapshot_from_bytes(source: &[u8]) -> anyhow::Result<BTreeMap<String, Value>> {
     let tools: Vec<Value> =
         serde_json::from_slice(source).map_err(|e| usage(format!("invalid snapshot JSON: {e}")))?;
     let mut snapshot = BTreeMap::new();
@@ -360,6 +430,30 @@ pub fn validate_container_name(name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// HTTPS origin, with HTTP reserved for loopback-only local development.
+pub fn validate_public_url(value: &str) -> anyhow::Result<()> {
+    let parsed = url::Url::parse(value).map_err(|_| usage("invalid --public-url"))?;
+    let loopback = parsed.host_str().is_some_and(|host| {
+        host == "localhost"
+            || host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    });
+    if !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || parsed.path() != "/"
+        || parsed.origin().ascii_serialization() != value
+        || !(parsed.scheme() == "https" || (parsed.scheme() == "http" && loopback))
+    {
+        return Err(usage(
+            "--public-url must be an exact HTTPS origin without credentials or path; HTTP is allowed only for loopback local development",
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Args)]
 pub struct InitCli {
     /// New private runtime directory; setup refuses any existing destination.
@@ -371,10 +465,19 @@ pub struct InitCli {
     #[arg(long, env = "AGENT_CONNECT_HARNESS_HOME", hide_env_values = true)]
     pub harness_home: Option<PathBuf>,
     #[arg(long)]
-    pub allow_origin: String,
+    pub allow_origin: Option<String>,
     /// Approved snapshot to validate and copy before issuing the grant.
     #[arg(long)]
-    pub tools: PathBuf,
+    pub tools: Option<PathBuf>,
+    /// Canonical external HTTPS gateway origin (HTTP loopback allowed locally).
+    #[arg(long)]
+    pub public_url: Option<String>,
+    /// Read the owner sign-in passphrase from an existing private file for unattended setup.
+    #[arg(long)]
+    pub owner_passphrase_file: Option<PathBuf>,
+    /// Explicitly create a fixed static bearer instead of gateway-hosted consent.
+    #[arg(long)]
+    pub headless_static_bearer: bool,
     #[arg(long, default_value = "127.0.0.1:18940")]
     pub listen: SocketAddr,
     #[arg(long, env = "AGENT_CONNECT_SESSION_IMAGE", default_value = DEFAULT_SESSION_IMAGE)]
@@ -384,16 +487,74 @@ pub struct InitCli {
 }
 
 pub fn init(cli: InitCli) -> anyhow::Result<()> {
-    validate_origin(&cli.allow_origin)?;
     validate_container_name(&cli.egress_container)?;
     if cli.listen.port() == 0 {
-        return Err(usage(
-            "init requires a nonzero listener port for the application grant",
-        ));
+        return Err(usage("init requires a nonzero listener port"));
     }
-    // Read and validate once; copy exactly the bytes that were validated.
-    let source = std::fs::read(&cli.tools).context("read approved tool snapshot")?;
-    snapshot_from_bytes(&source)?;
+    let public_url = if cli.headless_static_bearer {
+        if cli.public_url.is_some() || cli.owner_passphrase_file.is_some() {
+            return Err(usage("headless setup cannot configure owner pairing"));
+        }
+        None
+    } else {
+        if cli.allow_origin.is_some() || cli.tools.is_some() {
+            return Err(usage(
+                "--allow-origin/--tools require --headless-static-bearer; normal setup approves each app on the gateway consent page",
+            ));
+        }
+        let url = cli
+            .public_url
+            .clone()
+            .unwrap_or_else(|| format!("http://{}", cli.listen));
+        validate_public_url(&url)?;
+        Some(url)
+    };
+    let source = if cli.headless_static_bearer {
+        let origin = cli
+            .allow_origin
+            .as_deref()
+            .ok_or_else(|| usage("headless setup requires --allow-origin"))?;
+        validate_origin(origin)?;
+        let path = cli
+            .tools
+            .as_deref()
+            .ok_or_else(|| usage("headless setup requires --tools"))?;
+        let source = std::fs::read(path).context("read approved tool snapshot")?;
+        snapshot_from_bytes(&source)?;
+        Some(source)
+    } else {
+        None
+    };
+    let owner_passphrase = if public_url.is_some() {
+        let passphrase = if let Some(path) = &cli.owner_passphrase_file {
+            String::from_utf8(read_private(path)?)?
+                .trim_end_matches(['\r', '\n'])
+                .to_string()
+        } else {
+            use std::io::IsTerminal;
+            if !std::io::stdin().is_terminal() {
+                return Err(usage(
+                    "owner setup needs a terminal; unattended setup requires --owner-passphrase-file pointing to a private file",
+                ));
+            }
+            let passphrase = rpassword::prompt_password(
+                "Choose an owner sign-in passphrase (at least 12 characters): ",
+            )?;
+            let confirmation = rpassword::prompt_password("Confirm owner passphrase: ")?;
+            if passphrase != confirmation {
+                return Err(usage("owner passphrases did not match"));
+            }
+            passphrase
+        };
+        if passphrase.chars().count() < 12 || passphrase.len() > 1024 {
+            return Err(usage(
+                "owner passphrase must contain at least 12 characters and at most 1024 bytes",
+            ));
+        }
+        Some(passphrase)
+    } else {
+        None
+    };
     let mut builder = std::fs::DirBuilder::new();
     #[cfg(unix)]
     {
@@ -409,8 +570,15 @@ pub fn init(cli: InitCli) -> anyhow::Result<()> {
             .map(Ok)
             .unwrap_or_else(|| default_home(cli.harness))?;
         let home = HarnessHome::prepare(&home_path)?;
+        if public_url.is_some() && directory.starts_with(&home.path) {
+            return Err(usage(
+                "owner runtime/configuration and authorization state must be outside the mounted harness home",
+            ));
+        }
         builder.create(directory.join("state"))?;
-        write_private(&directory.join("tools.json"), &source)?;
+        if let Some(source) = &source {
+            write_private(&directory.join("tools.json"), source)?;
+        }
         let token = format!(
             "{}{}",
             uuid::Uuid::new_v4().simple(),
@@ -419,9 +587,11 @@ pub fn init(cli: InitCli) -> anyhow::Result<()> {
         let configuration = ServeOptions {
             harness: Some(cli.harness),
             listen: Some(cli.listen),
-            allow_origin: Some(cli.allow_origin.clone()),
-            token: Some(token.clone()),
-            tools: Some("tools.json".into()),
+            public_url: public_url.clone(),
+            headless_static_bearer: Some(cli.headless_static_bearer),
+            allow_origin: cli.allow_origin.clone(),
+            token: cli.headless_static_bearer.then_some(token.clone()),
+            tools: cli.headless_static_bearer.then_some("tools.json".into()),
             harness_home: Some(home.path),
             state_dir: Some("state".into()),
             boxed: Some(true),
@@ -433,20 +603,30 @@ pub fn init(cli: InitCli) -> anyhow::Result<()> {
             &directory.join("config.json"),
             &serde_json::to_vec_pretty(&configuration)?,
         )?;
-        let mut address = cli.listen;
-        if address.ip().is_unspecified() {
-            address.set_ip(if address.is_ipv4() {
-                "127.0.0.1".parse().unwrap()
-            } else {
-                "::1".parse().unwrap()
-            });
+        if let Some(public_url) = &public_url {
+            // Initialize outside the shared harness home; the agent cannot approve apps.
+            crate::authorization::AuthService::open(crate::authorization::AuthConfig {
+                public_url: public_url.clone(),
+                state_dir: directory.join("state/auth"),
+                policy_fingerprint: "setup".into(),
+                owner_passphrase: owner_passphrase.clone(),
+            })?;
+        } else {
+            let mut address = cli.listen;
+            if address.ip().is_unspecified() {
+                address.set_ip(if address.is_ipv4() {
+                    "127.0.0.1".parse().unwrap()
+                } else {
+                    "::1".parse().unwrap()
+                });
+            }
+            let grant =
+                serde_json::json!({"gatewayUrl": format!("ws://{address}/acp"), "token": token});
+            write_private(
+                &directory.join("grant.json"),
+                &serde_json::to_vec_pretty(&grant)?,
+            )?;
         }
-        let grant =
-            serde_json::json!({"gatewayUrl": format!("ws://{address}/acp"), "token": token});
-        write_private(
-            &directory.join("grant.json"),
-            &serde_json::to_vec_pretty(&grant)?,
-        )?;
         Ok(())
     })();
     if let Err(error) = result {
@@ -456,10 +636,15 @@ pub fn init(cli: InitCli) -> anyhow::Result<()> {
     }
     println!("Created private runtime directory: {}", directory.display());
     println!("Configuration: {}", directory.join("config.json").display());
-    println!(
-        "Application grant (keep private): {}",
-        directory.join("grant.json").display()
-    );
+    if let Some(public_url) = &public_url {
+        println!("Owner sign-in and grants: {public_url}/agent-connect/owner");
+        println!("Apps pair through gateway-hosted consent; no application token file is created.");
+    } else {
+        println!(
+            "Headless application grant (keep private): {}",
+            directory.join("grant.json").display()
+        );
+    }
     println!(
         "Next: agent-connect egress start --name {} --session-image {}",
         shell_quote(&cli.egress_container),
@@ -561,7 +746,7 @@ mod tests {
         let root = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
         std::fs::create_dir(&root).unwrap();
         let path = root.join("config.json");
-        write_private(&path, br#"{"harness":"codex","listen":"127.0.0.1:9","allow_origin":"https://app.example","token":"fixture","tools":"tools.json","mock_root":"fixture","state_dir":"state"}"#).unwrap();
+        write_private(&path, br#"{"headless_static_bearer":true,"harness":"codex","listen":"127.0.0.1:9","allow_origin":"https://app.example","token":"fixture","tools":"tools.json","mock_root":"fixture","state_dir":"state"}"#).unwrap();
         let options = ServeOptions {
             config: Some(path.clone()),
             listen: Some("127.0.0.1:0".parse().unwrap()),

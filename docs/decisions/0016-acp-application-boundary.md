@@ -2,8 +2,9 @@
 
 Date: 2026-09-30. Status: **proposed**, not accepted. If accepted, it would
 supersede the application wire of [ADR 0010](0010-open-responses-gateway-pivot.md)
-and the execution host of [ADR 0015](0015-openclaw-plugin-host.md). Until then,
-both remain in force, and so does AGENTS.md's installation guidance.
+and the execution host of [ADR 0015](0015-openclaw-plugin-host.md). The owner has approved ACP as the product direction and the current recommended
+implementation. Formal supersession and publication still require acceptance;
+the OpenClaw plugin remains available as the previous published target.
 
 Evidence: [ACP gateway spike results](../experiments/acp-gateway.md).
 
@@ -46,8 +47,20 @@ gained what a web application needs:
    MCP-over-ACP is unstable and is labeled so in every public API and
    document.
 2. **Agent Connect is a consent-enforcing ACP proxy.**
-   - It authorizes at connection time: an exact `Origin`, and a grant-bound
-     bearer token offered as a WebSocket subprotocol.
+   - The gateway serves owner sign-in, application consent and grant management.
+     Applications pair using pushed authorization requests and OAuth code +
+     S256 PKCE, bound to their exact origin, same-origin redirect and gateway
+     resource. No owner copies a bearer out of a file.
+   - Consent fixes the complete tool definitions and an explicit access duration.
+     Five-minute access tokens and rotating refresh tokens share a stable grant
+     identity; refresh replay revokes the grant. Owner revocation and policy
+     changes invalidate active and detached authority.
+   - Owner passphrases and optional enrolled TOTP are separate from application
+     grants. An application grant cannot create owner authority or approve grants.
+     Owner state and configuration must remain outside the shared harness home.
+   - WebSocket access checks the exact `Origin` and grant-bound access token
+     offered as a subprotocol. Static bearer setup is an explicit headless/CI
+     escape hatch, outside hosted pairing and individual grant management.
    - Its policy proxy is default-deny in both directions. It uses only generic
      ACP and MCP-over-ACP messages, and owns every authority-bearing field:
      client capabilities, `cwd`, MCP server declarations, mode and model.
@@ -106,7 +119,8 @@ Costs and risks:
 - The product depends on an unstable MCP-over-ACP RFD, and on MCP protocol
   generations interoperating (spike finding 3).
 - OpenClaw leaves the execution path. The installation and hosting story, and
-  AGENTS.md's "no separate process" rule, need a separate decision.
+  the approved product direction uses the standalone gateway, while the previous
+  plugin remains available until a separate retirement decision.
 - Agent Connect owns a small non-standard transport extension for mobile
   resilience until ACP v2 stream resumption exists.
 - Harness tool calls have a default ceiling of about 300 s. Long human waits
@@ -138,8 +152,10 @@ Costs and risks:
   [release plan](../plan/acp-gateway-release.md) proposes a prebuilt binary
   through npm and GitHub Releases. The implementation retains the OpenClaw
   plugin; any retirement requires separate release approval.
-- **Consent code.** Port the OAuth/PKCE consent, grant and revocation code, or
-  keep it as a separate component.
+- **Consent code.** The Rust gateway now implements hosted owner consent,
+  OAuth/PKCE, refresh, revocation and optional TOTP, following ADR 0009/0014/0015
+  semantics. Automated browser composition and independent security review are
+  required; live owner verification remains a release prerequisite.
 - **Session isolation.** A per-session internal network. The dedicated shared harness home restores conversations after a
   box is gone, but exposes transcripts across grants. Live credential checks
   remain a release prerequisite.
