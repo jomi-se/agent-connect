@@ -27,6 +27,7 @@ await writeFile(
   `#!/usr/bin/env node
 const { createInterface } = require("node:readline");
 const { randomUUID } = require("node:crypto");
+require("node:fs").writeFileSync(${JSON.stringify(join(root, "adapter.pid"))}, String(process.pid), { mode: 0o600 });
 createInterface({ input: process.stdin }).on("line", (line) => {
   const message = JSON.parse(line);
   if (message.id === undefined || !message.method) return;
@@ -425,8 +426,55 @@ try {
     await endSession.evaluate((button) => button === document.activeElement),
     true,
   );
-  await page.keyboard.press("Enter");
-  await page.getByText("No live sessions", { exact: true }).waitFor();
+  const adapterPid = Number(await readFile(join(root, "adapter.pid"), "utf8"));
+  assert.ok(Number.isInteger(adapterPid) && adapterPid > 0);
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: "load" }),
+    page.keyboard.press("Enter"),
+  ]);
+  const endedStates = [];
+  const cleanupDeadline = Date.now() + 25000;
+  let runtimeGone = false;
+  while (Date.now() < cleanupDeadline) {
+    await page.goto(owner);
+    const absent =
+      (await page.getByText("No live sessions", { exact: true }).count()) > 0;
+    let adapterGone = false;
+    try {
+      process.kill(adapterPid, 0);
+    } catch (error) {
+      if (error.code === "ESRCH") adapterGone = true;
+      else throw error;
+    }
+    if (absent && adapterGone) {
+      endedStates.push("absent");
+      runtimeGone = true;
+      break;
+    }
+    const sessionRecords = await page
+      .locator('form[action="/agent-connect/owner/sessions/end"]')
+      .evaluateAll((forms) =>
+        forms.map((form) => form.parentElement.textContent),
+      );
+    endedStates.push(
+      sessionRecords.some((text) => /stopping/i.test(text))
+        ? "stopping"
+        : absent
+          ? "awaiting-process-exit"
+          : "present",
+    );
+    await new Promise((ok) => setTimeout(ok, 100));
+  }
+  assert.ok(
+    runtimeGone,
+    "owner end must remove the real runtime host and terminate its controlled adapter within 25 seconds",
+  );
+  assert.equal(
+    await page
+      .getByRole("button", { name: "End session", exact: true })
+      .count(),
+    0,
+  );
   await runtimePage.waitForFunction(
     () => window.consoleFixtureCloseCode === 4415,
   );
@@ -623,6 +671,10 @@ try {
       {
         status: "passed",
         states,
+        sessionEndCleanup: {
+          observed: endedStates,
+          adapterTerminated: runtimeGone,
+        },
         viewports: views,
         pageErrors: errors,
         screenshots,
