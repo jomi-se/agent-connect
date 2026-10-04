@@ -769,7 +769,20 @@ try {
     const page = await appPage(context);
     await requestApproval(page);
     await page.waitForFunction(
-      () => !document.getElementById("chat-input").disabled,
+      () =>
+        !document.getElementById("chat-input").disabled ||
+        document.getElementById("error").textContent,
+    );
+    const connection = await page.evaluate(() => ({
+      disabled: document.getElementById("chat-input").disabled,
+      code: document.getElementById("error").dataset.code,
+      message: document.getElementById("error").textContent,
+    }));
+    if (connection.disabled) report.connectionFailure = connection;
+    assert.equal(
+      connection.disabled,
+      false,
+      `Application connection failed: ${JSON.stringify(connection)}`,
     );
     assert.ok(!new URL(page.url()).searchParams.has("code"));
     assert.equal(await page.locator("#grant-file, #grant-token").count(), 0);
@@ -1503,6 +1516,7 @@ try {
   assert.ok(listedGrants.includes(origin));
   assert.ok(listedGrants.includes("Active"));
   assert.ok(listedGrants.includes("Expires"));
+  const revokedHost = await ownedHost(ownerGrants);
   await ownerGrants
     .getByRole("button", { name: "Revoke access", exact: true })
     .click();
@@ -1540,6 +1554,9 @@ try {
   report.checks.push(
     "gateway owner grants list revokes the actual application grant, clears tab authorization and forbids automatic replay",
   );
+  // Revocation ends authority immediately; boxed cleanup retains capacity until
+  // its owned container/network are gone. Do not replace that gate with a delay.
+  await waitNoLiveSessions(ownerGrants, revokedHost);
   await ownerGrants.close();
   await cancelPage.close();
   const firstGrantPage = await connectPage();
