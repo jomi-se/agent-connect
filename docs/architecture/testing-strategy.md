@@ -23,7 +23,7 @@ an imitation of its events.
 ## Commands
 
 Use Node 24 LTS >=24.15 and <25, Docker and the pinned ACP build tools. Adapter
-pins live in the gateway and session-image manifests. Native browser gates use
+pins live in the gateway and box manifests. Native browser gates use
 `config/webmcp-test-compat.json`.
 
 ```sh
@@ -45,3 +45,11 @@ Diagnostic output lives outside repositories. `AGENT_CONNECT_KEEP_TEST_INSTALLS=
 is an explicit debugging opt-in, never a default. Clean each temporary artifact
 when no active work needs it. A disconnect proves neither that generation
 stopped nor that an already-started application effect did not happen.
+
+Setup acceptance installs the packed launcher and Linux platform package in an
+isolated HOME/XDG environment, builds the local box from their files, and checks
+owner-context hash changes, reuse and failed-build fallback. Box tests check the
+curated tools, one Claude binary selected by the real adapter/SDK, and Codex ACP
+turns without optional voice/code-mode hosts. Runtime proxy and home boundaries
+remain the same; builds use normal network access. See
+[local box decision](../decisions/0017-local-box-build.md).

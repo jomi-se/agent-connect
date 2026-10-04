@@ -229,7 +229,7 @@ harness for a live release.
 1. **Gateway option `--harness-home <dir>`.** It bind-mounts a host directory
    as the box home for every session, in place of the per-session tmpfs or
    the per-grant volume.
-2. **One-time login helper.** It runs the session image interactively with
+2. **One-time login helper.** It runs the box interactively with
    that directory mounted:
    - for Claude Code, `/login` (with a pasted code), and separately
      `claude setup-token`;
@@ -268,7 +268,7 @@ The entrypoint uses umask 077; Codex uses a file credential store in the shared
 home. Existing private files stay in place. Container launch has an explicit
 environment allowlist; no API-key variables are forwarded.
 
-After the local session image is built, the owner runs one command:
+After the local box is built, the owner runs one command:
 
 ```sh
 agent-connect login

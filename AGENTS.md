@@ -8,7 +8,7 @@ live in `docs/plan/current-work.md`; decisions live in `docs/decisions/`.
 Agent Connect lets web applications use an agent the user already owns. It is one product with two components:
 
 - the Rust gateway in `crates/gateway` (CLI `agent-connect`), packaged as
-  `@open-agent-connect/gateway` with a digest-pinned Docker session image;
+  `@open-agent-connect/gateway` with a locally built Docker box;
 - the browser SDK `@open-agent-connect/web`, exported from its package root.
 
 Keep the application-facing API agent- and harness-neutral. Codex, Claude Code
@@ -67,7 +67,7 @@ cargo test --locked   # Rust workspace
 npm run analyze       # report-first metrics; boundary violations are hard failures
 ```
 
-Session images and release artifacts are built as described in
+Boxes and release artifacts are built as described in
 `docs/install/release.md`. CI is read-only.
 
 Run routine checks through `quiet-run` (on PATH; `scripts/quiet-run.sh` is the

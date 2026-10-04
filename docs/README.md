@@ -1,7 +1,7 @@
 # Documentation
 
 Agent Connect is one product: the Rust gateway, npm launcher/platform packages,
-boxed session image and root browser SDK. The standalone chat sample shows the
+boxed box and root browser SDK. The standalone chat sample shows the
 application integration.
 
 - [Mission](mission.md)

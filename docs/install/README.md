@@ -31,17 +31,11 @@ npm install --global ./open-agent-connect-gateway-0.0.1.tgz \
 
 Keep npm optional dependencies enabled: they select the native platform binary.
 The launcher does not download executables at runtime. Adapters and harness CLIs
-are pinned in the Docker session image.
+are pinned in the locally built Docker box.
 
-Archive and checksum-verified shell installers are also available from the
-[versioned release](https://github.com/jomi-se/agent-connect/releases) after
-publication. Archive targets are `aarch64-apple-darwin`,
-`x86_64-unknown-linux-musl` and `aarch64-unknown-linux-musl`, named
-`agent-connect-gateway-<target>.tar.xz`. Verify the matching `SHA256SUMS` before
-extracting an archive or running its downloaded installer. There is no Windows
-installer. `agent-connect release-info` reports the installed version and default
-session image; published binaries pin that image by digest. Local candidates
-need the matching native Docker image supplied by the artifact producer.
+`agent-connect release-info` reports the installed version. Setup builds the box
+locally from files shipped in the npm installation; no prebuilt registry box is
+required. Native archives and checksums are release build artifacts.
 
 ## 2. Run guided setup
 
@@ -50,6 +44,11 @@ For local use:
 ```sh
 agent-connect setup
 ```
+
+Setup announces a local Docker build for your architecture (roughly 1 GB before
+owner additions). Docker downloads the pinned Node base, locked adapters and OS
+tools during this explicit build. Later setup runs reuse the versioned box.
+See [owner box tools](configuration.md#owner-box-tools) to bake in extra tools.
 
 For a gateway behind your HTTPS reverse proxy:
 
@@ -71,13 +70,13 @@ must include its default. Setup reruns preserve these choices and reject
 incompatible changes instead of silently expanding application authority.
 
 The default origin is `http://127.0.0.1:18940`. Setup creates private owner
-configuration, checks the image and owned Docker egress, and installs and starts
+configuration, builds the local box and checks owned Docker egress, and installs and starts
 the user service. It prompts for a hidden owner passphrase of at least 12 characters and
 confirmation. This passphrase signs you in to Agent Connect; provider login is
 separate. Use `--harness codex` to select Codex explicitly.
 
 Run `agent-connect login` yourself to authenticate the dedicated harness home.
-The interactive selector defaults to Codex, whose release image runs unmodified
+The interactive selector defaults to Codex, whose box runs unmodified
 `codex login --device-auth`. Guided setup asks whether to run this interactive
 step; `--login` requests it explicitly. Neither command imports personal harness
 credentials. Read the
@@ -218,7 +217,7 @@ agent-connect doctor
 
 Use `--directory <private-runtime>` when upgrading a non-default runtime, and its
 config for service/doctor commands. Upgrade uses the new installed release's
-session image, updates the owned service executable even when its image is
+box, updates the owned service executable even when its image is
 unchanged, recreates owned egress when needed, and preserves owner
 passphrase, TOTP, grant records, journals and login homes. Image or harness-policy
 changes invalidate existing application authority: pair affected apps again.

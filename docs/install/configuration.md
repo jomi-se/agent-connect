@@ -10,8 +10,7 @@ harness and uses a dedicated platform-default home; `--harness` skips selection,
 home/image. `XDG_STATE_HOME` overrides the platform state root and must be absolute.
 Without a terminal, omitted `--harness` is a usage error, never a silent choice.
 The [install guide](README.md#2-run-guided-setup) explains dedicated login.
-Release builds use the matching
-session image by digest; `release-info` reports its compiled default.
+Setup builds the matching local box; `release-info` reports the gateway version.
 
 Default private runtime: Linux uses
 `$HOME/.local/state/agent-connect/runtime`; macOS uses
@@ -25,10 +24,10 @@ serve; they are not relocated automatically.
 provider login; new owner initialization requires a protected
 `--owner-passphrase-file`. Guided setup confirms application, offers provider
 login and installs/starts the user service. `--no-service` uses another supervisor.
-Existing config and owner state are preserved; conflicting requested changes
-are rejected. Explicit `setup --upgrade` updates the configured session image
-to the installed release default, preserves private authentication/journals and
-login homes, and updates the owned service executable even when the image is
+Existing owner state and application policy are preserved; conflicting requested
+policy changes are rejected. Setup rebuilds and selects the box when the gateway
+version or owner layer changes. All setup runs preserve private authentication, journals and login homes.
+Explicit `setup --upgrade` updates the owned service executable even when the image is
 unchanged. Owned egress is recreated when needed. Changed image or harness
 policy invalidates existing grants; apps must pair again. Service operations accept `--config` and optional
 `--manager systemd|launchd` before `install|uninstall|start|stop|status|logs`.
@@ -43,7 +42,7 @@ can share the existing gateway.
 New setup accepts repeatable `--entry-point <origin>` and `--profile <profile>`
 plus `--permissions <default-profile>`; these choices persist in its config.
 The default profile must be offered. Existing setup reruns require matching
-profile/entry-point choices, and upgrade changes the image only. In contrast,
+profile/entry-point choices, and upgrades preserve those policy choices. In contrast,
 serve flags override configuration for that process without persisting edits.
 
 `serve --config config.json` reads a JSON object with snake_case keys below.
@@ -65,7 +64,7 @@ config, defaults**. Each key supports `AGENT_CONNECT_<UPPER_SNAKE_KEY>`;
 | `token` / `--token`                                   | Headless mode only: required static application bearer; prefer private config                                        |
 | `tools` / `--tools`                                   | Headless mode only: required fixed snapshot JSON array of tool names and schemas                                     |
 | `harness_home` / `--harness-home`                     | Dedicated whole-home read-write bind mount; defaults to the per-harness Agent Connect home                           |
-| `session_image` / `--session-image`                   | Matching release digest; local builds use a versioned local tag                                                      |
+| `box_image` / `--box-image`                           | Local tag selected by setup from gateway version and owner context hash                                              |
 | `egress_container` / `--egress-container`             | Required operator-selected proxy; setup uses `agent-connect-egress`                                                  |
 | `boxed` / `--boxed`                                   | Required true in production; set true by setup                                                                       |
 | `permissions` / `--permissions`                       | Default profile; `sandboxed`, `read-only`, `app-tools-only` or `deny-all`, subject to harness limits                 |
@@ -163,7 +162,7 @@ native filesystem policy on a namespace-capable host.
 
 `RUST_LOG` controls diagnostics. `AGENT_CONNECT_GATEWAY_BIN` overrides the npm
 launcher's executable for local testing. Image selection is also available to
-init/login/egress as `AGENT_CONNECT_SESSION_IMAGE`; egress name as
+init/login/egress as `AGENT_CONNECT_BOX_IMAGE`; egress name as
 `AGENT_CONNECT_EGRESS_CONTAINER`. No API-key environment is forwarded to boxes.
 
 Process exit codes: 0 successful completion/help; 1 runtime/I/O/Docker/login
@@ -283,3 +282,39 @@ app with the exact gateway origin it will use; metadata, consent and tokens stay
 bound to that entry point. Additional hostnames have distinct owner cookies and
 do not import an existing browser sign-in. Cross-entry-point owner POSTs are
 rejected even when both origins are configured.
+
+## Owner box tools
+
+The optional context is `$XDG_CONFIG_HOME/agent-connect/box/`, or
+`$HOME/.config/agent-connect/box/` when XDG_CONFIG_HOME is unset, on Linux and macOS.
+It is separate from the private state root used for owner authentication and
+harness homes. Put a `Dockerfile` here **without a FROM line**, and put any COPY
+inputs in this directory. Only regular files and directories are supported;
+symlinks and special files are rejected so COPY cannot reach gateway state.
+
+Setup generates `FROM agent-connect-box:<version>` and `USER root`, appends your
+instructions, then reasserts `USER node`, `WORKDIR /work` and Agent Connect's
+ENTRYPOINT. Do not set FROM, USER, ENTRYPOINT or ONBUILD in the owner file. For
+example, this adds an OS tool and mise:
+
+```dockerfile
+RUN apt-get update && apt-get install -y --no-install-recommends sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
+```
+
+Build time has normal network access. Running sessions only reach the network
+through the owned egress proxy, so install tools and language runtimes during
+the build. Pin owner tool versions when reproducibility matters. Tools installed
+under root's home are not available to the session user; use shared paths such
+as `/usr/local/bin`.
+
+Run `agent-connect setup` after editing the directory. The resulting tag is
+`agent-connect-box:<version>-<16-character-content-hash>`; unchanged versions
+and directory contents reuse the existing box. Names, bytes, permissions and
+empty directories contribute to the hash, including ignored files. A failed
+Docker build prints Docker's output and keeps the previously configured box in
+use; first installation fails if no previous box exists. `agent-connect doctor`
+reports pending changes with “run agent-connect setup to rebuild”. The owner
+layer stays local and is never published. Sessions receive no build context or
+Docker socket.

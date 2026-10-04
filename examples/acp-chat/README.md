@@ -14,7 +14,8 @@ npm run dev
 Install and set up the matching gateway using the
 [install guide](../../docs/install/README.md). Provider login is an owner-run
 step in a dedicated harness home. For a supplied local candidate, use its
-matching platform tarball and session image. Normal setup starts the user service.
+matching launcher and platform tarballs. Setup builds the local box and starts
+the user service.
 
 Enter the gateway's HTTP or HTTPS address and choose **Connect**. The gateway's
 owner sign-in and consent pages show the application origin and its exact three

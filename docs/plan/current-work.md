@@ -10,7 +10,9 @@ The [release guide](../install/release.md) covers protected automation and local
 validation. [ADR 0016](../decisions/0016-acp-application-boundary.md) was
 accepted on 2026-10-04: ACP is the product vision and chosen open standard.
 ACP, MCP-over-ACP and the resume extension remain unstable. No ACP artifact
-is published.
+is published. [ADR 0017](../decisions/0017-local-box-build.md) replaces registry
+boxes with a smaller local setup build from npm-shipped files and optional owner
+tools; the release has only native builds and npm publication.
 
 Local gates exercise real pinned adapters with deterministic inference. The
 clean-room gate installs release tarballs in a fresh container, builds the
@@ -23,7 +25,7 @@ composition evidence, not live subscription evidence. Native plan conversion
 has contract coverage; the selected pinned harness fixtures expose no plan tool.
 
 The browser SDK is **0.0.10** at `@open-agent-connect/web`; gateway, native
-platform packages and session image are **0.0.1**. Versions are independent and
+platform packages and box are **0.0.1**. Versions are independent and
 remain on 0.0.x until the shape is final. Applications import the ACP browser API from the package root.
 
 Local product parity is complete. `agent-connect setup` provides guided and
@@ -34,11 +36,11 @@ owner sign-out, immutable supported profiles, multiple entry points and offline
 TOTP recovery. The sample automatically recovers interrupted transport without
 replaying uncertain prompts or application effects.
 
-Release qualification reruns `npm run verify` and `cargo test --locked --workspace` against the exact reviewed ACP-only candidate. The artifact-only
+Release qualification reruns `npm run verify:full` and `cargo test --locked --workspace` against the exact reviewed ACP-only candidate. The artifact-only
 clean-room passes 26 checks, including real browser pairing, setup/doctor,
 offline service lifecycle, sessions/end-session, revoke-all, app tools,
 reconnect/cancel and browser back/forward cache restoration. All six owned hosts
-are removed. The owner UI covers twenty states at desktop, phone and 320 px
+are removed. The owner UI covers twenty-four states at desktop, phone and 320 px
 reflow widths, with keyboard/touch checks. The completed
 [parity checklist](../archive/plans/acp-gateway-parity.md) records each capability
 and independent-review outcome.
@@ -63,7 +65,6 @@ Owner-required work:
    Keep login status and live-run evidence in private artifacts, outside this
    product repository.
 2. **First real release run.** Releases publish automatically from `main`
-   ([release process](../install/release.md)). After the first run, make the
-   GHCR session image public, then verify anonymous image pulls, the complete native
+   ([release process](../install/release.md)). After the first run, verify the complete native
    matrix (including native service operation on macOS and Codex filesystem
    policy on a compatible sandbox host) and the public artifact installation path.

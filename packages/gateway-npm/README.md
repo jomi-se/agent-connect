@@ -23,9 +23,13 @@ before login.
 
 The launcher selects a matching native binary through optional npm dependencies;
 keep them enabled. It downloads no executable at launch and exposes no JavaScript
-library API. Pinned ACP adapters and harness CLIs live in the matching session
-image. `agentConnect.adapterVersions` records those pins. Published native
-binaries embed an immutable image digest; `agent-connect release-info` reports it.
+library API. The launcher ships the complete box build recipe and locked adapter
+inputs; platform packages ship the matching static Linux session-runner, including
+Linux ARM64 for Apple Silicon. `agentConnect.adapterVersions` records the pins.
+Setup explicitly builds `agent-connect-box:<version>` locally (roughly 1 GB),
+reuses unchanged builds, and supports local owner tools through the XDG config
+`agent-connect/box/` directory. There is no registry box or second publication
+channel. `agent-connect release-info` reports the gateway version.
 
 See [configuration](https://github.com/jomi-se/agent-connect/blob/main/docs/install/configuration.md),
 [troubleshooting](https://github.com/jomi-se/agent-connect/blob/main/docs/install/troubleshooting.md)

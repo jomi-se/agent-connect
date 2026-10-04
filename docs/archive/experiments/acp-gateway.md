@@ -464,7 +464,7 @@ installation, Safari, grant issuance/consent/revocation and release/ADR approval
 remain open. No personal harness home was opened or modified, and no live model
 turn or interactive login was run during implementation.
 
-The session image also starts both exact pinned CLIs as an unnamed UID/GID
+The box also starts both exact pinned CLIs as an unnamed UID/GID
 12345 with no network and temporary homes. Both harness configuration directories
 are owned by that identity with mode 0700. This validates the non-node-1000 image
 path without logging in or touching a host credential directory.
@@ -478,11 +478,11 @@ retaining its AbortSignal listener.
 ## Product artifact qualification (2026-10-02)
 
 The ACP candidate is now version 0.0.1 across the SDK, Rust gateway,
-npm launcher/platform packages and session-image manifest. SDK tarball checks
+npm launcher/platform packages and box manifest. SDK tarball checks
 verify public ACP imports/types, retained deprecated legacy declarations, no
 tests/maps/local-path leaks and browser-safe output. The launcher no longer
 duplicates harness packages on the host: the exact adapter/CLI pins live in
-its metadata and the matching session image. A fresh npm consumer runs npx help
+its metadata and the matching box. A fresh npm consumer runs npx help
 and version through the packed platform executable.
 
 Operator init validates and copies the snapshot, generates a private random
@@ -493,7 +493,7 @@ maintenance and accepted credential/transcript/config risks. At this stage the w
 an OAuth portal or establish ADR acceptance.
 
 Both Linux cargo-dist archives, the shell installer, local npm publication dry
-runs and the multiarch OCI/native session images build without publication.
+runs and the multiarch OCI/native boxes build without publication.
 All workflow files pass actionlint. The protected release workflow is authored,
 with ADR/tag/reviewer gates, OIDC npm provenance and immutable image references;
 it has not run on GitHub. Ordinary main/PR CI no longer publishes automatically.
@@ -695,7 +695,7 @@ only native conversation-title generation with its exact instruction and title-o
 schema; app prompts and tool-effect counters remain strict against replay.
 
 Both Linux archives, shell installer and npm artifacts were rebuilt locally, as
-were both session-image architectures without push. `cargo test --locked --workspace`,
+were both box architectures without push. `cargo test --locked --workspace`,
 CLI checks, release manifest tests, actionlint and publication dry runs pass.
 Final `npm run verify` passes, including both host and boxed adapter suites,
 the 14-case teardown gate and a fresh consent-based clean-room run. Independent

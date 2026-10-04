@@ -21,8 +21,7 @@ credential contents or owner authentication secrets.
 | `runtime_permissions` | Runtime/state directories must be owned by the invoking user, private (0700), and not symlinks. Use the account that created them.                                                                       |
 | `owner_state`         | Owner-state file must exist and be private (0600). Restore its protected backup or deliberately start a new runtime and pair again. Headless mode reports a warning because it has no hosted owner flow. |
 | `docker_available`    | Start Docker and ensure `docker info` works as the gateway user. Running the gateway as root is not the repair.                                                                                          |
-| `session_image`       | Install the matching session image from the release or local artifact producer, then rerun setup. An unpublished image is not a login failure.                                                           |
-| `session_image_pin`   | A development tag is mutable. Published installations should use the release's digest-pinned image.                                                                                                      |
+| `box_image`           | Run setup to build the local box from the installed npm package. A build failure is not a login failure.                                                                                                 |
 | `egress_owned_ready`  | The configured owned proxy must be running and match the image. Rerun setup for this runtime. A conflicting/foreign container is never replaced automatically.                                           |
 | `harness_home`        | The dedicated home is missing or unsafe. Keep it private and separate from owner state; do not substitute a personal harness home.                                                                       |
 | `login_file_present`  | Credential-file metadata is present. This does not verify the credential, subscription or provider response.                                                                                             |
@@ -48,7 +47,7 @@ session. Windows is unsupported.
 The service definition is owned by a specific runtime. Operations refuse foreign
 or conflicting definitions. Use `setup --upgrade` after installing a new binary:
 it replaces the owned service executable and restarts the service while preserving
-the private runtime and harness home, even when the session image is unchanged.
+the private runtime and harness home, even when the box is unchanged.
 Service logs are bounded
 recent output, rather than a continuous follow stream.
 

@@ -20,6 +20,10 @@ cargo build --locked --bin agent-connect
 cargo test --locked
 ```
 
+Setup builds the box locally from the installed npm context and matching static
+Linux session-runner; optional owner tools use the XDG config `agent-connect/box/`
+directory. See [ADR 0017](../../docs/decisions/0017-local-box-build.md).
+
 The [release guide](../../docs/install/release.md) covers distribution builds.
 `npm run verify` also exercises real pinned Codex and Claude ACP adapters with
 deterministic inference, temporary homes and no provider login. See the

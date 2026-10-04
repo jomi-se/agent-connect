@@ -74,7 +74,7 @@ gained what a web application needs:
    - It restricts session load and resume to sessions the grant created.
    - Installation and operation belong to the product CLI: guided `setup`,
      read-only `doctor`, user-service lifecycle commands and anonymous minimal
-     `/healthz`. Explicit setup upgrade replaces the release image and owned
+     `/healthz`. Setup builds the local box from npm inputs (ADR 0017); upgrade replaces the box and owned
      service executable while preserving private state; changed harness authority
      requires application reapproval. Plugin users initialize a fresh ACP runtime.
    - The owner console manages live sessions, individual/all grants, browser
@@ -143,7 +143,7 @@ Costs and risks:
   resilience until ACP v2 stream resumption exists.
 - Harness tool calls have a default ceiling of about 300 s. Long human waits
   need progress notifications or a receipt-and-follow-up pattern.
-- Per-session images are large (about 2 GB unpacked), although runtime cost is
+- Local boxes use a slim Node base (ADR 0017); runtime cost is
   small (about 0.6–1.5 s start, 80–190 MiB per session).
 
 ## Prerequisites before acceptance

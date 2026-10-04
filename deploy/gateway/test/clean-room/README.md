@@ -2,17 +2,16 @@
 
 Run `node scripts/clean-room.mjs [artifact-directory]` after preparing the
 local release. The default directory is the ignored `dist/release`.
-`AGENT_CONNECT_RELEASE_DIR` overrides it; `ACP_SESSION_IMAGE` and `ACP_CLEAN_ROOM_IMAGE`
+`AGENT_CONNECT_RELEASE_DIR` overrides it; `ACP_BOX_IMAGE` and `ACP_CLEAN_ROOM_IMAGE`
 select local test image tags. `ACP_DOCKER_SOCKET` can select a local socket.
-The release's session image must already be built.
+Setup builds the box from the installed tarball files; no prebuilt box is required.
 
 The directory must contain `release.json`, npm tarballs for the gateway, the
 current Linux platform binary and the web SDK, and `acp-chat-sample.tgz` with a
 `package/` root. Packages are identified by their packed manifests and must
 match `release.version` for gateway/platform packages and `release.sdkVersion`
 for the independently versioned browser SDK. All manifest artifact sizes and SHA256
-checksums are checked before installation. The manifest's `sessionImage` is used
-when present.
+checksums are checked before installation.
 
 The runner builds a fresh Node 24 image with pinned Playwright and Chromium,
 and copies only the CLI binary from a digest-pinned Docker 29 image.
@@ -23,10 +22,10 @@ It never mounts a repository checkout, SDK source or a prior build directory.
 
 The fresh container installs the packed gateway and selected binary, builds the
 standalone reader sample against the packed SDK's public ACP export, then uses
-the CLI's normal owner-bootstrap `init` and `serve --config` flow. The test
-passphrase and HOME/XDG_STATE_HOME directories are isolated fixtures; initialization
+the CLI's normal `setup` local build and `serve --config` flow. The test
+passphrase and HOME/XDG_STATE_HOME/XDG_CONFIG_HOME directories are isolated fixtures; initialization
 creates no static application grant. A real Codex ACP adapter runs in the
-release session image with an isolated synthetic model; no account login,
+release box with an isolated synthetic model; no account login,
 provider API key, personal harness home or live model turn is involved.
 
 Browser checks drive the real gateway owner sign-in, approval and denial pages,
