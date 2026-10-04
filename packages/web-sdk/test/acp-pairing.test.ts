@@ -296,7 +296,7 @@ describe("experimental browser ACP PKCE pairing", () => {
       );
       if (kind === "cancel") {
         popup.closed = true;
-        await vi.advanceTimersByTimeAsync(200);
+        await vi.advanceTimersByTimeAsync(400);
       }
       if (kind === "timeout") await vi.advanceTimersByTimeAsync(500);
       if (kind === "dispose") controller.dispose();
@@ -305,6 +305,31 @@ describe("experimental browser ACP PKCE pairing", () => {
       expect(remove).toHaveBeenCalledWith("message", expect.any(Function));
     },
   );
+  it("accepts a validated callback queued after the popup closes", async () => {
+    vi.useFakeTimers();
+    const popup = {
+      closed: false,
+      location: { href: "about:blank", origin: "null", search: "" },
+      close: vi.fn(),
+    };
+    windowMock.open.mockReturnValue(popup);
+    const controller = pairing();
+    const pending = controller.pair("popup");
+    await vi.waitFor(() => expect(popup.location.href).toContain("/authorize"));
+    popup.closed = true;
+    await vi.advanceTimersByTimeAsync(200);
+    expect(requests).toHaveLength(1);
+    const event = new Event("message");
+    Object.assign(event, {
+      source: popup,
+      origin,
+      data: { type: "agent-connect.acp.callback", url: callback() },
+    });
+    windowMock.dispatchEvent(event);
+    expect((await pending).grantId).toBe("grant-stable");
+    expect(requests).toHaveLength(2);
+    expect(popup.close).toHaveBeenCalled();
+  });
   it("validates popup message source and origin before approval", async () => {
     const popup = {
       closed: false,

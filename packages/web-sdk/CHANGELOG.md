@@ -12,6 +12,8 @@
   CSP-safe tool validation and `createAcpChatTransport` for AI SDK `useChat`.
 - Execute approved application tools inside the ACP transport with stable action
   IDs, cooperative cancellation and explicit recovery without replay.
+- Allow a queued, validated approval callback to arrive after popup closure
+  before reporting cancellation; retain bounded timeout and disposal cleanup.
 - Version independently from the gateway. ACP, MCP-over-ACP and the resume API
   remain unstable; versions stay on 0.0.x until the shape is final.
 

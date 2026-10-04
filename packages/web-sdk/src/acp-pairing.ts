@@ -574,6 +574,7 @@ export class AcpPairing {
   }
   private waitPopup(popup: Window, url: string): Promise<string> {
     return new Promise((resolve, reject) => {
+      let observedClosed = false;
       const finish = (callback?: string, error?: AcpPairingError) => {
         clearInterval(poll);
         clearTimeout(timer);
@@ -593,6 +594,12 @@ export class AcpPairing {
       };
       const poll = setInterval(() => {
         if (popup.closed) {
+          // The callback posts a message and closes. Its queued message may be
+          // delivered after this poll observes closure; allow one poll interval.
+          if (!observedClosed) {
+            observedClosed = true;
+            return;
+          }
           finish(
             undefined,
             new AcpPairingError("cancelled", "Approval window was closed"),
