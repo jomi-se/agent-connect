@@ -109,6 +109,40 @@ fn input(text: &str, name: &str) -> String {
         .replace("&lt;", "<")
         .replace("&amp;", "&")
 }
+fn enrollment_secret(text: &str) -> String {
+    let href = text
+        .split("href='otpauth://")
+        .nth(1)
+        .unwrap()
+        .split('\'')
+        .next()
+        .unwrap();
+    let uri = Url::parse(&format!("otpauth://{}", href.replace("&amp;", "&"))).unwrap();
+    uri.query_pairs()
+        .find(|(key, _)| key == "secret")
+        .unwrap()
+        .1
+        .into_owned()
+}
+
+fn assert_style_hashes(page: &Reply, count: usize) {
+    let styles: Vec<_> = page
+        .text
+        .split("<style>")
+        .skip(1)
+        .map(|style| style.split("</style>").next().unwrap())
+        .collect();
+    assert_eq!(styles.len(), count);
+    let policy = page.headers["content-security-policy"].to_str().unwrap();
+    for style in styles {
+        let digest =
+            base64::engine::general_purpose::STANDARD.encode(Sha256::digest(style.as_bytes()));
+        assert!(policy.contains(&format!("'sha256-{digest}'")));
+    }
+    assert_eq!(policy.matches("'sha256-").count(), count);
+    assert!(!policy.contains("unsafe-inline"));
+}
+
 fn cookie(reply: &Reply) -> String {
     reply.headers[header::SET_COOKIE]
         .to_str()
@@ -561,7 +595,7 @@ async fn logout_owner_and_application_revocation_are_durable() {
     let owner = login(auth, "").await;
     let tokens = pair(auth, &owner, "3600").await;
     let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
-    let revoke_csrf = input(&page.text, "csrf_token");
+    let revoke_csrf = form_token(&page.text, "/agent-connect/owner/grants/revoke");
     assert_eq!(
         request(
             auth,
@@ -736,7 +770,7 @@ async fn authenticator_enrollment_login_approval_and_replay() {
     let fixture = Fixture::new();
     let auth = &fixture.auth;
     let owner = login(auth, "").await;
-    let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+    let page = request(auth, Method::GET, pages::TOTP, None, Some(&owner), &[]).await;
     let csrf = input(&page.text, "csrf_token");
     let page = request(
         auth,
@@ -748,15 +782,26 @@ async fn authenticator_enrollment_login_approval_and_replay() {
     )
     .await;
     assert_eq!(page.status, StatusCode::OK, "{}", page.text);
-    let secret = page
+    assert!(page.text.contains("<svg viewBox="));
+    assert!(page.text.contains("role='img' aria-label='QR code"));
+    let script = page
         .text
-        .split("<code>")
+        .split("<script>")
         .nth(1)
         .unwrap()
-        .split("</code>")
+        .split("</script>")
         .next()
-        .unwrap()
-        .to_string();
+        .unwrap();
+    let digest =
+        base64::engine::general_purpose::STANDARD.encode(Sha256::digest(script.as_bytes()));
+    let policy = page.headers["content-security-policy"].to_str().unwrap();
+    assert!(policy.contains(&format!("script-src 'sha256-{digest}'")));
+    assert!(!policy.contains("unsafe-inline"));
+    assert!(
+        page.text
+            .contains("class='copy-status' role='status' aria-live='polite'")
+    );
+    let secret = enrollment_secret(&page.text);
     assert_eq!(decode_secret(&secret).unwrap().len(), 20);
     let factor = totp(&secret, auth.now() / 30).unwrap();
     let response = request(
@@ -772,7 +817,7 @@ async fn authenticator_enrollment_login_approval_and_replay() {
     )
     .await;
     assert_eq!(response.status, StatusCode::FOUND);
-    assert_eq!(response.headers["location"], OWNER);
+    assert_eq!(response.headers["location"], pages::SECURITY);
     assert_eq!(
         request(auth, Method::GET, OWNER, None, Some(&owner), &[])
             .await
@@ -1013,27 +1058,20 @@ async fn owner_ui_has_labels_empty_states_and_hashed_styles() {
     assert!(policy.contains(&format!("style-src 'sha256-{digest}'")));
     assert!(!policy.contains("unsafe-inline"));
     assert!(policy.contains("frame-ancestors 'none'"));
-    assert!(styles.contains("@media(max-width:600px)"));
+    assert!(styles.contains("@media (max-width:600px)"));
     assert!(styles.contains(":focus-visible"));
-    assert!(styles.contains("h1,h2,h3{overflow-wrap:anywhere}"));
+    assert!(styles.contains("overflow-wrap:anywhere"));
     let owner = login(auth, "").await;
     let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
     assert!(page.text.contains("<main class='page'>"));
-    assert!(
-        page.text
-            .contains("role='group' aria-label='Access summary'")
-    );
-    assert!(page.text.contains("No decisions waiting"));
-    assert!(page.text.contains("No applications approved yet"));
-    assert!(
-        page.text
-            .contains("<label for='enroll-passphrase'>Confirm owner passphrase</label>")
-    );
+    assert!(page.text.contains("No apps yet"));
+    assert!(page.text.contains("aria-label='Owner pages'"));
+    assert!(page.text.contains("href='/agent-connect/owner/totp'"));
     let uri = pushed(auth).await;
     let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
     assert!(page.text.contains("Books &lt;app&gt;"));
-    assert!(page.text.contains("Review request"));
-    assert!(page.text.contains("2023-11-14 22:23 UTC"));
+    assert!(page.text.contains(">Review</a>"));
+    assert!(page.text.contains("request expires"));
     assert!(!page.text.contains("Unix seconds"));
     let page = request(
         auth,
@@ -1044,12 +1082,24 @@ async fn owner_ui_has_labels_empty_states_and_hashed_styles() {
         &[],
     )
     .await;
-    assert!(page.text.contains("View exact input schema"));
-    assert!(page.text.contains("&lt;script&gt;"));
     assert!(
         page.text
-            .contains("<label for='access-duration'>Access duration</label>")
+            .contains("role='region' aria-label='Input schema for read_book'")
     );
+    assert!(page.text.contains("&lt;script&gt;"));
+    assert!(page.text.contains("<legend>Access lasts</legend>"));
+    assert_eq!(page.text.matches("type=radio name=duration").count(), 4);
+    assert!(page.text.contains("type=radio name=profile"));
+    assert!(!page.text.contains("<select"));
+    let first_button = page
+        .text
+        .split("<button")
+        .nth(1)
+        .unwrap()
+        .split("</button>")
+        .next()
+        .unwrap();
+    assert!(first_button.contains("name=decision value=approve>Approve"));
     let policy = page.headers["content-security-policy"].to_str().unwrap();
     assert!(policy.contains("form-action 'self' https://app.example"));
     assert!(policy.contains("style-src 'sha256-"));
@@ -1155,12 +1205,7 @@ async fn owner_error_never_reflects_raw_errors_or_untrusted_return_paths() {
     assert!(!text.contains("evil.example"));
     assert!(!text.contains("<script>"));
     assert!(text.contains("href='/agent-connect/owner'"));
-    assert!(page_csp(None).contains("style-src 'sha256-"));
-    assert_eq!(duration_label(3600), "1 hour");
-    assert_eq!(duration_label(2592000), "30 days");
-    assert!(utc_time(0).contains("1970-01-01 00:00 UTC"));
-    assert!(utc_time(1700000000).contains("2023-11-14 22:13 UTC"));
-    assert!(utc_time(951782400).contains("2000-02-29 00:00 UTC"));
+    assert!(page_csp(None, "", "").contains("style-src 'sha256-"));
 }
 
 #[tokio::test]
@@ -1192,7 +1237,7 @@ async fn overloaded_owner_forms_keep_html_and_security_headers() {
 }
 
 fn form_token(page: &str, action: &str) -> String {
-    let marker = format!("<form method=post action='{action}'>");
+    let marker = format!("action='{action}'>");
     input(
         page.split(&marker)
             .nth(1)
@@ -1252,6 +1297,7 @@ async fn owner_runtime_controls_are_csrf_bound_and_keep_grants() {
                 id: "live-one".into(),
                 grant_id: grant_id.into(),
                 state: "Connected".into(),
+                started_at: auth.now(),
             }],
         },
         ended: Mutex::new(Vec::new()),
@@ -1261,7 +1307,7 @@ async fn owner_runtime_controls_are_csrf_bound_and_keep_grants() {
     assert!(page.text.contains("runtime-problem' role='status"));
     assert!(page.text.contains("Repair &lt;runtime&gt;"));
     assert!(page.text.contains("doctor &amp; review"));
-    assert!(page.text.contains("Live sessions"));
+    assert!(page.text.contains("is connected"));
     assert!(
         !page
             .text
@@ -1323,7 +1369,7 @@ async fn revoke_all_invalidates_grants_and_codes_but_keeps_owner() {
     let refresh_token = tokens["refresh_token"].as_str().unwrap();
     let uri = pushed(auth).await;
     let outstanding_code = code(&consent(auth, &owner, &uri, "approve", "", "3600").await);
-    let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+    let page = request(auth, Method::GET, pages::SECURITY, None, Some(&owner), &[]).await;
     let token = form_token(&page.text, "/agent-connect/owner/grants/revoke-all");
     let bad_origin = request(
         auth,
@@ -1366,7 +1412,7 @@ async fn revoke_all_invalidates_grants_and_codes_but_keeps_owner() {
 }
 
 #[tokio::test]
-async fn forget_browser_expires_owner_cookie_without_revoking_application() {
+async fn logout_expires_owner_cookie_without_revoking_application() {
     let fixture = Fixture::new();
     let auth = &fixture.auth;
     let owner = login(auth, "").await;
@@ -1380,11 +1426,11 @@ async fn forget_browser_expires_owner_cookie_without_revoking_application() {
     .await
     .json();
     let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
-    let token = form_token(&page.text, "/agent-connect/owner/forget-browser");
+    let token = form_token(&page.text, "/agent-connect/owner/logout");
     let reply = request(
         auth,
         Method::POST,
-        "/agent-connect/owner/forget-browser",
+        "/agent-connect/owner/logout",
         Some(ISSUER),
         Some(&owner),
         &[("csrf_token", &token)],
@@ -1518,6 +1564,8 @@ async fn legacy_default_grant_survives_upgrade_and_entry_point_addition() {
     for grant in stored["grants"].as_array_mut().unwrap() {
         grant.as_object_mut().unwrap().remove("profile");
         grant.as_object_mut().unwrap().remove("issuer");
+        grant.as_object_mut().unwrap().remove("approved_at");
+        grant.as_object_mut().unwrap().remove("revoked_at");
     }
     stored.as_object_mut().unwrap().remove("totp_reset_count");
     stored.as_object_mut().unwrap().remove("last_totp_reset_at");
@@ -1528,6 +1576,12 @@ async fn legacy_default_grant_survives_upgrade_and_entry_point_addition() {
         .entry_points
         .push("https://second.example".into());
     let auth = AuthService::open(configuration).unwrap();
+    {
+        let inner = auth.inner.lock().unwrap();
+        assert_eq!(inner.stored.grants[0].approved_at, None);
+        assert_eq!(inner.stored.grants[0].revoked_at, None);
+    }
+
     assert_eq!(
         auth.authenticate(bearer, APP).unwrap().permissions,
         PermissionProfile::Sandboxed
@@ -1842,6 +1896,16 @@ async fn entry_points_pair_with_exact_issuer_and_bind_owner_sessions_to_origin()
         &[],
     )
     .await;
+    let page = request_at(
+        &auth,
+        Method::GET,
+        pages::GATEWAY,
+        None,
+        Some(&owner),
+        Some(SECOND_HOST),
+        &[],
+    )
+    .await;
     assert!(page.text.contains(&format!("href='{SECOND}{OWNER}'")));
     drop(auth);
     fs::remove_dir_all(dir).unwrap();
@@ -1855,7 +1919,15 @@ async fn entry_point_totp_enrollment_and_verification_cannot_cross_origins() {
     configuration.entry_points.push(SECOND.into());
     let auth = AuthService::open(configuration).unwrap();
     let primary_owner = login(&auth, "").await;
-    let page = request(&auth, Method::GET, OWNER, None, Some(&primary_owner), &[]).await;
+    let page = request(
+        &auth,
+        Method::GET,
+        pages::TOTP,
+        None,
+        Some(&primary_owner),
+        &[],
+    )
+    .await;
     let token = form_token(&page.text, "/agent-connect/owner/totp/enroll");
     let cross = request_at(
         &auth,
@@ -1878,15 +1950,8 @@ async fn entry_point_totp_enrollment_and_verification_cannot_cross_origins() {
     )
     .await;
     assert_eq!(enrolled.status, StatusCode::OK, "{}", enrolled.text);
-    let secret = enrolled
-        .text
-        .split("<code>")
-        .nth(1)
-        .unwrap()
-        .split("</code>")
-        .next()
-        .unwrap();
-    let factor = totp(secret, auth.now() / 30).unwrap();
+    let secret = enrollment_secret(&enrolled.text);
+    let factor = totp(&secret, auth.now() / 30).unwrap();
     let token = input(&enrolled.text, "csrf_token");
     let cross = request_at(
         &auth,
@@ -1913,4 +1978,153 @@ async fn entry_point_totp_enrollment_and_verification_cannot_cross_origins() {
     assert!(auth.inner.lock().unwrap().stored.totp_secret.is_some());
     drop(auth);
     fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn owner_sections_require_session_reject_queries_and_removed_route() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let owner = login(auth, "").await;
+    for (path, heading) in [
+        (pages::SECURITY, "Security"),
+        (pages::GATEWAY, "Gateway"),
+        (pages::TOTP, "Set up an authenticator"),
+    ] {
+        let anonymous = request(auth, Method::GET, path, None, None, &[]).await;
+        assert_eq!(anonymous.status, StatusCode::FOUND);
+        assert_eq!(anonymous.headers["location"], LOGIN);
+        let page = request(auth, Method::GET, path, None, Some(&owner), &[]).await;
+        assert_eq!(page.status, StatusCode::OK);
+        assert!(page.text.contains(&format!("<h1>{heading}</h1>")));
+        assert_eq!(
+            request(
+                auth,
+                Method::GET,
+                &format!("{path}?unexpected=1"),
+                None,
+                Some(&owner),
+                &[]
+            )
+            .await
+            .status,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    for method in [Method::GET, Method::POST] {
+        assert_eq!(
+            request(
+                auth,
+                method,
+                "/agent-connect/owner/forget-browser",
+                Some(ISSUER),
+                Some(&owner),
+                &[]
+            )
+            .await
+            .status,
+            StatusCode::NOT_FOUND
+        );
+    }
+}
+
+#[tokio::test]
+async fn grant_activity_times_are_persisted_on_every_revoke_path() {
+    for mode in ["owner", "all", "application", "reuse"] {
+        let fixture = Fixture::new();
+        let auth = &fixture.auth;
+        let owner = login(auth, "").await;
+        let approved = auth.now();
+        let tokens = pair(auth, &owner, "3600").await;
+        {
+            let inner = auth.inner.lock().unwrap();
+            assert_eq!(inner.stored.grants[0].approved_at, Some(approved));
+            assert_eq!(inner.stored.grants[0].revoked_at, None);
+        }
+        advance(auth, 30);
+        match mode {
+            "owner" | "all" => {
+                let (page_path, action) = if mode == "owner" {
+                    (OWNER, "/agent-connect/owner/grants/revoke")
+                } else {
+                    (pages::SECURITY, "/agent-connect/owner/grants/revoke-all")
+                };
+                let page = request(auth, Method::GET, page_path, None, Some(&owner), &[]).await;
+                let token = form_token(&page.text, action);
+                let mut fields = vec![("csrf_token", token.as_str())];
+                if mode == "owner" {
+                    fields.push(("grant_id", tokens["grant_id"].as_str().unwrap()));
+                }
+                assert_eq!(
+                    request(
+                        auth,
+                        Method::POST,
+                        action,
+                        Some(ISSUER),
+                        Some(&owner),
+                        &fields
+                    )
+                    .await
+                    .status,
+                    StatusCode::FOUND
+                );
+            }
+            "application" => {
+                assert_eq!(
+                    request(
+                        auth,
+                        Method::POST,
+                        REVOKE,
+                        Some(APP),
+                        None,
+                        &[
+                            ("client_id", APP),
+                            ("token", tokens["access_token"].as_str().unwrap())
+                        ]
+                    )
+                    .await
+                    .status,
+                    StatusCode::OK
+                );
+            }
+            _ => {
+                let token = tokens["refresh_token"].as_str().unwrap();
+                assert_eq!(refresh(auth, token).await.status, StatusCode::OK);
+                assert_eq!(refresh(auth, token).await.status, StatusCode::BAD_REQUEST);
+            }
+        }
+        let stored: Stored =
+            serde_json::from_slice(&fs::read(fixture.dir.join("authorization.json")).unwrap())
+                .unwrap();
+        assert_eq!(stored.grants[0].approved_at, Some(approved), "{mode}");
+        assert_eq!(stored.grants[0].revoked_at, Some(auth.now()), "{mode}");
+        assert!(stored.grants[0].revoked, "{mode}");
+    }
+}
+
+#[tokio::test]
+async fn consent_client_form_action_and_activity_track_have_hashed_styles() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let owner = login(auth, "").await;
+    let uri = pushed(auth).await;
+    let page = request(
+        auth,
+        Method::GET,
+        &authorize_url(APP, &uri),
+        None,
+        Some(&owner),
+        &[],
+    )
+    .await;
+    assert!(
+        page.headers["content-security-policy"]
+            .to_str()
+            .unwrap()
+            .contains("form-action 'self' https://app.example")
+    );
+    assert_style_hashes(&page, 1);
+    let _ = consent(auth, &owner, &uri, "approve", "", "3600").await;
+    let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+    assert!(page.text.contains("class='track'"));
+    assert_style_hashes(&page, 2);
 }

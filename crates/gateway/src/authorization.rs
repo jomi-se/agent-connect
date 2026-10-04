@@ -97,6 +97,7 @@ pub struct OwnerSession {
     pub id: String,
     pub grant_id: String,
     pub state: String,
+    pub started_at: u64,
 }
 pub trait OwnerRuntime: Send + Sync {
     fn snapshot(&self) -> OwnerRuntimeSnapshot;
@@ -145,6 +146,11 @@ struct Grant {
     tools: Vec<Tool>,
     expires: u64,
     revoked: bool,
+    /// Activity times; absent on grants stored before they were recorded.
+    #[serde(default)]
+    approved_at: Option<u64>,
+    #[serde(default)]
+    revoked_at: Option<u64>,
     access_hash: Option<String>,
     access_expires: u64,
     refresh_hash: Option<String>,
@@ -403,40 +409,6 @@ impl AuthService {
         Ok(enrolled)
     }
 
-    fn profile_choices(&self) -> String {
-        let options = self
-            .config
-            .profiles
-            .iter()
-            .map(|profile| {
-                format!(
-                    "<option value='{}'{}>{}</option>",
-                    profile.as_str(),
-                    if *profile == self.config.default_profile {
-                        " selected"
-                    } else {
-                        ""
-                    },
-                    escape(profile_label(*profile))
-                )
-            })
-            .collect::<String>();
-        let descriptions = self
-            .config
-            .profiles
-            .iter()
-            .map(|profile| {
-                format!(
-                    "<p class='help'><strong>{}</strong>: {}</p>",
-                    escape(profile_label(*profile)),
-                    escape(profile_description(*profile, self.config.harness))
-                )
-            })
-            .collect::<String>();
-        format!(
-            "<div class='field'><label for='restricted-profile'>Restricted profile</label><select id='restricted-profile' name=profile required aria-describedby='profile-help'>{options}</select><div id='profile-help'>{descriptions}</div></div>"
-        )
-    }
     fn grant_profile(&self, grant: &Grant) -> PermissionProfile {
         grant.profile.unwrap_or(self.config.default_profile)
     }
@@ -465,7 +437,8 @@ impl AuthService {
             OWNER,
             LOGIN,
             "/agent-connect/owner/logout",
-            "/agent-connect/owner/forget-browser",
+            pages::SECURITY,
+            pages::GATEWAY,
             "/agent-connect/owner/grants/revoke-all",
             "/agent-connect/owner/sessions/end",
             "/agent-connect/owner/grants/revoke",
@@ -604,16 +577,15 @@ impl AuthService {
         body: &[u8],
         peer: IpAddr,
     ) -> Result<Response> {
-        let runtime_view =
-            if method == Method::GET && (path == OWNER || path == "/agent-connect/owner/totp") {
-                self.runtime
-                    .lock()
-                    .map_err(|_| anyhow!("runtime unavailable"))?
-                    .clone()
-                    .map(|runtime| runtime.snapshot())
-            } else {
-                None
-            };
+        let runtime_view = if method == Method::GET && path == OWNER {
+            self.runtime
+                .lock()
+                .map_err(|_| anyhow!("runtime unavailable"))?
+                .clone()
+                .map(|runtime| runtime.snapshot())
+        } else {
+            None
+        };
         let mut inner = self
             .inner
             .lock()
@@ -666,16 +638,16 @@ impl AuthService {
             let continuation = self.continuation(&inner, &args)?;
             let (session, cookie) = self.session(&mut inner, headers, false)?;
             let csrf = csrf(&mut inner, &session, &format!("login:{continuation}"), now);
-            let factor = if inner.stored.totp_secret.is_some() {
-                "<div class='field'><label for='login-totp'>Authenticator code</label><input id='login-totp' name=totp inputmode=numeric pattern='[0-9]{6}' autocomplete=one-time-code required aria-describedby='login-totp-help'><p id='login-totp-help' class='help'>Enter a fresh six-digit code from your enrolled authenticator.</p></div>"
-            } else {
-                ""
-            };
-            let body = format!(
-                "<div class='compact'><p class='eyebrow'>Gateway owner</p><h1>Sign in to Agent Connect</h1><p class='lede'>Review application requests and manage the access you have approved.</p><form method=post action='{LOGIN}'>{}<div class='field'><label for='owner-passphrase'>Owner passphrase</label><input id='owner-passphrase' type=password name=passphrase autocomplete=current-password required maxlength=1024 aria-describedby='passphrase-help'><p id='passphrase-help' class='help'>Use the passphrase you chose when setting up this gateway. Applications cannot sign in with their access tokens.</p></div>{factor}<div class='actions'><button>Sign in</button></div></form></div>",
-                hidden("csrf_token", &csrf) + &hidden("continue", &continuation)
+            let waiting = args
+                .get("request_uri")
+                .and_then(|uri| inner.pending.get(uri))
+                .map(|pending| pending.client_name.clone());
+            let page = pages::sign_in(
+                &(hidden("csrf_token", &csrf) + &hidden("continue", &continuation)),
+                inner.stored.totp_secret.is_some(),
+                waiting.as_deref(),
             );
-            return Ok(self.with_cookie(html(&body), cookie, &self.request_origin(headers)?));
+            return Ok(self.with_cookie(html(page), cookie, &self.request_origin(headers)?));
         }
         if method == Method::POST && path == LOGIN {
             self.owner_origin(headers)?;
@@ -750,108 +722,151 @@ impl AuthService {
                 &self.request_origin(headers)?,
             ));
         }
-        if method == Method::GET && (path == OWNER || path == "/agent-connect/owner/totp") {
+        if method == Method::GET
+            && [OWNER, pages::SECURITY, pages::GATEWAY, pages::TOTP].contains(&path)
+        {
             let Ok(session) = self.session_id(&inner, headers, true) else {
                 return redirect(LOGIN);
             };
             ensure!(query.is_empty(), "invalid_request");
-            let active_count = inner
-                .stored
-                .grants
-                .iter()
-                .filter(|g| self.grant_active(g, now))
-                .count();
-            let mut body = format!(
-                "<header class='page-heading'><div><p class='eyebrow'>Gateway owner</p><h1>Application access</h1><p class='lede'>Review requests and manage the authority applications hold through your gateway.</p></div><div class='counts' role='group' aria-label='Access summary'><span><strong>{}</strong>Pending</span><span><strong>{active_count}</strong>Active</span></div></header>{}<section class='management' aria-labelledby='pending-title'><header><h2 id='pending-title'>Pending requests</h2><p class='help'>Each request needs your decision and expires automatically.</p></header>",
-                inner.pending.len(),
-                runtime_view.as_ref().map(|view| view.problems.iter().map(|problem| format!("<div class='alert runtime-problem' role='status'><strong>{}</strong><p>{}</p></div>", escape(&problem.message), escape(&problem.repair))).collect::<String>()).unwrap_or_default()
-            );
-            if inner.pending.is_empty() {
-                body.push_str("<div class='empty'><strong>No decisions waiting</strong><p>When an application asks to connect, its request will appear here for you to review.</p></div>");
-            }
-            for (uri, pending) in &inner.pending {
-                body.push_str(&format!("<article class='record'><div class='record-heading'><div><h3>{}</h3><p class='origin'>{}</p></div><span class='status pending'>Pending</span></div><p class='help'>Expires {} · {} application tools</p><div class='actions'><a class='button' href='{}'>Review request</a></div></article>", escape(&pending.client_name), escape(&pending.client), utc_time(pending.expires), pending.tools.len(), escape(&authorize_url(&pending.client, uri))));
-            }
-            body.push_str("</section><section class='management' aria-labelledby='grants-title'><header><h2 id='grants-title'>Approved applications</h2><p class='help'>Access ends when a grant expires or you revoke it. Revocation cannot undo completed effects.</p></header>");
-            if inner.stored.grants.is_empty() {
-                body.push_str("<div class='empty'><strong>No applications approved yet</strong><p>Approved applications will appear here with their exact origin, fixed tools and expiration date.</p></div>");
-            }
-            for grant in inner.stored.grants.clone() {
-                let status = if grant.revoked {
-                    "Revoked"
-                } else if grant.expires <= now {
-                    "Expired"
-                } else if !self.grant_active(&grant, now) {
-                    "Policy changed"
-                } else {
-                    "Active"
-                };
-                let action = if status == "Active" {
-                    let token = csrf(&mut inner, &session, &format!("revoke:{}", grant.id), now);
-                    format!(
-                        "<form method=post action='/agent-connect/owner/grants/revoke'>{}{}<button class='danger'>Revoke access</button></form>",
-                        hidden("csrf_token", &token),
-                        hidden("grant_id", &grant.id)
-                    )
-                } else {
-                    String::new()
-                };
-                body.push_str(&format!("<article class='record'><div class='record-heading'><h3 class='origin'>{}</h3><span class='status {}'>{status}</span></div><p class='help'>Profile: {} · Expires {}{}</p><details class='authority'><summary>View approved tools ({} tool{})</summary>{}</details><div class='actions'>{action}</div></article>", escape(&grant.client), if status == "Active" { "active" } else { "inactive" }, escape(profile_label(self.grant_profile(&grant))), utc_time(grant.expires), if status == "Active" { format!(" · {} remaining", duration_label(grant.expires.saturating_sub(now))) } else { String::new() }, grant.tools.len(), if grant.tools.len() == 1 { "" } else { "s" }, tool_cards(&grant.tools)));
-            }
-            body.push_str("</section><section class='management' aria-labelledby='sessions-title'><header><h2 id='sessions-title'>Live sessions</h2><p class='help'>Ending a session stops its running host and cleans up its resources. The application grant stays active.</p></header>");
-            if let Some(view) = &runtime_view {
-                if view.sessions.is_empty() {
-                    body.push_str("<div class='empty'><strong>No live sessions</strong><p>Sessions appear here while their application hosts remain active.</p></div>");
-                }
-                for runtime_session in &view.sessions {
-                    let token = csrf(
-                        &mut inner,
-                        &session,
-                        &format!("end:{}", runtime_session.id),
-                        now,
-                    );
-                    body.push_str(&format!("<article class='record'><div class='record-heading'><h3 class='origin'>{}</h3><span class='status'>{}</span></div><p class='help origin'>Session {}</p><form method=post action='/agent-connect/owner/sessions/end'>{}{}<div class='actions'><button class='danger'>End session</button></div></form></article>", escape(inner.stored.grants.iter().find(|grant| grant.id == runtime_session.grant_id).map(|grant| grant.client.as_str()).unwrap_or("Application unavailable")), escape(&runtime_session.state), escape(&runtime_session.id), hidden("session_id", &runtime_session.id), hidden("csrf_token", &token)));
-                }
-            } else {
-                body.push_str("<div class='empty'><strong>Session status unavailable</strong><p>Check the gateway runtime before relying on session management.</p></div>");
-            }
-            body.push_str("</section><section class='management' aria-labelledby='profiles-title'><header><h2 id='profiles-title'>Restricted profiles</h2><p class='help'>Choose a configured profile when approving access. A grant keeps its chosen authority until expiry or revocation.</p></header>");
-            for profile in &self.config.profiles {
-                body.push_str(&format!(
-                    "<article class='record'><h3>{}</h3><p class='help'>{}</p></article>",
-                    escape(profile_label(*profile)),
-                    escape(profile_description(*profile, self.config.harness))
-                ));
-            }
-            if self.config.harness == Harness::Codex {
-                body.push_str("<p class='help record'>Deny-all and app-tools-only profiles are unavailable for boxed Codex: native actions can run without permission requests.</p>");
-            } else {
-                body.push_str("<p class='help record'>Codex read-only mode is unavailable for Claude. Claude profiles govern permission requests; they do not guarantee that every native action requests permission.</p>");
-            }
-            body.push_str("</section><section class='management' aria-labelledby='entry-points-title'><header><h2 id='entry-points-title'>Gateway entry points</h2><p class='help'>Use a configured entry point to reach the gateway. Pair applications with the exact entry-point origin they will use. Owner sign-in and consent stay on that origin.</p></header><div class='record'>");
-            for origin in
-                std::iter::once(&self.config.public_url).chain(self.config.entry_points.iter())
-            {
-                body.push_str(&format!(
-                    "<p class='origin'><a href='{}{OWNER}'>{}</a></p>",
-                    escape(origin),
-                    escape(origin)
-                ));
-            }
-            body.push_str("</div>");
-            body.push_str("</section><section class='management' aria-labelledby='security-title'><header><h2 id='security-title'>Owner sign-in security</h2><p class='help'>These controls protect the gateway owner. Application tokens cannot approve new access.</p></header><div class='record'>");
-            if inner.stored.totp_secret.is_none() {
+            if path == pages::TOTP {
+                ensure!(
+                    inner.stored.totp_secret.is_none(),
+                    "factor_already_enrolled"
+                );
                 let token = csrf(&mut inner, &session, "enroll", now);
-                body.push_str(&format!("<h3>Add an authenticator</h3><p class='help'>Require a fresh authenticator code for each owner sign-in and each access approval.</p><form method=post action='/agent-connect/owner/totp/enroll'>{}<div class='field'><label for='enroll-passphrase'>Confirm owner passphrase</label><input id='enroll-passphrase' type=password name=passphrase autocomplete=current-password required maxlength=1024></div><div class='actions'><button class='secondary'>Create enrollment secret</button></div></form>", hidden("csrf_token", &token)));
-            } else {
-                body.push_str("<p class='status active'>Authenticator enrolled</p><p class='help'>A fresh code is required for every sign-in and access approval. Lost the authenticator? The gateway owner can stop the gateway and run agent-connect reset-totp, then sign in with the existing passphrase and enroll again. Application grants stay active.</p>");
+                return Ok(html(pages::totp_start(&hidden("csrf_token", &token))));
             }
-            let forget_token = csrf(&mut inner, &session, "forget-browser", now);
-            let revoke_token = csrf(&mut inner, &session, "revoke-all", now);
-            body.push_str(&format!("</div><div class='record'><h3>Forget this browser</h3><p class='help'>End this owner-console session before leaving a shared device. Application grants stay active.</p><form method=post action='/agent-connect/owner/forget-browser'>{}<div class='actions'><button class='secondary'>Forget this browser</button></div></form></div><div class='record'><h3>Revoke all application access</h3><p class='help'>Revoke all application grants. This browser stays signed in. Completed effects cannot be undone.</p><form method=post action='/agent-connect/owner/grants/revoke-all'>{}<div class='actions'><button class='danger'{}>Revoke all active grants</button></div></form></div>", hidden("csrf_token", &forget_token), hidden("csrf_token", &revoke_token), if active_count == 0 { " disabled" } else { "" }));
-            let token = csrf(&mut inner, &session, "logout", now);
-            body.push_str(&format!("<div class='record'><h3>End this owner session</h3><p class='help'>Sign out before leaving a shared device. Application grants stay active until they expire or are revoked.</p><form method=post action='/agent-connect/owner/logout'>{}<div class='actions'><button class='secondary'>Sign out</button></div></form></div></section>", hidden("csrf_token", &token)));
-            return Ok(html(&body));
+            let logout_token = csrf(&mut inner, &session, "logout", now);
+            let addresses = std::iter::once(&self.config.public_url)
+                .chain(self.config.entry_points.iter())
+                .cloned()
+                .collect::<Vec<_>>();
+            if path == pages::SECURITY {
+                let active_grants = inner
+                    .stored
+                    .grants
+                    .iter()
+                    .filter(|g| self.grant_active(g, now))
+                    .count();
+                let revoke_all_token = csrf(&mut inner, &session, "revoke-all", now);
+                return Ok(html(pages::security(pages::Security {
+                    logout_token,
+                    authenticator: inner.stored.totp_secret.is_some(),
+                    active_grants,
+                    revoke_all_token,
+                })));
+            }
+            if path == pages::GATEWAY {
+                let harness = self.config.harness;
+                return Ok(html(pages::gateway(pages::Gateway {
+                    logout_token,
+                    harness: match harness {
+                        Harness::Codex => "Codex",
+                        Harness::Claude => "Claude Code",
+                    },
+                    addresses,
+                    profiles: self
+                        .config
+                        .profiles
+                        .iter()
+                        .map(|p| (profile_label(*p), profile_description(*p, harness)))
+                        .collect(),
+                    profile_note: if harness == Harness::Codex {
+                        "Deny-all and app-tools-only profiles are unavailable for boxed Codex: its native actions can run without asking permission."
+                    } else {
+                        "Codex read-only mode is unavailable for Claude Code. Claude profiles govern permission requests; native actions that do not ask may still run."
+                    },
+                })));
+            }
+            let requests = inner
+                .pending
+                .iter()
+                .map(|(uri, pending)| pages::Request {
+                    name: pending.client_name.clone(),
+                    origin: pending.client.clone(),
+                    href: authorize_url(&pending.client, uri),
+                    tools: pending.tools.len(),
+                    expires: pending.expires,
+                })
+                .collect();
+            let grants = inner.stored.grants.clone();
+            let live = runtime_view.as_ref().map(|view| {
+                view.sessions
+                    .iter()
+                    .map(|live| pages::Live {
+                        origin: grants
+                            .iter()
+                            .find(|grant| grant.id == live.grant_id)
+                            .map(|grant| grant.client.clone())
+                            .unwrap_or_else(|| "Application unavailable".into()),
+                        id: live.id.clone(),
+                        state: live.state.clone(),
+                        started: live.started_at,
+                        end_token: csrf(&mut inner, &session, &format!("end:{}", live.id), now),
+                    })
+                    .collect()
+            });
+            let mut events = Vec::new();
+            for grant in &grants {
+                let state = if self.grant_active(grant, now) {
+                    pages::GrantState::Active {
+                        grant_id: grant.id.clone(),
+                        revoke_token: csrf(
+                            &mut inner,
+                            &session,
+                            &format!("revoke:{}", grant.id),
+                            now,
+                        ),
+                    }
+                } else if !grant.revoked && grant.expires > now {
+                    pages::GrantState::Paused
+                } else {
+                    pages::GrantState::Ended
+                };
+                events.push(pages::Event {
+                    at: grant.approved_at,
+                    origin: grant.client.clone(),
+                    kind: pages::EventKind::Approved {
+                        profile: profile_label(self.grant_profile(grant)),
+                        tools: grant.tools.clone(),
+                        expires: grant.expires,
+                        lifetime: grant.approved_at.map(|at| grant.expires.saturating_sub(at)),
+                        state,
+                    },
+                });
+                if grant.revoked {
+                    events.push(pages::Event {
+                        at: grant.revoked_at,
+                        origin: grant.client.clone(),
+                        kind: pages::EventKind::Revoked,
+                    });
+                } else if grant.expires <= now {
+                    events.push(pages::Event {
+                        at: Some(grant.expires),
+                        origin: grant.client.clone(),
+                        kind: pages::EventKind::Expired,
+                    });
+                }
+            }
+            return Ok(html(pages::console(pages::Console {
+                now,
+                logout_token,
+                problems: runtime_view
+                    .as_ref()
+                    .map(|view| {
+                        view.problems
+                            .iter()
+                            .map(|problem| (problem.message.clone(), problem.repair.clone()))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                authenticator: inner.stored.totp_secret.is_some(),
+                requests,
+                live,
+                events,
+                addresses,
+            })));
         }
         if method == Method::POST && path == "/agent-connect/owner/sessions/end" {
             self.owner_origin(headers)?;
@@ -992,23 +1007,29 @@ impl AuthService {
                 }
             };
             let token = csrf(&mut inner, &session, &format!("consent:{uri}"), now);
-            let mut response = html(&format!(
-                "<p class='eyebrow'>Application request</p><h1>Allow {}?</h1><p class='lede'>Choose whether this application can use your selected harness through Agent Connect.</p><section class='origin-box' aria-label='Requesting application'><span class='help'>Exact application origin</span><strong class='origin'>{}</strong></section><section aria-labelledby='tools-title'><h2 id='tools-title'>Fixed application tools</h2><p class='help'>Only these tool names, descriptions and exact input schemas are approved by this request.</p>{}</section><section class='notice' aria-labelledby='authority-title'><h2 id='authority-title'>What this access allows</h2><p>The selected profile below bounds native authority inside a disposable box. Application tool effects follow the fixed tool approval. Sessions share a dedicated harness home: a consented application may obtain its dedicated login and read other applications’ transcripts.</p><p>Expiry and revocation stop further authorization; they cannot undo completed effects. ACP and MCP-over-ACP are unstable.</p></section><form method=post action='{AUTHORIZE}'>{}{}<div class='field'><label for='access-duration'>Access duration</label><select id='access-duration' name=duration aria-describedby='duration-help'><option value=3600>1 hour</option><option value=86400>1 day</option><option value=604800>7 days</option><option value=2592000>30 days</option></select><p id='duration-help' class='help'>You can revoke access at any time from the owner console.</p></div>{}{}<div class='actions'><button class='secondary' name=decision value=deny>Deny</button><button name=decision value=approve>Approve</button></div></form>",
-                escape(&pending.client_name),
-                escape(&pending.client),
-                tool_cards(&pending.tools),
-                hidden("request_uri", uri),
-                hidden("csrf_token", &token),
-                self.profile_choices(),
-                if inner.stored.totp_secret.is_some() {
-                    "<div class='field'><label for='approval-totp'>Fresh authenticator code</label><input id='approval-totp' name=totp inputmode=numeric autocomplete=one-time-code pattern='[0-9]{6}' aria-describedby='approval-help'><p id='approval-help' class='help'>A fresh code is required to approve access. You can deny this request without a code.</p></div>"
-                } else {
-                    ""
-                }
-            ));
+            let harness = self.config.harness;
+            let mut response = html(pages::consent(pages::Consent {
+                name: pending.client_name.clone(),
+                origin: pending.client.clone(),
+                tools: pending.tools.clone(),
+                fields: hidden("request_uri", uri) + &hidden("csrf_token", &token),
+                profiles: self
+                    .config
+                    .profiles
+                    .iter()
+                    .map(|profile| pages::ProfileChoice {
+                        value: profile.as_str(),
+                        label: profile_label(*profile),
+                        summary: profile_summary(*profile),
+                        detail: profile_description(*profile, harness),
+                        selected: *profile == self.config.default_profile,
+                    })
+                    .collect(),
+                factor: inner.stored.totp_secret.is_some(),
+            }));
             response.headers_mut().insert(
                 "content-security-policy",
-                HeaderValue::from_str(&page_csp(Some(&pending.client)))?,
+                HeaderValue::from_str(&page_csp(Some(&pending.client), "", ""))?,
             );
             return Ok(response);
         }
@@ -1084,6 +1105,8 @@ impl AuthService {
                 tools: pending.tools.clone(),
                 expires: now + duration,
                 revoked: false,
+                approved_at: Some(now),
+                revoked_at: None,
                 access_hash: None,
                 access_expires: 0,
                 refresh_hash: None,
@@ -1248,6 +1271,9 @@ impl AuthService {
             .iter_mut()
             .find(|g| g.id == id)
             .ok_or_else(|| anyhow!("invalid_grant"))?;
+        if !grant.revoked {
+            grant.revoked_at = Some(self.now());
+        }
         grant.revoked = true;
         grant.access_hash = None;
         grant.refresh_hash = None;
@@ -1287,16 +1313,12 @@ impl AuthService {
         let session = self.session_id(inner, headers, true)?;
         let now = self.now();
         match path {
-            "/agent-connect/owner/logout" | "/agent-connect/owner/forget-browser" => {
+            "/agent-connect/owner/logout" => {
                 let form = form(headers, body, &["csrf_token"])?;
                 consume_csrf(
                     inner,
                     &session,
-                    if path.ends_with("forget-browser") {
-                        "forget-browser"
-                    } else {
-                        "logout"
-                    },
+                    "logout",
                     required(&form, "csrf_token")?,
                     now,
                 )?;
@@ -1338,6 +1360,7 @@ impl AuthService {
                 for grant in &mut next.grants {
                     if !grant.revoked {
                         grant.revoked = true;
+                        grant.revoked_at = Some(now);
                         grant.access_hash = None;
                         grant.refresh_hash = None;
                         grant.access_expires = 0;
@@ -1384,11 +1407,10 @@ impl AuthService {
                     .append_pair("algorithm", "SHA1")
                     .append_pair("digits", "6")
                     .append_pair("period", "30");
-                Ok(html(&format!(
-                    "<div class='compact'><p class='eyebrow'>Owner sign-in security</p><h1>Enroll authenticator</h1><p class='lede'>Add this secret to your authenticator, then enter a code to confirm enrollment.</p><section class='origin-box'><span class='help'>Enrollment secret — keep this private</span><code>{}</code></section><p><a href='{}'>Open authenticator</a></p><p class='help'>This enrollment expires in 10 minutes. After confirmation, a fresh code is required for sign-in and access approval. Keep access to the authenticator; recovery is not available through this page.</p><form method=post action='/agent-connect/owner/totp/verify'>{}<div class='field'><label for='enrollment-totp'>Authenticator code</label><input id='enrollment-totp' name=totp inputmode=numeric autocomplete=one-time-code pattern='[0-9]{{6}}' required></div><div class='actions'><a class='button secondary' href='/agent-connect/owner'>Back to owner console</a><button>Confirm enrollment</button></div></form></div>",
-                    escape(&secret),
-                    escape(uri.as_str()),
-                    hidden("csrf_token", &token)
+                Ok(html(pages::totp_scan(
+                    &secret,
+                    uri.as_str(),
+                    &hidden("csrf_token", &token),
                 )))
             }
             "/agent-connect/owner/totp/verify" => {
@@ -1419,7 +1441,7 @@ impl AuthService {
                 // Keep the verifying owner, invalidate peers that never verified this factor.
                 inner.sessions.retain(|id, _| id == &session);
                 inner.csrf.clear();
-                redirect(OWNER)
+                redirect(pages::SECURITY)
             }
             _ => bail!("invalid_request"),
         }
@@ -1866,6 +1888,18 @@ fn profile_label(profile: PermissionProfile) -> &'static str {
         PermissionProfile::AppToolsOnly => "Application tool permission requests only",
     }
 }
+fn profile_summary(profile: PermissionProfile) -> &'static str {
+    match profile {
+        PermissionProfile::Sandboxed => "Its own tools run freely inside a disposable box.",
+        PermissionProfile::ReadOnly => "Its own tools can read but not write.",
+        PermissionProfile::DenyAll => {
+            "Permission requests are denied; actions that do not ask may still run."
+        }
+        PermissionProfile::AppToolsOnly => {
+            "Only this app’s tool requests are allowed; actions that do not ask may still run."
+        }
+    }
+}
 fn profile_description(profile: PermissionProfile, harness: Harness) -> &'static str {
     match profile {
         PermissionProfile::Sandboxed => {
@@ -1974,34 +2008,40 @@ fn hidden(name: &str, value: &str) -> String {
         escape(value)
     )
 }
-// Fixed styles are authorized by their SHA-256 CSP hash, never unsafe-inline.
-const PAGE_STYLES: &str = r#":root{color-scheme:light;--ground:#f4f5f2;--paper:#fff;--ink:#202d2c;--muted:#566463;--line:#d7dfdb;--accent:#205e58;--soft:#edf5f1;--danger:#a52e27;font:16px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:var(--ground);color:var(--ink)}a{color:var(--accent);text-underline-offset:.18em}.page{max-width:64rem;margin:0 auto;padding:clamp(1rem,4vw,3rem)}.page--compact{max-width:40rem}.brand{display:flex;align-items:center;gap:.6rem;font-weight:750;letter-spacing:-.025em;margin:0 0 1.2rem}.brand-mark{width:.65rem;height:.65rem;border-radius:50%;background:#ce7849;box-shadow:.9rem 0 var(--accent),1.8rem 0 #7861ad;margin-right:1.9rem}.surface{background:var(--paper);border:1px solid var(--line);border-radius:1rem;padding:clamp(1.25rem,4vw,2.5rem);box-shadow:0 .6rem 2rem #202d2c08}.compact{max-width:32rem;margin:auto}.eyebrow{margin:0 0 .35rem;color:var(--accent);font-size:.8rem;font-weight:750;letter-spacing:.07em;text-transform:uppercase}h1,h2,h3{overflow-wrap:anywhere}h1{margin:0;font-size:clamp(1.8rem,5vw,2rem);line-height:1.2;letter-spacing:-.035em}h2{margin:0;font-size:1.15rem;line-height:1.35}h3{margin:0;font-size:1rem}.lede{margin:.75rem 0 1.75rem;color:var(--muted);max-width:65ch}.help{color:var(--muted);font-size:.9rem;margin:.4rem 0 0}.field{display:grid;gap:.45rem;margin:1.4rem 0}.field label{font-weight:650}input,select,button{font:inherit}input,select{width:100%;min-height:3rem;padding:.7rem .85rem;border:1px solid #97a9a3;border-radius:.55rem;background:var(--paper);color:var(--ink)}button,.button{display:inline-flex;align-items:center;justify-content:center;min-height:2.9rem;padding:.65rem 1rem;border:1px solid transparent;border-radius:.55rem;background:var(--accent);color:white;font-weight:700;cursor:pointer;text-decoration:none}button:hover,.button:hover{background:#174a44}.secondary{background:white;color:var(--ink);border-color:#97a9a3}.secondary:hover{background:var(--ground)}.danger{background:white;color:var(--danger);border-color:#d5aaa5}.danger:hover{background:#fff0ec}button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,summary:focus-visible,pre:focus-visible{outline:3px solid #8062b7;outline-offset:3px}.actions{display:flex;align-items:center;justify-content:flex-end;gap:.75rem;flex-wrap:wrap;margin:1.4rem 0 0}.origin{overflow-wrap:anywhere;word-break:break-word}.origin-box{display:grid;gap:.35rem;background:var(--soft);border:1px solid #cfdfd6;border-radius:.6rem;padding:1rem;margin:1.5rem 0}.origin-box code{overflow-wrap:anywhere;letter-spacing:.05em}.notice{background:#fff8ec;border-left:3px solid #b48435;border-radius:.35rem;padding:1rem 1.2rem;margin:1.6rem 0;font-size:.9rem}.notice p:last-child{margin-bottom:0}.tool{margin:.8rem 0;padding:1rem;border:1px solid var(--line);border-radius:.6rem}.tool p{margin:.4rem 0 .7rem;overflow-wrap:anywhere}.tool h3 code{font-size:.95rem}summary{min-height:2.75rem;padding-block:.4rem;cursor:pointer;font-weight:650;color:var(--accent)}pre{overflow:auto;max-height:28rem;padding:.85rem;background:var(--ground);border-radius:.4rem;font: .85rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:2}.management{margin-top:1.3rem;border:1px solid var(--line);border-radius:.65rem;overflow:hidden}.management>header{padding:1rem 1.2rem;background:#f7f9f6;border-bottom:1px solid var(--line)}.record{padding:1.1rem 1.2rem}.record+.record{border-top:1px solid var(--line)}.record-heading,.page-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}.page-heading .lede{margin-bottom:0}.counts{display:flex;border:1px solid var(--line);border-radius:.55rem;flex-shrink:0}.counts span{display:grid;padding:.6rem 1rem;font-size:.8rem;color:var(--muted)}.counts span+span{border-left:1px solid var(--line)}.counts strong{font-size:1.25rem;color:var(--ink);font-variant-numeric:tabular-nums}.status{font-size:.8rem;font-weight:750;white-space:nowrap;padding:.2rem .6rem;border-radius:2rem}.active{background:#e8f4ec;color:#22643e}.pending{background:#fff4d9;color:#785513}.inactive{background:var(--ground);color:var(--muted)}.authority{margin-top:.8rem}.empty{margin:1rem;padding:1rem;border-radius:.5rem;background:var(--ground)}.empty p{margin:.35rem 0 0;color:var(--muted)}.alert{border:1px solid #e5bfb6;border-radius:.6rem;background:#fff1eb;color:#823c2c;padding:1rem;margin:1rem 0}.alert p{margin:.4rem 0 0}.footer-note{text-align:center;color:var(--muted);font-size:.8rem;margin:1rem 0 0}time{font-variant-numeric:tabular-nums}@media(max-width:600px){.page{padding:1rem}.surface{padding:1.15rem;border-radius:.7rem}.page-heading,.record-heading{flex-direction:column;gap:.7rem}.counts{width:100%}.counts span{flex:1}.actions{display:grid;grid-template-columns:1fr}.actions form,button,.button{width:100%}.record,.management>header{padding:1rem}.status{align-self:flex-start}h1{font-size:1.8rem}}
-"#;
-
-fn page_csp(client: Option<&str>) -> String {
-    let digest =
-        base64::engine::general_purpose::STANDARD.encode(Sha256::digest(PAGE_STYLES.as_bytes()));
+// Styles are authorized by their SHA-256 CSP hashes, never unsafe-inline.
+fn page_csp(client: Option<&str>, dynamic_css: &str, script: &str) -> String {
+    let digest = |css: &str| {
+        format!(
+            "'sha256-{}'",
+            base64::engine::general_purpose::STANDARD.encode(Sha256::digest(css.as_bytes()))
+        )
+    };
+    let mut styles = digest(pages::STYLES);
+    if !dynamic_css.is_empty() {
+        styles = format!("{styles} {}", digest(dynamic_css));
+    }
+    let scripts = if script.is_empty() {
+        String::new()
+    } else {
+        format!("; script-src {}", digest(script))
+    };
     format!(
-        "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'{}; style-src 'sha256-{digest}'",
+        "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'{}; style-src {styles}{scripts}",
         client
             .map(|origin| format!(" {origin}"))
             .unwrap_or_default()
     )
 }
 
-fn html(body: &str) -> Response {
-    let page_class = if body.starts_with("<div class='compact'>") {
-        "page page--compact"
-    } else {
-        "page"
-    };
-    Response::builder().header(header::CONTENT_TYPE,"text/html; charset=utf-8")
-        .header("content-security-policy",page_csp(None))
-        .body(Body::from(format!("<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='color-scheme' content='light'><title>Agent Connect · Owner access</title><style>{PAGE_STYLES}</style></head><body><main class='{page_class}'><p class='brand'><span class='brand-mark' aria-hidden='true'></span>Agent Connect</p><section class='surface'>{body}</section><p class='footer-note'>This authorization surface is served by your own gateway.</p></main></body></html>"))).unwrap()
-}
-
-fn tool_cards(tools: &[Tool]) -> String {
-    tools.iter().map(|tool|format!("<article class='tool'><h3><code>{}</code></h3><p>{}</p><details><summary>View exact input schema</summary><pre tabindex='0' role='region' aria-label='Input schema for {}'>{}</pre></details></article>",escape(&tool.name),escape(&tool.description),escape(&tool.name),escape(&serde_json::to_string_pretty(&tool.schema).expect("serializable schema")))).collect()
+fn html(page: pages::Page) -> Response {
+    Response::builder()
+        .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+        .header(
+            "content-security-policy",
+            page_csp(None, &page.dynamic_css, page.script),
+        )
+        .body(Body::from(pages::document(&page)))
+        .unwrap()
 }
 
 fn owner_error(status: StatusCode, reason: &str, path: &str) -> Response {
@@ -2032,7 +2072,7 @@ fn owner_error(status: StatusCode, reason: &str, path: &str) -> Response {
         ),
         "invalid_enrollment" => (
             "Enrollment expired",
-            "Create a new enrollment secret from the owner console and confirm it within 10 minutes.",
+            "Start authenticator setup again from Security and finish it within 10 minutes.",
         ),
         "factor_already_enrolled" => (
             "Authenticator already enrolled",
@@ -2055,50 +2095,11 @@ fn owner_error(status: StatusCode, reason: &str, path: &str) -> Response {
         if path == LOGIN || matches!(reason, "owner_login_required" | "invalid_session") {
             (LOGIN, "Return to sign-in")
         } else {
-            (OWNER, "Return to owner console")
+            (OWNER, "Back to Activity")
         };
-    let mut response = html(&format!(
-        "<div class='compact'><p class='eyebrow'>Owner access</p><h1>{}</h1><div class='alert' role='alert'><p>{}</p></div><p class='help'>Return through the link below to load a fresh form. Submitted passphrases, codes and application data are never shown here.</p><div class='actions'><a class='button' href='{target}'>{label}</a></div></div>",
-        escape(title),
-        escape(message)
-    ));
+    let mut response = html(pages::error(title, message, target, label));
     *response.status_mut() = status;
     response
-}
-
-fn duration_label(seconds: u64) -> String {
-    let (value, unit) = if seconds >= 86400 {
-        (seconds / 86400, "day")
-    } else if seconds >= 3600 {
-        (seconds / 3600, "hour")
-    } else if seconds >= 60 {
-        (seconds / 60, "minute")
-    } else {
-        return "less than 1 minute".into();
-    };
-    format!("{value} {unit}{}", if value == 1 { "" } else { "s" })
-}
-
-fn utc_time(seconds: u64) -> String {
-    // Gregorian civil-date conversion keeps presentation independent of locale
-    // and local machine timezone, without adding a date library dependency.
-    let days = (seconds / 86400) as i64 + 719468;
-    let era = (if days >= 0 { days } else { days - 146096 }) / 146097;
-    let day_of_era = days - era * 146097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
-    let mut year = year_of_era + era * 400;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_prime = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
-    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
-    year += i64::from(month <= 2);
-    let hour = seconds % 86400 / 3600;
-    let minute = seconds % 3600 / 60;
-    let second = seconds % 60;
-    format!(
-        "<time datetime='{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z'>{year:04}-{month:02}-{day:02} {hour:02}:{minute:02} UTC</time>"
-    )
 }
 
 fn json_response(status: StatusCode, value: Value) -> Response {
@@ -2174,6 +2175,7 @@ fn verify_totp(secret: &str, code: &str, now: u64, last: Option<u64>) -> Result<
     matched.ok_or_else(|| anyhow!("invalid_factor"))
 }
 
+mod pages;
 #[cfg(test)]
 mod tests;
 

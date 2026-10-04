@@ -236,7 +236,7 @@ try {
     "profile-readonly",
     "sample-auto-recovery",
     "sessions-end",
-    "forget-browser",
+    "logout",
     "revoke-all",
     "runtime-problem",
   ])

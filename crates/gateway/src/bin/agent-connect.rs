@@ -176,7 +176,7 @@ impl OwnerRuntime for ConsoleRuntime {
             if session.state == "cleanup-failed" {
                 problems.push(OwnerProblem { message: "A session could not release its Docker resources. Capacity remains held.".into(), repair: "Run agent-connect doctor and inspect agent-connect service logs before restarting.".into() });
             }
-            OwnerSession { id: session.id, grant_id: session.grant_id, state: session.state.into() }
+            OwnerSession { id: session.id, grant_id: session.grant_id, state: session.state.into(), started_at: session.started_at }
         }).collect();
         OwnerRuntimeSnapshot { problems, sessions }
     }

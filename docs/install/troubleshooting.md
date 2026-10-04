@@ -33,7 +33,7 @@ credential contents or owner authentication secrets.
 
 `/healthz` is credential-free HTTP readiness. HTTP success is not evidence of
 provider authentication or an end-to-end application turn. Check the owner
-console's runtime banner and verify a sample tool call after provider login.
+Activity page's runtime banner and verify a sample tool call after provider login.
 
 ## Setup or service stopped halfway
 
@@ -66,7 +66,7 @@ WebSocket subprotocol headers and never inject bearer credentials.
 | 4403             | Match the approved application origin.                                                               |
 | 4404, 4410, 4413 | Session expired: recover deliberately, preserving the transcript and avoiding uncertain turn replay. |
 | 4409, 4415       | Another attachment owns the session: use that attachment or start a new session explicitly.          |
-| 4418             | Wait for capacity, end an unused live session in the console, or investigate failed cleanup.         |
+| 4418             | Wait for capacity, end an unused live session in Activity, or investigate failed cleanup.            |
 | 4500             | Check service logs and doctor for adapter/container launch failures.                                 |
 | 1009             | Reduce the serialized frame below 1 MiB; this terminal failure must not be retried unchanged.        |
 
@@ -99,8 +99,8 @@ For a non-default runtime, pass the same config to both service commands.
 user and refuses to proceed while the gateway holds its exclusive state lock.
 It clears the enrolled factor and its replay counter while preserving the owner
 passphrase and application grants. It records recovery count/time without
-printing any secret. Sign in with the existing passphrase and enroll a new
-authenticator. Recovery does not grant access to a lost owner passphrase or
+printing any secret. Sign in with the existing passphrase and set up a new
+authenticator from Security. Recovery does not grant access to a lost owner passphrase or
 authenticate the provider.
 
 ## Docker cleanup and capacity

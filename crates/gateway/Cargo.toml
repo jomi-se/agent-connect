@@ -17,6 +17,7 @@ rpassword = "7"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 argon2 = "0.5"
 base64 = "0.22"
+qrcodegen = "1.8"
 hmac = "0.12"
 rand = "0.8"
 sha1 = "0.10"
