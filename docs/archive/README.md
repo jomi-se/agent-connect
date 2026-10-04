@@ -20,7 +20,7 @@ subscription, ingress or mobile behavior by remaining in the tree.
 
 - [ACP gateway spike](plans/acp-gateway-spike.md) and
   [mobile resume](plans/acp-gateway-mobile-resume.md): completed experiments
-  that led to the product gateway and ADR 0016 (proposed).
+  that led to the product gateway and ADR 0016 (accepted 2026-10-04).
 
 ## Agent Connect plugin for OpenClaw (ADR 0015)
 

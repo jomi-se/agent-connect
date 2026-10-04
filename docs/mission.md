@@ -12,8 +12,10 @@ home. Application contracts stay agent- and harness-neutral.
 The product is the ACP gateway (`agent-connect`) plus `@open-agent-connect/web`
 at the package root. The SDK pairs through owner-hosted OAuth consent, connects
 an ACP provider and supplies `createAcpChatTransport` for AI SDK `useChat`.
-ACP, MCP-over-ACP and the resume extension remain unstable under proposed
-[ADR 0016](decisions/0016-acp-application-boundary.md).
+ACP is the chosen open standard for this product, established by
+[ADR 0016](decisions/0016-acp-application-boundary.md), accepted on 2026-10-04.
+ACP, MCP-over-ACP and the resume extension remain unstable as the standard and
+its extensions evolve.
 
 ## Authority and reliability
 

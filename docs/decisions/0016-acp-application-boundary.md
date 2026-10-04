@@ -1,12 +1,12 @@
 # ADR 0016: ACP application boundary and consent-enforcing ACP gateway
 
-Status: proposed; ACP gateway implementation exists, but formal acceptance and publication remain owner gates.
+Status: accepted (2026-10-04); the owner selected ACP as the current product vision and open, still-evolving standard, filling the role Open Responses had in the earlier direction. Protocol instability remains explicit; publication requires separate owner authorization.
 
 Date: 2026-09-30. The owner selected ACP
 as the product direction and retired the superseded plugin implementation on
 2026-10-03. [ADR 0010](0010-open-responses-gateway-pivot.md) and
 [ADR 0015](0015-openclaw-plugin-host.md) preserve historical context.
-Formal acceptance of the ACP decision and publication remain owner gates.
+The owner accepted the ACP decision on 2026-10-04. Publication remains an owner gate.
 
 Evidence: [ACP gateway spike results](../archive/experiments/acp-gateway.md).
 
@@ -42,7 +42,7 @@ gained what a web application needs:
 - official Rust and TypeScript SDKs;
 - maintained adapters for Codex, Claude Code and other harnesses.
 
-## Proposed decision
+## Decision
 
 1. **Application wire: ACP over WebSocket.** Applications speak ACP v1 and
    offer their tools as one MCP-over-ACP server, declared in session setup.

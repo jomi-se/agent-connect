@@ -7,7 +7,10 @@ The ACP product candidates are gateway **0.0.1** and root browser SDK
 helper (`agent-connect login`, harness selector and shared default homes), boxed sessions, resumable transport/recovery and AI SDK useChat.
 The [artifact install guide](../install/README.md) works without a checkout.
 The [release guide](../install/release.md) covers protected automation and local
-validation. ADR 0016 remains proposed and no ACP artifact is published.
+validation. [ADR 0016](../decisions/0016-acp-application-boundary.md) was
+accepted on 2026-10-04: ACP is the product vision and chosen open standard.
+ACP, MCP-over-ACP and the resume extension remain unstable. No ACP artifact
+is published.
 
 Local gates exercise real pinned adapters with deterministic inference. The
 clean-room gate installs release tarballs in a fresh container, builds the
@@ -66,6 +69,3 @@ Owner-required work:
    matrix (including native service operation on macOS and Codex filesystem
    policy on a compatible sandbox host) and the public artifact installation path. None of
    these account/GitHub/registry actions has been performed locally.
-3. **ADR 0016 acceptance.** Decide whether the implemented hosted authorization and
-   shared-home credential boundary are acceptable, and accept the decision
-   explicitly before the publication workflow can proceed.
