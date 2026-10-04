@@ -53,3 +53,7 @@ curated tools, one Claude binary selected by the real adapter/SDK, and Codex ACP
 turns without optional voice/code-mode hosts. Runtime proxy and home boundaries
 remain the same; builds use normal network access. See
 [local box decision](../decisions/0017-local-box-build.md).
+
+Native WebMCP gates allocate a free loopback port and a fresh results directory.
+`WEBMCP_PORT` and `PLAYWRIGHT_OUTPUT_DIR` provide explicit overrides. The selected
+values are shared with test workers, so gates can run alongside existing previews.
