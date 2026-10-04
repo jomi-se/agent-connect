@@ -1,4 +1,4 @@
-name: ACP release candidate
+name: Release candidate
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: acp-release-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -87,16 +87,16 @@ jobs:
           JS
       - run: npm ci
       - name: Check package versions and adapter pins
-        run: node scripts/acp-release.mjs check
+        run: node scripts/release.mjs check
       - name: Install pinned build, provider and browser tools
         run: |
-          ./scripts/install-acp-build-tools.sh
+          ./scripts/install-build-tools.sh
           ./scripts/install-ci-test-tools.sh
       - name: Prepare credential-free local candidate and clean-room artifacts
         run: |
           docker info
-          ./deploy/acp-gateway/session/build-local.sh --native-only
-          node scripts/build-acp-release-local.mjs
+          ./deploy/gateway/session/build-local.sh --native-only
+          node scripts/build-release-local.mjs
       - name: Run credential-free product verification
         run: npm run verify:full
       - name: Check Rust, lint and dependency boundaries
@@ -108,8 +108,8 @@ jobs:
       - name: Preserve the local candidate for environment reviewers
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: acp-verified-local-${{ steps.authority.outputs.version }}
-          path: dist/acp-release/
+          name: verified-local-${{ steps.authority.outputs.version }}
+          path: dist/release/
           if-no-files-found: error
           retention-days: 14
 
@@ -130,15 +130,15 @@ jobs:
         with:
           node-version: 24.15.0
           package-manager-cache: false
-      - run: ./scripts/install-acp-build-tools.sh
+      - run: ./scripts/install-build-tools.sh
       - name: Cross-build both static session runners locally
-        run: ./deploy/acp-gateway/session/build-local.sh --runners-only
+        run: ./deploy/gateway/session/build-local.sh --runners-only
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Export OCI image only
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          file: deploy/acp-gateway/session/Dockerfile
+          file: deploy/gateway/session/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: false
           tags: agent-connect-session:${{ needs.checks.outputs.version }}
@@ -150,7 +150,7 @@ jobs:
         run: printf 'ref=agent-connect-session:%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: acp-session-image-oci-${{ needs.checks.outputs.version }}
+          name: session-image-oci-${{ needs.checks.outputs.version }}
           path: ${{ runner.temp }}/agent-connect-session.oci.tar
           if-no-files-found: error
           compression-level: 0
@@ -177,8 +177,8 @@ jobs:
         with:
           node-version: 24.15.0
           package-manager-cache: false
-      - run: ./scripts/install-acp-build-tools.sh
-      - run: ./deploy/acp-gateway/session/build-local.sh --runners-only
+      - run: ./scripts/install-build-tools.sh
+      - run: ./deploy/gateway/session/build-local.sh --runners-only
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Authenticate GHCR with the ephemeral job token
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -191,7 +191,7 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          file: deploy/acp-gateway/session/Dockerfile
+          file: deploy/gateway/session/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ needs.checks.outputs.image_registry }}:${{ needs.checks.outputs.version }}
@@ -233,7 +233,7 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24.15.0
-      - run: ./scripts/install-acp-build-tools.sh
+      - run: ./scripts/install-build-tools.sh
       - name: Require the exact selected image for every binary
         env:
           PUBLISH: ${{ inputs.publish }}
@@ -251,10 +251,10 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           VERSION: ${{ needs.checks.outputs.version }}
-        run: node scripts/acp-release-info.mjs record --target "$TARGET" --version "$VERSION" --image "$AGENT_CONNECT_SESSION_IMAGE"
+        run: node scripts/release-info.mjs record --target "$TARGET" --version "$VERSION" --image "$AGENT_CONNECT_SESSION_IMAGE"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: acp-native-${{ matrix.target }}
+          name: native-${{ matrix.target }}
           path: |
             target/distrib/*.tar.xz
             target/distrib/*.sha256
@@ -284,10 +284,10 @@ jobs:
           cache: npm
       - run: npm install --global npm@11.19.1
       - run: npm ci
-      - run: ./scripts/install-acp-build-tools.sh
+      - run: ./scripts/install-build-tools.sh
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          pattern: acp-native-*
+          pattern: native-*
           path: target/distrib
           merge-multiple: true
       - name: Generate the global shell installer without rebuilding binaries
@@ -298,21 +298,21 @@ jobs:
         env:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          mkdir -p dist/acp-release
-          cp target/distrib/*.sha256 dist/acp-release/
+          mkdir -p dist/release
+          cp target/distrib/*.sha256 dist/release/
           options=()
           if [[ "$DRY_RUN" == "true" ]]; then options+=(--local); fi
-          node scripts/acp-release.mjs pack --image "$AGENT_CONNECT_SESSION_IMAGE" "${options[@]}" --artifacts target/distrib --directory dist/acp-release
+          node scripts/release.mjs pack --image "$AGENT_CONNECT_SESSION_IMAGE" "${options[@]}" --artifacts target/distrib --directory dist/release
       - name: Smoke-test the exact SDK tarball
         env:
           VERSION: ${{ needs.checks.outputs.sdk_version }}
-        run: node scripts/smoke-web-sdk-package.mjs "dist/acp-release/open-agent-connect-web-$VERSION.tgz"
+        run: node scripts/smoke-web-sdk-package.mjs "dist/release/open-agent-connect-web-$VERSION.tgz"
       - name: Preview npm publication without credentials or writes
-        run: node scripts/acp-release.mjs publish-dry-run --directory dist/acp-release
+        run: node scripts/release.mjs publish-dry-run --directory dist/release
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: acp-release-${{ needs.checks.outputs.version }}
-          path: dist/acp-release/
+          name: release-${{ needs.checks.outputs.version }}
+          path: dist/release/
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -342,8 +342,8 @@ jobs:
       - run: npm install --global npm@11.19.1
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: acp-release-${{ needs.checks.outputs.version }}
-          path: dist/acp-release
+          name: release-${{ needs.checks.outputs.version }}
+          path: dist/release
       - name: Recheck remote tag and accepted decision immediately before publication
         env:
           TAG: ${{ needs.checks.outputs.tag }}
@@ -362,7 +362,7 @@ jobs:
       - name: Publish exact tarballs with provenance on the next dist-tag
         env:
           AGENT_CONNECT_PUBLISH_APPROVED: ${{ needs.checks.outputs.version }}
-        run: node scripts/acp-release.mjs publish --directory dist/acp-release
+        run: node scripts/release.mjs publish --directory dist/release
       - name: Create a prerelease for the existing owner-pushed tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -370,5 +370,5 @@ jobs:
           VERSION: ${{ needs.checks.outputs.version }}
           IMAGE_REF: ${{ needs.image-publish.outputs.ref }}
         run: |
-          printf 'Experimental ACP/MCP-over-ACP release. Session image: `%s`. Verify SHA256SUMS before installation.\n' "$IMAGE_REF" > "$RUNNER_TEMP/acp-release-notes.md"
-          gh release create "$TAG" dist/acp-release/* --verify-tag --prerelease --title "Agent Connect $VERSION" --notes-file "$RUNNER_TEMP/acp-release-notes.md"
+          printf 'Experimental ACP/MCP-over-ACP release. Session image: `%s`. Verify SHA256SUMS before installation.\n' "$IMAGE_REF" > "$RUNNER_TEMP/release-notes.md"
+          gh release create "$TAG" dist/release/* --verify-tag --prerelease --title "Agent Connect $VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"

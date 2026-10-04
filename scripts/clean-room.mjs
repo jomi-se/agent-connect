@@ -16,11 +16,11 @@ import { resolve, join } from "node:path";
 import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
 const repo = resolve(import.meta.dirname, "..");
 const artifactDirectory = resolve(
-  process.env.ACP_RELEASE_DIR ??
+  process.env.AGENT_CONNECT_RELEASE_DIR ??
     process.argv[2] ??
-    join(repo, "dist/acp-release"),
+    join(repo, "dist/release"),
 );
-const kit = join(repo, "deploy/acp-gateway/test/clean-room");
+const kit = join(repo, "deploy/gateway/test/clean-room");
 const run = await mkdtemp(join(tmpdir(), "acp-clean-room-"));
 const suffix = run.split("-").at(-1).toLowerCase();
 const name = `acp-clean-room-${suffix}`;
@@ -167,7 +167,7 @@ try {
   for (const file of ["Dockerfile", "package.json", "run.mjs", "relay.mjs"])
     await copyFile(join(kit, file), join(run, "context", file));
   await copyFile(
-    join(repo, "deploy/acp-gateway/test/fixtures/mock-model/server.mjs"),
+    join(repo, "deploy/gateway/test/fixtures/mock-model/server.mjs"),
     join(run, "context/mock-model.mjs"),
   );
   const sessionImage =

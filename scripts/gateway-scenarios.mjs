@@ -16,7 +16,7 @@ import { createServer as tcpServer } from "node:net";
 import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
 
 const repo = resolve(import.meta.dirname, "..");
-const fixtures = join(repo, "deploy/acp-gateway/test/fixtures");
+const fixtures = join(repo, "deploy/gateway/test/fixtures");
 const run = await mkdtemp(join(tmpdir(), "agent-connect-acp-"));
 const children = new Set();
 const dockerContainers = [];
@@ -24,7 +24,7 @@ const dockerNetworks = [];
 const boxed = process.env.ACP_BOXED === "1";
 const sessionImage =
   process.env.ACP_SESSION_IMAGE ??
-  `agent-connect-session:${JSON.parse(await readFile(join(repo, "deploy/acp-gateway/session/package.json"), "utf8")).version}`;
+  `agent-connect-session:${JSON.parse(await readFile(join(repo, "deploy/gateway/session/package.json"), "utf8")).version}`;
 let mockContainer, egressContainer;
 const cleanEnv = {
   PATH: process.env.PATH,
@@ -130,10 +130,7 @@ const pageServer = createServer(async (req, res) => {
 });
 try {
   await command(process.env.CARGO ?? "cargo", ["build", "--locked", "--bins"]);
-  await command("node", [
-    "--test",
-    join(repo, "scripts/acp-gateway-cli.test.mjs"),
-  ]);
+  await command("node", ["--test", join(repo, "scripts/gateway-cli.test.mjs")]);
   for (const name of ["adapters", "web"]) {
     await mkdir(join(run, name));
     for (const file of ["package.json", "package-lock.json"])
@@ -186,12 +183,12 @@ try {
   if (boxed) {
     await command("node", [
       "--test",
-      join(repo, "deploy/acp-gateway/test/egress-proxy.test.mjs"),
+      join(repo, "deploy/gateway/test/egress-proxy.test.mjs"),
     ]);
     await command("docker", ["image", "inspect", sessionImage]);
     await command("node", [
       "--test",
-      join(repo, "deploy/acp-gateway/test/session-image.test.mjs"),
+      join(repo, "deploy/gateway/test/session-image.test.mjs"),
     ]);
     const suffix = run.split("-").at(-1).toLowerCase();
     mockContainer = `acp-test-model-${suffix}`;
@@ -347,7 +344,7 @@ try {
         "node",
         [
           scenario === "policy"
-            ? join(repo, "scripts/acp-policy-browser.mjs")
+            ? join(repo, "scripts/policy-browser.mjs")
             : join(
                 fixtures,
                 "web",

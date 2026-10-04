@@ -11,7 +11,7 @@ rust_version=1.98.1
 dist_version=0.33.0
 zigbuild_version=0.23.4
 zig_version=0.14.1
-tools_dir=$(mktemp -d "$RUNNER_TEMP/agent-connect-acp-build-tools.XXXXXX")
+tools_dir=$(mktemp -d "$RUNNER_TEMP/agent-connect-build-tools.XXXXXX")
 mkdir -p "$tools_dir/bin" "$tools_dir/dist"
 
 case "$(uname -s):$(uname -m)" in
@@ -30,7 +30,7 @@ case "$(uname -s):$(uname -m)" in
     dist_sha256=4761cff5fc547ad66d1449abbf321380b0e6bd8093b1fe6593852a3314fd0c19
     rust_targets=(x86_64-unknown-linux-musl aarch64-unknown-linux-musl)
     ;;
-  *) echo "Unsupported ACP build runner." >&2; exit 1 ;;
+  *) echo "Unsupported release build runner." >&2; exit 1 ;;
 esac
 
 rustup toolchain install "$rust_version" --profile minimal --component rustfmt --component clippy
@@ -81,5 +81,5 @@ printf '%s\n' "$tools_dir/bin" "$tools_dir/cargo-tools/bin" >> "$GITHUB_PATH"
 [[ "$(dist --version)" == "cargo-dist $dist_version" ]]
 [[ "$(cargo-zigbuild --version)" == "cargo-zigbuild $zigbuild_version" ]]
 [[ "$(zig version)" == "$zig_version" ]]
-printf 'Installed ACP build pins: Rust %s, cargo-dist %s, cargo-zigbuild %s, Zig %s\n' \
+printf 'Installed release build pins: Rust %s, cargo-dist %s, cargo-zigbuild %s, Zig %s\n' \
   "$rust_version" "$dist_version" "$zigbuild_version" "$zig_version"

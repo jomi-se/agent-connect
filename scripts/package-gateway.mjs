@@ -9,9 +9,7 @@ const platforms = {
   "aarch64-unknown-linux-musl": ["linux", "arm64"],
 };
 if (!platforms[target] || !binary)
-  throw new Error(
-    "Usage: node scripts/package-acp-gateway.mjs <target> <binary>",
-  );
+  throw new Error("Usage: node scripts/package-gateway.mjs <target> <binary>");
 if (basename(binary) !== "agent-connect-gateway")
   throw new Error("Only the product gateway executable can be packaged");
 const [os, cpu] = platforms[target];
@@ -19,7 +17,7 @@ const repo = resolve(import.meta.dirname, "..");
 const manifest = JSON.parse(
   await readFile(join(repo, "packages/gateway-npm/package.json"), "utf8"),
 );
-const output = join(repo, "dist/acp-gateway", `${os}-${cpu}`);
+const output = join(repo, "dist/gateway", `${os}-${cpu}`);
 await mkdir(join(output, "bin"), { recursive: true });
 const dest = join(output, "bin/agent-connect-gateway");
 await copyFile(resolve(binary), dest);

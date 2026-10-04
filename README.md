@@ -20,7 +20,7 @@ agent-connect doctor
 
 Production sessions run in disposable boxes with a dedicated shared harness
 home and owned restricted egress. Owner authentication/grants remain outside
-the harness home. Read [the shared-home risks](docs/plan/acp-gateway-credentials.md)
+the harness home. Read [the shared-home risks](docs/plan/credentials.md)
 before owner-run login. Setup never imports personal credentials.
 
 ```text

@@ -39,7 +39,7 @@ retain capacity until owned resources are removed.
 
 ## Fixture storage
 
-Fixtures live under `deploy/acp-gateway/test/fixtures`. Dependency trees and
+Fixtures live under `deploy/gateway/test/fixtures`. Dependency trees and
 per-run caches are removed after owned processes stop, on success and failure.
 Diagnostic output lives outside repositories. `AGENT_CONNECT_KEEP_TEST_INSTALLS=1`
 is an explicit debugging opt-in, never a default. Clean each temporary artifact

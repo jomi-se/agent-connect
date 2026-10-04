@@ -17,7 +17,7 @@ Do not create release tags, publish packages or push images during local checks.
 
 The npm wrapper uses per-platform optional packages: one installed executable
 for the host, with exact adapter and CLI versions in its manifest. Produce each
-local platform package with `node scripts/package-acp-gateway.mjs <target> <binary>`;
+local platform package with `node scripts/package-gateway.mjs <target> <binary>`;
 `npm pack` can inspect it without publishing. The wrapper records adapter pins;
 adapters run in the matching image. A local executable override supports launcher
 smokes. Registry publication and the first complete platform-matrix run require
@@ -27,7 +27,7 @@ Build both Linux static session runners and a multi-architecture OCI archive:
 
 ```sh
 # Prerequisites: Rust musl targets, Zig and cargo-zigbuild on PATH, Docker buildx.
-./deploy/acp-gateway/session/build-local.sh
+./deploy/gateway/session/build-local.sh
 ```
 
 The build installs target-specific npm dependencies on the builder's own
@@ -40,7 +40,7 @@ A production session requires a dedicated private harness home and an
 operator-selected egress proxy container. Each session gets its own internal
 network; the egress proxy denies private and reserved destinations. The workspace
 is tmpfs. The shared home includes credentials, configuration and transcripts.
-Read the [accepted credential risk](../../docs/plan/acp-gateway-credentials.md)
+Read the [accepted credential risk](../../docs/plan/credentials.md)
 before the owner runs `agent-connect login`. Claude Code remains
 unconfirmed against Anthropic terms. Live login checks are never a build step.
 

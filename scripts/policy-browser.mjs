@@ -5,10 +5,7 @@ import { readFile } from "node:fs/promises";
 
 const definitions = JSON.parse(
   await readFile(
-    new URL(
-      "../deploy/acp-gateway/test/fixtures/web/tools.json",
-      import.meta.url,
-    ),
+    new URL("../deploy/gateway/test/fixtures/web/tools.json", import.meta.url),
     "utf8",
   ),
 );

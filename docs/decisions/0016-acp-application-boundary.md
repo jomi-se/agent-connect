@@ -110,7 +110,7 @@ gained what a web application needs:
    tool server and chat state that the ACP SDK lacks. It integrates with the
    AI SDK at the UI layer (a `useChat` `ChatTransport`), not as a
    `LanguageModel`, because a harness runs its own loop. See the
-   [release plan](../plan/acp-gateway-release.md).
+   [release plan](../plan/release-plan.md).
 7. **Unchanged principles.** Owner consent with OAuth/PKCE, revocable grants,
    immutable tool snapshots, stable action IDs, no automatic replay of
    ambiguous effects, and no claim of exactly-once execution.
@@ -155,16 +155,16 @@ Costs and risks:
   Claude Code harness as unconfirmed. The current implementation never
   forwards API-key variables into boxes. OpenAI
   publicly supports ChatGPT-plan use in third-party tools. See the [credentials
-  plan](../plan/acp-gateway-credentials.md).
+  plan](../plan/credentials.md).
 - **Credential boundary.** Use the owner's subscription without copying the
   owner's personal login, and without breaking refresh-token rotation for the
   owner's other sessions. The proposed direction is a dedicated Agent Connect
   login per harness, made once through the provider's own flow, in a shared
   home that every box mounts. Credential exposure to the harness's shell is
   accepted and documented ([credentials
-  plan](../plan/acp-gateway-credentials.md)).
+  plan](../plan/credentials.md)).
 - **Hosting and installation.** What the owner installs and runs. The
-  [release plan](../plan/acp-gateway-release.md) proposes a prebuilt binary
+  [release plan](../plan/release-plan.md) proposes a prebuilt binary
   through npm and GitHub Releases. The implementation removes the superseded plugin. Owner-only post-publication npm retirement is recorded in the release checklist.
 - **Consent code.** The Rust gateway now implements hosted owner consent,
   OAuth/PKCE, refresh, revocation and optional TOTP, following ADR 0009/0014/0015
@@ -175,7 +175,7 @@ Costs and risks:
   remain a release prerequisite.
 - **Mobile.** One manual iOS Safari check of the resumable transport.
 - **Migration.** Applications move to AI SDK `useChat` over the root SDK's ACP transport ([release
-  plan](../plan/acp-gateway-release.md)). The SDK's MCP server answers unknown
+  plan](../plan/release-plan.md)). The SDK's MCP server answers unknown
   methods with method-not-found and sends progress while it waits.
 
 ## Alternatives considered

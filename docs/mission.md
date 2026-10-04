@@ -18,7 +18,7 @@ profile choice, session inspection/end-session and revocation live in the
 gateway. Production sessions run in owned disposable boxes with dedicated
 shared harness homes and restricted owned egress. Owner state stays outside
 those homes. Per-app box isolation remains deferred; the accepted shared-home
-risks are recorded in [the credential plan](plan/acp-gateway-credentials.md).
+risks are recorded in [the credential plan](plan/credentials.md).
 
 Each conversation admits one active request. Persist application actions before
 notifying the application. Stable action IDs require application-owned

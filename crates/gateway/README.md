@@ -18,7 +18,7 @@ uncertain effects after a crash; they are never automatically replayed. Applicat
 must deduplicate side effects with the stable `agent-connect/actionId`.
 
 The experimental browser fixture and deterministic model remain under
-`deploy/acp-gateway/test/fixtures`. Host adapter launches are test-only and provide no
+`deploy/gateway/test/fixtures`. Host adapter launches are test-only and provide no
 native-action isolation; container sessions provide that boundary.
 
 Production runs use `agent-connect-gateway serve --boxed --harness codex`, with
@@ -26,7 +26,7 @@ Production runs use `agent-connect-gateway serve --boxed --harness codex`, with
 The shared home must be dedicated, private (0700) and owned by the invoking user;
 containers run as that UID/GID. The home includes credentials and transcripts,
 so a consented application could obtain the dedicated login and read other
-applications' transcripts. See the [credential boundary](../../docs/plan/acp-gateway-credentials.md).
+applications' transcripts. See the [credential boundary](../../docs/plan/credentials.md).
 
 `agent-connect-gateway login --harness codex --harness-home /path/to/dedicated-home`
 runs the one-time device login in the session image. The owner runs it; tests

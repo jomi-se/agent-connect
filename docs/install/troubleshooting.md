@@ -115,4 +115,4 @@ another application's resources. Retrying the interrupted prompt can duplicate
 an application effect and is not cleanup.
 
 For unsupported or disputed provider authentication, consult the
-[credential and terms analysis](../plan/acp-gateway-credentials.md). ACP setup creates fresh grants and never imports personal provider login state.
+[credential and terms analysis](../plan/credentials.md). ACP setup creates fresh grants and never imports personal provider login state.

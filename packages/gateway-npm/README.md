@@ -49,7 +49,7 @@ consent. ACP setup creates a fresh runtime with dedicated login and application 
 
 The shared home intentionally contains credentials, configuration and transcripts
 from all applications; consented tools can disclose its data. Read the
-[accepted credential risks](https://github.com/jomi-se/agent-connect/blob/main/docs/plan/acp-gateway-credentials.md)
+[accepted credential risks](https://github.com/jomi-se/agent-connect/blob/main/docs/plan/credentials.md)
 before login. Claude Code subscription use remains unconfirmed against
 Anthropic's terms. API-key environment variables are never forwarded into boxes.
 The explicit `--headless-static-bearer` path is separate from normal pairing.

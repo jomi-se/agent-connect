@@ -83,7 +83,7 @@ The interactive selector defaults to Codex, whose release image runs unmodified
 `codex login --device-auth`. Guided setup asks whether to run this interactive
 step; `--login` requests it explicitly. Neither command imports personal harness
 credentials. Read the
-[shared-home credential risks](../plan/acp-gateway-credentials.md) before login,
+[shared-home credential risks](../plan/credentials.md) before login,
 and [Claude Code](#claude-code) before selecting Claude.
 
 Setup prints the runtime location and next actions. Rerun it to continue an
@@ -236,7 +236,7 @@ Claude Code subscription use remains **unconfirmed against Anthropic's terms**.
 It is not a confirmed substitute for Codex. An owner who chooses to investigate
 it must use a separate Claude runtime and dedicated login; the helper invokes
 `claude /login`. `claude setup-token` is not a gateway login method. See the
-[credential and terms analysis](../plan/acp-gateway-credentials.md).
+[credential and terms analysis](../plan/credentials.md).
 
 API-key authentication belongs in a separate application-server integration with
 API billing. The gateway does not forward `ANTHROPIC_API_KEY` or other API-key

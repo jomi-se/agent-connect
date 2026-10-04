@@ -47,16 +47,16 @@ jobs:
         run: ./scripts/install-ci-test-tools.sh
 
       - name: Install pinned Rust and release build tools
-        run: ./scripts/install-acp-build-tools.sh
+        run: ./scripts/install-build-tools.sh
 
       - name: Check ACP versions and adapter pins
-        run: node scripts/acp-release.mjs check
+        run: node scripts/release.mjs check
 
       - name: Build the local session image and clean-room release artifacts
         run: |
           docker info
-          ./deploy/acp-gateway/session/build-local.sh --native-only
-          node scripts/build-acp-release-local.mjs
+          ./deploy/gateway/session/build-local.sh --native-only
+          node scripts/build-release-local.mjs
 
       - name: Run all credential-free verification gates
         run: npm run verify:full
