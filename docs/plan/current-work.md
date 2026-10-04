@@ -2,15 +2,14 @@
 
 Updated: 2026-10-04
 
-The ACP product candidates are gateway **0.0.1** and root browser SDK
-**0.0.10**: Rust launcher/platform binaries, hosted owner sign-in/consent/grant management, dedicated login
+Gateway **0.0.1** and root browser SDK **0.0.10** were published to npm on
+2026-10-04: Rust launcher/platform binaries, hosted owner sign-in/consent/grant management, dedicated login
 helper (`agent-connect login`, harness selector and shared default homes), boxed sessions, resumable transport/recovery and AI SDK useChat.
 The [artifact install guide](../install/README.md) works without a checkout.
 The [release guide](../install/release.md) covers protected automation and local
 validation. [ADR 0016](../decisions/0016-acp-application-boundary.md) was
 accepted on 2026-10-04: ACP is the product vision and chosen open standard.
-ACP, MCP-over-ACP and the resume extension remain unstable. No ACP artifact
-is published. [ADR 0017](../decisions/0017-local-box-build.md) replaces registry
+ACP, MCP-over-ACP and the resume extension remain unstable. [ADR 0017](../decisions/0017-local-box-build.md) replaces registry
 boxes with a smaller local setup build from npm-shipped files and optional owner
 tools; the release has only native builds and npm publication.
 
@@ -64,7 +63,16 @@ Owner-required work:
    opt-in real-model acceptance requires owner-prepared dedicated harness homes.
    Keep login status and live-run evidence in private artifacts, outside this
    product repository.
-2. **First real release run.** Releases publish automatically from `main`
-   ([release process](../install/release.md)). After the first run, verify the complete native
+2. **Platform validation.** Releases publish automatically from `main`
+   ([release process](../install/release.md)); the first one is out. Verify the complete native
    matrix (including native service operation on macOS and Codex filesystem
    policy on a compatible sandbox host) and the public artifact installation path.
+
+Backlog:
+
+- `agent-connect --help` still describes the gateway as "Unreleased".
+- `scripts/release.mjs publish` discards npm's output on success, so a slow or
+  unexpected publish result is invisible; print it and confirm each version is
+  live afterwards.
+- The box ships the test fixture `mock-codex-config.toml`; move it to test-only
+  build inputs.
