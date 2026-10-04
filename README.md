@@ -5,8 +5,8 @@ The application supplies its UI and a fixed set of approved tools; your gateway
 provides scoped access to your chosen harness and model.
 
 One product: the Rust gateway (`agent-connect`) and browser SDK
-(`@open-agent-connect/web`). Gateway **0.0.1** and SDK **0.0.10** are unpublished
-candidates. ACP, MCP-over-ACP and transport resumption are **experimental and
+(`@open-agent-connect/web`). Gateway **0.0.1** and SDK **0.0.10** are early alpha
+releases. ACP, MCP-over-ACP and transport resumption are **experimental and
 unstable**. [ADR 0016](docs/decisions/0016-acp-application-boundary.md), accepted
 on 2026-10-04, establishes ACP as the product vision and chosen open standard.
 

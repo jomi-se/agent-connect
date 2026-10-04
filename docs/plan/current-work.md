@@ -62,10 +62,8 @@ Owner-required work:
    opt-in real-model acceptance requires owner-prepared dedicated harness homes.
    Keep login status and live-run evidence in private artifacts, outside this
    product repository.
-2. **First real release run.** Configure the protected GitHub environment,
-   package ownership/trusted publishers and public GHCR visibility, push the
-   reviewed source and version tag yourself, then inspect a manual dry run and
-   approve publication. Verify anonymous image pulls, the complete native
+2. **First real release run.** Releases publish automatically from `main`
+   ([release process](../install/release.md)). After the first run, make the
+   GHCR session image public, then verify anonymous image pulls, the complete native
    matrix (including native service operation on macOS and Codex filesystem
-   policy on a compatible sandbox host) and the public artifact installation path. None of
-   these account/GitHub/registry actions has been performed locally.
+   policy on a compatible sandbox host) and the public artifact installation path.

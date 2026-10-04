@@ -9,8 +9,7 @@
     "directory": "packages/gateway-npm"
   },
   "publishConfig": {
-    "access": "public",
-    "tag": "next"
+    "access": "public"
   },
   "type": "module",
   "bin": {

@@ -1,12 +1,11 @@
 # Release process
 
-Gateway **0.0.1** and browser SDK **0.0.10** are unpublished candidates.
-[ADR 0016](../decisions/0016-acp-application-boundary.md) was accepted on
-2026-10-04; publication still requires explicit owner authorization.
-The [manual workflow](../../.github/workflows/release.yml) is the only
-approved automated publication path. Ordinary CI is read-only. Agents may
-prepare and verify artifacts but never push, publish, run this workflow or
-execute npm deprecation.
+Releases are automatic. Every push to `main` runs the
+[release workflow](../../.github/workflows/release.yml), which publishes each
+package version that is not on npm yet: bump a version in a merged change to
+release it. Main only receives commits that passed the required PR checks, so
+the workflow does not repeat them. Ordinary CI is read-only. Agents may prepare
+and verify artifacts but never push, publish or execute npm deprecation.
 
 ## Artifacts and pins
 
@@ -110,83 +109,39 @@ then runs Rust tests and lint/dependency-boundary checks. A passing synthetic
 acceptance run does not establish live subscription quality or authorize a
 release.
 
-## Manual dry run
+## Publication
 
-After the operator has pushed the reviewable workflow to GitHub, dispatch
-**Release candidate** with `dry_run=true`, `publish=false`. Leave `tag` empty
-to inspect the selected commit, or provide the matching version tag. Dispatch
-does not create a Git ref.
+The workflow compares `packages/web-sdk` and `packages/gateway-npm` versions
+with npm and runs only what is missing:
 
-The workflow first verifies the product, then cross-builds both static session
-runners and exports the `linux/amd64,linux/arm64` session image as an OCI archive.
-It performs no registry login or image push. Each gateway binary embeds the
-local image tag through `AGENT_CONNECT_SESSION_IMAGE`; collected metadata is
-marked `localOnly`. Install/publish previews use the exact tarballs and
-`npm publish --dry-run`.
+- **SDK:** packs `@open-agent-connect/web`, smoke-tests the exact tarball and
+  publishes it.
+- **Gateway:** pushes the multiarch session image with the job's ephemeral
+  `GITHUB_TOKEN`, injects its immutable
+  `ghcr.io/<owner>/agent-connect-session@sha256:<digest>` reference into every
+  native cargo-dist build, packs the launcher and platform packages with
+  `release.json`, then publishes platform packages before the launcher. A
+  package version already on npm is skipped, so rerunning a partly failed
+  release resumes it.
 
-Download the `session-image-oci-<version>` and `release-<version>` Actions
-artifacts, inspect `release.json`, verify `SHA256SUMS`, and review the package
-contents and shell installer. The local tag is not available on other machines
-until the exported image is imported/tagged there; its presence in a dry-run
-binary is intentional. No dry-run artifact is silently promoted to publication.
+npm publication uses trusted publishing (OIDC) with `--provenance` on the
+`latest` dist-tag; only the publishing jobs receive `id-token: write`. No
+long-lived npm token, git tag or GitHub release is involved. Never replace an
+already published npm version; fix forward with a new version.
 
-## First-release setup and publication
+## One-time setup
 
-The operator must complete these external setup steps separately:
+1. The GitHub environment **`release`** exists and only accepts deployments
+   from `main`.
+2. npm can only attach a trusted publisher to an existing package. Reserve each
+   new package name (for example a new platform package) by publishing an empty
+   `0.0.0` placeholder by hand, then deprecate it after its first real release.
+3. Each npm package's trusted publisher names this repository, workflow
+   **`release.yml`** and environment **`release`**, with direct publishing
+   allowed. Dist-tag management is not needed.
+4. The session image package on GHCR is public. A new GHCR package starts
+   private, so after the first image push change its visibility and confirm an
+   anonymous `docker pull` works.
 
-1. Verify that the reviewed source records ADR 0016 as accepted on 2026-10-04.
-   The workflow enforces accepted status; the decision does not authorize
-   publication by itself.
-2. Keep the external GitHub environment name `acp-first-release` unchanged.
-   Create it if needed, add the operator as a required reviewer,
-   choose the desired self-review policy, and restrict deployment refs to the
-   approved version tags. Protect tag creation/movement through repository
-   rules. The workflow reads the environment configuration and refuses
-   publication if reviewer protection is missing.
-3. Configure each npm package's trusted publisher with the actual repository
-   owner/name, workflow filename **`release.yml`**, and environment
-   **`acp-first-release`**. Allow direct `npm publish`. Arrange package ownership
-   and any initial package/bootstrap setup before this run; this workflow does
-   not create accounts, alter publisher settings or fall back to an npm token.
-4. Ensure the repository's ephemeral `GITHUB_TOKEN` can create the intended
-   GHCR package and that the resulting session image is publicly readable for
-   installation. Initial GHCR package visibility is an operator-owned setting;
-   a successful push alone does not prove anonymous pulls work.
-5. Commit and push the approved source and exact `v0.0.1` tag yourself.
-   The workflow never pushes commits or creates tags.
-
-Trusted publishing binds OIDC credentials to the specified repository,
-workflow and environment; it requires supported GitHub-hosted runners and a
-compatible npm CLI. The public packages' repository metadata must match.
 See [npm's trusted-publisher setup](https://docs.npmjs.com/trusted-publishers/)
-and [GitHub deployment environment protection](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
-
-Dispatch from that **exact tag**, set `tag=v0.0.1`, `dry_run=false`, and
-`publish=true`. The workflow confirms that the tag already exists remotely and
-resolves to the dispatched checkout. Conflicting inputs fail before any write.
-Review the `verified-local-<version>` candidate before approving the image job.
-
-The protected image job uses only its ephemeral `GITHUB_TOKEN` with
-`packages: write` to push the multiarch session image. Its resulting immutable
-`ghcr.io/<owner>/agent-connect-session@sha256:<digest>` reference is injected into
-**every** native cargo-dist binary build and recorded in `release.json`.
-There is no mutable registry tag fallback in a publishable candidate. See
-[GHCR authentication with GITHUB_TOKEN](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
-
-Review the resulting `release-<version>` artifacts before approving the final
-publication job. It repeats the decision/tag checks, verifies artifact hashes,
-and invokes `scripts/release.mjs publish` on those exact npm tarballs with
-OIDC, `--provenance` and `--tag next`. Only this job receives `id-token: write` and
-`contents: write`. No long-lived npm token or model credential is required.
-
-Finally it creates a GitHub **prerelease** with `gh release create --verify-tag`,
-attaching the reviewed files. `--verify-tag` prevents the CLI from creating a
-missing tag; the workflow additionally verifies the remote tag's commit.
-See the [official GitHub CLI command reference](https://cli.github.com/manual/gh_release_create).
-
-Image push, npm publication and GitHub release creation are separate external
-writes. If one fails after another succeeds, stop and inspect the published
-state before deciding how to resume. Do not automatically reissue an uncertain
-publication, move a tag, or replace an already published npm version. After a
-successful release, verify anonymous image pulls, platform installations,
-package provenance and the `next` dist-tag from the published artifacts.
+and [GHCR authentication with GITHUB_TOKEN](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).

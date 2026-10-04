@@ -275,8 +275,10 @@ if (command === "check") {
     throw new Error(
       "Publication requires a digest-pinned candidate and explicit protected OIDC workflow approval",
     );
+  // The SDK publishes from its own job; the gateway set goes platforms first,
+  // launcher last, skipping versions a previous run already published.
   const packages = Object.keys(metadata.artifacts)
-    .filter((name) => name.endsWith(".tgz") && name !== "acp-chat-sample.tgz")
+    .filter((name) => /^open-agent-connect-gateway-.+\.tgz$/.test(name))
     .sort(
       (a, b) =>
         (a.includes("gateway-0") ? 1 : 0) - (b.includes("gateway-0") ? 1 : 0),
@@ -288,13 +290,25 @@ if (command === "check") {
       .digest("hex");
     if (sha !== metadata.artifacts[filename].sha256)
       throw new Error(`Artifact checksum mismatch: ${filename}`);
+    const name = `@open-agent-connect/${basename(filename).slice("open-agent-connect-".length, -`-${version}.tgz`.length)}`;
+    const published = spawnSync(
+      "npm",
+      ["view", `${name}@${version}`, "version"],
+      {
+        encoding: "utf8",
+      },
+    );
+    if (published.stdout.trim() === version) {
+      console.log(`${name}@${version} is already published`);
+      continue;
+    }
     run("npm", [
       "publish",
       path,
       "--access",
       "public",
       "--tag",
-      "next",
+      "latest",
       "--ignore-scripts",
       ...(command === "publish-dry-run" ? ["--dry-run"] : ["--provenance"]),
     ]);

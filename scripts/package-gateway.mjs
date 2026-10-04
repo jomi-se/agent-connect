@@ -44,7 +44,7 @@ await writeFile(
       bugs: manifest.bugs,
       engines: manifest.engines,
       sideEffects: false,
-      publishConfig: { access: "public", tag: "next" },
+      publishConfig: { access: "public" },
       os: [os],
       cpu: [cpu],
       files: ["bin", "LICENSE", "README.md", "SHA256SUMS"],
