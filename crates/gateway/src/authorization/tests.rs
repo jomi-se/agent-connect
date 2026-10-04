@@ -1475,12 +1475,11 @@ async fn profile_choice_is_fixed_in_grant_and_unoffered_profiles_are_rejected() 
     assert!(page.text.contains("name=profile"));
     assert!(
         page.text
-            .contains("Native reads and effects of approved application tools remain allowed")
+            .contains("Approved app tools still work and other permission requests are denied")
     );
     assert!(
-        page.text.contains(
-            "Native operations fail closed when the host cannot start the harness sandbox"
-        )
+        page.text
+            .contains("sessions refuse to run instead of running unrestricted")
     );
     let invalid = request(
         &auth,
@@ -1906,7 +1905,7 @@ async fn entry_points_pair_with_exact_issuer_and_bind_owner_sessions_to_origin()
         &[],
     )
     .await;
-    assert!(page.text.contains(&format!("href='{SECOND}{OWNER}'")));
+    assert!(page.text.contains(&format!("data-copy='{SECOND}'")));
     drop(auth);
     fs::remove_dir_all(dir).unwrap();
 }

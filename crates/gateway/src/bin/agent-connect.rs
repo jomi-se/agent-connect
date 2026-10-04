@@ -162,19 +162,19 @@ impl OwnerRuntime for ConsoleRuntime {
             || (gateway.cli.boxed && readiness.checked_at.elapsed() > Duration::from_secs(60))
         {
             problems.push(OwnerProblem {
-                message: "The boxed runtime is unavailable or its health check has stalled.".into(),
-                repair: "Run agent-connect doctor to diagnose Docker, the session image and owned egress.".into(),
+                message: "Sessions cannot start: the box runtime is not responding.".into(),
+                repair: "On the gateway host, run agent-connect doctor to check Docker, the session image and the network proxy.".into(),
             });
         }
         if gateway.capacity.is_closed() {
             problems.push(OwnerProblem {
-                message: "The gateway is stopping.".into(),
-                repair: "Use agent-connect service status or start to check the service.".into(),
+                message: "The gateway is shutting down.".into(),
+                repair: "On the gateway host, check it with agent-connect service status or restart it with agent-connect service start.".into(),
             });
         }
         let sessions: Vec<_> = gateway.hosts.session_views().into_iter().map(|session| {
             if session.state == "cleanup-failed" {
-                problems.push(OwnerProblem { message: "A session could not release its Docker resources. Capacity remains held.".into(), repair: "Run agent-connect doctor and inspect agent-connect service logs before restarting.".into() });
+                problems.push(OwnerProblem { message: "A session could not clean up its container, so its slot stays taken.".into(), repair: "On the gateway host, run agent-connect doctor and check agent-connect service logs before restarting.".into() });
             }
             OwnerSession { id: session.id, grant_id: session.grant_id, state: session.state.into(), started_at: session.started_at }
         }).collect();

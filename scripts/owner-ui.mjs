@@ -244,12 +244,14 @@ try {
   await capture("security-off");
   await page.getByRole("link", { name: "Gateway", exact: true }).click();
   await page
-    .getByRole("heading", { name: "Native access profiles", exact: true })
+    .getByRole("heading", {
+      name: "Access options when you approve an app",
+      exact: true,
+    })
     .waitFor();
+  await page.getByText("Details and limits", { exact: true }).click();
   await page
-    .getByText(
-      /Deny-all and app-tools-only profiles are unavailable for boxed Codex/,
-    )
+    .getByText(/Deny-all and app-tools-only are not offered for Codex/)
     .waitFor();
   await capture("gateway");
 
@@ -494,7 +496,7 @@ try {
   await capture("ended-session-active-grant");
   await runtimePage.close();
   await page.getByRole("button", { name: "Revoke" }).click();
-  await page.getByText("Revoked", { exact: true }).waitFor();
+  await page.getByText("revoked", { exact: true }).waitFor();
   await capture("activity-revoked");
   await page.goto(await push());
   await page.getByRole("button", { name: "Approve", exact: true }).click();
@@ -553,7 +555,7 @@ try {
   await page.goto(owner);
   await page.getByLabel("Owner passphrase").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.getByText("Access ended for", { exact: true }).waitFor();
+  await page.getByText("expired", { exact: true }).waitFor();
   await capture("activity-expired");
   await page.goto(await push({ stress: true }));
   await capture("long-app-origin-and-tool-names");
@@ -730,10 +732,7 @@ try {
     await new Promise((ok) => setTimeout(ok, 500));
   }
   const banner = problemPage.locator(".runtime-problem[role=status]");
-  assert.match(
-    await banner.textContent(),
-    /boxed runtime.*unavailable|health check.*stalled/i,
-  );
+  assert.match(await banner.textContent(), /box runtime is not responding/i);
   assert.match(await banner.textContent(), /agent-connect doctor/);
   assert.equal(
     await problemPage
