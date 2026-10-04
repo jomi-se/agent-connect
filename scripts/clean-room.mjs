@@ -9,7 +9,6 @@ import {
   copyFile,
   readFile,
   writeFile,
-  stat,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
@@ -33,6 +32,10 @@ async function command(binary, args, options = {}) {
   const child = spawn(binary, args, {
     stdio: ["ignore", "pipe", "pipe"],
     ...options,
+    env:
+      binary === "docker"
+        ? { ...process.env, DOCKER_CONFIG: join(run, "docker-config") }
+        : process.env,
   });
   children.add(child);
   let tail = "";
@@ -170,18 +173,34 @@ try {
     join(repo, "deploy/gateway/test/fixtures/mock-model/server.mjs"),
     join(run, "context/mock-model.mjs"),
   );
-  const sessionImage =
-    process.env.ACP_SESSION_IMAGE ??
-    manifest.sessionImage ??
-    `agent-connect-session:${manifest.version}`;
-  await command("docker", ["image", "inspect", sessionImage]);
+  const boxImage =
+    process.env.ACP_BOX_IMAGE ?? `agent-connect-box:${manifest.version}`;
   await command("docker", ["build", "-t", image, join(run, "context")]);
   createdImageId = (
     await command("docker", ["image", "inspect", "--format", "{{.Id}}", image])
   ).trim();
   assert.match(createdImageId, /^sha256:[0-9a-f]{64}$/);
   const socket = process.env.ACP_DOCKER_SOCKET ?? "/var/run/docker.sock";
-  const socketGroup = String((await stat(socket)).gid);
+  // Read the mounted socket in Docker's namespace: a sandbox may map its GID
+  // to nobody even though the actual socket has a different owning group.
+  const socketGroup = (
+    await command("docker", [
+      "run",
+      "--pull=never",
+      "--rm",
+      "--network",
+      "none",
+      "--mount",
+      `type=bind,src=${socket},dst=/var/run/docker.sock`,
+      "--entrypoint",
+      "stat",
+      createdImageId,
+      "-c",
+      "%g",
+      "/var/run/docker.sock",
+    ])
+  ).trim();
+  assert.match(socketGroup, /^\d+$/);
   const uid = process.getuid();
   const gid = process.getgid();
   await writeFile(
@@ -211,11 +230,13 @@ try {
       "-e",
       `ACP_CLEAN_SUFFIX=${suffix}`,
       "-e",
-      `ACP_SESSION_IMAGE=${sessionImage}`,
+      `ACP_BOX_IMAGE=${boxImage}`,
       "-e",
       `HOME=${join(run, "work")}`,
       "-e",
       `XDG_STATE_HOME=${join(run, "work/state-home")}`,
+      "-e",
+      `XDG_CONFIG_HOME=${join(run, "work/config-home")}`,
       createdImageId,
     ],
     { inherit: true },

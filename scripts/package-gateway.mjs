@@ -9,14 +9,16 @@ import {
 } from "node:fs/promises";
 import { resolve, join, basename } from "node:path";
 import { createHash } from "node:crypto";
-const [target, binary] = process.argv.slice(2);
+const [target, binary, runner] = process.argv.slice(2);
 const platforms = {
   "aarch64-apple-darwin": ["darwin", "arm64"],
   "x86_64-unknown-linux-musl": ["linux", "x64"],
   "aarch64-unknown-linux-musl": ["linux", "arm64"],
 };
-if (!platforms[target] || !binary)
-  throw new Error("Usage: node scripts/package-gateway.mjs <target> <binary>");
+if (!platforms[target] || !binary || !runner)
+  throw new Error(
+    "Usage: node scripts/package-gateway.mjs <target> <binary> <linux-runner>",
+  );
 if (basename(binary) !== "agent-connect")
   throw new Error("Only the product gateway executable can be packaged");
 const [os, cpu] = platforms[target];
@@ -30,6 +32,8 @@ await mkdir(join(output, "bin"), { recursive: true });
 const dest = join(output, "bin/agent-connect");
 await copyFile(resolve(binary), dest);
 await chmod(dest, 0o755);
+await copyFile(resolve(runner), join(output, "bin/session-runner"));
+await chmod(join(output, "bin/session-runner"), 0o755);
 await writeFile(
   join(output, "package.json"),
   JSON.stringify(
@@ -63,6 +67,8 @@ await writeFile(
   join(output, "SHA256SUMS"),
   `${createHash("sha256")
     .update(await readFile(dest))
-    .digest("hex")}  bin/agent-connect\n`,
+    .digest("hex")}  bin/agent-connect\n${createHash("sha256")
+    .update(await readFile(runner))
+    .digest("hex")}  bin/session-runner\n`,
 );
 console.log(`Prepared local ${target} npm artifact`);

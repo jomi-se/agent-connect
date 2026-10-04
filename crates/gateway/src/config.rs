@@ -14,10 +14,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const DEFAULT_SESSION_IMAGE: &str = match option_env!("AGENT_CONNECT_SESSION_IMAGE") {
-    Some(image) => image,
-    None => "agent-connect-session:0.0.1",
-};
+pub const DEFAULT_BOX_IMAGE: &str = concat!("agent-connect-box:", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug)]
 pub struct UsageError(pub String);
@@ -125,10 +122,10 @@ pub struct ServeOptions {
     #[arg(long, env = "AGENT_CONNECT_HARNESS_HOME", hide_env_values = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub harness_home: Option<PathBuf>,
-    /// Session image; release builds default to an immutable digest.
-    #[arg(long, env = "AGENT_CONNECT_SESSION_IMAGE", hide_env_values = true)]
+    /// Locally built box selected by setup.
+    #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE", hide_env_values = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_image: Option<String>,
+    pub box_image: Option<String>,
     /// Egress proxy container attached to internal session networks.
     #[arg(long, env = "AGENT_CONNECT_EGRESS_CONTAINER", hide_env_values = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -183,7 +180,7 @@ pub struct ServeCli {
     pub codex_mode: Option<CodexMode>,
     pub permissions: PermissionProfile,
     pub harness_home: Option<PathBuf>,
-    pub session_image: String,
+    pub box_image: String,
     pub egress_container: Option<String>,
     pub mock_root: Option<PathBuf>,
     pub mock_container: Option<String>,
@@ -236,7 +233,7 @@ impl ServeOptions {
             codex_mode: merged!(codex_mode),
             permissions: merged!(permissions).unwrap_or_else(|| PermissionProfile::Sandboxed),
             harness_home: merged!(harness_home),
-            session_image: merged!(session_image).unwrap_or_else(|| DEFAULT_SESSION_IMAGE.into()),
+            box_image: merged!(box_image).unwrap_or_else(|| DEFAULT_BOX_IMAGE.into()),
             egress_container: merged!(egress_container),
             mock_root: merged!(mock_root),
             mock_container: merged!(mock_container),
@@ -556,8 +553,8 @@ pub struct InitCli {
     pub headless_static_bearer: bool,
     #[arg(long, default_value = "127.0.0.1:18940")]
     pub listen: SocketAddr,
-    #[arg(long, env = "AGENT_CONNECT_SESSION_IMAGE", default_value = DEFAULT_SESSION_IMAGE)]
-    pub session_image: String,
+    #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE", default_value = DEFAULT_BOX_IMAGE)]
+    pub box_image: String,
     #[arg(long, alias = "egress-name", default_value = "agent-connect-egress")]
     pub egress_container: String,
 }
@@ -680,7 +677,7 @@ fn init_with_output(cli: InitCli, output: bool) -> anyhow::Result<()> {
             harness_home: Some(home.path),
             state_dir: Some("state".into()),
             boxed: Some(true),
-            session_image: Some(cli.session_image.clone()),
+            box_image: Some(cli.box_image.clone()),
             egress_container: Some(cli.egress_container.clone()),
             ..Default::default()
         };
@@ -747,11 +744,11 @@ fn init_with_output(cli: InitCli, output: bool) -> anyhow::Result<()> {
             );
         }
         println!(
-            "Next: agent-connect egress start --name {} --session-image {}",
+            "Next: agent-connect egress start --name {} --box-image {}",
             shell_quote(&cli.egress_container),
-            shell_quote(&cli.session_image)
+            shell_quote(&cli.box_image)
         );
-        if cli.harness_home.is_none() && cli.session_image == DEFAULT_SESSION_IMAGE {
+        if cli.harness_home.is_none() && cli.box_image == DEFAULT_BOX_IMAGE {
             println!(
                 "Next: agent-connect login (choose {})",
                 match cli.harness {

@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const platform = `${process.platform}-${process.arch}`;
 const supported = new Set(["darwin-arm64", "linux-x64", "linux-arm64"]);
@@ -31,7 +32,12 @@ if (!binary) {
 if (!existsSync(binary)) fail("Gateway executable does not exist.");
 const child = spawn(binary, process.argv.slice(2), {
   stdio: "inherit",
-  env: process.env,
+  env: {
+    ...process.env,
+    AGENT_CONNECT_BOX_CONTEXT: fileURLToPath(
+      new URL("../box/", import.meta.url),
+    ),
+  },
 });
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => child.kill(signal));

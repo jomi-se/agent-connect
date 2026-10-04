@@ -17,6 +17,7 @@
   },
   "files": [
     "bin",
+    "box",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"

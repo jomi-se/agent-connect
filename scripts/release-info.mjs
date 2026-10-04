@@ -29,11 +29,9 @@ function run(bin, args) {
 export function releaseInfoFilename(target) {
   return `agent-connect-gateway-${target}.release-info.json`;
 }
-function checkInfo(info, { target, version, sessionImage }) {
+function checkInfo(info, { target, version }) {
   if (info.version !== version)
     throw new Error(`Compiled gateway version mismatch for ${target}`);
-  if (info.sessionImage !== sessionImage)
-    throw new Error(`Compiled gateway session image mismatch for ${target}`);
 }
 function commandFor(target, binary) {
   const [os, arch] = releaseTargets[target] ?? [];
@@ -55,10 +53,9 @@ export async function verifyArchiveReleaseInfo({
   archive,
   target,
   version,
-  sessionImage,
   record = false,
 }) {
-  const expected = { target, version, sessionImage };
+  const expected = { target, version };
   const directory = await mkdtemp(join(tmpdir(), "release-info-"));
   try {
     const entries = run("tar", ["-tf", archive]).trim().split("\n");
@@ -80,7 +77,7 @@ export async function verifyArchiveReleaseInfo({
       if (!(await lstat(path)).isFile())
         throw new Error("Gateway executable must be a regular file");
       const bytes = await readFile(path);
-      // /home/node is the fixed session-image home, not a builder location.
+      // /home/node is the fixed box home, not a builder location.
       const pathText = bytes
         .toString("latin1")
         .replace(/\/home\/node(?=\/|\0|\s|--|:|$)/g, "/container-home");
@@ -119,7 +116,7 @@ export async function verifyArchiveReleaseInfo({
           typeof info !== "object" ||
           Array.isArray(info) ||
           Object.keys(info).sort().join(",") !==
-            "binarySha256,schemaVersion,sessionImage,target,version" ||
+            "binarySha256,schemaVersion,target,version" ||
           !/^[a-f0-9]{64}$/.test(info.binarySha256)
         )
           throw new Error("Invalid release-info evidence fields");
@@ -154,18 +151,12 @@ if (
     options: {
       target: { type: "string" },
       version: { type: "string" },
-      image: { type: "string" },
       artifacts: { type: "string", default: "target/distrib" },
     },
   });
-  if (
-    positionals[0] !== "record" ||
-    !values.target ||
-    !values.version ||
-    !values.image
-  )
+  if (positionals[0] !== "record" || !values.target || !values.version)
     throw new Error(
-      "Usage: release-info.mjs record --target <target> --version <version> --image <ref> [--artifacts <directory>]",
+      "Usage: release-info.mjs record --target <target> --version <version> [--artifacts <directory>]",
     );
   await verifyArchiveReleaseInfo({
     archive: resolve(
@@ -174,7 +165,6 @@ if (
     ),
     target: values.target,
     version: values.version,
-    sessionImage: values.image,
     record: true,
   });
   console.log(`Recorded executable release-info for ${values.target}`);

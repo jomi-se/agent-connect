@@ -27,7 +27,7 @@ const runtime = join(work, "operator");
 const install = join(work, "install");
 const modelName = `acp-clean-model-${suffix}`;
 const egressName = `acp-clean-egress-${suffix}`;
-const sessionImage = process.env.ACP_SESSION_IMAGE;
+const boxImage = process.env.ACP_BOX_IMAGE;
 const services = new Set();
 const resources = { containers: [], networks: [] };
 const report = { packed: {}, checks: [] };
@@ -394,8 +394,6 @@ try {
     passphraseFile,
     "--listen",
     `127.0.0.1:${gatewayPort}`,
-    "--session-image",
-    sessionImage,
     "--egress-container",
     egressName,
     "--no-service",
@@ -599,7 +597,7 @@ try {
     "MOCK_PORT=18931",
     "-e",
     "MOCK_LOG=/log/model.jsonl",
-    sessionImage,
+    boxImage,
     "/fixture.mjs",
   ]);
   await command(gateway, [
@@ -607,8 +605,8 @@ try {
     "start",
     "--name",
     egressName,
-    "--session-image",
-    sessionImage,
+    "--box-image",
+    boxImage,
   ]);
   // Repeat the installed CLI operation to prove it recognizes its own hardened peer.
   await command(gateway, [
@@ -616,8 +614,8 @@ try {
     "start",
     "--name",
     egressName,
-    "--session-image",
-    sessionImage,
+    "--box-image",
+    boxImage,
   ]);
   report.checks.push(
     "installed egress start creates and reuses its hardened owned runtime peer",

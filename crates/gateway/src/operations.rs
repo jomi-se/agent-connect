@@ -1,4 +1,5 @@
 //! Owner-run installation and read-only diagnostics. No provider secrets are inspected.
+mod box_build;
 mod doctor;
 mod service;
 pub use doctor::{Check, CheckStatus, DoctorCli, DoctorReport, doctor, doctor_report};
@@ -41,8 +42,6 @@ pub struct SetupCli {
     #[arg(long)]
     pub listen: Option<SocketAddr>,
     #[arg(long)]
-    pub session_image: Option<String>,
-    #[arg(long)]
     pub egress_container: Option<String>,
     #[arg(long)]
     pub owner_passphrase_file: Option<PathBuf>,
@@ -59,7 +58,7 @@ pub struct SetupCli {
     /// Leave service management to another supervisor.
     #[arg(long)]
     pub no_service: bool,
-    /// Update only the configured session image to this release's default or --session-image.
+    /// Upgrade the gateway service while preserving private owner and application state.
     #[arg(long)]
     pub upgrade: bool,
 }
@@ -125,7 +124,7 @@ pub struct SetupPlan {
     pub profiles: Vec<PermissionProfile>,
     pub permissions: PermissionProfile,
     pub listen: SocketAddr,
-    pub session_image: String,
+    pub box_image: String,
     pub egress_container: String,
     pub login: bool,
     pub login_required: bool,
@@ -133,7 +132,7 @@ pub struct SetupPlan {
     pub service: bool,
     pub steps: Vec<&'static str>,
     pub upgrade: bool,
-    pub previous_session_image: Option<String>,
+    pub previous_box_image: Option<String>,
 }
 
 fn usage(message: impl Into<String>) -> anyhow::Error {
@@ -204,15 +203,8 @@ pub fn setup_plan(cli: &SetupCli) -> anyhow::Result<SetupPlan> {
     config::validate_public_url(&origin)?;
     let egress_container = select!(egress_container, "agent-connect-egress".into());
     config::validate_container_name(&egress_container)?;
-    let previous_session_image = previous.as_ref().and_then(|c| c.session_image.clone());
-    let session_image = if cli.upgrade {
-        cli.session_image
-            .clone()
-            .unwrap_or_else(|| config::DEFAULT_SESSION_IMAGE.into())
-    } else {
-        select!(session_image, config::DEFAULT_SESSION_IMAGE.into())
-    };
-    validate_argument(&session_image)?;
+    let previous_box_image = previous.as_ref().and_then(|c| c.box_image.clone());
+    let box_image = box_build::desired_image()?;
     let home = absolute(&home)?;
     let home = if home.exists() || home.is_symlink() {
         anyhow::ensure!(
@@ -246,7 +238,7 @@ pub fn setup_plan(cli: &SetupCli) -> anyhow::Result<SetupPlan> {
             .or_else(|| previous.as_ref().and_then(|c| c.permissions)),
         boxed: Some(true),
         harness_home: Some(home.clone()),
-        session_image: Some(session_image.clone()),
+        box_image: Some(box_image.clone()),
         egress_container: Some(egress_container.clone()),
         ..Default::default()
     }
@@ -262,7 +254,6 @@ pub fn setup_plan(cli: &SetupCli) -> anyhow::Result<SetupPlan> {
             || previous.listen != Some(listen)
             || previous.public_url.as_deref() != Some(&origin)
             || previous.harness_home.as_ref() != Some(&home)
-            || (!cli.upgrade && previous.session_image.as_deref() != Some(&session_image))
             || previous.egress_container.as_deref() != Some(&egress_container)
         {
             return Err(usage(
@@ -318,7 +309,7 @@ pub fn setup_plan(cli: &SetupCli) -> anyhow::Result<SetupPlan> {
         profiles: requested_policy.profiles,
         permissions: requested_policy.permissions,
         listen,
-        session_image,
+        box_image,
         egress_container,
         login: cli.login,
         login_required,
@@ -326,13 +317,13 @@ pub fn setup_plan(cli: &SetupCli) -> anyhow::Result<SetupPlan> {
         service: !cli.no_service,
         steps: vec![
             if cli.upgrade {
-                "upgrade-session-image-preserve-private-state"
+                "upgrade-box-preserve-private-state"
             } else if existing {
                 "preserve-private-runtime"
             } else {
                 "initialize-private-runtime"
             },
-            "verify-session-image",
+            "build-local-box",
             "owner-login-if-requested",
             "start-owned-egress",
             if cli.no_service {
@@ -342,7 +333,7 @@ pub fn setup_plan(cli: &SetupCli) -> anyhow::Result<SetupPlan> {
             },
         ],
         upgrade: cli.upgrade,
-        previous_session_image,
+        previous_box_image,
     })
 }
 
@@ -405,29 +396,13 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         ));
     }
     // Fail prerequisites before creating private authentication state.
-    let image = NativeRunner
-        .run(CommandSpec::new(
-            "docker",
-            [
-                "image",
-                "inspect",
-                "--format",
-                "{{.Id}}",
-                &plan.session_image,
-            ],
-        ))
-        .await?;
-    if image.code != 0 {
-        eprintln!("Pulling the configured session image; this may take several minutes.");
-        let pulled = NativeRunner
-            .run(CommandSpec::new("docker", ["pull", &plan.session_image]).deadline(300))
-            .await?;
-        pulled.success("session image could not be pulled; start Docker and use the image supplied by the installed release")?;
-    }
-    if plan.upgrade {
+    plan.box_image =
+        box_build::ensure_box(&plan.box_image, plan.previous_box_image.as_deref()).await?;
+    let box_changed = plan.existing && plan.previous_box_image.as_deref() != Some(&plan.box_image);
+    if plan.upgrade || box_changed {
         let fresh = setup_plan(&cli)?;
         anyhow::ensure!(
-            fresh.previous_session_image == plan.previous_session_image
+            fresh.previous_box_image == plan.previous_box_image
                 && fresh.origin == plan.origin
                 && fresh.harness_home == plan.harness_home
                 && fresh.listen == plan.listen
@@ -441,8 +416,8 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         if plan.service {
             service::stop_service_for_upgrade(&plan.config).await?;
         }
-        let same_image = plan.previous_session_image.as_deref() == Some(&plan.session_image);
-        let image = plan.session_image.clone();
+        let same_image = plan.previous_box_image.as_deref() == Some(&plan.box_image);
+        let image = plan.box_image.clone();
         let egress = plan.egress_container.clone();
         let already_ready = same_image
             && tokio::task::spawn_blocking(move || crate::sandbox::preflight(&image, &egress))
@@ -453,7 +428,7 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
                 "stop the running gateway before an image upgrade; its listener is still occupied",
             )?;
             drop(listener);
-            upgrade_image(&plan.config, &plan.session_image)?;
+            upgrade_image(&plan.config, &plan.box_image)?;
             // Inspect before a stop so an absent container remains resumable. Ownership
             // is rechecked by egress_stop; unrelated resources are never removed.
             let existing_egress = NativeRunner
@@ -480,7 +455,7 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             owner_passphrase_file: cli.owner_passphrase_file,
             headless_static_bearer: false,
             listen: plan.listen,
-            session_image: plan.session_image.clone(),
+            box_image: plan.box_image.clone(),
             egress_container: plan.egress_container.clone(),
         };
         tokio::task::spawn_blocking(move || config::init_quiet(init)).await??;
@@ -503,7 +478,7 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         );
     }
     let name = plan.egress_container.clone();
-    let image = plan.session_image.clone();
+    let image = plan.box_image.clone();
     tokio::task::spawn_blocking(move || crate::sandbox::egress_start(&name, &image)).await??;
     if plan.service {
         service::service_run(ServiceCli {
@@ -526,17 +501,13 @@ fn upgrade_image(path: &Path, image: &str) -> anyhow::Result<()> {
     private_metadata(path, false)?;
     let original = std::fs::read(path)?;
     let mut value: serde_json::Value = serde_json::from_slice(&original)?;
-    if value
-        .get("session_image")
-        .and_then(serde_json::Value::as_str)
-        == Some(image)
-    {
+    if value.get("box_image").and_then(serde_json::Value::as_str) == Some(image) {
         return Ok(());
     }
     value
         .as_object_mut()
         .ok_or_else(|| usage("configuration must be an object"))?
-        .insert("session_image".into(), image.into());
+        .insert("box_image".into(), image.into());
     let suffix = uuid::Uuid::new_v4();
     let backup = path.with_file_name(format!("config.json.pre-upgrade-{suffix}"));
     private_write(&backup, &original)?;
@@ -636,11 +607,6 @@ fn print_plan(plan: &SetupPlan, json: bool) -> anyhow::Result<()> {
         if !plan.service {
             println!("Start: agent-connect serve --config {:?}", plan.config);
         }
-        if !plan.session_image.contains("@sha256:") {
-            println!(
-                "Development warning: mutable session image tag; use the release digest for production."
-            );
-        }
     }
     Ok(())
 }
@@ -722,7 +688,6 @@ mod tests {
             profiles: None,
             permissions: None,
             listen: None,
-            session_image: Some("session:test".into()),
             egress_container: None,
             owner_passphrase_file: None,
             apply: false,
@@ -751,8 +716,6 @@ mod tests {
         cli.origin = Some("https://example.test/path".into());
         assert!(setup_plan(&cli).is_err());
         cli.origin = None;
-        cli.session_image = Some("--privileged".into());
-        assert!(setup_plan(&cli).is_err());
         assert!(!dir.exists());
     }
     #[test]
@@ -779,7 +742,7 @@ mod tests {
             owner_passphrase_file: Some(passphrase),
             headless_static_bearer: false,
             listen: plan.listen,
-            session_image: plan.session_image.clone(),
+            box_image: plan.box_image.clone(),
             egress_container: plan.egress_container.clone(),
         })
         .unwrap();
@@ -850,11 +813,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("acp-upgrade-{}", uuid::Uuid::new_v4()));
         create_private_directory(&dir).unwrap();
         let path = dir.join("config.json");
-        private_write(&path, br#"{"session_image":"old:tag","state_dir":"state","entry_points":["https://example.test"],"future":{"retained":true}}"#).unwrap();
+        private_write(&path, br#"{"box_image":"old:tag","state_dir":"state","entry_points":["https://example.test"],"future":{"retained":true}}"#).unwrap();
         upgrade_image(&path, "new@sha256:123").unwrap();
         let value: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        assert_eq!(value["session_image"], "new@sha256:123");
+        assert_eq!(value["box_image"], "new@sha256:123");
         assert_eq!(value["future"]["retained"], true);
         assert_eq!(value["state_dir"], "state");
         let entries = std::fs::read_dir(&dir).unwrap().count();
@@ -897,10 +860,6 @@ impl CommandSpec {
             args: args.into_iter().map(|a| a.as_ref().to_owned()).collect(),
             timeout_secs: 15,
         }
-    }
-    fn deadline(mut self, seconds: u64) -> Self {
-        self.timeout_secs = seconds;
-        self
     }
 }
 pub(super) struct CommandOutput {

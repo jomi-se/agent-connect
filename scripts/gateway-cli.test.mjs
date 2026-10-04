@@ -380,7 +380,7 @@ test("egress uses read-only same-image proxy and verifies ownership before delet
       "start",
       "--name",
       "owned-egress",
-      "--session-image",
+      "--box-image",
       "session:test",
     ],
     env,
@@ -438,17 +438,10 @@ test("egress uses read-only same-image proxy and verifies ownership before delet
   assert.deepEqual(args, ["rm", "--force", id]);
 });
 
-test("release-info reports the compiled default image independently of runtime overrides", () => {
-  const result = command(["release-info"], {
-    AGENT_CONNECT_SESSION_IMAGE: "runtime:override",
-  });
+test("release-info reports only the compiled gateway version", () => {
+  const result = command(["release-info"]);
   assert.equal(result.status, 0, result.stderr);
-  const release = JSON.parse(result.stdout);
-  assert.equal(release.version, "0.0.1");
-  assert.match(
-    release.sessionImage,
-    /^(agent-connect-session:0\.0\.1|.+@sha256:[a-f0-9]{64})$/,
-  );
+  assert.deepEqual(JSON.parse(result.stdout), { version: "0.0.1" });
 });
 
 test("relative config argument resolves a dedicated production home to an absolute path", async () => {
@@ -491,7 +484,7 @@ test("login defaults match init, explicit homes and old configs remain usable", 
   );
   // An existing runtime may still use its relative, per-runtime home/image.
   config.harness_home = "legacy-home";
-  config.session_image = "session:legacy-test";
+  config.box_image = "session:legacy-test";
   await writeFile(path, JSON.stringify(config));
   const configured = command(
     ["login", "--harness", "codex", "--config", path],
@@ -514,7 +507,7 @@ test("login defaults match init, explicit homes and old configs remain usable", 
       path,
       "--harness-home",
       join(root, "override"),
-      "--session-image",
+      "--box-image",
       "session:override",
     ],
     env,
@@ -538,7 +531,7 @@ test("login defaults match init, explicit homes and old configs remain usable", 
     JSON.stringify({
       harness: "codex",
       harness_home: "legacy-home",
-      session_image: "session:legacy-test",
+      box_image: "session:legacy-test",
     }),
   );
   const loginOnly = command(["login", "--harness", "codex", "--config", path], {
@@ -752,7 +745,7 @@ test("serve rejects owner state or config inside harness mount before Docker sta
     public_url: "https://gateway.example",
     boxed: true,
     harness_home: home,
-    session_image: "session:test",
+    box_image: "session:test",
     egress_container: "owned-egress",
     state_dir: join(home, "authstate"),
   };

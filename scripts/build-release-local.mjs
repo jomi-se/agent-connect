@@ -19,7 +19,6 @@ const dist = process.env.CARGO_DIST_BIN ?? "dist";
 const env = {
   ...process.env,
   CARGO_ENCODED_RUSTFLAGS: encodedReleaseRustflags(process.env, repo),
-  AGENT_CONNECT_SESSION_IMAGE: `agent-connect-session:${version}`,
   npm_config_cache:
     process.env.npm_config_cache ?? join(repo, ".agent-connect/npm-cache"),
 };
@@ -61,6 +60,7 @@ try {
     // Rust's bundled LLD understands its musl CRT and architecture errata flags.
     env[`CARGO_TARGET_${key.toUpperCase()}_LINKER`] ??= "rust-lld";
   }
+  run("./deploy/gateway/box/build-local.sh", ["--runners-only"]);
   run(dist, [
     "build",
     "--artifacts=local",
@@ -77,17 +77,10 @@ try {
       target,
       "--version",
       version,
-      "--image",
-      env.AGENT_CONNECT_SESSION_IMAGE,
     ]);
   }
-  run(process.execPath, [
-    "scripts/release.mjs",
-    "pack",
-    "--local",
-    "--image",
-    `agent-connect-session:${version}`,
-  ]);
+  run(process.execPath, ["scripts/release.mjs", "pack", "--local"]);
+  run(process.execPath, ["scripts/test-box-setup.mjs"]);
 } finally {
   await rm(compilers, { recursive: true, force: true });
 }

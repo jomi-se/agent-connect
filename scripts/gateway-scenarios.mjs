@@ -22,9 +22,9 @@ const children = new Set();
 const dockerContainers = [];
 const dockerNetworks = [];
 const boxed = process.env.ACP_BOXED === "1";
-const sessionImage =
-  process.env.ACP_SESSION_IMAGE ??
-  `agent-connect-session:${JSON.parse(await readFile(join(repo, "deploy/gateway/session/package.json"), "utf8")).version}`;
+const boxImage =
+  process.env.ACP_BOX_IMAGE ??
+  `agent-connect-box:${JSON.parse(await readFile(join(repo, "deploy/gateway/box/package.json"), "utf8")).version}`;
 let mockContainer, egressContainer;
 const cleanEnv = {
   PATH: process.env.PATH,
@@ -185,10 +185,10 @@ try {
       "--test",
       join(repo, "deploy/gateway/test/egress-proxy.test.mjs"),
     ]);
-    await command("docker", ["image", "inspect", sessionImage]);
+    await command("docker", ["image", "inspect", boxImage]);
     await command("node", [
       "--test",
-      join(repo, "deploy/gateway/test/session-image.test.mjs"),
+      join(repo, "deploy/gateway/test/box.test.mjs"),
     ]);
     const suffix = run.split("-").at(-1).toLowerCase();
     mockContainer = `acp-test-model-${suffix}`;
@@ -224,14 +224,7 @@ try {
     ]);
     await command(
       join(repo, "target/debug/agent-connect"),
-      [
-        "egress",
-        "start",
-        "--name",
-        egressContainer,
-        "--session-image",
-        sessionImage,
-      ],
+      ["egress", "start", "--name", egressContainer, "--box-image", boxImage],
       { env: cleanEnv },
     );
     // The helper verified this owner-labelled proxy and its selected image.
@@ -291,8 +284,8 @@ try {
                 "--boxed",
                 "--harness-home",
                 harnessHome,
-                "--session-image",
-                sessionImage,
+                "--box-image",
+                boxImage,
                 "--egress-container",
                 egressContainer,
                 "--mock-container",

@@ -19,14 +19,13 @@ import {
   verifyArchiveReleaseInfo,
 } from "./release-info.mjs";
 const version = "0.0.1";
-const sessionImage = `agent-connect-session:${version}`;
 const hostTarget = Object.entries(releaseTargets).find(
   ([, [os, arch]]) => os === process.platform && arch === process.arch,
 )?.[0];
 const foreignTarget = Object.keys(releaseTargets).find(
   (target) => target !== hostTarget,
 );
-async function fixture(t, target, info = { version, sessionImage }) {
+async function fixture(t, target, info = { version }) {
   const directory = await mkdtemp(join(tmpdir(), "release-test-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const files = join(directory, "files");
@@ -43,7 +42,7 @@ async function fixture(t, target, info = { version, sessionImage }) {
     { encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr);
-  return { directory, files, archive, target, version, sessionImage };
+  return { directory, files, archive, target, version };
 }
 test(
   "native release-info evidence is emitted only after the executable reports matching defaults",
@@ -52,7 +51,6 @@ test(
     const input = await fixture(t, hostTarget);
     const info = await verifyArchiveReleaseInfo({ ...input, record: true });
     assert.equal(info.version, version);
-    assert.equal(info.sessionImage, sessionImage);
     assert.equal(info.target, hostTarget);
     assert.equal(
       info.binarySha256,
@@ -73,7 +71,6 @@ test(
 );
 for (const [field, replacement, message] of [
   ["version", "9.9.9", /version mismatch/],
-  ["sessionImage", "agent-connect-session:wrong", /session image mismatch/],
 ]) {
   test(
     `pack rejects compiled ${field} mismatch before creating packages`,
@@ -81,7 +78,6 @@ for (const [field, replacement, message] of [
     async (t) => {
       const input = await fixture(t, hostTarget, {
         version,
-        sessionImage,
         [field]: replacement,
       });
       const output = join(input.directory, "output");
@@ -91,8 +87,6 @@ for (const [field, replacement, message] of [
           resolve(import.meta.dirname, "release.mjs"),
           "pack",
           "--local",
-          "--image",
-          sessionImage,
           "--artifacts",
           input.directory,
           "--directory",
@@ -119,7 +113,6 @@ test("cross-target packaging requires evidence bound to the executable hash", as
     schemaVersion: 1,
     target: foreignTarget,
     version,
-    sessionImage,
     binarySha256: hash,
   };
   const path = join(input.directory, releaseInfoFilename(foreignTarget));
@@ -129,7 +122,6 @@ test("cross-target packaging requires evidence bound to the executable hash", as
     ["binarySha256", "0".repeat(64), /does not match archive/],
     ["target", hostTarget, /does not match archive/],
     ["version", "9.9.9", /version mismatch/],
-    ["sessionImage", "wrong", /session image mismatch/],
   ]) {
     await writeFile(path, JSON.stringify({ ...info, [field]: replacement }));
     await assert.rejects(verifyArchiveReleaseInfo(input), message);
@@ -155,7 +147,7 @@ test(
   async (t) => {
     const input = await fixture(t, hostTarget, {
       version,
-      sessionImage: "wrong",
+      version: "wrong",
     });
     await writeFile(
       join(input.directory, releaseInfoFilename(hostTarget)),
@@ -163,24 +155,20 @@ test(
         schemaVersion: 1,
         target: hostTarget,
         version,
-        sessionImage,
       }),
     );
-    await assert.rejects(
-      verifyArchiveReleaseInfo(input),
-      /session image mismatch/,
-    );
+    await assert.rejects(verifyArchiveReleaseInfo(input), /version mismatch/);
   },
 );
 
-test("release checks accept independent SDK versions and reject gateway/image drift", async (t) => {
+test("release checks accept independent SDK versions and reject gateway/box drift", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "acp-version-contract-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   for (const folder of [
     "scripts",
     "packages/web-sdk",
     "packages/gateway-npm",
-    "deploy/gateway/session",
+    "deploy/gateway/box",
     "crates/gateway",
   ])
     await mkdir(join(directory, folder), { recursive: true });
@@ -196,7 +184,7 @@ test("release checks accept independent SDK versions and reject gateway/image dr
     version: "0.0.1",
     agentConnect: { adapterVersions: { "fixture-adapter": "2.0.1" } },
   });
-  await manifest("deploy/gateway/session/package.json", {
+  await manifest("deploy/gateway/box/package.json", {
     version: "0.0.1",
     dependencies: { "fixture-adapter": "2.0.1" },
   });
@@ -216,13 +204,13 @@ test("release checks accept independent SDK versions and reject gateway/image dr
   assert.notEqual(sdkDrift.status, 0);
   assert.match(sdkDrift.stderr, /independently versioned 0.0.x/);
   await manifest("packages/web-sdk/package.json", { version: "0.0.10" });
-  await manifest("deploy/gateway/session/package.json", {
+  await manifest("deploy/gateway/box/package.json", {
     version: "0.0.2",
     dependencies: { "fixture-adapter": "2.0.1" },
   });
-  const imageDrift = check();
-  assert.notEqual(imageDrift.status, 0);
-  assert.match(imageDrift.stderr, /must share one version/);
+  const boxDrift = check();
+  assert.notEqual(boxDrift.status, 0);
+  assert.match(boxDrift.stderr, /must share one version/);
 });
 
 for (const prefix of ["/home/example/", "/Users/example/"]) {

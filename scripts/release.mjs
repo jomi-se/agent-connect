@@ -23,7 +23,6 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     directory: { type: "string", default: "dist/release" },
-    image: { type: "string" },
     local: { type: "boolean", default: false },
     artifacts: { type: "string", default: "target/distrib" },
   },
@@ -34,24 +33,24 @@ const json = async (path) =>
   JSON.parse(await readFile(join(repo, path), "utf8"));
 const sdk = await json("packages/web-sdk/package.json");
 const gateway = await json("packages/gateway-npm/package.json");
-const session = await json("deploy/gateway/session/package.json");
+const box = await json("deploy/gateway/box/package.json");
 const cargo = await readFile(join(repo, "crates/gateway/Cargo.toml"), "utf8");
 const version = gateway.version;
 if (
-  ![session.version, cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1]].every(
+  ![box.version, cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1]].every(
     (v) => v === version,
   )
 )
   throw new Error(
-    "Gateway, Cargo crate and session image manifest must share one version",
+    "Gateway, Cargo crate and box manifest must share one version",
   );
 if (!/^0\.0\.\d+$/.test(sdk.version) || !/^0\.0\.\d+$/.test(version))
   throw new Error(
     "SDK and gateway must remain on independently versioned 0.0.x releases",
   );
 for (const [name, pin] of Object.entries(gateway.agentConnect.adapterVersions))
-  if (session.dependencies[name] !== pin)
-    throw new Error(`Session image adapter pin mismatch: ${name}`);
+  if (box.dependencies[name] !== pin)
+    throw new Error(`Box adapter pin mismatch: ${name}`);
 // Platform packages are unpublished until release, so the workspace launcher does
 // not declare them (older npm ci rejects lockfiles missing optional packages).
 // The packed launcher declares every platform at the gateway version.
@@ -81,19 +80,6 @@ const targets = [
   "x86_64-unknown-linux-musl",
   "aarch64-unknown-linux-musl",
 ];
-function imageRef() {
-  const image = values.image;
-  if (
-    !image ||
-    (!values.local && !/^[a-z0-9./_-]+@sha256:[a-f0-9]{64}$/.test(image))
-  )
-    throw new Error(
-      "--image must be an immutable registry digest; --local permits a local test tag",
-    );
-  if (values.local && !/^[a-zA-Z0-9./_:@-]+$/.test(image))
-    throw new Error("Invalid local image reference");
-  return image;
-}
 async function writeMetadata() {
   const artifacts = {};
   for (const filename of (await readdir(output)).sort()) {
@@ -111,7 +97,6 @@ async function writeMetadata() {
       {
         schemaVersion: 1,
         version,
-        sessionImage: imageRef(),
         adapterVersions: gateway.agentConnect.adapterVersions,
         sdkVersion: sdk.version,
         targets,
@@ -145,7 +130,6 @@ async function pack(path) {
 if (command === "check") {
   console.log(`ACP release versions and adapter pins agree: ${version}`);
 } else if (command === "pack") {
-  imageRef();
   const artifacts = resolve(repo, values.artifacts);
   const available = await readdir(artifacts);
   if (
@@ -166,7 +150,6 @@ if (command === "check") {
       archive: join(artifacts, filename),
       target,
       version,
-      sessionImage: imageRef(),
     });
     releaseEvidence.push([target, evidence]);
   }
@@ -200,6 +183,10 @@ if (command === "check") {
         "scripts/package-gateway.mjs",
         target,
         join(staging, executable),
+        join(
+          artifacts,
+          `session-runner-linux-${target.startsWith("x86_64") ? "amd64" : "arm64"}`,
+        ),
       ]);
       const platform = target.startsWith("aarch64-apple")
         ? "darwin-arm64"
@@ -220,6 +207,25 @@ if (command === "check") {
       recursive: true,
       filter: (path) => !path.split(/[\\/]/).includes("node_modules"),
     });
+    await mkdir(join(launcher, "box"));
+    for (const file of [
+      "Dockerfile",
+      "entrypoint.sh",
+      "package.json",
+      "package-lock.json",
+    ])
+      await cp(
+        join(repo, "deploy/gateway/box", file),
+        join(launcher, "box", file),
+      );
+    await cp(
+      join(repo, "deploy/gateway/egress-proxy.mjs"),
+      join(launcher, "box/egress-proxy.mjs"),
+    );
+    await cp(
+      join(repo, "deploy/gateway/test/fixtures/codex-config.toml"),
+      join(launcher, "box/mock-codex-config.toml"),
+    );
     await writeFile(
       join(launcher, "package.json"),
       JSON.stringify(
@@ -273,7 +279,7 @@ if (command === "check") {
       process.env.AGENT_CONNECT_PUBLISH_APPROVED !== version)
   )
     throw new Error(
-      "Publication requires a digest-pinned candidate and explicit protected OIDC workflow approval",
+      "Publication requires a complete candidate and the protected OIDC workflow",
     );
   // The SDK publishes from its own job; the gateway set goes platforms first,
   // launcher last, skipping versions a previous run already published.
@@ -316,5 +322,5 @@ if (command === "check") {
   console.log(`ACP ${command} checked ${packages.length} packages`);
 } else
   throw new Error(
-    "Usage: release.mjs check | pack --image <ref> [--local] | publish-dry-run | publish",
+    "Usage: release.mjs check | pack [--local] | publish-dry-run | publish",
   );

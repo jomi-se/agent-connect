@@ -147,43 +147,48 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
                 "inspect",
                 "--format",
                 "{{.Id}}",
-                &configured.session_image,
+                &configured.box_image,
             ],
         ))
         .await
     {
         Ok(result) if result.code == 0 => report.add(
-            "session_image",
+            "box_image",
             CheckStatus::Pass,
-            "Configured session image is installed",
+            "Configured box is installed",
             None,
         ),
         _ => report.add(
-            "session_image",
+            "box_image",
             CheckStatus::Fail,
-            "Configured session image is absent or unavailable",
-            Some("Install the selected release session image, then rerun setup"),
+            "Configured box is absent or unavailable",
+            Some("Run agent-connect setup to build the local box"),
         ),
     }
-    if configured.session_image.contains("@sha256:") {
-        report.add(
-            "session_image_pin",
+    match super::box_build::desired_image() {
+        Ok(image) if image == configured.box_image => report.add(
+            "box_current",
             CheckStatus::Pass,
-            "Session image uses an immutable digest reference",
+            "Box matches this gateway version and owner layer",
             None,
-        );
-    } else {
-        report.add(
-            "session_image_pin",
+        ),
+        Ok(_) => report.add(
+            "box_current",
             CheckStatus::Warn,
-            "Session image uses a mutable development tag",
-            Some("Use the digest-pinned image supplied by the installed release for production"),
-        );
+            "Gateway version or owner box directory changed since the last build",
+            Some("Run agent-connect setup to rebuild"),
+        ),
+        Err(error) => report.add(
+            "box_current",
+            CheckStatus::Fail,
+            format!("Cannot inspect owner box directory: {error}"),
+            Some("Repair the owner box directory, then run agent-connect setup to rebuild"),
+        ),
     }
     if let Some(egress) = configured.egress_container.clone() {
-        let image = configured.session_image.clone();
+        let image = configured.box_image.clone();
         match tokio::task::spawn_blocking(move || crate::sandbox::preflight(&image, &egress)).await {
-            Ok(Ok(())) => report.add("egress_owned_ready", CheckStatus::Pass, "Owned egress proxy matches the session image and restricted configuration", None),
+            Ok(Ok(())) => report.add("egress_owned_ready", CheckStatus::Pass, "Owned egress proxy matches the box and restricted configuration", None),
             _ => report.add("egress_owned_ready", CheckStatus::Fail, "Owned egress proxy is absent, stopped, unhealthy or does not match the configured image", Some("Run agent-connect setup --apply --non-interactive to resume owned egress, or use agent-connect egress start with the configured name and image; foreign containers are never changed")),
         }
     }

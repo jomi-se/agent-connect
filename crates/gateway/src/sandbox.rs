@@ -14,6 +14,7 @@ const EGRESS_OWNER: &str = "acp-egress";
 pub fn egress_start_args(name: &str, image: &str) -> Vec<String> {
     [
         "run",
+        "--pull=never",
         "--detach",
         "--name",
         name,
@@ -97,7 +98,7 @@ fn preflight_with(
     Ok(())
 }
 
-struct SessionImage {
+struct BoxImage {
     id: String,
     env: serde_json::Value,
     user: serde_json::Value,
@@ -106,9 +107,9 @@ fn inspect_image(
     image: &str,
     docker: &mut impl DockerCommand,
     deadline: Instant,
-) -> anyhow::Result<SessionImage> {
+) -> anyhow::Result<BoxImage> {
     let output = docker.run(&["image", "inspect", "--format", "{{json .}}", image], deadline)
-        .context("selected session image is unavailable; Docker must be running and the selected image installed before egress start or serve")?;
+        .context("selected box is unavailable; Docker must be running and the selected image installed before egress start or serve")?;
     let value: serde_json::Value =
         serde_json::from_str(&output).context("invalid Docker image inspection")?;
     let id = value
@@ -116,7 +117,7 @@ fn inspect_image(
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("missing inspected image ID"))?;
     docker_id(id.strip_prefix("sha256:").unwrap_or(id))?;
-    Ok(SessionImage {
+    Ok(BoxImage {
         id: id.into(),
         env: value
             .pointer("/Config/Env")
@@ -154,17 +155,17 @@ fn inspect_container(
 }
 fn checked_egress(
     name: &str,
-    image: &SessionImage,
+    image: &BoxImage,
     docker: &mut impl DockerCommand,
     deadline: Instant,
 ) -> anyhow::Result<String> {
     let container = inspect_container(name, docker, deadline)?
-        .ok_or_else(|| anyhow::anyhow!("egress proxy is absent; run agent-connect egress start with the configured name and session image"))?;
+        .ok_or_else(|| anyhow::anyhow!("egress proxy is absent; run agent-connect egress start with the configured name and box"))?;
     validate_egress(&container, image, true)
 }
 fn validate_egress(
     container: &serde_json::Value,
-    image: &SessionImage,
+    image: &BoxImage,
     running: bool,
 ) -> anyhow::Result<String> {
     use serde_json::json;
@@ -327,6 +328,7 @@ pub fn box_args(
     let mut args: Vec<String> = [
         "docker",
         "run",
+        "--pull=never",
         "-i",
         "--rm",
         "--name",
@@ -905,7 +907,7 @@ mod tests {
 
     #[test]
     fn egress_refuses_unowned_wrong_image_or_modified_proxy() {
-        let image = SessionImage {
+        let image = BoxImage {
             id: format!("sha256:{}", "d".repeat(64)),
             env: serde_json::json!(["PATH=/usr/bin"]),
             user: serde_json::Value::Null,
@@ -1171,7 +1173,7 @@ mod tests {
             preflight_with("session:test", "egress-name", &mut absent)
                 .unwrap_err()
                 .to_string()
-                .contains("image is unavailable")
+                .contains("box is unavailable")
         );
         assert!(absent.0.is_empty());
         let mut stopped = Fixture(VecDeque::from([

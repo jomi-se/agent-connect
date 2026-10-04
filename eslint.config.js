@@ -43,6 +43,7 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
+      "target/**",
       "**/coverage/**",
       "**/node_modules/**",
       ".agents/**",

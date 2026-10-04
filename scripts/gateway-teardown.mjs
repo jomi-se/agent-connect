@@ -23,8 +23,8 @@ const repo = resolve(import.meta.dirname, "..");
 const root = await mkdtemp(join(tmpdir(), "agent-connect-teardown-"));
 const suffix = root.split("-").at(-1).toLowerCase();
 const image =
-  process.env.ACP_SESSION_IMAGE ??
-  `agent-connect-session:${JSON.parse(await readFile(join(repo, "deploy/gateway/session/package.json"), "utf8")).version}`;
+  process.env.ACP_BOX_IMAGE ??
+  `agent-connect-box:${JSON.parse(await readFile(join(repo, "deploy/gateway/box/package.json"), "utf8")).version}`;
 const sourceBinary =
   process.env.ACP_GATEWAY_BIN ?? join(repo, "target/debug/agent-connect");
 const binary = join(root, "gateway");
@@ -210,7 +210,7 @@ async function runCase(mode) {
         : mode === "startup-unowned-egress"
           ? modelName
           : egressName,
-      "--session-image",
+      "--box-image",
       image,
       "--tools",
       join(repo, "examples/acp-chat/tools.json"),
@@ -269,7 +269,7 @@ async function runCase(mode) {
           "start",
           "--name",
           egressName,
-          "--session-image",
+          "--box-image",
           image,
         ]);
       }
@@ -430,7 +430,7 @@ async function runCase(mode) {
         "start",
         "--name",
         egressName,
-        "--session-image",
+        "--box-image",
         image,
       ]);
     }
@@ -445,7 +445,7 @@ try {
     "start",
     "--name",
     egressName,
-    "--session-image",
+    "--box-image",
     image,
   ]);
   const egress = await inspect("container", egressName);
@@ -456,7 +456,7 @@ try {
     "start",
     "--name",
     egressName,
-    "--session-image",
+    "--box-image",
     image,
   ]);
   assert.equal(
@@ -470,7 +470,7 @@ try {
     "start",
     "--name",
     egressName,
-    "--session-image",
+    "--box-image",
     image,
   ]);
   assert.equal(

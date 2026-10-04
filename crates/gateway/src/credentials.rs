@@ -46,7 +46,7 @@ fn default_home_from(
     }))
 }
 
-/// The shipped session image sets CODEX_HOME and CLAUDE_CONFIG_DIR under the
+/// The shipped box sets CODEX_HOME and CLAUDE_CONFIG_DIR under the
 /// mounted whole home. Inspect metadata only; never open credential contents.
 pub fn credential_file_present(home: &Path, harness: Harness) -> bool {
     home.join(match harness {
@@ -159,6 +159,7 @@ impl HarnessHome {
 pub fn login_args(home: &HarnessHome, image: &str, harness: Harness) -> Vec<String> {
     let mut args = vec![
         "run".into(),
+        "--pull=never".into(),
         "--rm".into(),
         "-it".into(),
         "--cap-drop=ALL".into(),
@@ -199,7 +200,7 @@ mod tests {
 
     #[test]
     fn login_detection_matches_shipped_image_homes_without_reading_credentials() {
-        let entrypoint = include_str!("../../../deploy/gateway/session/entrypoint.sh");
+        let entrypoint = include_str!("../../../deploy/gateway/box/entrypoint.sh");
         assert!(entrypoint.contains("CODEX_HOME=\"$HOME/codex-home\""));
         assert!(entrypoint.contains("CLAUDE_CONFIG_DIR=\"$HOME/claude-config\""));
         let root =

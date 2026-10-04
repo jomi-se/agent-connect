@@ -52,10 +52,9 @@ jobs:
       - name: Check ACP versions and adapter pins
         run: node scripts/release.mjs check
 
-      - name: Build the local session image and clean-room release artifacts
+      - name: Build the clean-room release artifacts
         run: |
           docker info
-          ./deploy/gateway/session/build-local.sh --native-only
           node scripts/build-release-local.mjs
 
       - name: Run all credential-free verification gates

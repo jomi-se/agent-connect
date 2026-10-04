@@ -21,7 +21,7 @@ struct Cli {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    // The image provides both adapters on PATH and harness configuration via
+    // The box provides both adapters on PATH and harness configuration via
     // environment set by the container entrypoint.
     let adapter = match cli.harness {
         Harness::Codex => "codex-acp",
@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let agent = AcpAgent::from_args([adapter])?;
     let chain = ConductorImpl::new_agent(
-        "agent-connect-session",
+        "agent-connect-box",
         ProxiesAndAgent::new(agent).proxy(McpOverAcpPolyfill::http()),
     );
     chain.connect_to(Stdio::new()).await?;

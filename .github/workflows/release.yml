@@ -25,7 +25,6 @@ jobs:
       sdk_version: ${{ steps.plan.outputs.sdk_version }}
       gateway: ${{ steps.plan.outputs.gateway }}
       sdk: ${{ steps.plan.outputs.sdk }}
-      image_registry: ${{ steps.plan.outputs.image_registry }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -36,8 +35,6 @@ jobs:
           package-manager-cache: false
       - name: Compare package versions with npm
         id: plan
-        env:
-          OWNER: ${{ github.repository_owner }}
         run: |
           version=$(node -p 'require("./packages/gateway-npm/package.json").version')
           sdk_version=$(node -p 'require("./packages/web-sdk/package.json").version')
@@ -51,7 +48,6 @@ jobs:
             echo "sdk_version=$sdk_version"
             echo "gateway=$gateway"
             echo "sdk=$sdk"
-            echo "image_registry=ghcr.io/${OWNER,,}/agent-connect-session"
           } >> "$GITHUB_OUTPUT"
 
   sdk:
@@ -84,56 +80,10 @@ jobs:
           node scripts/smoke-web-sdk-package.mjs "$tarball"
           npm publish "$tarball" --access public --tag latest --provenance
 
-  image:
-    name: Publish the multiarch session image
-    if: needs.plan.outputs.gateway == 'true'
-    needs: plan
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      ref: ${{ steps.reference.outputs.ref }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24.15.0
-          package-manager-cache: false
-      - run: ./scripts/install-build-tools.sh
-      - run: ./deploy/gateway/session/build-local.sh --runners-only
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - name: Authenticate GHCR with the ephemeral job token
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push the image
-        id: image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          file: deploy/gateway/session/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ needs.plan.outputs.image_registry }}:${{ needs.plan.outputs.version }}
-          provenance: true
-      - name: Record the immutable image digest
-        id: reference
-        env:
-          REGISTRY: ${{ needs.plan.outputs.image_registry }}
-          DIGEST: ${{ steps.image.outputs.digest }}
-        run: |
-          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
-          printf 'ref=%s@%s\n' "$REGISTRY" "$DIGEST" >> "$GITHUB_OUTPUT"
-
   native:
     name: Native gateway (${{ matrix.target }})
-    needs: [plan, image]
+    if: needs.plan.outputs.gateway == 'true'
+    needs: plan
     strategy:
       fail-fast: false
       matrix:
@@ -146,8 +96,6 @@ jobs:
             target: aarch64-unknown-linux-musl
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
-    env:
-      AGENT_CONNECT_SESSION_IMAGE: ${{ needs.image.outputs.ref }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -156,21 +104,19 @@ jobs:
         with:
           node-version: 24.15.0
       - run: ./scripts/install-build-tools.sh
-      - name: Require a digest-pinned image for every binary
-        run: '[[ "$AGENT_CONNECT_SESSION_IMAGE" =~ ^ghcr\.io/[^@]+@sha256:[a-f0-9]{64}$ ]]'
       - name: Build target archives and checksums with cargo-dist
         env:
           TARGET: ${{ matrix.target }}
           VERSION: ${{ needs.plan.outputs.version }}
         run: dist build --artifacts local --target "$TARGET" --tag "v$VERSION" --no-local-paths
-      - name: Record image and version from the exact native archive executables
+      - name: Record version from the exact native archive executables
         env:
           TARGET: ${{ matrix.target }}
           VERSION: ${{ needs.plan.outputs.version }}
-        run: node scripts/release-info.mjs record --target "$TARGET" --version "$VERSION" --image "$AGENT_CONNECT_SESSION_IMAGE"
+        run: node scripts/release-info.mjs record --target "$TARGET" --version "$VERSION"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: native-${{ matrix.target }}
+          name: gateway-native-${{ matrix.target }}
           path: |
             target/distrib/*.tar.xz
             target/distrib/*.sha256
@@ -179,13 +125,34 @@ jobs:
           compression-level: 0
           retention-days: 14
 
+  runners:
+    name: Static Linux box runners
+    if: needs.plan.outputs.gateway == 'true'
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.15.0
+      - run: ./scripts/install-build-tools.sh
+      - run: ./deploy/gateway/box/build-local.sh --runners-only
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gateway-runners
+          path: target/distrib/session-runner-linux-*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
   package:
     name: Pack the gateway npm packages
-    needs: [plan, image, native]
+    needs: [plan, native, runners]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      AGENT_CONNECT_SESSION_IMAGE: ${{ needs.image.outputs.ref }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -200,7 +167,7 @@ jobs:
       - run: ./scripts/install-build-tools.sh
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          pattern: native-*
+          pattern: gateway-*
           path: target/distrib
           merge-multiple: true
       - name: Generate the global shell installer without rebuilding binaries
@@ -211,7 +178,7 @@ jobs:
         run: |
           mkdir -p dist/release
           cp target/distrib/*.sha256 dist/release/
-          node scripts/release.mjs pack --image "$AGENT_CONNECT_SESSION_IMAGE" --artifacts target/distrib --directory dist/release
+          node scripts/release.mjs pack --artifacts target/distrib --directory dist/release
       - name: Preview npm publication
         run: node scripts/release.mjs publish-dry-run --directory dist/release
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

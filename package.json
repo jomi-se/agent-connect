@@ -33,7 +33,7 @@
     "release:check": "node scripts/release.mjs check",
     "release:prepare-local": "node scripts/build-release-local.mjs",
     "release:dry-run": "node scripts/release.mjs publish-dry-run",
-    "build:session": "./deploy/gateway/session/build-local.sh",
+    "build:box-runners": "./deploy/gateway/box/build-local.sh",
     "test:integration:gateway:clean-room": "node scripts/clean-room.mjs",
     "test:integration:gateway:teardown": "node scripts/gateway-teardown.mjs",
     "test:ui:owner": "node scripts/owner-ui.mjs",

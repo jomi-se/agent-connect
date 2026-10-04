@@ -28,7 +28,7 @@ use agent_connect_gateway::authorization::{
     OwnerSession,
 };
 use agent_connect_gateway::config::{
-    self, CodexMode, DEFAULT_SESSION_IMAGE, InitCli, ServeCli, ServeOptions, UsageError,
+    self, CodexMode, DEFAULT_BOX_IMAGE, InitCli, ServeCli, ServeOptions, UsageError,
 };
 use agent_connect_gateway::credentials::{HarnessHome, default_home, login_args, select_harness};
 use agent_connect_gateway::operations::{self, DoctorCli, ResetTotpCli, ServiceCli, SetupCli};
@@ -82,7 +82,7 @@ enum Command {
     Login(LoginCli),
     /// Manage the gateway-owned egress proxy (Docker required).
     Egress(EgressCli),
-    /// Print machine-readable release version and default session image.
+    /// Print machine-readable release version.
     ReleaseInfo,
 }
 #[derive(Args)]
@@ -96,8 +96,8 @@ struct LoginCli {
     /// Use the harness home and image from an existing private runtime config.
     #[arg(long, env = "AGENT_CONNECT_CONFIG", hide_env_values = true)]
     config: Option<std::path::PathBuf>,
-    #[arg(long, env = "AGENT_CONNECT_SESSION_IMAGE")]
-    session_image: Option<String>,
+    #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE")]
+    box_image: Option<String>,
 }
 
 #[derive(Args)]
@@ -115,8 +115,8 @@ enum EgressCommand {
             default_value = "agent-connect-egress"
         )]
         name: String,
-        #[arg(long, env = "AGENT_CONNECT_SESSION_IMAGE", default_value = DEFAULT_SESSION_IMAGE)]
-        session_image: String,
+        #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE", default_value = DEFAULT_BOX_IMAGE)]
+        box_image: String,
     },
     /// Remove a proxy only after verifying the gateway ownership label.
     Stop {
@@ -163,7 +163,7 @@ impl OwnerRuntime for ConsoleRuntime {
         {
             problems.push(OwnerProblem {
                 message: "Sessions cannot start: the box runtime is not responding.".into(),
-                repair: "On the gateway host, run agent-connect doctor to check Docker, the session image and the network proxy.".into(),
+                repair: "On the gateway host, run agent-connect doctor to check Docker, the box and the network proxy.".into(),
             });
         }
         if gateway.capacity.is_closed() {
@@ -274,7 +274,6 @@ async fn run() -> anyhow::Result<()> {
                 "{}",
                 serde_json::json!({
                     "version": env!("CARGO_PKG_VERSION"),
-                    "sessionImage": DEFAULT_SESSION_IMAGE,
                 })
             );
             return Ok(());
@@ -286,11 +285,8 @@ async fn run() -> anyhow::Result<()> {
         Command::ResetTotp(cli) => return operations::reset_totp(cli).await,
         Command::Egress(cli) => {
             match cli.command {
-                EgressCommand::Start {
-                    name,
-                    session_image,
-                } => {
-                    egress_start(&name, &session_image)?;
+                EgressCommand::Start { name, box_image } => {
+                    egress_start(&name, &box_image)?;
                     println!("Egress proxy started: {name}");
                 }
                 EgressCommand::Stop { name } => {
@@ -334,9 +330,9 @@ async fn run() -> anyhow::Result<()> {
                 .unwrap_or_else(|| default_home(harness))?;
             let home = HarnessHome::prepare(&path)?;
             let image = cli
-                .session_image
-                .or_else(|| configured.and_then(|c| c.session_image))
-                .unwrap_or_else(|| DEFAULT_SESSION_IMAGE.into());
+                .box_image
+                .or_else(|| configured.and_then(|c| c.box_image))
+                .unwrap_or_else(|| DEFAULT_BOX_IMAGE.into());
             eprintln!("Dedicated harness home: {}", home.path.display());
             if matches!(harness, Harness::Claude) {
                 eprintln!(
@@ -388,7 +384,7 @@ async fn run() -> anyhow::Result<()> {
         }
     }
     if cli.boxed {
-        let image = cli.session_image.clone();
+        let image = cli.box_image.clone();
         let egress = cli.egress_container.clone().unwrap();
         tokio::task::spawn_blocking(move || {
             agent_connect_gateway::sandbox::preflight(&image, &egress)
@@ -411,7 +407,7 @@ async fn run() -> anyhow::Result<()> {
         use sha2::{Digest, Sha256};
         let profile = serde_json::json!({
             "harness": cli.harness, "mode": cli.codex_mode, "permissions": cli.permissions,
-            "boxed": cli.boxed, "image": cli.session_image, "home": cli.harness_home,
+            "boxed": cli.boxed, "image": cli.box_image, "home": cli.harness_home,
             "egress": cli.egress_container, "public_url": public_url,
         });
         let fingerprint = format!("{:x}", Sha256::digest(serde_json::to_vec(&profile)?));
@@ -458,7 +454,7 @@ async fn run() -> anyhow::Result<()> {
                 if gateway.capacity.is_closed() {
                     break;
                 }
-                let image = gateway.cli.session_image.clone();
+                let image = gateway.cli.box_image.clone();
                 let egress = gateway.cli.egress_container.clone().unwrap();
                 let result = tokio::task::spawn_blocking(move || {
                     agent_connect_gateway::sandbox::preflight(&image, &egress)
@@ -850,7 +846,7 @@ async fn run_host(
         let mode = grant
             .permissions
             .codex_mode(gateway.cli.codex_mode.unwrap());
-        let image = gateway.cli.session_image.clone();
+        let image = gateway.cli.box_image.clone();
         let harness = gateway.cli.harness;
         let home = gateway.home.clone();
         let volume = gateway.cli.durable_home.then(|| home_volume(&grant.id));

@@ -10,7 +10,7 @@ rust-toolchain-version = "1.98.1"
 dist = true
 # CI backends to support
 ci = []
-# The hand-authored workflow is manual and enforces the owner-pushed tag boundary.
+# The hand-authored workflow builds from main and publishes npm packages only.
 hosting = ["github"]
 # The installers to generate for each app
 installers = ["shell"]

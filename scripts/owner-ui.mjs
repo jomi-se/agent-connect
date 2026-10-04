@@ -666,8 +666,7 @@ try {
   const version = JSON.parse(
     await readFile(join(repo, "packages/gateway-npm/package.json"), "utf8"),
   ).version;
-  const sessionImage =
-    process.env.ACP_SESSION_IMAGE ?? `agent-connect-session:${version}`;
+  const boxImage = process.env.ACP_BOX_IMAGE ?? `agent-connect-box:${version}`;
   run(binary, [
     "init",
     "--directory",
@@ -684,7 +683,7 @@ try {
   const probeConfigPath = join(probeRuntime, "config.json");
   const probeConfig = JSON.parse(await readFile(probeConfigPath, "utf8"));
   probeConfig.listen = `127.0.0.1:${probePort}`;
-  probeConfig.session_image = sessionImage;
+  probeConfig.box_image = boxImage;
   probeConfig.egress_container = problemEgress;
   await writeFile(probeConfigPath, JSON.stringify(probeConfig), {
     mode: 0o600,
@@ -695,8 +694,8 @@ try {
     "start",
     "--name",
     problemEgress,
-    "--session-image",
-    sessionImage,
+    "--box-image",
+    boxImage,
   ]);
   problemGateway = spawn(binary, ["serve", "--config", probeConfigPath], {
     env: fixtureEnv,

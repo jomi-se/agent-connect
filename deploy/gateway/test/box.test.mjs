@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 const version = JSON.parse(
-  readFileSync(new URL("../session/package.json", import.meta.url), "utf8"),
+  readFileSync(new URL("../box/package.json", import.meta.url), "utf8"),
 ).version;
-test("session image starts both pinned CLIs with an unnamed UID and private homes", () => {
+test("box starts both pinned CLIs with an unnamed UID and private homes", () => {
   const output = execFileSync(
     "docker",
     [
@@ -24,7 +24,7 @@ test("session image starts both pinned CLIs with an unnamed UID and private home
       "/work:rw,exec,uid=12345,gid=12345",
       "--tmpfs",
       "/tmp:rw,exec",
-      process.env.ACP_SESSION_IMAGE ?? `agent-connect-session:${version}`,
+      process.env.ACP_BOX_IMAGE ?? `agent-connect-box:${version}`,
       "sh",
       "-c",
       'codex --version && claude --version && stat -c "%a %u %g" "$CODEX_HOME" "$CLAUDE_CONFIG_DIR"',
