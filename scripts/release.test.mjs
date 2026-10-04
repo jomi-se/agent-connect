@@ -258,3 +258,38 @@ for (const prefix of ["/home/example/", "/Users/example/"]) {
     },
   );
 }
+
+test(
+  "release evidence permits the fixed container home without permitting similarly named builder homes",
+  { skip: !hostTarget },
+  async (t) => {
+    const input = await fixture(t, hostTarget);
+    const file = join(input.files, "agent-connect");
+    const original = await readFile(file, "utf8");
+    for (const [path, permitted] of [
+      ["/home/node", true],
+      ["/home/node/.codex", true],
+      ["/home/node--device-auth", true],
+      ["/home/node:rw,exec", true],
+      ["/home/node-builder/repository", false],
+    ]) {
+      await writeFile(file, original + `# ${path}\n`);
+      assert.equal(
+        spawnSync("tar", [
+          "-cJf",
+          input.archive,
+          "-C",
+          input.files,
+          "agent-connect",
+        ]).status,
+        0,
+      );
+      if (permitted) await verifyArchiveReleaseInfo(input);
+      else
+        await assert.rejects(
+          verifyArchiveReleaseInfo(input),
+          /personal builder path/,
+        );
+    }
+  },
+);

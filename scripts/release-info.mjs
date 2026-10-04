@@ -80,7 +80,11 @@ export async function verifyArchiveReleaseInfo({
       if (!(await lstat(path)).isFile())
         throw new Error("Gateway executable must be a regular file");
       const bytes = await readFile(path);
-      if (["/home/", "/Users/"].some((prefix) => bytes.includes(prefix)))
+      // /home/node is the fixed session-image home, not a builder location.
+      const pathText = bytes
+        .toString("latin1")
+        .replace(/\/home\/node(?=\/|\0|\s|--|:|$)/g, "/container-home");
+      if (["/home/", "/Users/"].some((prefix) => pathText.includes(prefix)))
         throw new Error(
           "Gateway executable contains a personal builder path; rebuild with release path remapping",
         );
