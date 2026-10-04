@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
+import { encodedReleaseRustflags } from "./release-build-env.mjs";
 const repo = resolve(import.meta.dirname, "..");
 const { version } = JSON.parse(
   await readFile(join(repo, "packages/gateway-npm/package.json"), "utf8"),
@@ -17,6 +18,7 @@ const { version } = JSON.parse(
 const dist = process.env.CARGO_DIST_BIN ?? "dist";
 const env = {
   ...process.env,
+  CARGO_ENCODED_RUSTFLAGS: encodedReleaseRustflags(process.env, repo),
   AGENT_CONNECT_SESSION_IMAGE: `agent-connect-session:${version}`,
   npm_config_cache:
     process.env.npm_config_cache ?? join(repo, ".agent-connect/npm-cache"),
@@ -28,13 +30,6 @@ function run(bin, args) {
 }
 run(process.execPath, ["scripts/release.mjs", "check"]);
 await mkdir(join(repo, "dist/release"), { recursive: true });
-const plan = spawnSync(
-  dist,
-  ["plan", "--tag", `v${version}`, "--output-format=json"],
-  { cwd: repo, env, encoding: "utf8" },
-);
-if (plan.status !== 0) throw new Error(`dist plan failed: ${plan.stderr}`);
-await writeFile(join(repo, "dist/release/dist-plan.json"), plan.stdout);
 const targets = process.argv.includes("--all-linux")
   ? ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]
   : [

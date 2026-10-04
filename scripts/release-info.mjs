@@ -79,11 +79,12 @@ export async function verifyArchiveReleaseInfo({
     for (const path of paths) {
       if (!(await lstat(path)).isFile())
         throw new Error("Gateway executable must be a regular file");
-      hashes.push(
-        createHash("sha256")
-          .update(await readFile(path))
-          .digest("hex"),
-      );
+      const bytes = await readFile(path);
+      if (["/home/", "/Users/"].some((prefix) => bytes.includes(prefix)))
+        throw new Error(
+          "Gateway executable contains a personal builder path; rebuild with release path remapping",
+        );
+      hashes.push(createHash("sha256").update(bytes).digest("hex"));
     }
     const sidecar = join(dirname(archive), releaseInfoFilename(target));
     const native =

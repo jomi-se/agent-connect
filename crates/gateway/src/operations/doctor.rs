@@ -1,5 +1,5 @@
 use super::{CommandSpec, NativeRunner, Runner, default_runtime_directory, private_metadata};
-use crate::{Harness, config};
+use crate::config;
 use clap::Args;
 use serde::Serialize;
 use std::{
