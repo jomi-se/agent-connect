@@ -1,6 +1,6 @@
 # 0009: Separate ingress, owner authentication, and application authorization
 
-Status: proposed historical design; the ACP gateway implements separate ingress, owner sign-in and application grants under proposed ADR 0016.
+Status: proposed historical design; the ACP gateway implements separate ingress, owner sign-in and application grants under accepted ADR 0016 (2026-10-04).
 
 - Date: 2026-07-23
 

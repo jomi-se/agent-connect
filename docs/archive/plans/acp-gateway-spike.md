@@ -4,7 +4,8 @@ Status: completed spike plan, 2026-09-30. Experimental; not an accepted decision
 Owner: gateway.
 Code: `experiments/gateway/`.
 Results: [`docs/experiments/acp-gateway.md`](../experiments/acp-gateway.md).
-Proposed decision: [ADR 0016](../../decisions/0016-acp-application-boundary.md).
+Decision: [ADR 0016](../../decisions/0016-acp-application-boundary.md), accepted
+on 2026-10-04. This plan records the earlier spike, before acceptance.
 
 ## Why this spike exists
 
@@ -237,7 +238,7 @@ results doc as they land.
    Record the event trace, not the content.
    _Exit:_ one real composition per harness, or a documented blocker.
 8. **Write-up.** Results doc with answers, measurements, traces summarized,
-   and what broke. If Q1–Q3 pass, draft ADR 0016 (status: proposed): "ACP
+   and what broke. If Q1–Q3 pass, draft ADR 0016 (initially proposed, accepted 2026-10-04): "ACP
    application boundary". It would supersede ADR 0010's wire and ADR 0015's
    execution host. Add a pointer from [current work](../../plan/current-work.md).
 

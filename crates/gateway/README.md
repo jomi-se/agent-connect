@@ -4,8 +4,8 @@ The gateway implements hosted owner sign-in, fixed-tool OAuth consent, ACP
 session policy, resumable delivery, durable action journaling and owned Docker
 cleanup. It is the native component of Agent Connect, packaged by the
 [npm launcher](../../packages/gateway-npm/README.md).
-ACP, MCP-over-ACP and `agent-connect.resume.v1` remain unstable under
-[proposed ADR 0016](../../docs/decisions/0016-acp-application-boundary.md).
+ACP, MCP-over-ACP and `agent-connect.resume.v1` remain unstable. The product decision is
+[accepted ADR 0016](../../docs/decisions/0016-acp-application-boundary.md).
 
 For installation and normal operation, use the
 [install guide](../../docs/install/README.md). Owner state and grants stay outside

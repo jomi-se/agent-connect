@@ -12,7 +12,7 @@ application integration.
 - [Architecture](architecture/target-architecture.md)
 - [Browser SDK](../packages/web-sdk/README.md)
 - [Testing strategy](architecture/testing-strategy.md)
-- [ACP decision (proposed)](decisions/0016-acp-application-boundary.md)
+- [ACP decision (accepted 2026-10-04)](decisions/0016-acp-application-boundary.md)
 
 Superseded plans, research and decisions preserve historical evidence only.
 They are not current installation or API instructions.

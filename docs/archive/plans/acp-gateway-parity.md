@@ -1,7 +1,7 @@
 # ACP gateway product parity
 
 Status: completed local qualification. Updated: 2026-10-03.
-ADR 0016 remains proposed. This archived checklist records the tested candidate;
+ADR 0016 was accepted on 2026-10-04. This archived checklist records the tested candidate;
 current install instructions and owner release gates live in
 [the install guide](../../install/README.md) and
 [current work](../../plan/current-work.md).
@@ -112,6 +112,6 @@ unsupported. Mobile second-factor approval and recovery codes are future work;
 owner TOTP and offline recovery are implemented. These are explicit scope
 boundaries, not unfinished local parity checks.
 
-Only owner-run live credential checks, first release/account/platform validation
-and ADR 0016 acceptance remain before publication. See current work for the
+Owner-run live credential checks and first release/account/platform validation
+remain before publication. ADR 0016 was accepted on 2026-10-04. See current work for the
 current release gates rather than using this archived execution record.

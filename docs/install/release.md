@@ -1,7 +1,8 @@
 # Release process
 
 Gateway **0.0.1** and browser SDK **0.0.10** are unpublished candidates.
-ADR 0016 remains proposed; publication requires explicit owner acceptance.
+[ADR 0016](../decisions/0016-acp-application-boundary.md) was accepted on
+2026-10-04; publication still requires explicit owner authorization.
 The [manual workflow](../../.github/workflows/release.yml) is the only
 approved automated publication path. Ordinary CI is read-only. Agents may
 prepare and verify artifacts but never push, publish, run this workflow or
@@ -133,8 +134,9 @@ binary is intentional. No dry-run artifact is silently promoted to publication.
 
 The operator must complete these external setup steps separately:
 
-1. Accept ADR 0016 in the reviewed source of truth. A proposed or rejected
-   decision cannot authorize the publication jobs.
+1. Verify that the reviewed source records ADR 0016 as accepted on 2026-10-04.
+   The workflow enforces accepted status; the decision does not authorize
+   publication by itself.
 2. Keep the external GitHub environment name `acp-first-release` unchanged.
    Create it if needed, add the operator as a required reviewer,
    choose the desired self-review policy, and restrict deployment refs to the

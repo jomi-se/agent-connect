@@ -11,7 +11,7 @@
   offline TOTP recovery, upgrade and explicit headless configuration.
 - Package native executables for Apple Silicon macOS, Linux x64 and Linux ARM64
   through optional npm platform dependencies, with no runtime binary download.
-- Keep ACP, MCP-over-ACP and transport resumption experimental. ADR 0016 remains
-  proposed; publication is an owner gate.
+- Keep ACP, MCP-over-ACP and transport resumption experimental. ADR 0016 was
+  accepted on 2026-10-04; publication remains an owner gate.
 
 See the [install guide](https://github.com/jomi-se/agent-connect/blob/main/docs/install/README.md).

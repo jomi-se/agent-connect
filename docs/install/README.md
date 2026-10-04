@@ -4,8 +4,8 @@ Install your gateway, run guided setup, and approve an application's exact
 origin and tools in your browser. **0.0.1 is an unpublished release
 candidate:** use supplied local artifacts until the owner approves the first
 release. The npm and release commands below describe the path after publication.
-ADR 0016 remains proposed. ACP, MCP-over-ACP and `agent-connect.resume.v1` are
-unstable.
+[ADR 0016](../decisions/0016-acp-application-boundary.md) was accepted on
+2026-10-04. ACP, MCP-over-ACP and `agent-connect.resume.v1` remain unstable.
 
 ## 1. Install
 

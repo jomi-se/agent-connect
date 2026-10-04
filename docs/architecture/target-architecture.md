@@ -1,8 +1,9 @@
 # Current architecture and acceptance boundary
 
 The owner-approved current implementation is the standalone ACP gateway under
-[proposed ADR 0016](../decisions/0016-acp-application-boundary.md). Formal ADR
-acceptance and publication remain owner gates. The implementation comprises the ACP gateway and root browser SDK.
+[ADR 0016](../decisions/0016-acp-application-boundary.md), accepted on 2026-10-04.
+Publication remains an owner gate. The product comprises the ACP gateway and
+root browser SDK; ACP, MCP-over-ACP and the resume extension remain unstable.
 
 ## Current ACP boundary
 

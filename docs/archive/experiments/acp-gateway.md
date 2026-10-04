@@ -4,8 +4,9 @@
 
 Status: complete, 2026-09-30; mobile follow-up 2026-10-01
 ([plan](../plans/acp-gateway-mobile-resume.md)). Experimental evidence for the
-[spike plan](../plans/acp-gateway-spike.md), not an accepted decision. The
-proposed decision is [ADR 0016](../../decisions/0016-acp-application-boundary.md).
+[spike plan](../plans/acp-gateway-spike.md). The resulting decision is
+[ADR 0016](../../decisions/0016-acp-application-boundary.md), accepted on
+2026-10-04. The dated entries below record the work before acceptance.
 Code: `experiments/gateway/`.
 
 ## Verdict
@@ -406,7 +407,7 @@ uses pinned real adapters, deterministic inference and Chromium with isolated
 temporary homes. Product policy also checks chain session ownership, rejects
 concurrent prompts, removes unrecognized authority fields, and journals stable
 action IDs before application delivery. Browser authorization failures use
-4401/4403 close codes. ADR 0016 remains proposed; the OpenClaw plugin is intact.
+4401/4403 close codes. At this stage ADR 0016 was proposed and the OpenClaw plugin was intact.
 
 Phase 2 adds shared harness homes and the interactive login helper. Tests confirm
 private modes, host UID/GID mount behavior and absence of API-key variables in
@@ -488,8 +489,8 @@ Operator init validates and copies the snapshot, generates a private random
 grant/config, and provides a dedicated shared home. Configuration supports
 CLI/environment/file precedence; egress helpers manage only owned containers.
 The artifact install guide covers the explicit manual grant handoff, login,
-maintenance and accepted credential/transcript/config risks. This does not add
-an OAuth portal or accept ADR 0016.
+maintenance and accepted credential/transcript/config risks. At this stage the work did not add
+an OAuth portal or establish ADR acceptance.
 
 Both Linux cargo-dist archives, the shell installer, local npm publication dry
 runs and the multiarch OCI/native session images build without publication.
@@ -513,8 +514,8 @@ corrected to the metadata field. The clean-room Docker CLI is pinned to match
 the current daemon API rather than using Debian's older client. These are
 installation-test corrections, not mock ACP/provider behavior.
 
-The remaining owner gates are live dedicated-login/refresh/revoke checks,
-first actual release/account setup and ADR acceptance. No personal harness home,
+At this stage the remaining owner gates were live dedicated-login/refresh/revoke
+checks, first actual release/account setup and ADR acceptance. No personal harness home,
 live login, subscription-backed turn, remote ref, registry publication or npm
 deprecation was performed. The previous OpenClaw plugin remains intact.
 
@@ -647,7 +648,7 @@ cancel retain their separate deterministic coverage. A read-only call also does
 not demonstrate a visible highlighting effect. The assistant's general claims
 about native capabilities are not security evidence: the gateway/container
 boundary, rather than model self-description, controls authority. Claude terms,
-first publication and ADR 0016 acceptance remain unchanged.
+first publication and ADR acceptance were still pending at this stage.
 
 ## Hosted authorization and pre-auth review hardening (2026-10-03)
 
@@ -657,7 +658,7 @@ origin, complete tool definitions and selected duration. S256 PKCE, rotating
 five-minute access tokens, refresh replay detection, stable grant ownership and
 optional TOTP are implemented; owner auth state cannot overlap the harness home.
 Static bearer setup requires explicit headless mode and does not satisfy product
-pairing acceptance. ADR 0016 remains proposed.
+pairing acceptance. ADR 0016 was still proposed at this stage.
 
 An independent source review found three auth integration defects: opaque-origin
 owner form submissions under universal no-referrer, owner state within the
