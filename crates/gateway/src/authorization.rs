@@ -151,6 +151,9 @@ struct Grant {
     approved_at: Option<u64>,
     #[serde(default)]
     revoked_at: Option<u64>,
+    /// The name the application declared when it was approved, shown with its origin.
+    #[serde(default)]
+    name: Option<String>,
     access_hash: Option<String>,
     access_expires: u64,
     refresh_hash: Option<String>,
@@ -770,12 +773,18 @@ impl AuthService {
                         .config
                         .profiles
                         .iter()
-                        .map(|p| (profile_label(*p), profile_description(*p, harness)))
+                        .map(|p| {
+                            (
+                                profile_label(*p),
+                                profile_summary(*p),
+                                profile_description(*p, harness),
+                            )
+                        })
                         .collect(),
                     profile_note: if harness == Harness::Codex {
-                        "Deny-all and app-tools-only profiles are unavailable for boxed Codex: its native actions can run without asking permission."
+                        "Deny-all and app-tools-only are not offered for Codex: inside its box, its own tools can act without asking for permission."
                     } else {
-                        "Codex read-only mode is unavailable for Claude Code. Claude profiles govern permission requests; native actions that do not ask may still run."
+                        "Read-only is not offered for Claude Code. Its options govern permission requests; actions that do not ask for permission may still run."
                     },
                 })));
             }
@@ -795,6 +804,10 @@ impl AuthService {
                 view.sessions
                     .iter()
                     .map(|live| pages::Live {
+                        name: grants
+                            .iter()
+                            .find(|grant| grant.id == live.grant_id)
+                            .and_then(|grant| grant.name.clone()),
                         origin: grants
                             .iter()
                             .find(|grant| grant.id == live.grant_id)
@@ -825,6 +838,7 @@ impl AuthService {
                     pages::GrantState::Ended
                 };
                 events.push(pages::Event {
+                    name: grant.name.clone(),
                     at: grant.approved_at,
                     origin: grant.client.clone(),
                     kind: pages::EventKind::Approved {
@@ -837,12 +851,14 @@ impl AuthService {
                 });
                 if grant.revoked {
                     events.push(pages::Event {
+                        name: grant.name.clone(),
                         at: grant.revoked_at,
                         origin: grant.client.clone(),
                         kind: pages::EventKind::Revoked,
                     });
                 } else if grant.expires <= now {
                     events.push(pages::Event {
+                        name: grant.name.clone(),
                         at: Some(grant.expires),
                         origin: grant.client.clone(),
                         kind: pages::EventKind::Expired,
@@ -1107,6 +1123,7 @@ impl AuthService {
                 revoked: false,
                 approved_at: Some(now),
                 revoked_at: None,
+                name: Some(pending.client_name.clone()),
                 access_hash: None,
                 access_expires: 0,
                 refresh_hash: None,
@@ -1903,22 +1920,22 @@ fn profile_summary(profile: PermissionProfile) -> &'static str {
 fn profile_description(profile: PermissionProfile, harness: Harness) -> &'static str {
     match profile {
         PermissionProfile::Sandboxed => {
-            "Allows native tools within the disposable box and all approved application tools. Shared harness login and transcripts remain readable."
+            "The agent’s own tools work freely inside the disposable box, and all approved app tools are allowed. Approved apps can still reach the shared agent login and other apps’ conversations."
         }
         PermissionProfile::ReadOnly => {
-            "Codex read-only mode restricts native writes. Native reads and effects of approved application tools remain allowed; unexpected permission requests are denied. Native operations fail closed when the host cannot start the harness sandbox."
+            "The agent’s own tools can read but not write. Approved app tools still work and other permission requests are denied. If this host cannot start the agent’s sandbox, sessions refuse to run instead of running unrestricted."
         }
         PermissionProfile::DenyAll if harness == Harness::Claude => {
-            "Denies Claude permission requests. Native actions that do not request permission may still run; this is not a guarantee of native-tool denial."
+            "Claude Code’s permission requests are denied. Actions that do not ask for permission may still run, so this does not block every action of its own tools."
         }
         PermissionProfile::AppToolsOnly if harness == Harness::Claude => {
-            "Allows permission requests attributed to approved application tools; denies other requests. Attribution depends on the adapter, and native actions without requests may still run."
+            "Only permission requests tied to this app’s tools are allowed; others are denied. Matching depends on the adapter, and actions that do not ask for permission may still run."
         }
         PermissionProfile::DenyAll => {
-            "Denies all permission requests. Native actions that do not request permission may still run."
+            "Permission requests are denied. Actions that do not ask for permission may still run."
         }
         PermissionProfile::AppToolsOnly => {
-            "Allows only permission requests attributed to approved application tools. Native actions without requests may still run."
+            "Only permission requests tied to approved app tools are allowed. Actions that do not ask for permission may still run."
         }
     }
 }

@@ -144,6 +144,7 @@ pub(super) struct Request {
 }
 
 pub(super) struct Live {
+    pub name: Option<String>,
     pub origin: String,
     pub id: String,
     pub state: String,
@@ -153,6 +154,7 @@ pub(super) struct Live {
 
 pub(super) struct Event {
     pub at: Option<u64>,
+    pub name: Option<String>,
     pub origin: String,
     pub kind: EventKind,
 }
@@ -186,13 +188,13 @@ pub(super) fn console(view: Console) -> Page {
             body,
             "<div class='alert runtime-problem' role='status'><strong>{}</strong><p>{}</p></div>",
             escape(message),
-            escape(repair)
+            commands(repair)
         );
     }
     if !view.authenticator {
         let _ = write!(
             body,
-            "<div class='setup'>{}<p><strong>Add an authenticator.</strong> Right now your passphrase alone can approve apps.</p><a class='button' href='{TOTP}'>Set up</a></div>",
+            "<p class='setup'>{}<span>Your passphrase alone can approve apps.</span><a href='{TOTP}'>Add an authenticator</a></p>",
             shield(false)
         );
     }
@@ -216,16 +218,18 @@ pub(super) fn console(view: Console) -> Page {
     if view.requests.is_empty() && live.is_empty() && view.events.is_empty() {
         let _ = write!(
             body,
-            "<section class='empty' aria-labelledby='empty-title'><h1 id='empty-title'>No apps yet</h1><p>To connect an app, give it this gateway’s address:</p>{}<p class='hint'>Its request will appear here for you to approve.</p></section>",
+            "<section class='first-run' aria-labelledby='empty-title'><h1 id='empty-title'>No apps yet</h1><p class='lede'>Give an app this gateway’s address. Its request will appear here for you to approve.</p>{}</section>",
             addresses(&view.addresses)
         );
-        return owner_page(
+        let mut page = owner_page(
             "Activity",
             Tab::Activity,
             view.logout_token,
             body,
             String::new(),
         );
+        page.script = COPY_SCRIPT;
+        return page;
     }
     body.push_str("<h1 class='visually-hidden'>Activity</h1>");
     let mut css = String::new();
@@ -233,13 +237,18 @@ pub(super) fn console(view: Console) -> Page {
         body.push_str("<section class='feed' aria-labelledby='feed-now'><h2 class='day' id='feed-now'>Now</h2><ol class='events'>");
         for session in live {
             let short = session.id.get(..8).unwrap_or(&session.id);
+            let state = if session.state.eq_ignore_ascii_case("connected") {
+                String::new()
+            } else {
+                format!(" · {}", escape(&session.state))
+            };
             let _ = write!(
                 body,
-                "<li class='event event--live'><span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'>{} <span class='verb'>is connected</span></p><p class='meta'>Session {} · {} · started {}</p></div><form class='event-action' method=post action='/agent-connect/owner/sessions/end'>{}{}<button class='quiet danger'>End session</button></form></li>",
-                origin(&session.origin),
+                "<li class='event event--live'>{}<span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'>{} <span class='verb'>is connected</span></p><p class='meta'>{}session {}{state}</p></div><form class='event-action' method=post action='/agent-connect/owner/sessions/end'>{}{}<button class='quiet danger'>End session</button></form></li>",
+                when(now, Some(session.started)),
+                subject(&session.name, &session.origin),
+                secondary_origin(&session.name, &session.origin),
                 escape(short),
-                escape(&session.state),
-                ago(now, session.started),
                 hidden("session_id", &session.id),
                 hidden("csrf_token", &session.end_token)
             );
@@ -250,6 +259,7 @@ pub(super) fn console(view: Console) -> Page {
     events.sort_by_key(|event| std::cmp::Reverse(event.at.unwrap_or(0)));
     let mut open: Option<&str> = None;
     for (index, event) in events.iter().enumerate() {
+        // Rolling windows, not calendar days: the server cannot know the owner's timezone.
         let group = match event.at.map(|at| now.saturating_sub(at)) {
             Some(age) if age < 86_400 => "Last 24 hours",
             Some(age) if age < 7 * 86_400 => "Last 7 days",
@@ -274,18 +284,15 @@ pub(super) fn console(view: Console) -> Page {
 }
 
 fn event_row(now: u64, index: usize, event: &Event, css: &mut String) -> String {
-    let when = event
-        .at
-        .map(|at| ago(now, at))
-        .unwrap_or_else(|| "Earlier".into());
+    let when = when(now, event.at);
+    let subject = subject(&event.name, &event.origin);
+    let place = secondary_origin(&event.name, &event.origin);
     match &event.kind {
         EventKind::Revoked => format!(
-            "<li class='event event--ended'><span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'><span class='verb'>Revoked</span> {}</p><p class='meta'>{when}</p></div></li>",
-            origin(&event.origin)
+            "<li class='event event--ended'>{when}<span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'>{subject} <span class='verb'>revoked</span></p><p class='meta'>{place}access ended</p></div></li>"
         ),
         EventKind::Expired => format!(
-            "<li class='event event--ended'><span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'><span class='verb'>Access ended for</span> {}</p><p class='meta'>{when} · expired</p></div></li>",
-            origin(&event.origin)
+            "<li class='event event--ended'>{when}<span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'>{subject} <span class='verb'>expired</span></p><p class='meta'>{place}access ended</p></div></li>"
         ),
         EventKind::Approved {
             profile,
@@ -318,7 +325,7 @@ fn event_row(now: u64, index: usize, event: &Event, css: &mut String) -> String 
                     };
                     (
                         "event--active",
-                        format!("ends {}", until(now, *expires)),
+                        format!(" · ends {}", until(now, *expires)),
                         track,
                         format!(
                             "<form class='event-action' method=post action='/agent-connect/owner/grants/revoke'>{}{}<button class='quiet danger'>Revoke</button></form>",
@@ -329,32 +336,74 @@ fn event_row(now: u64, index: usize, event: &Event, css: &mut String) -> String 
                 }
                 GrantState::Paused => (
                     "event--paused",
-                    "paused: the gateway’s profile settings changed".into(),
+                    " · paused: the gateway’s access options changed".into(),
                     "",
                     String::new(),
                 ),
                 GrantState::Ended => (
                     "event--past",
                     lifetime
-                        .map(|total| format!("for {}", span(total)))
+                        .map(|total| format!(" · for {}", span(total)))
                         .unwrap_or_default(),
                     "",
                     String::new(),
                 ),
             };
-            let status = if status.is_empty() {
-                String::new()
-            } else {
-                format!(" · {status}")
-            };
             format!(
-                "<li class='event {class}' id='grant-{index}'><span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'><span class='verb'>Approved</span> {}</p><p class='meta'>{when} · {} · {count}{status}</p>{track}<details class='tools'><summary>Show {count}</summary>{}</details></div>{action}</li>",
-                origin(&event.origin),
+                "<li class='event {class}' id='grant-{index}'>{when}<span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'>{subject} <span class='verb'>approved</span></p><p class='meta'>{place}{} · {count}{status}</p>{track}<details class='tools'><summary>Show {count}</summary>{}</details></div>{action}</li>",
                 escape(profile),
                 tool_list(tools)
             )
         }
     }
+}
+
+/// The leading time column: short, tabular, with the exact UTC time on hover.
+fn when(now: u64, at: Option<u64>) -> String {
+    match at {
+        None => "<span class='when'>Earlier</span>".into(),
+        Some(at) => {
+            let age = now.saturating_sub(at);
+            let short = match age {
+                0..60 => "now".to_string(),
+                60..3600 => format!("{}m", age / 60),
+                3600..86_400 => format!("{}h", age / 3600),
+                _ => format!("{}d", age / 86_400),
+            };
+            format!("<span class='when'>{}</span>", stamp(at, &short))
+        }
+    }
+}
+
+/// The app the owner approved, by its declared name when the grant recorded one.
+fn subject(name: &Option<String>, value: &str) -> String {
+    match name {
+        Some(name) => format!("<strong>{}</strong>", escape(name)),
+        None => origin(value),
+    }
+}
+
+/// The exact origin in the meta line when the subject is a declared name.
+fn secondary_origin(name: &Option<String>, value: &str) -> String {
+    if name.is_some() {
+        format!("{} · ", origin(value))
+    } else {
+        String::new()
+    }
+}
+
+/// Plain repair text with gateway CLI commands set as code.
+fn commands(text: &str) -> String {
+    let mut out = escape(text);
+    for command in [
+        "agent-connect service status",
+        "agent-connect service start",
+        "agent-connect service logs",
+        "agent-connect doctor",
+    ] {
+        out = out.replace(command, &format!("<code>{command}</code>"));
+    }
+    out
 }
 
 fn owner_page(title: &str, tab: Tab, logout_token: String, body: String, css: String) -> Page {
@@ -381,7 +430,7 @@ pub(super) struct Security {
 pub(super) fn security(view: Security) -> Page {
     let authenticator = if view.authenticator {
         format!(
-            "<div class='row'>{}<div class='row-main'><p class='row-title'>Authenticator is on</p><p class='meta'>Sign-in and every approval need a fresh code.</p></div></div><p class='hint below'>Lost it? On the gateway host, stop the gateway and run <code>agent-connect reset-totp</code>, then set it up again here. App access is not affected.</p>",
+            "<div class='row'>{}<div class='row-main'><p class='row-title'>Authenticator is on</p><p class='meta'>Sign-in and every approval need a fresh code.</p><p class='hint'>Lost it? On the gateway host, stop the gateway and run <code>agent-connect reset-totp</code>, then set it up again here. App access is not affected.</p></div></div>",
             shield(true)
         )
     } else {
@@ -392,7 +441,7 @@ pub(super) fn security(view: Security) -> Page {
     };
     let apps = view.active_grants;
     let body = format!(
-        "<h1>Security</h1><section class='section' aria-labelledby='authenticator-title'><h2 id='authenticator-title'>Authenticator</h2><div class='rows'>{authenticator}</div></section><section class='section' aria-labelledby='access-title'><h2 id='access-title'>App access</h2><div class='rows'><div class='row'><div class='row-main'><p class='row-title'>Revoke access for every app</p><p class='meta'>{}. Revoking can’t undo what they already did.</p></div><form method=post action='/agent-connect/owner/grants/revoke-all'>{}<button class='secondary danger'{}>Revoke all</button></form></div></div></section>",
+        "<h1>Security</h1><div class='list'>{authenticator}<div class='row'><div class='row-main'><p class='row-title'>Revoke every app’s access</p><p class='meta'>{}. Revoking can’t undo what they already did.</p></div><form method=post action='/agent-connect/owner/grants/revoke-all'>{}<button class='secondary danger'{}>Revoke all</button></form></div></div>",
         match apps {
             0 => "No app has access right now".to_string(),
             1 => "1 app has access".to_string(),
@@ -414,7 +463,8 @@ pub(super) struct Gateway {
     pub logout_token: String,
     pub harness: &'static str,
     pub addresses: Vec<String>,
-    pub profiles: Vec<(&'static str, &'static str)>,
+    /// Label, one-line summary and full description.
+    pub profiles: Vec<(&'static str, &'static str, &'static str)>,
     pub profile_note: &'static str,
 }
 
@@ -422,27 +472,40 @@ pub(super) fn gateway(view: Gateway) -> Page {
     let profiles = view
         .profiles
         .iter()
-        .map(|(label, description)| {
+        .map(|(label, summary, _)| {
             format!(
                 "<div class='row'><div class='row-main'><p class='row-title'>{}</p><p class='meta'>{}</p></div></div>",
+                escape(label),
+                escape(summary)
+            )
+        })
+        .collect::<String>();
+    let details = view
+        .profiles
+        .iter()
+        .map(|(label, _, description)| {
+            format!(
+                "<p><strong>{}.</strong> {}</p>",
                 escape(label),
                 escape(description)
             )
         })
         .collect::<String>();
     let body = format!(
-        "<h1>Gateway</h1><section class='section' aria-labelledby='addresses-title'><h2 id='addresses-title'>Addresses</h2><p class='section-lede'>Give an app one of these addresses. You sign in and approve on the address the app uses.</p>{}</section><section class='section' aria-labelledby='agent-title'><h2 id='agent-title'>Agent</h2><div class='rows'><div class='row'><div class='row-main'><p class='row-title'>{}</p><p class='meta'>Runs each session in a disposable box with restricted network access.</p></div></div></div></section><section class='section' aria-labelledby='profiles-title'><h2 id='profiles-title'>Native access profiles</h2><p class='section-lede'>You pick one each time you approve an app. It limits what the agent’s own tools may do; app tools follow the approval.</p><div class='rows'>{profiles}</div><p class='hint below'>{}</p></section>",
+        "<h1>Gateway</h1><p class='lede'>Give an app one of these addresses. You sign in and approve on the address it uses.</p>{}<div class='list'><div class='row'><div class='row-main'><p class='row-title'>Your agent: {}</p><p class='meta'>Each session runs in a disposable box with restricted network access.</p></div></div></div><section class='section' aria-labelledby='profiles-title'><h2 id='profiles-title'>Access options when you approve an app</h2><div class='list'>{profiles}</div><details class='fineprint limits'><summary>Details and limits</summary>{details}<p>{}</p></details></section>",
         addresses(&view.addresses),
         escape(view.harness),
         escape(view.profile_note)
     );
-    owner_page(
+    let mut page = owner_page(
         "Gateway",
         Tab::Gateway,
         view.logout_token,
         body,
         String::new(),
-    )
+    );
+    page.script = COPY_SCRIPT;
+    page
 }
 
 fn addresses(list: &[String]) -> String {
@@ -450,8 +513,7 @@ fn addresses(list: &[String]) -> String {
         .iter()
         .map(|address| {
             format!(
-                "<li><code class='address'>{}</code><a href='{}{OWNER}'>Open</a></li>",
-                escape(address),
+                "<li><code class='address'>{0}</code><span class='copy'><button type=button class='quiet' data-copy='{0}' hidden>Copy</button><span class='copy-status' role='status' aria-live='polite'></span></span></li>",
                 escape(address)
             )
         })
@@ -479,23 +541,22 @@ pub(super) fn totp_scan(secret: &str, uri: &str, fields: &str) -> Page {
         "Add to your authenticator",
         Width::Medium,
         format!(
-            "<div class='panel'><h1>Add Agent Connect to your authenticator</h1><p class='lede'>Scan the code, or open it directly on this phone. This setup expires in 10 minutes.</p><div class='enroll'><figure class='qr'>{}<figcaption>Scan with your authenticator app</figcaption></figure><div class='enroll-other'><a class='button secondary' href='{}'>Open in authenticator app</a><details class='manual'><summary>Enter the key by hand<span class='copy-status' role='status' aria-live='polite'></span></summary><p class='key' aria-label='Setup key'>{key}</p><p class='hint'>Time-based · 6 digits · 30 seconds</p></details></div></div><form method=post action='/agent-connect/owner/totp/verify'>{fields}<div class='field'><label for='enrollment-totp'>Code shown in your authenticator</label><input id='enrollment-totp' name=totp {CODE_INPUT} required></div><div class='actions actions--end'><button>Turn on</button><a class='button secondary' href='{SECURITY}'>Cancel</a></div></form><p class='hint below'>If you lose the authenticator, recovery needs a command on the gateway host.</p></div>",
+            "<div class='panel'><h1>Add Agent Connect to your authenticator</h1><p class='lede'><span class='on-wide'>Scan this code with your phone’s authenticator app.</span><span class='on-narrow'>Open it in your authenticator app on this phone, or scan the code from another device.</span> This setup expires in 10 minutes.</p><div class='enroll'><figure class='qr'>{}<figcaption>Scan with your authenticator</figcaption></figure><div class='enroll-other'><a class='open-app' href='{}'>Open in authenticator app</a><details class='manual'><summary>Enter the key by hand<span class='copy-status' role='status' aria-live='polite'></span></summary><p class='key' aria-label='Setup key'>{key}</p><p class='hint'>Time-based · 6 digits · 30 seconds</p></details></div></div><form method=post action='/agent-connect/owner/totp/verify'>{fields}<div class='field'><label for='enrollment-totp'>Code shown in your authenticator</label><input id='enrollment-totp' name=totp {CODE_INPUT} required></div><div class='actions actions--end'><button>Turn on</button><a class='button secondary' href='{SECURITY}'>Cancel</a></div></form><p class='hint below'>If you lose the authenticator, recovery needs a command on the gateway host.</p></div>",
             qr(uri),
             escape(uri)
         ),
     );
-    page.script = COPY_KEY_SCRIPT;
+    page.script = COPY_SCRIPT;
     page
 }
 
-const COPY_KEY_SCRIPT: &str = r#"(() => {
-  const manual = document.querySelector('.manual');
-  const status = manual.querySelector('.copy-status');
-  let timer;
-  manual.querySelector('summary').addEventListener('click', async () => {
-    clearTimeout(timer);
+/// Clipboard copy for the setup key and gateway addresses. Pages work without it:
+/// the key and addresses stay selectable and Copy buttons stay hidden.
+const COPY_SCRIPT: &str = r#"(() => {
+  const copy = async (text, status) => {
+    clearTimeout(status.timer);
     try {
-      await navigator.clipboard.writeText(manual.querySelector('.key').textContent);
+      await navigator.clipboard.writeText(text);
       status.textContent = 'Copied';
       status.classList.remove('copied');
       void status.offsetWidth;
@@ -503,8 +564,17 @@ const COPY_KEY_SCRIPT: &str = r#"(() => {
     } catch {
       status.textContent = 'Copy unavailable';
     }
-    timer = setTimeout(() => { status.textContent = ''; }, 3000);
-  });
+    status.timer = setTimeout(() => { status.textContent = ''; }, 3000);
+  };
+  const manual = document.querySelector('.manual');
+  if (manual) {
+    manual.querySelector('summary').addEventListener('click', () =>
+      copy(manual.querySelector('.key').textContent, manual.querySelector('.copy-status')));
+  }
+  for (const button of document.querySelectorAll('button[data-copy]')) {
+    button.hidden = false;
+    button.addEventListener('click', () => copy(button.dataset.copy, button.nextElementSibling));
+  }
 })();"#;
 
 pub(super) struct Consent {
@@ -578,8 +648,9 @@ pub(super) fn consent(view: Consent) -> Page {
         &format!("Allow {}?", view.name),
         Width::Full,
         format!(
-            "<header class='consent-head'><h1>Allow <span class='app'>{}</span> to use your agent?</h1><p class='from'>Request from <span class='origin-chip'>{}</span></p></header><section class='block' aria-labelledby='tools-title'><h2 id='tools-title'>It can call {} tool{}</h2><p class='section-lede'>Only these, exactly as described. Open one to see its input schema.</p>{}</section><form class='decision' method=post action='{AUTHORIZE}'>{}<fieldset class='segmented'><legend>Access lasts</legend><div class='opts'>{durations}</div><p class='hint'>You can revoke it sooner from Activity.</p></fieldset><fieldset class='options'><legend>Your agent’s own tools</legend>{profiles}</fieldset><div class='fineprint'><p>An app you approve could obtain your agent’s login and read other apps’ conversations with it. Revoking stops future use; it can’t undo what’s already done.</p><details><summary>What this means</summary><p>Each session runs in a disposable box with restricted network access. The option you pick limits the agent’s own tools there; this app’s tools follow this approval.</p><p>All approved apps share one dedicated login for your agent.</p>{details}<p>Agent Connect uses ACP and MCP-over-ACP, which are still unstable protocols.</p></details></div><div class='decide'>{factor}<div class='decide-actions'><button name=decision value=approve>Approve</button><button class='secondary' name=decision value=deny>Deny</button></div></div></form>",
+            "<header class='consent-head'><h1>Allow <span class='app' title='{}'>{}</span> to use your agent?</h1><p class='from'>from <span class='origin-chip'>{}</span></p></header><section class='block' aria-labelledby='tools-title'><h2 id='tools-title'>It can call only these {} tool{}</h2>{}</section><form class='decision' method=post action='{AUTHORIZE}'>{}<fieldset class='segmented'><legend>Access lasts</legend><div class='opts'>{durations}</div></fieldset><fieldset class='options'><legend>Your agent’s own tools</legend>{profiles}</fieldset><div class='fineprint'><p>An app you approve could obtain your agent’s login and read other apps’ conversations with it. Revoking stops future use; it can’t undo what’s already done.</p><details><summary>What this means</summary><p>Each session runs in a disposable box with restricted network access. The option you pick limits the agent’s own tools there; this app’s tools follow this approval.</p><p>All approved apps share one dedicated login for your agent.</p>{details}<p>Agent Connect uses ACP and MCP-over-ACP, which are still unstable protocols.</p></details></div><div class='decide'>{factor}<div class='decide-actions'><button name=decision value=approve>Approve</button><button class='secondary' name=decision value=deny>Deny</button></div></div></form>",
             escape(&view.name),
+            escape(&shorten(&view.name, 48)),
             escape(&view.origin),
             count,
             if count == 1 { "" } else { "s" },
@@ -601,6 +672,18 @@ pub(super) fn error(title: &str, message: &str, target: &str, label: &str) -> Pa
             escape(message)
         ),
     )
+}
+
+/// Bound an app-declared name so it cannot push the exact origin out of view.
+fn shorten(value: &str, limit: usize) -> String {
+    if value.chars().count() <= limit {
+        value.to_string()
+    } else {
+        format!(
+            "{}…",
+            value.chars().take(limit - 1).collect::<String>().trim_end()
+        )
+    }
 }
 
 fn tool_list(tools: &[Tool]) -> String {
@@ -675,16 +758,6 @@ fn span(seconds: u64) -> String {
     format!("{value} {unit}")
 }
 
-fn ago(now: u64, at: u64) -> String {
-    let age = now.saturating_sub(at);
-    let text = if age < 60 {
-        "just now".into()
-    } else {
-        format!("{} ago", span(age))
-    };
-    stamp(at, &text)
-}
-
 fn until(now: u64, at: u64) -> String {
     stamp(at, &format!("in {}", span(at.saturating_sub(now))))
 }
@@ -750,7 +823,6 @@ time{font-variant-numeric:tabular-nums}
 .hint{margin-top:.35rem;color:var(--muted);font-size:.875rem}
 .hint.below{margin-top:.75rem}
 .meta{margin-top:.15rem;color:var(--muted);font-size:.875rem}
-.section-lede{margin:-.35rem 0 .75rem;color:var(--muted);font-size:.9375rem}
 .field{display:grid;gap:.4rem;margin-top:1.25rem}
 label,legend{font-weight:620}
 input:not([type=radio]){width:100%;min-height:3rem;padding:.65rem .8rem;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line-strong);border-radius:.5rem;transition:border-color .15s ease-out}
@@ -767,7 +839,7 @@ button:active,.button:active{transform:translateY(1px)}
 .danger,.danger:hover{color:var(--danger)}
 .secondary.danger{border-color:var(--danger-line)}
 .danger:hover{background:var(--danger-soft)}
-button:disabled,button:disabled:hover{color:var(--muted);background:var(--paper);border-color:var(--line);cursor:not-allowed;transform:none}
+button:disabled,button:disabled:hover,.secondary.danger:disabled{color:var(--muted);background:var(--paper);border-color:var(--line);cursor:not-allowed;transform:none}
 .actions{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem;margin-top:1.5rem}
 .actions--end{flex-direction:row-reverse;justify-content:flex-start}
 .wide{width:100%}
@@ -775,8 +847,10 @@ button:disabled,button:disabled:hover{color:var(--muted);background:var(--paper)
 .alert{display:grid;gap:.2rem;margin-bottom:1.25rem;padding:.9rem 1.1rem;color:#7d2f22;background:#fff3ef;border:1px solid var(--danger-line);border-radius:.65rem}
 .icon{flex:none;width:1.5rem;height:1.5rem;color:var(--orange-ink)}
 .icon--on{color:var(--teal)}
-.setup{display:flex;align-items:center;gap:.9rem;margin-bottom:1.5rem;padding:.9rem 1rem .9rem 1.1rem;background:var(--paper);border:1px solid var(--line);border-radius:.75rem}
-.setup p{flex:1}
+.setup{display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;padding:.6rem 0 .75rem;font-size:.9375rem;color:var(--muted);border-bottom:1px solid var(--line)}
+.setup .icon{width:1.25rem;height:1.25rem}
+.setup span{flex:1}
+.setup a{font-weight:650;white-space:nowrap}
 .dot{flex:none;width:.6rem;height:.6rem;border-radius:50%;background:var(--line-strong)}
 .request{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.25rem 1rem;margin-bottom:1rem;padding:1.15rem 1.25rem;background:var(--orange-soft);border:1px solid var(--orange-line);border-radius:.9rem}
 .request .dot{align-self:start;margin-top:.55rem;background:var(--orange)}
@@ -787,7 +861,9 @@ button:disabled,button:disabled:hover{color:var(--muted);background:var(--paper)
 .feed+.feed,.request+.feed,.setup+.feed,.alert+.feed{margin-top:1.75rem}
 .day{padding-bottom:.5rem;color:var(--muted);font-size:.8125rem;font-weight:650;border-bottom:1px solid var(--line)}
 .events{list-style:none;padding:0}
-.event{display:grid;grid-template-columns:.6rem 1fr auto;align-items:start;gap:0 .9rem;padding:.95rem 0;border-bottom:1px solid var(--line)}
+.event{display:grid;grid-template-columns:3rem .6rem 1fr auto;align-items:start;gap:0 .9rem;padding:.95rem 0;border-bottom:1px solid var(--line)}
+.when{padding-top:.1rem;color:var(--muted);font-size:.8125rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.when time{text-decoration:none}
 .event .dot{margin-top:.5rem}
 .event--active .dot,.event--live .dot{background:var(--teal)}
 .event--live .dot{animation:breathe 2.6s cubic-bezier(.16,1,.3,1) infinite}
@@ -811,44 +887,47 @@ details[open]>summary::before{transform:rotate(45deg)}
 .tools{margin-top:.4rem}
 .tools>summary,.manual>summary,.fineprint summary{display:flex;align-items:center;min-height:2rem;color:var(--teal);font-size:.875rem;font-weight:600}
 .tools[open]>.tool-list{margin-top:.4rem}
-.tool-list{list-style:none;padding:0;background:var(--paper);border:1px solid var(--line);border-radius:.65rem}
+.tool-list{list-style:none;padding:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .tool-list li+li{border-top:1px solid var(--line)}
 .tool-list summary{display:flex;align-items:baseline;width:100%;padding:.75rem .9rem;color:var(--muted)}
 .tool-text{display:grid;gap:.1rem;min-width:0}
 .tool-text code{color:var(--ink);font-weight:650;overflow-wrap:anywhere}
 .tool-text span{color:var(--muted);font-size:.9375rem;overflow-wrap:anywhere}
 pre{max-height:22rem;margin:0 .9rem .9rem;padding:.8rem .9rem;overflow:auto;font-size:.8125rem;line-height:1.55;tab-size:2;background:var(--ground);border-radius:.45rem}
-.empty{padding:2rem 1.5rem;background:var(--paper);border:1px dashed var(--line-strong);border-radius:.9rem}
-.empty h1{font-size:1.5rem}
-.empty>p{margin-top:.6rem}
-.addresses{list-style:none;padding:0;margin-top:.75rem;background:var(--paper);border:1px solid var(--line);border-radius:.65rem}
-.addresses li{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.7rem .9rem;flex-wrap:wrap}
-.addresses li+li{border-top:1px solid var(--line)}
+.first-run h1{font-size:1.5rem}
+.addresses{list-style:none;padding:0;margin-top:1rem;border-top:1px solid var(--line)}
+.addresses li{display:flex;align-items:center;justify-content:space-between;gap:.5rem 1rem;padding:.6rem 0;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.copy{display:flex;align-items:center;gap:.5rem}
+.copy .copy-status{margin:0;padding:0}
+.copy button{color:var(--teal);font-weight:650}
+.copy button:hover{color:var(--teal-ink);background:var(--teal-soft)}
 .address{font-size:.9375rem;overflow-wrap:anywhere;user-select:all;-webkit-user-select:all}
-.addresses a{display:flex;align-items:center;min-height:2rem;font-size:.875rem;font-weight:600}
-.empty .addresses{background:var(--ground);border-color:transparent}
 .section{margin-top:2.25rem}
-h1+.section{margin-top:1.5rem}
+.list{margin-top:1.25rem;border-top:1px solid var(--line)}
+.addresses+.list{margin-top:0;border-top:0}
+.list .row{padding:1rem 0;border-bottom:1px solid var(--line)}
+.hint code,.alert code{white-space:nowrap}
+.on-narrow{display:none}
 .section>h2{margin-bottom:.75rem}
-.rows{background:var(--paper);border:1px solid var(--line);border-radius:.75rem}
 .row{display:flex;align-items:center;gap:.9rem;padding:1rem 1.15rem}
-.row+.row{border-top:1px solid var(--line)}
 .row-main{flex:1;min-width:0}
+.row>.icon{align-self:flex-start;margin-top:.1rem}
 .row-title{font-weight:620}
-.rows+.hint{padding:0 .25rem}
 .enroll{display:grid;grid-template-columns:auto 1fr;align-items:start;gap:1.25rem 1.75rem;margin-top:1.5rem;padding-bottom:1.5rem;border-bottom:1px solid var(--line)}
 .qr{display:grid;justify-items:center;gap:.5rem;width:12rem}
 .qr svg{display:block;width:12rem;height:12rem;padding:.35rem;background:#fff;border:1px solid var(--line);border-radius:.6rem}
 .qr figcaption{color:var(--muted);font-size:.8125rem;text-align:center}
 .enroll-other{display:grid;gap:.75rem;align-content:start;padding-top:.25rem}
+.open-app{order:2;display:flex;align-items:center;min-height:2rem;font-size:.875rem;font-weight:600}
 .copy-status{margin-left:auto;padding-left:.5rem;font-size:.75rem;font-weight:500}
 .copy-status.copied{animation:copy-feedback .8s ease-out}
 @keyframes copy-feedback{from{opacity:.25}to{opacity:1}}
 .key{display:flex;flex-wrap:wrap;gap:.15rem .65rem;margin-top:.5rem;padding:.65rem .8rem;font-size:1rem;letter-spacing:.06em;background:var(--ground);border-radius:.45rem;user-select:all;-webkit-user-select:all}
 .consent-head{padding-bottom:1.25rem;border-bottom:1px solid var(--line)}
 .consent-head h1{font-size:2rem}
-.from{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .6rem;margin-top:.85rem;color:var(--muted)}
-.origin-chip{padding:.3rem .6rem;font-size:.9375rem;color:var(--ink);background:var(--paper);border:1px solid var(--line-strong);border-radius:.45rem;overflow-wrap:anywhere}
+.from{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .6rem;margin-top:.85rem;color:var(--muted);font-size:1.125rem}
+.consent-head .app{overflow-wrap:anywhere}
+.origin-chip{padding:.3rem .6rem;font-size:1.1875rem;font-weight:600;color:var(--ink);background:var(--paper);border:1px solid var(--line-strong);border-radius:.45rem;overflow-wrap:anywhere}
 .block{margin-top:1.75rem}
 .block h2{margin-bottom:.6rem}
 fieldset{min-width:0;margin:1.75rem 0 0;padding:0;border:0}
@@ -870,8 +949,10 @@ legend{margin-bottom:.6rem;padding:0;font-size:1.125rem;font-weight:680;letter-s
 .option:has(:focus-visible){outline:3px solid var(--purple);outline-offset:2px}
 .fineprint{margin-top:1.75rem;padding-top:1.25rem;font-size:.875rem;color:var(--muted);border-top:1px solid var(--line)}
 .fineprint details{margin-top:.4rem}
-.fineprint details p{margin-top:.6rem;max-width:65ch}
-.decide{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:1rem 1.5rem;margin-top:1.75rem;padding:1.1rem 1.25rem;background:var(--paper);border:1px solid var(--line);border-radius:.85rem}
+.fineprint details p,.limits p{margin-top:.6rem;max-width:65ch}
+.limits{margin-top:.75rem;padding-top:0;border-top:0}
+.decide{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:1rem 1.5rem;margin-top:1.75rem}
+.decide:has(.field){padding:1.1rem 1.25rem;background:var(--paper);border:1px solid var(--line);border-radius:.85rem}
 .decide .field{margin:0}
 .decide-actions{display:flex;flex-direction:row-reverse;gap:.75rem;margin-left:auto}
 .decide-actions button{min-width:7.5rem}
@@ -883,14 +964,20 @@ h1{font-size:1.5rem}
 .bar nav{order:3;width:100%;margin:0 -.7rem}
 .page{padding-top:1.5rem}
 .panel{padding:1.25rem}
-.setup{flex-wrap:wrap}
-.setup .button{width:100%}
+.setup{flex-wrap:wrap;row-gap:0}
+.setup span{flex:1 1 calc(100% - 2rem)}
+.origin-chip{font-size:1.0625rem}
+.setup a{display:flex;align-items:center;min-height:2.75rem;padding-left:1.85rem}
+.on-wide{display:none}
+.on-narrow{display:inline}
+.open-app{order:0;justify-content:center;min-height:2.75rem;padding:.6rem 1.15rem;font-size:1rem;font-weight:650;color:var(--ink);text-decoration:none;background:var(--paper);border:1px solid var(--line-strong);border-radius:.5rem}
+.open-app:hover{color:var(--ink);background:var(--ground)}
 .request{grid-template-columns:auto 1fr;padding:1rem}
 .request .button{grid-column:1/-1;width:100%;margin-top:.6rem}
-.event{grid-template-columns:.6rem 1fr}
-.event-action{grid-column:2;margin-top:.35rem}
+.event{grid-template-columns:2.25rem .6rem 1fr}
+.event-action{grid-column:3;margin-top:.35rem}
 .quiet{min-height:2.75rem;padding-inline:0}
-summary,.tools>summary,.manual>summary,.fineprint summary,.addresses a{min-height:2.75rem}
+summary,.tools>summary,.manual>summary,.fineprint summary{min-height:2.75rem}
 .row{flex-wrap:wrap}
 .row form,.row .button,.row form button{width:100%}
 .actions .button,.actions button{width:100%}
@@ -898,7 +985,7 @@ summary,.tools>summary,.manual>summary,.fineprint summary,.addresses a{min-heigh
 .enroll-other{order:-1}
 .qr{justify-self:center}
 .opts{grid-template-columns:repeat(2,1fr)}
-.decide{padding:1rem}
+.decide:has(.field){padding:1rem}
 .decide .field,.decide-actions{width:100%}
 .decide-actions{flex-direction:column}
 .decide-actions button{width:100%}
