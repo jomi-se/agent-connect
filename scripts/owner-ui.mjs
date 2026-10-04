@@ -1,22 +1,32 @@
 // Credential-free browser qualification of the gateway-owned authorization UI.
-// Screenshots and synthetic owner/factor state stay in a private temporary root.
+// Synthetic owner/factor state stays isolated; screenshots default to a temporary
+// review root or are retained in OWNER_UI_SCREENSHOTS when explicitly requested.
 import assert from "node:assert/strict";
 import { createHash, createHmac } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { chmod, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import net from "node:net";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
 import { runCleanupTasks } from "./test-fixture-cleanup.mjs";
 
 const repo = resolve(import.meta.dirname, "..");
 const root = await mkdtemp(join(tmpdir(), "acp-owner-ui-"));
-const screenshots = join(root, "screenshots");
-await Promise.all(
-  ["home", "state", "screenshots"].map((name) => mkdir(join(root, name))),
-);
+const screenshots = process.env.OWNER_UI_SCREENSHOTS
+  ? resolve(process.env.OWNER_UI_SCREENSHOTS)
+  : join(root, "screenshots");
+await Promise.all(["home", "state"].map((name) => mkdir(join(root, name))));
+await mkdir(screenshots, { recursive: true });
 // Controlled ACP endpoint for gateway-owned console state only. It proves no
 // native adapter behavior and invokes no provider, shell tool, login or Docker.
 const adapterDirectory = join(root, "adapters/node_modules/.bin");
@@ -95,7 +105,7 @@ Object.assign(config, {
   listen: `127.0.0.1:${port}`,
 });
 await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
-const gateway = spawn(binary, ["serve", "--config", configPath], {
+let gateway = spawn(binary, ["serve", "--config", configPath], {
   env: fixtureEnv,
   stdio: ["ignore", "ignore", "pipe"],
 });
@@ -103,7 +113,7 @@ let diagnostics = "";
 gateway.stderr.on("data", (chunk) => {
   diagnostics = (diagnostics + chunk).slice(-4000);
 });
-const gatewayExit = new Promise((ok) => gateway.once("exit", ok));
+let gatewayExit = new Promise((ok) => gateway.once("exit", ok));
 const states = [];
 const views = [
   { name: "desktop", width: 1440, height: 1000 },
@@ -125,6 +135,8 @@ function run(binary, args) {
   return result.stdout;
 }
 console.log(`Owner UI review artifacts: ${join(root, "report.json")}`);
+if (process.env.OWNER_UI_SCREENSHOTS)
+  console.log(`Owner UI screenshots: ${screenshots}`);
 try {
   for (let attempt = 0; attempt < 100; attempt++) {
     if (diagnostics.includes("listening on")) break;
@@ -144,7 +156,7 @@ try {
       const geometry = await target.evaluate(() => ({
         width: innerWidth,
         contentWidth: document.documentElement.scrollWidth,
-        surfaceWidth: document.querySelector(".surface").getBoundingClientRect()
+        surfaceWidth: document.querySelector("main").getBoundingClientRect()
           .width,
         headings: document.querySelectorAll("h1").length,
         main: document.querySelectorAll("main").length,
@@ -162,7 +174,9 @@ try {
         );
       if (view.name !== "desktop") {
         for (const control of await target
-          .locator("button, select, input:not([type=hidden]), summary")
+          .locator(
+            "button, a, input:not([type=hidden]):not([type=radio]), label:has(input[type=radio]), summary",
+          )
           .all()) {
           if (!(await control.isVisible())) continue;
           const box = await control.boundingBox();
@@ -183,10 +197,11 @@ try {
   await page.goto(owner);
   await capture("sign-in", { compact: true });
   await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
   await page.getByLabel("Owner passphrase").evaluate((input) => {
     assertBrowser(
       input === document.activeElement,
-      "Passphrase must be first in keyboard order",
+      "Passphrase follows the brand link in keyboard order",
     );
     const style = getComputedStyle(input);
     assertBrowser(
@@ -216,31 +231,27 @@ try {
   await page.getByLabel("Owner passphrase").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page
-    .getByRole("heading", { name: "Application access", exact: true, level: 1 })
+    .getByRole("heading", { name: "No apps yet", exact: true })
     .waitFor();
-  await page.getByRole("group", { name: "Access summary" }).waitFor();
-  await page
-    .getByRole("heading", { name: "Live sessions", exact: true })
-    .waitFor();
-  await page.getByText("No live sessions", { exact: true }).waitFor();
+  await capture("activity-empty");
+  await page.getByRole("link", { name: "Security", exact: true }).click();
+  await page.getByText("Authenticator is off", { exact: true }).waitFor();
   assert.ok(
     await page
-      .getByRole("button", { name: "Revoke all active grants", exact: true })
+      .getByRole("button", { name: "Revoke all", exact: true })
       .isDisabled(),
   );
+  await capture("security-off");
+  await page.getByRole("link", { name: "Gateway", exact: true }).click();
   await page
-    .getByRole("heading", { name: "Restricted profiles", exact: true })
+    .getByRole("heading", { name: "Native access profiles", exact: true })
     .waitFor();
   await page
     .getByText(
       /Deny-all and app-tools-only profiles are unavailable for boxed Codex/,
     )
     .waitFor();
-  await page
-    .getByRole("heading", { name: "Gateway entry points", exact: true })
-    .waitFor();
-  await capture("empty-console");
-  await capture("profiles-supported-and-unavailable");
+  await capture("gateway");
 
   let pendingAuthorization;
   async function push({ stress = false } = {}) {
@@ -306,27 +317,26 @@ try {
   }
   const consent = await push();
   await page.goto(owner);
-  await page
-    .getByRole("button", { name: "Create enrollment secret" })
-    .waitFor();
-  await capture("pending-console");
+  await page.getByRole("link", { name: "Review", exact: true }).waitFor();
+  await capture("activity-pending");
   await page.goto(consent);
-  const profile = page.getByLabel("Restricted profile", { exact: true });
+  const profiles = page.locator('input[type="radio"][name="profile"]');
   assert.deepEqual(
-    await profile
-      .locator("option")
-      .evaluateAll((options) => options.map((option) => option.value)),
+    await profiles.evaluateAll((inputs) => inputs.map((input) => input.value)),
     ["sandboxed", "read-only"],
   );
+  const profile = page.locator('input[name="profile"][value="sandboxed"]');
   await profile.focus();
   await page.keyboard.press("ArrowDown");
-  assert.equal(await profile.inputValue(), "read-only");
+  assert.equal(
+    await page.locator('input[name="profile"][value="read-only"]').isChecked(),
+    true,
+  );
   await page.keyboard.press("ArrowUp");
-  assert.equal(await profile.inputValue(), "sandboxed");
+  assert.equal(await profile.isChecked(), true);
+  assert.equal(await page.locator("button").first().textContent(), "Approve");
   await capture("consent");
-  const disclosure = page
-    .getByText("View exact input schema", { exact: true })
-    .first();
+  const disclosure = page.locator(".tool-list summary").first();
   await disclosure.focus();
   await page.keyboard.press("Enter");
   assert.equal(await page.locator("details").first().getAttribute("open"), "");
@@ -413,14 +423,14 @@ try {
     { origin, token: access.access_token },
   );
   await page.goto(owner);
-  await page.getByText("Active", { exact: true }).last().waitFor();
-  await capture("active-grant");
+  await page.locator(".event--active").waitFor();
+  await capture("activity-active");
   const endSession = page.getByRole("button", {
     name: "End session",
     exact: true,
   });
   await endSession.waitFor();
-  await capture("live-session");
+  await capture("activity-live");
   await endSession.focus();
   assert.equal(
     await endSession.evaluate((button) => button === document.activeElement),
@@ -437,8 +447,7 @@ try {
   let runtimeGone = false;
   while (Date.now() < cleanupDeadline) {
     await page.goto(owner);
-    const absent =
-      (await page.getByText("No live sessions", { exact: true }).count()) > 0;
+    const absent = (await page.locator(".event--live").count()) === 0;
     let adapterGone = false;
     try {
       process.kill(adapterPid, 0);
@@ -479,70 +488,116 @@ try {
     () => window.consoleFixtureCloseCode === 4415,
   );
   assert.ok(
-    await page
-      .getByRole("button", { name: "Revoke access", exact: true })
-      .isVisible(),
+    await page.getByRole("button", { name: "Revoke", exact: true }).isVisible(),
     "ending a host retains its application grant",
   );
   await capture("ended-session-active-grant");
   await runtimePage.close();
-  await page.getByRole("button", { name: "Revoke access" }).click();
+  await page.getByRole("button", { name: "Revoke" }).click();
   await page.getByText("Revoked", { exact: true }).waitFor();
-  await capture("revoked-grant");
+  await capture("activity-revoked");
   await page.goto(await push());
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await page.waitForURL(`${appOrigin}/**`);
-  await page.goto(owner);
+  await page.goto(`${owner}/security`);
   const revokeAll = page.getByRole("button", {
-    name: "Revoke all active grants",
+    name: "Revoke all",
     exact: true,
   });
   await revokeAll.focus();
   await page.keyboard.press("Enter");
-  await page.waitForFunction(
-    () =>
-      document.querySelector(
-        'form[action="/agent-connect/owner/grants/revoke-all"] button',
-      )?.disabled === true,
-  );
+  await page.waitForURL(owner);
+  await page.goto(`${owner}/security`);
   assert.ok(
     await page
-      .getByRole("button", { name: "Revoke all active grants", exact: true })
+      .getByRole("button", { name: "Revoke all", exact: true })
       .isDisabled(),
   );
+  await page.goto(owner);
   assert.equal(
-    await page
-      .getByRole("button", { name: "Revoke access", exact: true })
-      .count(),
+    await page.getByRole("button", { name: "Revoke", exact: true }).count(),
     0,
   );
   await capture("all-grants-revoked");
-  const forget = page.getByRole("button", {
-    name: "Forget this browser",
-    exact: true,
+  // Controlled stored history exercises expiry without waiting an hour or
+  // changing the gateway's production clock.
+  gateway.kill("SIGTERM");
+  await gatewayExit;
+  const authPath = join(
+    resolve(dirname(configPath), config.state_dir),
+    "auth/authorization.json",
+  );
+  const stored = JSON.parse(await readFile(authPath, "utf8"));
+  Object.assign(stored.grants[0], {
+    revoked: false,
+    revoked_at: null,
+    approved_at: Math.floor(Date.now() / 1000) - 3660,
+    expires: Math.floor(Date.now() / 1000) - 60,
   });
-  await forget.focus();
-  await page.keyboard.press("Enter");
-  await page.getByLabel("Owner passphrase").waitFor();
-  await capture("forgotten-browser", { compact: true });
+  await writeFile(authPath, JSON.stringify(stored), { mode: 0o600 });
+  diagnostics = "";
+  gateway = spawn(binary, ["serve", "--config", configPath], {
+    env: fixtureEnv,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  gateway.stderr.on("data", (chunk) => {
+    diagnostics = (diagnostics + chunk).slice(-4000);
+  });
+  gatewayExit = new Promise((ok) => gateway.once("exit", ok));
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (diagnostics.includes("listening on")) break;
+    assert.equal(gateway.exitCode, null, diagnostics);
+    await new Promise((ok) => setTimeout(ok, 50));
+  }
+  assert.match(diagnostics, /listening on/);
+  await page.goto(owner);
   await page.getByLabel("Owner passphrase").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page
-    .getByRole("heading", { name: "Application access", exact: true, level: 1 })
-    .waitFor();
-
+  await page.getByText("Access ended for", { exact: true }).waitFor();
+  await capture("activity-expired");
   await page.goto(await push({ stress: true }));
   await capture("long-app-origin-and-tool-names");
   await page.goto(owner);
   await capture("long-pending-origin");
-  await page.getByLabel("Confirm owner passphrase").fill(password);
-  await page.getByRole("button", { name: "Create enrollment secret" }).click();
-  await page.getByRole("heading", { name: "Enroll authenticator" }).waitFor();
-  await capture("factor-enrollment", { compact: true });
+  await page.goto(`${owner}/totp`);
+  await capture("authenticator-start", { compact: true });
+  await page.getByLabel("Owner passphrase").fill(password);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page
+    .getByRole("img", {
+      name: "QR code for adding Agent Connect to an authenticator",
+    })
+    .waitFor();
+  assert.equal(await page.locator(".qr svg").count(), 1);
+  await capture("authenticator-qr");
   const uri = await page
-    .getByRole("link", { name: "Open authenticator" })
+    .getByRole("link", { name: "Open in authenticator app" })
     .getAttribute("href");
   const secret = new URL(uri).searchParams.get("secret");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin,
+  });
+  const manual = page.locator(".manual summary");
+  await manual.click();
+  await page.getByText("Copied", { exact: true }).waitFor();
+  assert.ok(
+    (await page.evaluate(() => navigator.clipboard.readText())) === secret,
+    "Manual setup click copies the complete unspaced key",
+  );
+  assert.equal(await page.locator(".manual").getAttribute("open"), "");
+  await capture("authenticator-key-copied");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await manual.focus();
+  await manual.press("Enter");
+  assert.equal(await page.locator(".manual").getAttribute("open"), null);
+  assert.equal(
+    await page
+      .locator(".copy-status")
+      .evaluate((status) => getComputedStyle(status).animationName),
+    "none",
+  );
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+
   const bits = [...secret]
     .map((letter) =>
       "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
@@ -561,13 +616,37 @@ try {
   const code = ((digest.readUInt32BE(offset) & 0x7fffffff) % 1e6)
     .toString()
     .padStart(6, "0");
-  await page.getByLabel("Authenticator code").fill(code);
-  await page.getByRole("button", { name: "Confirm enrollment" }).click();
-  await page.getByText("Authenticator enrolled", { exact: true }).waitFor();
-  await capture("factor-enrolled");
+  await page.getByLabel("Code shown in your authenticator").fill(code);
+  await page.getByRole("button", { name: "Turn on" }).click();
+  await page.getByText("Authenticator is on", { exact: true }).waitFor();
+  await capture("security-on");
   await page.goto(await push());
-  await page.getByLabel("Fresh authenticator code").waitFor();
+  await page.getByLabel("Authenticator code").waitFor();
   await capture("factor-consent");
+  await page.getByLabel("Authenticator code").fill(code);
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "Authenticator code not accepted" })
+    .waitFor();
+  await capture("factor-error", { compact: true });
+  await page.goto(await push());
+  const enrollmentStep = step.readBigUInt64BE();
+  while (BigInt(Math.floor(Date.now() / 30000)) <= enrollmentStep)
+    await new Promise((ok) => setTimeout(ok, 500));
+  step.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+  const freshDigest = createHmac("sha1", bytes).update(step).digest();
+  const freshOffset = freshDigest.at(-1) & 15;
+  const freshCode = ((freshDigest.readUInt32BE(freshOffset) & 0x7fffffff) % 1e6)
+    .toString()
+    .padStart(6, "0");
+  await page.getByLabel("Authenticator code").fill(freshCode);
+  await page.getByLabel("Authenticator code").press("Enter");
+  await page.waitForURL(`${appOrigin}/**`);
+  assert.ok(
+    new URL(page.url()).searchParams.get("code"),
+    "Enter approves rather than denying consent",
+  );
+  await page.goto(await push());
   await page.getByRole("button", { name: "Deny", exact: true }).click();
   await page.waitForURL(`${appOrigin}/**`);
   await page.goto(owner);
@@ -718,6 +797,13 @@ try {
     () => {
       if (problemEgressAllocated)
         run(binary, ["egress", "stop", "--name", problemEgress]);
+    },
+    async () => {
+      // Retain the default review report and screenshots, never fixture secrets.
+      for (const name of await readdir(root)) {
+        if (name === "screenshots" || name === "report.json") continue;
+        await rm(join(root, name), { recursive: true, force: true });
+      }
     },
   ]);
 }

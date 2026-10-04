@@ -123,16 +123,19 @@ agent-connect setup --origin https://gateway.example --apply --non-interactive \
 
 Open `http://127.0.0.1:18940/agent-connect/owner`, or
 `https://gateway.example/agent-connect/owner` remotely. Sign in with the owner
-passphrase. The console shows runtime health, configured entry points, grants
-and live sessions. Connect apps through a configured entry point. Optional TOTP
-enrollment requires fresh authenticator codes at sign-in and each approval.
+passphrase. Activity shows runtime health, pending requests, live sessions and grant history.
+Security manages the authenticator and revoking all app access; Gateway lists
+configured entry points, the harness and native access profiles. Connect apps through a configured entry point. Optional TOTP
+setup confirms your passphrase, then shows a QR code and an authenticator link.
+Click **Enter the key by hand** to copy the setup key and reveal it for manual entry.
+Verification returns to Security; sign-in and each approval then need a fresh code.
 
 In your app, enter the gateway origin and choose **Connect**. Review the exact
 application origin, complete tool schemas, available restricted profile, native
 harness authority and access duration before approving. Duration choices are
 one hour (default), one day, seven days or thirty days. The approved tool snapshot
 cannot expand on reconnect. Profile availability depends on the harness; the
-console describes the native authority that remains.
+Gateway page describes the native authority that remains.
 
 To try the sample, obtain `acp-chat-sample.tgz` and
 `open-agent-connect-web-0.0.10.tgz` from the matching release or artifact
@@ -186,8 +189,8 @@ share that gateway. It refuses to replace a service owned by another runtime.
 For foreground operation, `serve --config <config>` remains available; avoid
 running it alongside the service on the same listener.
 
-The console can end a live session without revoking its grant, revoke one or all
-grants, and forget the owner browser session. Revocation affects active and
+Activity can end a live session without revoking its grant and revoke an individual
+grant. Security can revoke all grants. Sign out ends the owner browser session. Revocation affects active and
 detached authority within one second; completed effects cannot be undone. A
 revoked app must explicitly Connect for new consent.
 

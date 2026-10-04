@@ -30,7 +30,7 @@ Local product parity is complete. `agent-connect setup` provides guided and
 unattended planning/application, `doctor` supplies actionable human/JSON diagnosis,
 and user-service commands manage systemd/launchd definitions. The owner console
 includes health/problem guidance, live sessions/end-session, revoke-all,
-forget-browser, immutable supported profiles, multiple entry points and offline
+owner sign-out, immutable supported profiles, multiple entry points and offline
 TOTP recovery. The sample automatically recovers interrupted transport without
 replaying uncertain prompts or application effects.
 

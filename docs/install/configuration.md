@@ -97,7 +97,7 @@ to sixteen canonical HTTPS origins or HTTP loopback origins with unique
 host-and-port combinations. Each origin must route to this same gateway and
 preserve its public Host header. Applications pair with the exact entry point
 they will use; sign-in, consent, issuer and grant remain bound to that origin.
-The owner console lists all configured entry points. Changes to the selected harness,
+The Gateway owner page lists all configured entry points. Changes to the selected harness,
 image, permissions and other fingerprinted operator policy invalidate grants.
 Applications choose their exact origin and fixed tool snapshot at owner consent;
 they cannot change native harness policy. Old bearer configs require explicit
@@ -105,18 +105,23 @@ they cannot change native harness policy. Old bearer configs require explicit
 
 The hosted routes are:
 
-| Route                                                        | Purpose                                                                                        |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `/healthz`                                                   | Credential-free runtime health                                                                 |
-| `/agent-connect/owner`                                       | Owner sign-in, grant list and revocation controls                                              |
-| `/agent-connect/owner/login`, `/agent-connect/owner/logout`  | Owner session authentication                                                                   |
-| `/agent-connect/owner/totp`                                  | Optional authenticator enrollment; enrollment then requires fresh TOTP at sign-in and approval |
-| `/agent-connect/owner/grants/revoke`                         | Owner revocation of an individual grant                                                        |
-| `/agent-connect/oauth/par`, `/agent-connect/oauth/authorize` | Pushed authorization request and owner consent                                                 |
-| `/agent-connect/oauth/token`, `/agent-connect/oauth/revoke`  | PKCE code exchange, rotating refresh and application revocation                                |
-| `/.well-known/oauth-authorization-server/agent-connect`      | Authorization-server metadata                                                                  |
-| `/.well-known/oauth-protected-resource/acp`                  | Protected ACP resource metadata                                                                |
-| `/acp`                                                       | Grant-authorized ACP WebSocket                                                                 |
+| Route                                                                  | Purpose                                                                            |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `/healthz`                                                             | Credential-free runtime health                                                     |
+| `/agent-connect/owner`                                                 | Activity feed with pending requests, live sessions and grant history               |
+| `/agent-connect/owner/login`, `/agent-connect/owner/logout`            | Owner session authentication                                                       |
+| `/agent-connect/owner/security`                                        | Authenticator status, setup link and revoke-all control                            |
+| `/agent-connect/owner/gateway`                                         | Configured entry points, harness and native access profiles                        |
+| `/agent-connect/owner/totp`                                            | Authenticator setup starts with owner passphrase confirmation                      |
+| `/agent-connect/owner/totp/enroll`, `/agent-connect/owner/totp/verify` | Server-rendered QR and otpauth link, then code verification; redirects to Security |
+| `/agent-connect/owner/grants/revoke-all`                               | Revoke all application grants from Security                                        |
+| `/agent-connect/owner/sessions/end`                                    | End a live session from Activity while retaining its grant                         |
+| `/agent-connect/owner/grants/revoke`                                   | Owner revocation of an individual grant                                            |
+| `/agent-connect/oauth/par`, `/agent-connect/oauth/authorize`           | Pushed authorization request and owner consent                                     |
+| `/agent-connect/oauth/token`, `/agent-connect/oauth/revoke`            | PKCE code exchange, rotating refresh and application revocation                    |
+| `/.well-known/oauth-authorization-server/agent-connect`                | Authorization-server metadata                                                      |
+| `/.well-known/oauth-protected-resource/acp`                            | Protected ACP resource metadata                                                    |
+| `/acp`                                                                 | Grant-authorized ACP WebSocket                                                     |
 
 Authorization requests expire after ten minutes; single-use authorization codes
 after two minutes. Access tokens last at most five minutes. Owner consent offers

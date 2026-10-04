@@ -756,11 +756,9 @@ try {
     );
     for (const tool of ["read_passage", "highlight", "ask_reader"])
       assert.ok(consent.includes(tool), `Gateway consent includes ${tool}`);
-    await owner.locator('select[name="duration"]').selectOption("3600");
+    await owner.locator('input[name="duration"][value="3600"]').check();
     if (decision === "Approve")
-      await owner
-        .getByLabel("Restricted profile", { exact: true })
-        .selectOption("read-only");
+      await owner.locator('input[name="profile"][value="read-only"]').check();
     await owner.getByRole("button", { name: decision, exact: true }).click();
     return owner;
   }
@@ -796,7 +794,7 @@ try {
       await ownerSignIn(page);
     await page
       .getByRole("heading", {
-        name: "Application access",
+        name: "Activity",
         exact: true,
         level: 1,
       })
@@ -809,7 +807,7 @@ try {
     const observed = [];
     while (Date.now() < deadline) {
       await page.goto(ownerUrl);
-      if (await page.getByText("No live sessions", { exact: true }).count()) {
+      if ((await page.locator(".event--live").count()) === 0) {
         const container = await commandResult("docker", [
           "inspect",
           "--format",
@@ -901,7 +899,9 @@ try {
       );
       if (width < 500)
         for (const control of await page
-          .locator("button, select, input:not([type=hidden]), summary")
+          .locator(
+            "button, a, input:not([type=hidden]):not([type=radio]), label:has(input[type=radio]), summary",
+          )
           .all()) {
           if (await control.isVisible())
             assert.ok(
@@ -1461,7 +1461,7 @@ try {
   assert.deepEqual(await effects(cancelPage), beforeEndEffects);
   assert.equal(
     await ownerGrants
-      .getByRole("button", { name: "Revoke access", exact: true })
+      .getByRole("button", { name: "Revoke", exact: true })
       .count(),
     1,
     "ending a session retains its application grant",
@@ -1471,23 +1471,23 @@ try {
     "real boxed live sessions support keyboard End session, terminal4415 without automatic replay, and retain the approved app grant",
   );
 
-  const forget = ownerGrants.getByRole("button", {
-    name: "Forget this browser",
+  const signOut = ownerGrants.getByRole("button", {
+    name: "Sign out",
     exact: true,
   });
-  await forget.focus();
+  await signOut.focus();
   await ownerGrants.keyboard.press("Enter");
   await ownerGrants.getByLabel("Owner passphrase", { exact: true }).waitFor();
   await ownerSignIn(ownerGrants);
   assert.equal(
     await ownerGrants
-      .getByRole("button", { name: "Revoke access", exact: true })
+      .getByRole("button", { name: "Revoke", exact: true })
       .count(),
     1,
-    "forget-browser invalidates owner verification without revoking apps",
+    "logout invalidates owner verification without revoking apps",
   );
   report.checks.push(
-    "real browser Forget this browser requires owner sign-in again and preserves application authority",
+    "real browser Sign out requires owner sign-in again and preserves application authority",
   );
   await cancelPage.locator("#chat-new").click();
   await cancelPage.waitForFunction(
@@ -1510,15 +1510,15 @@ try {
     }));
   await ownerGrants.goto(ownerUrl);
   await ownerGrants
-    .getByRole("button", { name: "Revoke access", exact: true })
+    .getByRole("button", { name: "Revoke", exact: true })
     .waitFor();
   const listedGrants = await ownerGrants.locator("body").textContent();
   assert.ok(listedGrants.includes(origin));
-  assert.ok(listedGrants.includes("Active"));
-  assert.ok(listedGrants.includes("Expires"));
+  assert.ok(await ownerGrants.locator(".event--active").count());
+  assert.ok(listedGrants.includes("ends"));
   const revokedHost = await ownedHost(ownerGrants);
   await ownerGrants
-    .getByRole("button", { name: "Revoke access", exact: true })
+    .getByRole("button", { name: "Revoke", exact: true })
     .click();
   await cancelPage.waitForFunction(
     () =>
@@ -1575,14 +1575,15 @@ try {
   await allGrantsOwner.goto(ownerUrl);
   assert.equal(
     await allGrantsOwner
-      .getByRole("button", { name: "Revoke access", exact: true })
+      .getByRole("button", { name: "Revoke", exact: true })
       .count(),
     2,
   );
   await ownerCapture(allGrantsOwner, "two-active-grants");
   const beforeAllRequests = (await modelRequests()).length;
+  await allGrantsOwner.goto(`${ownerUrl}/security`);
   const revokeAll = allGrantsOwner.getByRole("button", {
-    name: "Revoke all active grants",
+    name: "Revoke all",
     exact: true,
   });
   await revokeAll.focus();
@@ -1591,20 +1592,17 @@ try {
     true,
   );
   await allGrantsOwner.keyboard.press("Enter");
-  await allGrantsOwner.waitForFunction(
-    () =>
-      document.querySelector(
-        'form[action="/agent-connect/owner/grants/revoke-all"] button',
-      )?.disabled === true,
-  );
+  await allGrantsOwner.waitForURL(ownerUrl);
+  await allGrantsOwner.goto(`${ownerUrl}/security`);
   assert.ok(
     await allGrantsOwner
-      .getByRole("button", { name: "Revoke all active grants", exact: true })
+      .getByRole("button", { name: "Revoke all", exact: true })
       .isDisabled(),
   );
+  await allGrantsOwner.goto(ownerUrl);
   assert.equal(
     await allGrantsOwner
-      .getByRole("button", { name: "Revoke access", exact: true })
+      .getByRole("button", { name: "Revoke", exact: true })
       .count(),
     0,
   );
@@ -1687,7 +1685,7 @@ try {
     "profile-readonly",
     "sample-auto-recovery",
     "sessions-end",
-    "forget-browser",
+    "logout",
     "revoke-all",
     "runtime-problem",
   ];
