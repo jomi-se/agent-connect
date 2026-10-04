@@ -21,8 +21,7 @@ has contract coverage; the selected pinned harness fixtures expose no plan tool.
 
 The browser SDK is **0.0.10** at `@open-agent-connect/web`; gateway, native
 platform packages and session image are **0.0.1**. Versions are independent and
-remain on 0.0.x until the shape is final. The root is ACP-only; there are no legacy
-SDK exports or ACP subpath. Historical implementation records are superseded.
+remain on 0.0.x until the shape is final. Applications import the ACP browser API from the package root.
 
 Local product parity is complete. `agent-connect setup` provides guided and
 unattended planning/application, `doctor` supplies actionable human/JSON diagnosis,
@@ -70,11 +69,3 @@ Owner-required work:
 3. **ADR 0016 acceptance.** Decide whether the implemented hosted authorization and
    shared-home credential boundary are acceptable, and accept the decision
    explicitly before the publication workflow can proceed.
-
-4. **Owner-run package retirement.** The owner has deprecated every published
-   version of `@open-agent-connect/openclaw-plugin`. After both gateway 0.0.1 and
-   web SDK 0.0.10 are published and public installation is verified, the owner
-   still needs to deprecate `@open-agent-connect/web@<0.0.10`, pointing to the
-   gateway install guide.
-   Exact commands are in [the release checklist](../install/release.md#owner-only-retirement-after-publication).
-   Agents never run npm deprecate; no unpublication is authorized.

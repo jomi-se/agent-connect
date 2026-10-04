@@ -21,7 +21,7 @@ after a tested maintenance change has landed; do not assume all old PRs are safe
 
 ## PR verification
 
-`CI / PR checks` runs on PRs to main, main pushes and manual dispatch. It checks
+`CI / Required checks` runs on PRs to main, main pushes and manual dispatch. It checks
 the exact PR head rather than relying solely on GitHub's synthetic merge commit.
 The branch must contain current main and no merge commits on top of it. Use:
 
@@ -45,25 +45,16 @@ no operator credentials and no self-hosted runner. It runs:
 - native WebMCP using the explicit Chrome-for-Testing pin, and Canvas;
 - lint and dependency-boundary checks.
 
-The legacy replacement-engine crash suite is a separate command, not a current
-plugin restart-recovery guarantee. Native API or provider installation
-failures fail the check, not skip it. Python
-transitive dependencies remain ranged; compatibility pins are not a complete
-reproducible build lock. Lint's existing advisory warnings remain advisory.
+Native browser or adapter installation failures fail the check. Lint warnings
+remain advisory; dependency-boundary violations are hard failures.
 
 ## Permissions and required gates
 
-Main permits owner direct pushes and otherwise requires PRs, `PR checks` and
-`gitleaks`, with a current base. On this personal repository only `jomi-se` has
-the admin role used for the bypass. Re-evaluate that assumption if ownership or
-roles change. An agent using the owner's credentials has the same rights.
-The bypass also permits deliberate merge override; it is not a human detector.
+CI has read-only repository permissions and does not publish. The operator owns
+branch protection, required checks and permitted merge methods. Keep the branch
+current with main and resolve failed checks before requesting a merge. Agents
+commit reviewed changes locally; the operator pushes them.
 
-History rules are separate and have no bypass: no force pushes, deletions or
-merge commits on main. Normal PR merges use GitHub's rebase-and-merge method.
-No mandatory external approval is added: requiring somebody else to approve
-the owner's own PR would deadlock this single-maintainer repository.
-
-Live activation and check evidence are recorded in
-[the maintenance ledger](../archive/plans/repository-maintenance.md). A YAML file alone
-does not establish that GitHub settings were applied or that hosted CI passed.
+The source files describe the intended checks. Hosted CI results and account
+settings must be verified separately by the operator; local success does not
+establish that remote protections are active.

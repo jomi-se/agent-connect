@@ -1,9 +1,7 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # 0006: Explore AG-UI as the application-facing boundary
 
-- Status: superseded as the leading exploration by proposed ADR 0010; retained
-  as historical analysis
+Status: superseded by ADR 0016; AG-UI is not a current application protocol.
+
 - Date: 2026-07-14
 
 ## Context

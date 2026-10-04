@@ -1,8 +1,7 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # 0007: Bootstrap once with a runtime card, then authorize apps through the gateway
 
-- Status: superseded by ADR 0015; retained as historical security rationale
+Status: superseded by ADR 0016; runtime-card enrollment is removed, while hosted consent and PKCE remain.
+
 - Date: 2026-07-14
 
 Implementation note (2026-08-28): the hackathon-only anonymous `public-demo`

@@ -1,3 +1,5 @@
+> Superseded: this 2026-08-30 investigation assumes the removed HTTP gateway and standard-client grant profile. Native client identity needs a new decision against the current [ACP gateway](../../architecture/target-architecture.md).
+
 # Future task: application identity for native clients
 
 Status: proposed, not started. Written 2026-08-30 while planning a Readest fork
@@ -484,12 +486,12 @@ the gateway from the browser at all. Only an HTTPS origin can.
 
 Address-space behaviour, serving pages from three address spaces on one host:
 
-| Initiator                            | Target                              | Result                                                         |
-| ------------------------------------ | ----------------------------------- | -------------------------------------------------------------- |
-| `http://tailnet-device.example:9099` | `http://lan-device.example:9098`    | ordinary preflight, succeeded                                  |
-| `http://tailnet-device.example:9099` | `http://127.0.0.1:9098`             | never reached the server, hung pending                         |
-| `http://127.0.0.1:9099` (loopback)   | `http://lan-device.example:9098`    | never reached the server, hung pending                         |
-| `http://127.0.0.1:9099` (loopback)   | `https://…ts.net:8443/v1/responses` | reached the gateway in 25 ms, refused by its own origin policy |
+| Initiator                            | Target                                     | Result                                                         |
+| ------------------------------------ | ------------------------------------------ | -------------------------------------------------------------- |
+| `http://tailnet-device.example:9099` | `http://lan-device.example:9098`           | ordinary preflight, succeeded                                  |
+| `http://tailnet-device.example:9099` | `http://127.0.0.1:9098`                    | never reached the server, hung pending                         |
+| `http://127.0.0.1:9099` (loopback)   | `http://lan-device.example:9098`           | never reached the server, hung pending                         |
+| `http://127.0.0.1:9099` (loopback)   | `https://gateway.example.com/v1/responses` | reached the gateway in 25 ms, refused by its own origin policy |
 
 The hangs are a permission gate rather than unreachability — the same browser
 loads pages from both addresses directly, and a policy-blocked request fails
@@ -512,11 +514,11 @@ behaviour predicts.
 
 **The experiment that settles it** — worth running even though the bridge is
 discarded, because it establishes exact behaviour on the target stack. From a
-public HTTPS page, against `https://<gateway>.<tailnet>.ts.net`: a simple GET, a
+public HTTPS page, against `https://gateway.example.com`: a simple GET, a
 preflighted POST, SSE streaming, and cancellation; across Chrome Android, Chrome
 desktop, and Firefox Android; with permission granted and denied; with Tailscale
 disconnected; with tailnet DNS unavailable; against a raw `100.x` address versus
-the `ts.net` name; and top-level navigation as the control. Record whether a
+the gateway hostname; and top-level navigation as the control. Record whether a
 prompt appears, the exact request and response headers, whether the preflight
 carries any local-network header, the console error, whether the gateway
 received anything, whether SSE stays open, and what happens after the permission

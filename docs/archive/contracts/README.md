@@ -8,6 +8,6 @@ guarantees.
 
 The vendored `open-responses/` specification records the protocol pin used by
 that historical validation. Current Agent Connect plugin behavior is defined by the
-[mission](../../mission.md), [scope inventory](../../scope-inventory.md),
+[mission](../../mission.md), [scope inventory](../../README.md),
 and its package and installed-host tests. Do not mark a historical provider or
 durability assertion passed merely because current plugin tests are green.

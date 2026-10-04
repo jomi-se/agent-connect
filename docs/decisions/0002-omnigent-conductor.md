@@ -1,9 +1,6 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # ADR 0002: Evaluate Omnigent as the conductor
 
-Status: historical provider-selection record; superseded as the supported
-installation direction by ADR 0015
+Status: superseded by ADR 0016; Omnigent is not part of the current gateway.
 
 Date: 2026-07-13
 

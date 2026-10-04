@@ -29,10 +29,7 @@ __pycache__/
 .npm-cache/
 playwright-report/
 test-results/
-.omnigent-spike/
 .agent-connect/
-deploy/judge-demo/.env
-deploy/real-connector/.env
 
 # Private, local research evidence (for example raw visitor telemetry).
 # Also keep machine-specific deployment addresses and operator handoffs here.
@@ -48,7 +45,6 @@ docs/research/local-evidence/
 !.env.example
 !**/.env.example
 **/auth.json
-**/connector.json
 **/*service-account*.json
 **/*service_account*.json
 **/firebase-adminsdk-*.json
@@ -76,7 +72,7 @@ id_ed25519
 .mcp.json
 
 # Harness-materialized skill catalog. A harness (Claude/Codex) drops its full skill
-# set — mirrors of .agents/skills plus plugin skills (impeccable, agent-browser,
+# set — mirrors of .agents/skills plus extension skills (impeccable, agent-browser,
 # validators, mission playbooks) — into the adapter dirs on load. Never committed;
 # not repo content. Keep only the tracked ck-orchestration adapter in each.
 /.claude/skills/*

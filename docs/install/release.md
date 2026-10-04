@@ -188,23 +188,3 @@ state before deciding how to resume. Do not automatically reissue an uncertain
 publication, move a tag, or replace an already published npm version. After a
 successful release, verify anonymous image pulls, platform installations,
 package provenance and the `next` dist-tag from the published artifacts.
-
-## Owner-only retirement after publication
-
-The owner has deprecated every published version of
-`@open-agent-connect/openclaw-plugin`. The plugin command below records that
-completed owner-run step; it does not authorize an agent to execute it.
-
-The remaining SDK retirement follows publication of **both**
-`@open-agent-connect/gateway@0.0.1` and `@open-agent-connect/web@0.0.10` and
-verification of their public installation. Only the owner runs these commands.
-Agents never execute them.
-
-```sh
-npm deprecate '@open-agent-connect/openclaw-plugin@*' 'Use @open-agent-connect/gateway and the ACP SDK. Install guide: https://github.com/jomi-se/agent-connect/blob/main/docs/install/README.md'
-npm deprecate '@open-agent-connect/web@<0.0.10' 'Use @open-agent-connect/web@0.0.10 with @open-agent-connect/gateway. Install guide: https://github.com/jomi-se/agent-connect/blob/main/docs/install/README.md'
-```
-
-Verify that deprecation covers every plugin version and only SDK versions below
-0.0.10. Do not unpublish packages; published artifacts and Git history preserve
-the previous implementation.

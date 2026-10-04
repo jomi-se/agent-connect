@@ -1,8 +1,7 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # 0009: Separate ingress, owner authentication, and application authorization
 
-- Status: proposed
+Status: proposed historical design; the ACP gateway implements separate ingress, owner sign-in and application grants under proposed ADR 0016.
+
 - Date: 2026-07-23
 
 Implementation note (2026-08-28): the anonymous Funnel `public-demo` profile

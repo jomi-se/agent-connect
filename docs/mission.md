@@ -1,5 +1,9 @@
 # Mission
 
+**Connect your AI.** Choose the agent you already own, authorize an application,
+and use it through the application's own interface. The application supplies
+tools; your agent supplies intelligence under scoped, revocable consent.
+
 Agent Connect lets applications lend a fixed, approved set of tools to a
 user-owned agent. Applications own their UI, data and effects. The user chooses
 the harness and model and keeps provider credentials in a dedicated harness

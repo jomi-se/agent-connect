@@ -1,5 +1,9 @@
 # Documentation
 
+Agent Connect is one product: the Rust gateway, npm launcher/platform packages,
+boxed session image and root browser SDK. The standalone chat sample shows the
+application integration.
+
 - [Mission](mission.md)
 - [Install the ACP gateway](install/README.md)
 - [Configuration](install/configuration.md) and [troubleshooting](install/troubleshooting.md)

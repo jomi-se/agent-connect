@@ -1,3 +1,5 @@
+> Superseded: historical Open Responses product vision. The current north star is in [mission](../mission.md).
+
 # North star: Connect your AI
 
 Recorded: 2026-09-06.
@@ -13,7 +15,7 @@ Current implementation: the ACP gateway and root browser SDK connect a fixed,
 consented tool snapshot to a user-selected harness. AI SDK `useChat` owns browser
 presentation; the harness owns the model/tool loop. Native execution runs in
 owned boxes with dedicated harness homes and restricted egress. The
-[architecture](architecture/target-architecture.md) records the current boundary.
+[architecture](../architecture/target-architecture.md) records the current boundary.
 
 Make **Connect your AI** an ordinary application capability, like connecting a
 calendar or payment account. A developer integrates once; the user chooses who
@@ -242,8 +244,8 @@ This direction authorizes neither external outreach nor submissions by itself.
 ## Implementation evidence
 
 Current compatibility and product qualification are described in
-[the testing strategy](architecture/testing-strategy.md) and
-[current work](plan/current-work.md). Historical feasibility investigations are
+[the testing strategy](../architecture/testing-strategy.md) and
+[current work](../plan/current-work.md). Historical feasibility investigations are
 superseded evidence, not current setup or acceptance instructions.
 
 ## Limits and decisions still open
@@ -278,7 +280,7 @@ context; draft status and provider support must be rechecked before implementati
 - [OAuth Client ID Metadata Document, Internet-Draft](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/).
 - [Device authorization, RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html).
 - [Native application identity investigation](future/native-client-identity.md).
-- [ADR 0010: existing Open Responses boundary](decisions/0010-open-responses-gateway-pivot.md).
-- [ADR 0012: superseded implementation direction](decisions/0012-openclaw-policy-gateway.md).
-- [Current mission](mission.md), [implementation inventory](scope-inventory.md),
-  and [current work](plan/current-work.md).
+- [ADR 0010: existing Open Responses boundary](../decisions/0010-open-responses-gateway-pivot.md).
+- [ADR 0012: superseded implementation direction](../decisions/0012-openclaw-policy-gateway.md).
+- [Current mission](../mission.md), [implementation inventory](../README.md),
+  and [current work](../plan/current-work.md).

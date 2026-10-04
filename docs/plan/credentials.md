@@ -202,7 +202,7 @@ harness for a live release.
   compared in the spike.
 - Limits:
   - it can only make model requests (no Remote Control or claude.ai
-    connectors), which the gateway does not need;
+    integrations), which the gateway does not need;
   - `--bare` mode does not read it;
   - an environment variable is as readable to the harness's shell as a file,
     so the accepted risk is unchanged.
