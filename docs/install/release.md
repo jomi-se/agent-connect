@@ -190,9 +190,14 @@ package provenance and the `next` dist-tag from the published artifacts.
 
 ## Owner-only retirement after publication
 
-After **both** `@open-agent-connect/gateway@0.0.1` and
-`@open-agent-connect/web@0.0.10` are published and their public installation is
-verified, the owner runs these commands. Agents never execute them.
+The owner has deprecated every published version of
+`@open-agent-connect/openclaw-plugin`. The plugin command below records that
+completed owner-run step; it does not authorize an agent to execute it.
+
+The remaining SDK retirement follows publication of **both**
+`@open-agent-connect/gateway@0.0.1` and `@open-agent-connect/web@0.0.10` and
+verification of their public installation. Only the owner runs these commands.
+Agents never execute them.
 
 ```sh
 npm deprecate '@open-agent-connect/openclaw-plugin@*' 'Use @open-agent-connect/gateway and the ACP SDK. Install guide: https://github.com/jomi-se/agent-connect/blob/main/docs/install/README.md'
