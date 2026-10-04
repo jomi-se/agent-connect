@@ -1,68 +1,99 @@
 # Agent Connect
 
-Lend an application's tools to the user's own agent. The application owns its
-UI and effects; the user chooses the harness and model through their gateway.
+**Connect your AI.** Let a web application use the agent you already own.
+The application supplies its UI and a fixed set of approved tools; your gateway
+provides scoped access to your chosen harness and model.
 
-**Unpublished candidates:** gateway 0.0.1 and browser SDK 0.0.10. Versions remain
-on 0.0.x until the shape is final. ACP, MCP-over-ACP and resumable transport are
-unstable under [proposed ADR 0016](docs/decisions/0016-acp-application-boundary.md).
+One product: the Rust gateway (`agent-connect`) and browser SDK
+(`@open-agent-connect/web`). Gateway **0.0.1** and SDK **0.0.10** are unpublished
+candidates. ACP, MCP-over-ACP and transport resumption are **experimental and
+unstable**; [ADR 0016](docs/decisions/0016-acp-application-boundary.md) remains proposed.
 
-## Install
+## Run your gateway
 
-Follow [the gateway install guide](docs/install/README.md). From a prepared
-artifact set, install the gateway launcher and matching native platform package,
-then run:
+After publication, install from npm. Until then, use the matching launcher and
+platform tarballs as described in the [install guide](docs/install/README.md).
+You need Node 24 LTS (>=24.15), Docker and a browser.
 
 ```sh
+npm install --global @open-agent-connect/gateway@0.0.1
 agent-connect setup
+agent-connect login
 agent-connect doctor
+agent-connect service start
 ```
 
-Production sessions run in disposable boxes with a dedicated shared harness
-home and owned restricted egress. Owner authentication/grants remain outside
-the harness home. Read [the shared-home risks](docs/plan/credentials.md)
-before owner-run login. Setup never imports personal credentials.
+Setup creates private owner state, owned egress and a user service, which it
+starts automatically. Run provider login yourself in the dedicated harness home;
+read the [shared-home risks](docs/plan/credentials.md) first. The explicit start
+command also starts a previously stopped service. For remote access, follow the
+install guide's HTTPS setup.
 
-```text
-Web app: @open-agent-connect/web + approved application tools
-    | owner consent, exact origin, fixed tools, unstable ACP WebSocket
-Agent Connect gateway: owner console, profiles, grants, session cleanup
-    | pinned ACP adapter, owned egress
-Disposable session box: dedicated harness home, user-selected agent/model
+Open an app that supports Agent Connect, enter your gateway origin and choose
+**Connect**. Sign in on the gateway's owner page and approve the exact app origin,
+tool snapshot, restricted profile and duration. Try the
+[standalone chat sample](examples/acp-chat/README.md).
+
+## Add it to your application
+
+Install `@open-agent-connect/web@0.0.10` after publication, or its supplied tarball
+beforehand. Import from the package root. Call pairing from an explicit user
+action, then pass the returned transport to AI SDK `useChat`:
+
+```ts
+import {
+  captureAcpPairingCallback,
+  connectAgent,
+  createAcpChatTransport,
+  defineTool,
+} from "@open-agent-connect/web";
+
+const callbackUrl = captureAcpPairingCallback(); // Before rendering the callback.
+const tools = [
+  defineTool({
+    name: "read_note",
+    description: "Read the open note",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+    execute: () => "The note belongs to this application.",
+  }),
+];
+
+export async function connectNotes(gatewayUrl: string) {
+  const provider = await connectAgent({
+    gatewayUrl,
+    tools,
+    pairing: {
+      mode: "popup",
+      redirectUri: window.location.origin + window.location.pathname,
+      ...(callbackUrl ? { callbackUrl } : {}),
+      clientName: "Notes",
+    },
+  });
+  return { provider, transport: createAcpChatTransport({ provider, tools }) };
+}
 ```
 
-## Integrate
+The harness owns history and the tool loop. The transport validates and executes
+approved app tools. Effects need application-owned idempotency or action-ID
+deduplication; recovery never replays an uncertain prompt or effect. Close the
+transport and provider when leaving the feature. The
+[SDK guide](packages/web-sdk/README.md) covers React, tools, recovery and errors.
 
-Import from `@open-agent-connect/web` at the package root. Pair using
-`connectAgent`, then supply `createAcpChatTransport({ provider, tools })` to
-AI SDK `useChat`. The harness owns its history and tool loop; the transport
-validates and executes approved application tools internally. Applications
-must deduplicate consequential effects with stable action IDs. Recovery never
-replays uncertain prompts or actions.
+## Develop
 
-See the [SDK API and React example](packages/web-sdk/README.md) and
-[standalone packed sample](examples/acp-chat/README.md).
+Use Node 24 LTS >=24.15 and <25. The [release guide](docs/install/release.md)
+provides pinned tools, local artifact builds and the full verification sequence.
+Tests exercise real pinned adapters with deterministic inference; real-model
+application acceptance is separate evidence.
 
-## Develop and validate
-
-Use Node 24 LTS >=24.15 and <25, Docker and the pinned build/browser tools.
-Prepare local artifacts using [the release checklist](docs/install/release.md).
-
-```sh
-npm install
-npm run format:check
-npm run typecheck
-npm test
-npm run build
-cargo test --locked
-npm run verify
-```
-
-Verification exercises real pinned ACP adapters with deterministic inference,
-isolated state and artifact-only browser composition. Real-model application
-acceptance is separate evidence. See [testing strategy](docs/architecture/testing-strategy.md).
-Agents stage named paths and commit checked work; pushing and publication remain
-owner-run actions. [Current work](docs/plan/current-work.md) records release gates.
+- [Documentation](docs/README.md), [mission](docs/mission.md) and [architecture](docs/architecture/target-architecture.md)
+- [Configuration](docs/install/configuration.md) and [troubleshooting](docs/install/troubleshooting.md)
+- [Current work and owner gates](docs/plan/current-work.md)
+- [Testing strategy](docs/architecture/testing-strategy.md)
 
 ## License
 

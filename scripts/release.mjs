@@ -189,7 +189,7 @@ if (command === "check") {
       if (!entries.some((entry) => /(?:^|\/)agent-connect$/.test(entry)))
         throw new Error(`No primary agent-connect executable in ${filename}`);
       const executable = entries.find((entry) =>
-        /(?:^|\/)agent-connect-gateway$/.test(entry),
+        /(?:^|\/)agent-connect$/.test(entry),
       );
       if (!executable) throw new Error(`No gateway executable in ${filename}`);
       run(process.execPath, [

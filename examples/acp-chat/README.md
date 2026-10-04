@@ -1,4 +1,4 @@
-# Reader chat sample (unstable ACP alpha)
+# Reader chat sample (experimental ACP)
 
 Requires Node 24 LTS >=24.15 and <25. This standalone Vite application consumes
 the public `@open-agent-connect/web` export. It has no repository aliases.
@@ -11,16 +11,10 @@ npm install /path/to/open-agent-connect-web-0.0.10.tgz
 npm run dev
 ```
 
-Install the gateway and the platform binary from the same release. With Docker
-and the release session image available, prepare a dedicated operator directory:
-
-```sh
-agent-connect init --directory ./runtime --harness codex \
-  --public-url http://127.0.0.1:18940
-agent-connect login
-agent-connect egress start
-agent-connect serve --config ./runtime/config.json
-```
+Install and set up the matching gateway using the
+[install guide](../../docs/install/README.md). Provider login is an owner-run
+step in a dedicated harness home. For a supplied local candidate, use its
+matching platform tarball and session image. Normal setup starts the user service.
 
 Enter the gateway's HTTP or HTTPS address and choose **Connect**. The gateway's
 owner sign-in and consent pages show the application origin and its exact three

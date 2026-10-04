@@ -26,8 +26,7 @@ const image =
   process.env.ACP_SESSION_IMAGE ??
   `agent-connect-session:${JSON.parse(await readFile(join(repo, "deploy/gateway/session/package.json"), "utf8")).version}`;
 const sourceBinary =
-  process.env.ACP_GATEWAY_BIN ??
-  join(repo, "target/debug/agent-connect-gateway");
+  process.env.ACP_GATEWAY_BIN ?? join(repo, "target/debug/agent-connect");
 const binary = join(root, "gateway");
 const egressName = `acp-test-egress-${suffix}`;
 const modelName = `acp-test-model-${suffix}`;

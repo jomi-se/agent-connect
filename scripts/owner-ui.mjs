@@ -62,10 +62,10 @@ const application = createServer((_request, response) => {
 });
 await new Promise((ok) => application.listen(0, "127.0.0.1", ok));
 const appOrigin = `http://127.0.0.1:${application.address().port}`;
-const binary = join(repo, "target/debug/agent-connect-gateway");
+const binary = join(repo, "target/debug/agent-connect");
 const build = spawnSync(
   "cargo",
-  ["build", "--locked", "--bin", "agent-connect-gateway"],
+  ["build", "--locked", "--bin", "agent-connect"],
   { cwd: repo, encoding: "utf8" },
 );
 assert.equal(build.status, 0, build.stderr);

@@ -4,8 +4,7 @@ Start with `agent-connect setup`, then `agent-connect doctor` and the owner
 console. This reference covers explicit configuration and advanced operation.
 `agent-connect --help` lists setup, diagnosis, service lifecycle, owner recovery,
 `init`, `login`, `egress`, `serve` and `release-info`.
-`serve --help` lists all flags. `agent-connect-gateway` remains a compatibility
-alias in npm and the release archives. `agent-connect login` prompts for a
+`serve --help` lists all flags. `agent-connect login` prompts for a
 harness and uses a dedicated platform-default home; `--harness` skips selection,
 `--harness-home` overrides the home, and `--config` honors an existing runtime's
 home/image. `XDG_STATE_HOME` overrides the platform state root and must be absolute.

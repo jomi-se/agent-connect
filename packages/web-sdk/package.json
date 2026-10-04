@@ -54,5 +54,17 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "keywords": [
+    "agent-connect",
+    "acp",
+    "user-owned-agents",
+    "application-tools",
+    "browser-sdk",
+    "experimental"
+  ],
+  "bugs": {
+    "url": "https://github.com/jomi-se/agent-connect/issues"
+  },
+  "types": "./dist/index.d.ts"
 }

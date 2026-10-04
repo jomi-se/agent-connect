@@ -4,6 +4,8 @@
 ACP, MCP-over-ACP and Agent Connect's resumable transport remain **experimental**.
 The gateway is independently versioned at 0.0.1. Both candidates are unpublished.
 
+After publication (use the supplied SDK tarball before then):
+
 ```sh
 npm install @open-agent-connect/web@0.0.10 @ai-sdk/react react
 ```
@@ -50,7 +52,7 @@ async function pair(gatewayUrl: string) {
     pairing: {
       mode: "popup",
       redirectUri: window.location.origin + window.location.pathname,
-      callbackUrl,
+      ...(callbackUrl ? { callbackUrl } : {}),
       clientName: "Notes",
     },
   });
@@ -80,10 +82,10 @@ export function Chat({
 }
 ```
 
-The [typechecked React example](examples/acp-use-chat.tsx) renders thoughts, tool
-progress and plans. The [standalone sample](../../examples/acp-chat/README.md)
+The [React example](https://github.com/jomi-se/agent-connect/blob/main/packages/web-sdk/examples/acp-use-chat.tsx) renders thoughts, tool
+progress and plans. The [standalone sample](https://github.com/jomi-se/agent-connect/blob/main/examples/acp-chat/README.md)
 adds pairing, lifecycle and recovery controls using packed public exports.
-Dispose the chat transport and close its provider when leaving. BFCache pages
+Call `transport.close()` and `provider.close()` when leaving. BFCache pages
 retain their connection and check liveness on restoration.
 
 ## Tools and authority
@@ -98,7 +100,7 @@ cancellation uses the handler's signal; cancellation cannot undo an effect.
 `createWebMcpToolSnapshot` captures selected native browser tools before consent.
 Definitions remain fixed, registry changes invalidate the snapshot, and disposal
 aborts borrowed execution without unregistering the page's tools. See
-[the WebMCP boundary](../../docs/architecture/browser-sdk-building-blocks.md).
+[the WebMCP boundary](https://github.com/jomi-se/agent-connect/blob/main/docs/architecture/browser-sdk-building-blocks.md).
 
 ## Recovery and errors
 
@@ -116,3 +118,7 @@ until owned box cleanup succeeds; offer an owner-console link when supplied.
 `transport.error` retains the typed streaming failure even when AI SDK presents
 it as text. Low-level ACP stream and single-server helpers are exported for explicit protocol
 integration and remain unstable. No agent credentials are exposed to the app.
+
+See the [install guide](https://github.com/jomi-se/agent-connect/blob/main/docs/install/README.md)
+for gateway setup and pairing. README TypeScript snippets are checked by
+`npm run test:docs`.

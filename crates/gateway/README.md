@@ -1,36 +1,26 @@
-# Agent Connect ACP gateway
+# Agent Connect Rust gateway
 
-Unreleased implementation of proposed [ADR 0016](../../docs/decisions/0016-acp-application-boundary.md).
-ACP, MCP-over-ACP and `agent-connect.resume.v1` surfaces are **unstable**.
-The product exposes the ACP gateway and root browser SDK.
+The gateway implements hosted owner sign-in, fixed-tool OAuth consent, ACP
+session policy, resumable delivery, durable action journaling and owned Docker
+cleanup. It is the native component of Agent Connect, packaged by the
+[npm launcher](../../packages/gateway-npm/README.md).
+ACP, MCP-over-ACP and `agent-connect.resume.v1` remain unstable under
+[proposed ADR 0016](../../docs/decisions/0016-acp-application-boundary.md).
 
-Build with `cargo build --locked --bin agent-connect-gateway`; run unit tests
-with `cargo test --locked`. `npm run verify` additionally runs the real pinned
-Codex and Claude ACP adapters against deterministic inference in Chromium.
-It creates temporary harness homes and never uses personal logins.
+For installation and normal operation, use the
+[install guide](../../docs/install/README.md). Owner state and grants stay outside
+the dedicated harness home. Production sessions are boxed with restricted owned
+egress; [shared-home risks](../../docs/plan/credentials.md) remain explicit.
+Applications must deduplicate consequential effects using stable action IDs.
 
-The operator supplies an exact browser origin, bearer grant and consented tool
-snapshot with `--allow-origin`, `--token`, and `--tools`. Grant issuance and
-revocation remain release prerequisites. The gateway restricts session ownership,
-permits one active prompt per chain, owns session setup and permission answers,
-and journals application actions before delivery. Journal files are evidence of
-uncertain effects after a crash; they are never automatically replayed. Applications
-must deduplicate side effects with the stable `agent-connect/actionId`.
+From the repository root:
 
-The experimental browser fixture and deterministic model remain under
-`deploy/gateway/test/fixtures`. Host adapter launches are test-only and provide no
-native-action isolation; container sessions provide that boundary.
+```sh
+cargo build --locked --bin agent-connect
+cargo test --locked
+```
 
-Production runs use `agent-connect-gateway serve --boxed --harness codex`, with
-`--harness-home`, `--egress-container`, `--tools`, `--token` and `--allow-origin`.
-The shared home must be dedicated, private (0700) and owned by the invoking user;
-containers run as that UID/GID. The home includes credentials and transcripts,
-so a consented application could obtain the dedicated login and read other
-applications' transcripts. See the [credential boundary](../../docs/plan/credentials.md).
-
-`agent-connect-gateway login --harness codex --harness-home /path/to/dedicated-home`
-runs the one-time device login in the session image. The owner runs it; tests
-never authenticate. `--harness claude` opens `/login`; Claude Code is unconfirmed
-against Anthropic terms. `setup-token` is a compared variant only. API-key
-variables are never supplied to boxes. Host adapter launches require an explicit
-isolated `--mock-root`; this is only a deterministic test mode.
+The [release guide](../../docs/install/release.md) covers distribution builds.
+`npm run verify` also exercises real pinned Codex and Claude ACP adapters with
+deterministic inference, temporary homes and no provider login. See the
+[testing strategy](../../docs/architecture/testing-strategy.md).
