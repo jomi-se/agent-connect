@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-03
+Updated: 2026-10-04
 
 The ACP product candidates are gateway **0.0.1** and root browser SDK
 **0.0.10**: Rust launcher/platform binaries, hosted owner sign-in/consent/grant management, dedicated login
@@ -71,9 +71,10 @@ Owner-required work:
    shared-home credential boundary are acceptable, and accept the decision
    explicitly before the publication workflow can proceed.
 
-4. **Owner-run retirement after publication.** After both gateway 0.0.1 and
-   web SDK 0.0.10 are published and public installation is verified, deprecate
-   all versions of `@open-agent-connect/openclaw-plugin` and
-   `@open-agent-connect/web@<0.0.10`, each pointing to the gateway install guide.
+4. **Owner-run package retirement.** The owner has deprecated every published
+   version of `@open-agent-connect/openclaw-plugin`. After both gateway 0.0.1 and
+   web SDK 0.0.10 are published and public installation is verified, the owner
+   still needs to deprecate `@open-agent-connect/web@<0.0.10`, pointing to the
+   gateway install guide.
    Exact commands are in [the release checklist](../install/release.md#owner-only-retirement-after-publication).
    Agents never run npm deprecate; no unpublication is authorized.
