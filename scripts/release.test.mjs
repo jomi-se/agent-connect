@@ -225,3 +225,36 @@ test("release checks accept independent SDK versions and reject gateway/image dr
   assert.notEqual(imageDrift.status, 0);
   assert.match(imageDrift.stderr, /must share one version/);
 });
+
+for (const prefix of ["/home/example/", "/Users/example/"]) {
+  test(
+    `release evidence rejects an executable containing ${prefix}`,
+    { skip: !hostTarget },
+    async (t) => {
+      const input = await fixture(t, hostTarget);
+      const file = join(input.files, "agent-connect");
+      await writeFile(
+        file,
+        (await readFile(file, "utf8")) + `# builder: ${prefix}repository\n`,
+      );
+      assert.equal(
+        spawnSync("tar", [
+          "-cJf",
+          input.archive,
+          "-C",
+          input.files,
+          "agent-connect",
+        ]).status,
+        0,
+      );
+      await assert.rejects(
+        verifyArchiveReleaseInfo({ ...input, record: true }),
+        /personal builder path/,
+      );
+      await assert.rejects(
+        access(join(input.directory, releaseInfoFilename(hostTarget))),
+        { code: "ENOENT" },
+      );
+    },
+  );
+}

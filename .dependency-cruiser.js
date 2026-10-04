@@ -16,11 +16,11 @@ export default {
       to: { couldNotResolve: true },
     },
     {
-      name: "packages-do-not-import-apps",
+      name: "packages-do-not-import-sample",
       severity: "error",
-      comment: "Reusable packages must not depend on deployable demo apps.",
-      from: { path: "^packages/" },
-      to: { path: "^apps/" },
+      comment: "Production packages must not depend on the standalone sample.",
+      from: { path: "^packages/", pathNot: "/(?:test|e2e)/" },
+      to: { path: "^examples/" },
     },
     {
       name: "production-does-not-import-tests",
@@ -35,7 +35,7 @@ export default {
       comment:
         "The application-facing SDK must remain independent of the gateway implementation.",
       from: { path: "^packages/web-sdk/" },
-      to: { path: "^packages/gateway/" },
+      to: { path: "^(?:crates/gateway|deploy/gateway|packages/gateway-npm)/" },
     },
     {
       name: "web-sdk-does-not-import-node-builtins",
@@ -49,7 +49,7 @@ export default {
   options: {
     doNotFollow: { path: "node_modules" },
     exclude: { path: "(^|/)(?:dist|coverage|node_modules)/" },
-    includeOnly: ["^(?:apps|packages)/"],
+    includeOnly: ["^(?:examples|packages|deploy/gateway)/"],
     tsConfig: { fileName: "tsconfig.base.json" },
     enhancedResolveOptions: {
       extensions: [".js", ".mjs", ".cjs", ".ts", ".tsx", ".d.ts"],

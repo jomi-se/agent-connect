@@ -78,6 +78,8 @@ cargo install --locked --version "$zigbuild_version" --root "$tools_dir/cargo-to
 export PATH="$tools_dir/bin:$tools_dir/cargo-tools/bin:$PATH"
 printf '%s\n' "$tools_dir/bin" "$tools_dir/cargo-tools/bin" >> "$GITHUB_PATH"
 
+printf 'CARGO_ENCODED_RUSTFLAGS=%s\n' "$(node scripts/release-build-env.mjs)" >> "$GITHUB_ENV"
+
 [[ "$(dist --version)" == "cargo-dist $dist_version" ]]
 [[ "$(cargo-zigbuild --version)" == "cargo-zigbuild $zigbuild_version" ]]
 [[ "$(zig version)" == "$zig_version" ]]

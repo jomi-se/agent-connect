@@ -44,8 +44,7 @@ The rules in [`.dependency-cruiser.js`](../../.dependency-cruiser.js) enforce
 only current, documented ownership boundaries:
 
 - imports must resolve and production code must not import tests;
-- packages must not import deployable applications;
-- one application must not import another application;
+- packages must not import the standalone sample;
 - the web SDK must not import the gateway implementation;
 - the web SDK must not import Node.js built-ins;
 - circular dependencies are reported as warnings.

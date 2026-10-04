@@ -2,6 +2,8 @@
 # Builds local OCI archives; never pushes to a registry.
 set -eu
 cd "$(dirname "$0")/../../.."
+CARGO_ENCODED_RUSTFLAGS=$(node scripts/release-build-env.mjs)
+export CARGO_ENCODED_RUSTFLAGS
 build_mode=${1:-all}
 case "$build_mode" in all|--runners-only|--native-only|--oci-only) ;; *) echo 'Usage: build-local.sh [--runners-only|--native-only|--oci-only]' >&2; exit 2;; esac
 session_version=$(node -p 'JSON.parse(require("fs").readFileSync("deploy/gateway/session/package.json", "utf8")).version')

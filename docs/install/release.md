@@ -35,7 +35,9 @@ Each archive, shell installation and npm launcher exposes the `agent-connect` CL
 
 Cargo-dist produces target archives, SHA-256 checksums and the global shell
 installer. npm packaging is owned by `scripts/release.mjs`, avoiding a
-second cargo-dist npm installer. The collection contains:
+second cargo-dist npm installer. Local and CI builds remap Rust source paths
+for the checkout, Cargo dependencies and toolchain to neutral build prefixes;
+distributed executables must not contain personal builder paths. The collection contains:
 
 - `@open-agent-connect/web`;
 - `@open-agent-connect/gateway` and its three platform packages;

@@ -3,7 +3,7 @@ use super::{
     default_runtime_directory, private_metadata, usage, validate_argument,
 };
 use crate::config;
-use anyhow::{Context, bail};
+use anyhow::Context;
 use clap::{Args, Subcommand, ValueEnum};
 use std::{
     io::Write,
