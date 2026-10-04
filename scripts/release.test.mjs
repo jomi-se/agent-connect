@@ -195,7 +195,6 @@ test("release checks accept independent SDK versions and reject gateway/image dr
   await manifest("packages/gateway-npm/package.json", {
     version: "0.0.1",
     agentConnect: { adapterVersions: { "fixture-adapter": "2.0.1" } },
-    optionalDependencies: { "fixture-platform": "0.0.1" },
   });
   await manifest("deploy/gateway/session/package.json", {
     version: "0.0.1",

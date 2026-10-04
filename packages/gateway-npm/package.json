@@ -33,11 +33,6 @@
       "@anthropic-ai/claude-code": "2.1.286"
     }
   },
-  "optionalDependencies": {
-    "@open-agent-connect/gateway-darwin-arm64": "0.0.1",
-    "@open-agent-connect/gateway-linux-x64": "0.0.1",
-    "@open-agent-connect/gateway-linux-arm64": "0.0.1"
-  },
   "scripts": {
     "test": "node --test test/*.test.mjs"
   },

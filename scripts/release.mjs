@@ -52,8 +52,12 @@ if (!/^0\.0\.\d+$/.test(sdk.version) || !/^0\.0\.\d+$/.test(version))
 for (const [name, pin] of Object.entries(gateway.agentConnect.adapterVersions))
   if (session.dependencies[name] !== pin)
     throw new Error(`Session image adapter pin mismatch: ${name}`);
-if (!Object.values(gateway.optionalDependencies).every((v) => v === version))
-  throw new Error("Platform package versions must match the gateway");
+// Platform packages are unpublished until release, so the workspace launcher does
+// not declare them (older npm ci rejects lockfiles missing optional packages).
+// The packed launcher declares every platform at the gateway version.
+const platformPackages = ["darwin-arm64", "linux-arm64", "linux-x64"].map(
+  (platform) => `@open-agent-connect/gateway-${platform}`,
+);
 function run(bin, args, cwd = repo) {
   const result = spawnSync(bin, args, {
     cwd,
@@ -210,7 +214,29 @@ if (command === "check") {
   }
   run("npm", ["run", "build", "--workspace", "@open-agent-connect/web"]);
   await pack("./packages/web-sdk");
-  await pack("./packages/gateway-npm");
+  const launcher = await mkdtemp(join(tmpdir(), "acp-launcher-pack-"));
+  try {
+    await cp(join(repo, "packages/gateway-npm"), launcher, {
+      recursive: true,
+      filter: (path) => !path.split(/[\\/]/).includes("node_modules"),
+    });
+    await writeFile(
+      join(launcher, "package.json"),
+      JSON.stringify(
+        {
+          ...gateway,
+          optionalDependencies: Object.fromEntries(
+            platformPackages.map((name) => [name, version]),
+          ),
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    await pack(launcher);
+  } finally {
+    await rm(launcher, { recursive: true, force: true });
+  }
   const sample = await mkdtemp(join(tmpdir(), "acp-sample-pack-"));
   try {
     await cp(join(repo, "examples/acp-chat"), join(sample, "package"), {
