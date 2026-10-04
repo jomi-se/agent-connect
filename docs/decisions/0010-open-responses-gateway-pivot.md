@@ -1,9 +1,7 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # 0010: Use Open Responses at the application boundary
 
-- Status: accepted historical application-wire decision; implemented in the
-  current plugin path, with post-switch composition confirmed by the owner
+Status: superseded by ADR 0016; Open Responses is removed from the application boundary.
+
 - Date: 2026-08-26
 - Revised: 2026-09-04
 

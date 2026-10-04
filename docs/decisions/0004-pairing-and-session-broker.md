@@ -1,11 +1,6 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # 0004: Pair applications and broker provider sessions
 
-## Status
-
-Superseded by ADR 0007 on 2026-07-14. The compatibility implementation was
-removed on 2026-07-22 before public release.
+Status: superseded by ADR 0016; the current ACP gateway uses hosted OAuth consent and session ownership.
 
 ## Decision
 

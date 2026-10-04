@@ -105,7 +105,7 @@ demo's success claims. Compatibility providers remain deferred.
 
 This records the owner's refinements to the
 [implementation brief](../implementation-brief.md) and
-[north star](../../vision.md). Where their implementation ordering differs, this
+[north star](../vision.md). Where their implementation ordering differs, this
 plan takes precedence. No push, live runtime change or deployment is authorized
 by documenting this plan.
 

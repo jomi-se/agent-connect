@@ -1,11 +1,7 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # ADR 0013: Native provider delegation and AI SDK execution
 
 Date: 2026-09-06.
-Status: superseded on 2026-09-07 by the archived ADR 0014 decision and then by
-ADR 0015. Retained as the native-patch experiment record; it is not the
-mandatory execution path.
+Status: superseded by ADR 0016; native provider patching is not a current execution path.
 
 Architectural hardening, 2026-09-07: native admission is the authority
 linearization point. After plugin authentication and parsed-request authorization,

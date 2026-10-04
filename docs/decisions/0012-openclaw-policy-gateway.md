@@ -1,5 +1,3 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # ADR 0012: Delegate runtime execution and Responses to OpenClaw
 
 Implementation prescription superseded after two experiments: ADR 0013 records
@@ -8,9 +6,7 @@ the 2026-09-06 native-patch direction; current
 proxy to OpenClaw. Retain this document as earlier rationale, not a
 requirement to preserve its custom Responses engine or durable ledger.
 
-Status: historical and superseded by ADR 0015, 2026-09-09. the owner selected the
-built-in OpenClaw loop using his AI subscription; retain this as rationale, not
-as current release or cutover instructions.
+Status: superseded by ADR 0016; the current gateway does not delegate to OpenClaw.
 
 Reconsideration, later 2026-09-05: the owner requested investigating direct OpenClaw
 application delegation instead of assuming a separate gateway survives. The
@@ -19,7 +15,7 @@ the current isolated demo profile, not the desired final product boundary.
 See [the delegation research](../research/2026-09-05-openclaw-app-delegation.md).
 This records the open decision without silently changing the deployed policy.
 
-Product framing, 2026-09-06: the accepted [Connect your AI north star](../vision.md)
+Product framing, 2026-09-06: the accepted [Connect your AI north star](../archive/vision.md)
 makes OpenClaw a provider implementation of a portable authorization/discovery
 profile around Open Responses, not a dependency imposed on every app/provider.
 The separate gateway and prototype ingress arrangement are implementation choices,

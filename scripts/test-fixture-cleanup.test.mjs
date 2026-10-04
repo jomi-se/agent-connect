@@ -24,7 +24,7 @@ test("fixture teardown drops heavy installs and caches while retaining evidence 
     for (const path of [
       "adapters/node_modules/adapter",
       "web/node_modules/browser",
-      "state/extensions/plugin/node_modules/dependency",
+      "state/adapters/fixture/node_modules/dependency",
       "cache",
       "npm-cache",
       "node-compile-cache/adapter",
@@ -54,7 +54,7 @@ test("fixture teardown drops heavy installs and caches while retaining evidence 
       "node_modules",
       "adapters/node_modules",
       "web/node_modules",
-      "state/extensions/plugin/node_modules",
+      "state/adapters/fixture/node_modules",
       "cache",
       "npm-cache",
       "node-compile-cache",

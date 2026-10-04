@@ -1,8 +1,7 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # 0005: Bootstrap runtime identity through trusted transport profiles
 
-- Status: accepted security rationale; current Agent Connect plugin outcome noted below
+Status: accepted security rationale; transport trust and gateway authorization remain separate in the ACP gateway.
+
 - Date: 2026-07-14
 
 ## Context

@@ -1,6 +1,8 @@
 # Archived ADR 0014: Scoped authorization proxy to stock OpenClaw
 
-Date: 2026-09-07. Status: archived after supersession by ADR 0015.
+Status: superseded by ADR 0016; archived stock-OpenClaw proxy, outside the current ACP gateway.
+
+Date: 2026-09-07.
 
 Archived 2026-09-09. This ADR's standalone scoped-proxy deployment and duplicate
 suite were removed from `main`; git history preserves them. This is distinct

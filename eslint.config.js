@@ -6,7 +6,6 @@ import tseslint from "typescript-eslint";
 const javascriptFiles = ["**/*.{js,mjs,cjs}"];
 const typescriptFiles = ["**/*.{ts,tsx,mts,cts}"];
 const productionFiles = [
-  "apps/*/src/**/*.{ts,tsx,js,mjs,cjs}",
   "packages/*/src/**/*.{ts,tsx,js,mjs,cjs}",
   "scripts/**/*.{ts,tsx,js,mjs,cjs}",
 ];
@@ -51,8 +50,6 @@ export default tseslint.config(
       ".claude/**",
       ".codex/**",
       ".gemini/**",
-      ".omnigent-spike/**",
-      "submission-assets/**",
     ],
   },
   {
@@ -74,12 +71,6 @@ export default tseslint.config(
           varsIgnorePattern: "^_",
         },
       ],
-    },
-  },
-  {
-    files: ["scripts/capture-architecture-story.mjs"],
-    languageOptions: {
-      globals: { ...globals.node, ...globals.browser },
     },
   },
   {

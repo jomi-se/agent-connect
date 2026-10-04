@@ -60,8 +60,8 @@ assuming a folder convention captures it.
   Complexity metrics cover production source and operational scripts, not test
   bodies. Copied agent-skill directories and generated build output are
   excluded.
-- Knip has explicit workspace entry points. CSS-only font packages and the
-  externally installed `omnigent` executable are documented exceptions.
+- Knip has explicit script and browser SDK entry points. Review reports against
+  the package root exports before removing public API.
 - jscpd scans production JavaScript and TypeScript under `packages/`. Tests and end-to-end fixtures are excluded because repeated test
   setup is usually a different refactoring decision.
 

@@ -1,8 +1,7 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # 0008: Separate the Agent Connect control plane from runtime confinement
 
-- Status: accepted target direction; current implementation is transitional
+Status: accepted responsibility boundary; the ACP gateway owns authorization and boxed confinement around harness execution.
+
 - Date: 2026-07-14
 
 ## Context

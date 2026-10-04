@@ -1,9 +1,6 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # ADR 0001: Use ACP as the application boundary
 
-Status: superseded as the application-facing direction by ADR 0010 and the
-current plugin boundary; ACP remains an optional harness-facing adapter
+Status: superseded by ADR 0016; the current gateway uses ACP with a different authorization and runtime boundary.
 
 Date: 2026-07-13
 

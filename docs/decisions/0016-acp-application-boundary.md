@@ -1,6 +1,8 @@
 # ADR 0016: ACP application boundary and consent-enforcing ACP gateway
 
-Date: 2026-09-30. Status: **proposed**, not accepted. The owner selected ACP
+Status: proposed; ACP gateway implementation exists, but formal acceptance and publication remain owner gates.
+
+Date: 2026-09-30. The owner selected ACP
 as the product direction and retired the superseded plugin implementation on
 2026-10-03. [ADR 0010](0010-open-responses-gateway-pivot.md) and
 [ADR 0015](0015-openclaw-plugin-host.md) preserve historical context.
@@ -110,7 +112,7 @@ gained what a web application needs:
    tool server and chat state that the ACP SDK lacks. It integrates with the
    AI SDK at the UI layer (a `useChat` `ChatTransport`), not as a
    `LanguageModel`, because a harness runs its own loop. See the
-   [release plan](../plan/release-plan.md).
+   [release plan](../install/README.md).
 7. **Unchanged principles.** Owner consent with OAuth/PKCE, revocable grants,
    immutable tool snapshots, stable action IDs, no automatic replay of
    ambiguous effects, and no claim of exactly-once execution.
@@ -164,7 +166,7 @@ Costs and risks:
   accepted and documented ([credentials
   plan](../plan/credentials.md)).
 - **Hosting and installation.** What the owner installs and runs. The
-  [release plan](../plan/release-plan.md) proposes a prebuilt binary
+  [release plan](../install/README.md) proposes a prebuilt binary
   through npm and GitHub Releases. The implementation removes the superseded plugin. Owner-only post-publication npm retirement is recorded in the release checklist.
 - **Consent code.** The Rust gateway now implements hosted owner consent,
   OAuth/PKCE, refresh, revocation and optional TOTP, following ADR 0009/0014/0015
@@ -175,7 +177,7 @@ Costs and risks:
   remain a release prerequisite.
 - **Mobile.** One manual iOS Safari check of the resumable transport.
 - **Migration.** Applications move to AI SDK `useChat` over the root SDK's ACP transport ([release
-  plan](../plan/release-plan.md)). The SDK's MCP server answers unknown
+  plan](../install/README.md)). The SDK's MCP server answers unknown
   methods with method-not-found and sends progress while it waits.
 
 ## Alternatives considered

@@ -1,9 +1,7 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # 0011: Model completed-task continuation as a linear response history
 
-- Status: accepted bounded continuation decision; implementation complete, with
-  owner-reported subscription-runtime evidence and no exhaustive edge-case gate
+Status: superseded by ADR 0016; ACP sessions replace response-chain continuation.
+
 - Date: 2026-08-31
 
 ## Context

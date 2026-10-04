@@ -109,3 +109,8 @@ Moved here when the OpenClaw plugin and the legacy SDK were removed.
   [OpenClaw replacement scrutiny](reviews/openclaw-replacement-scrutiny.md) and
   regressions [OC-SCR-004](reviews/regressions/OC-SCR-004.md) and
   [OC-SCR-005](reviews/regressions/OC-SCR-005.md).
+
+## Retired product proposals
+
+- [Connect your AI vision](vision.md): Open Responses profile; the current north star lives in [mission](../mission.md).
+- [Native client identity](future/native-client-identity.md): research against the removed HTTP gateway; requires a new ACP decision.

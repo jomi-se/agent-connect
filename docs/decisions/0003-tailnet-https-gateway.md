@@ -1,8 +1,7 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
-
 # 0003: Put a loopback gateway behind Tailscale Serve
 
-- Status: accepted
+Status: accepted deployment rationale; private HTTPS ingress remains applicable to the ACP gateway, with operator-owned routing.
+
 - Date: 2026-07-13
 
 ## Context

@@ -192,7 +192,7 @@ the owner clarified that verified website origins are not a universal requiremen
 An explicitly approved installation key/device flow is acceptable, including
 native/mobile clients and local forks; optional domain metadata must not be
 mistaken for proof that a running binary belongs to that publisher. Reuse the
-distinction in [native client identity](../future/native-client-identity.md):
+distinction in [native client identity](../archive/future/native-client-identity.md):
 pairing method and publisher assurance are separate axes. The preceding origin
 discussion describes a browser option, not a mandatory prerequisite.
 
