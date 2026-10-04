@@ -1,5 +1,5 @@
 // Install exact release tarballs in a disposable consumer; never publish.
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -23,29 +23,33 @@ function run(bin, args) {
   assert.equal(result.status, 0, `${bin}: ${result.stderr}`);
   return result.stdout;
 }
-run("npm", ["init", "--yes"]);
-run("npm", ["install", "--ignore-scripts", wrapper, platform]);
-const help = run("npx", [
-  "--no-install",
-  "@open-agent-connect/gateway",
-  "--help",
-]);
-assert.match(help, /serve/i);
-assert.match(help, /login/i);
-assert.match(help, /init/i);
-assert.match(help, /egress/i);
-const manifest = JSON.parse(
-  await readFile(
-    join(dir, "node_modules/@open-agent-connect/gateway/package.json"),
-    "utf8",
-  ),
-);
-assert.equal(
-  run("npx", [
+try {
+  run("npm", ["init", "--yes"]);
+  run("npm", ["install", "--ignore-scripts", wrapper, platform]);
+  const help = run("npx", [
     "--no-install",
     "@open-agent-connect/gateway",
-    "--version",
-  ]).trim(),
-  `agent-connect-gateway ${manifest.version}`,
-);
-console.log("Packed gateway npx help/version passed");
+    "--help",
+  ]);
+  assert.match(help, /serve/i);
+  assert.match(help, /login/i);
+  assert.match(help, /init/i);
+  assert.match(help, /egress/i);
+  const manifest = JSON.parse(
+    await readFile(
+      join(dir, "node_modules/@open-agent-connect/gateway/package.json"),
+      "utf8",
+    ),
+  );
+  assert.equal(
+    run("npx", [
+      "--no-install",
+      "@open-agent-connect/gateway",
+      "--version",
+    ]).trim(),
+    `agent-connect ${manifest.version}`,
+  );
+  console.log("Packed gateway npx help/version passed");
+} finally {
+  await rm(dir, { recursive: true, force: true });
+}

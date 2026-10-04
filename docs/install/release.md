@@ -31,9 +31,7 @@ The explicit native matrix is:
 | `ubuntu-24.04`     | `x86_64-unknown-linux-musl`  |
 | `ubuntu-24.04-arm` | `aarch64-unknown-linux-musl` |
 
-Each archive and shell installation includes `agent-connect` and the
-`agent-connect-gateway` compatibility executable. npm exposes both names through
-the same launcher.
+Each archive, shell installation and npm launcher exposes the `agent-connect` CLI.
 
 Cargo-dist produces target archives, SHA-256 checksums and the global shell
 installer. npm packaging is owned by `scripts/release.mjs`, avoiding a
@@ -49,10 +47,10 @@ second cargo-dist npm installer. The collection contains:
 
 Before producing any npm package, the packer checks all available gateway
 archives against the requested version and `--image`. On the host target it
-executes both `agent-connect release-info` and the compatibility executable
-freshly, comparing their compiled defaults. Native CI build runners record the
+executes `agent-connect release-info` freshly and checks its compiled defaults.
+Native CI build runners record the
 same checks for foreign targets in `<archive-stem>.release-info.json`, bound to
-the target and SHA-256 of both archived executables. The collector rejects
+the target and SHA-256 of the archived executable. The collector rejects
 missing, stale or mismatched evidence; copying an image label into `release.json`
 is not sufficient. These sidecars are included in release metadata and aggregate
 checksums. Their trust comes from the selected build workflow artifacts; they

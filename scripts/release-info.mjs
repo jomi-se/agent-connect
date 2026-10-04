@@ -71,15 +71,10 @@ export async function verifyArchiveReleaseInfo({
     const primary = entries.find((entry) =>
       /(?:^|\/)agent-connect$/.test(entry),
     );
-    const compatibility = entries.find((entry) =>
-      /(?:^|\/)agent-connect-gateway$/.test(entry),
-    );
-    if (!primary || !compatibility)
-      throw new Error(`Both gateway executables are required in ${archive}`);
-    run("tar", ["-xf", archive, "-C", directory, "--", primary, compatibility]);
-    const paths = [primary, compatibility].map((entry) =>
-      join(directory, entry),
-    );
+    if (!primary)
+      throw new Error(`Gateway executable is required in ${archive}`);
+    run("tar", ["-xf", archive, "-C", directory, "--", primary]);
+    const paths = [join(directory, primary)];
     const hashes = [];
     for (const path of paths) {
       if (!(await lstat(path)).isFile())
@@ -104,8 +99,7 @@ export async function verifyArchiveReleaseInfo({
       info = {
         schemaVersion: 1,
         ...expected,
-        primarySha256: hashes[0],
-        binarySha256: hashes[1],
+        binarySha256: hashes[0],
       };
       if (record)
         await writeFile(sidecar, JSON.stringify(info, null, 2) + "\n");
@@ -120,8 +114,7 @@ export async function verifyArchiveReleaseInfo({
           typeof info !== "object" ||
           Array.isArray(info) ||
           Object.keys(info).sort().join(",") !==
-            "binarySha256,primarySha256,schemaVersion,sessionImage,target,version" ||
-          !/^[a-f0-9]{64}$/.test(info.primarySha256) ||
+            "binarySha256,schemaVersion,sessionImage,target,version" ||
           !/^[a-f0-9]{64}$/.test(info.binarySha256)
         )
           throw new Error("Invalid release-info evidence fields");
@@ -135,8 +128,7 @@ export async function verifyArchiveReleaseInfo({
       if (
         info.schemaVersion !== 1 ||
         info.target !== target ||
-        info.primarySha256 !== hashes[0] ||
-        info.binarySha256 !== hashes[1]
+        info.binarySha256 !== hashes[0]
       )
         throw new Error(
           `Release-info evidence does not match archive binaries for ${target}`,

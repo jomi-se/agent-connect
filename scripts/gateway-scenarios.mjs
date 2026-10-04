@@ -223,7 +223,7 @@ try {
       "/app/server.mjs",
     ]);
     await command(
-      join(repo, "target/debug/agent-connect-gateway"),
+      join(repo, "target/debug/agent-connect"),
       [
         "egress",
         "start",
@@ -283,7 +283,7 @@ try {
         continue;
       const gatewayPort = await port();
       const gateway = service(
-        join(repo, "target/debug/agent-connect-gateway"),
+        join(repo, "target/debug/agent-connect"),
         [
           "serve",
           ...(boxed

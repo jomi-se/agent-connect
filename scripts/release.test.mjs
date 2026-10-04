@@ -32,21 +32,21 @@ async function fixture(t, target, info = { version, sessionImage }) {
   const files = join(directory, "files");
   await mkdir(files);
   const executable = `#!/bin/sh\nprintf '%s\\n' '${JSON.stringify(info)}'\n`;
-  for (const name of ["agent-connect", "agent-connect-gateway"]) {
+  for (const name of ["agent-connect"]) {
     await writeFile(join(files, name), executable);
     await chmod(join(files, name), 0o755);
   }
   const archive = join(directory, `agent-connect-gateway-${target}.tar.xz`);
   const result = spawnSync(
     "tar",
-    ["-cJf", archive, "-C", files, "agent-connect", "agent-connect-gateway"],
+    ["-cJf", archive, "-C", files, "agent-connect"],
     { encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr);
   return { directory, files, archive, target, version, sessionImage };
 }
 test(
-  "native release-info evidence is emitted only after both executables agree",
+  "native release-info evidence is emitted only after the executable reports matching defaults",
   { skip: !hostTarget },
   async (t) => {
     const input = await fixture(t, hostTarget);
@@ -57,7 +57,7 @@ test(
     assert.equal(
       info.binarySha256,
       createHash("sha256")
-        .update(await readFile(join(input.files, "agent-connect-gateway")))
+        .update(await readFile(join(input.files, "agent-connect")))
         .digest("hex"),
     );
     assert.deepEqual(
@@ -106,7 +106,7 @@ for (const [field, replacement, message] of [
     },
   );
 }
-test("cross-target packaging requires evidence bound to both executable hashes", async (t) => {
+test("cross-target packaging requires evidence bound to the executable hash", async (t) => {
   const input = await fixture(t, foreignTarget);
   await assert.rejects(
     verifyArchiveReleaseInfo(input),
@@ -120,7 +120,6 @@ test("cross-target packaging requires evidence bound to both executable hashes",
     target: foreignTarget,
     version,
     sessionImage,
-    primarySha256: hash,
     binarySha256: hash,
   };
   const path = join(input.directory, releaseInfoFilename(foreignTarget));
@@ -128,7 +127,6 @@ test("cross-target packaging requires evidence bound to both executable hashes",
   assert.deepEqual(await verifyArchiveReleaseInfo(input), info);
   for (const [field, replacement, message] of [
     ["binarySha256", "0".repeat(64), /does not match archive/],
-    ["primarySha256", "0".repeat(64), /does not match archive/],
     ["target", hostTarget, /does not match archive/],
     ["version", "9.9.9", /version mismatch/],
     ["sessionImage", "wrong", /session image mismatch/],

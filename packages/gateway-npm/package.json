@@ -14,8 +14,7 @@
   },
   "type": "module",
   "bin": {
-    "agent-connect": "bin/gateway.mjs",
-    "agent-connect-gateway": "bin/gateway.mjs"
+    "agent-connect": "bin/gateway.mjs"
   },
   "files": [
     "bin",
@@ -41,5 +40,19 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"
-  }
+  },
+  "keywords": [
+    "agent-connect",
+    "acp",
+    "user-owned-agents",
+    "application-tools",
+    "gateway",
+    "experimental"
+  ],
+  "bugs": {
+    "url": "https://github.com/jomi-se/agent-connect/issues"
+  },
+  "homepage": "https://github.com/jomi-se/agent-connect/tree/main/packages/gateway-npm#readme",
+  "sideEffects": true,
+  "exports": {}
 }

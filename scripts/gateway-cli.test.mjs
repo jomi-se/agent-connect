@@ -6,10 +6,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 const cliHome = await mkdtemp(join(tmpdir(), "acp-cli-isolated-home-"));
 const cliState = join(cliHome, "state");
-const binary = resolve(
-  import.meta.dirname,
-  "../target/debug/agent-connect-gateway",
-);
+const binary = resolve(import.meta.dirname, "../target/debug/agent-connect");
 test("login invokes only the provider CLI with a private shared home and host UID", async () => {
   const root = await mkdtemp(join(tmpdir(), "acp-login-command-"));
   const home = join(root, "dedicated");

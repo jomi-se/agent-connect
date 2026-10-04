@@ -32,8 +32,7 @@ npm install --global ./open-agent-connect-gateway-0.0.1.tgz \
 
 Keep npm optional dependencies enabled: they select the native platform binary.
 The launcher does not download executables at runtime. Adapters and harness CLIs
-are pinned in the Docker session image. `agent-connect-gateway` remains a
-compatibility alias.
+are pinned in the Docker session image.
 
 Archive and checksum-verified shell installers are also available from the
 [versioned release](https://github.com/jomi-se/agent-connect/releases) after
@@ -225,8 +224,8 @@ Retaining a grant record does not keep it valid under a changed policy. Never
 replay interrupted turns or initialize over existing state.
 
 To uninstall, stop and uninstall the service, stop its owned egress with
-`agent-connect egress stop`, then uninstall the npm package or remove both
-archive-installed executables. These operations preserve private data. Revoke
+`agent-connect egress stop`, then uninstall the npm package or remove the
+archive-installed executable. These operations preserve private data. Revoke
 the dedicated provider login in the provider's account controls before choosing
 to delete it; leave personal logins alone. Never prune unrelated Docker resources.
 

@@ -26,7 +26,7 @@
     "test:webmcp": "npm run test:webmcp --workspace @open-agent-connect/web",
     "pretypecheck": "npm run build --workspace @open-agent-connect/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "verify": "npm run format:check && npm run typecheck && npm test && npm run build && npm run test:ui:owner && npm run test:integration:gateway && npm run test:integration:gateway:boxed && npm run test:integration:gateway:teardown && npm run test:integration:gateway:clean-room",
+    "verify": "npm run format:check && npm run typecheck && npm run test:docs && npm test && npm run build && npm run test:ui:owner && npm run test:integration:gateway && npm run test:integration:gateway:boxed && npm run test:integration:gateway:teardown && npm run test:integration:gateway:clean-room",
     "verify:full": "npm run verify && npm run test:package:web && npm run test:webmcp",
     "test:integration:gateway": "node scripts/gateway-scenarios.mjs",
     "test:integration:gateway:boxed": "ACP_BOXED=1 ACP_SCENARIOS=tools,policy,use-chat,shell,cancel,resume,slow-cut,ask-cut,answer-halfopen,expire,discard node scripts/gateway-scenarios.mjs",
@@ -36,7 +36,8 @@
     "build:session": "./deploy/gateway/session/build-local.sh",
     "test:integration:gateway:clean-room": "node scripts/clean-room.mjs",
     "test:integration:gateway:teardown": "node scripts/gateway-teardown.mjs",
-    "test:ui:owner": "node scripts/owner-ui.mjs"
+    "test:ui:owner": "node scripts/owner-ui.mjs",
+    "test:docs": "node scripts/check-readme-snippets.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

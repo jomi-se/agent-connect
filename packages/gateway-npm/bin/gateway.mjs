@@ -20,7 +20,7 @@ let binary = process.env.AGENT_CONNECT_GATEWAY_BIN;
 if (!binary) {
   try {
     binary = require.resolve(
-      `@open-agent-connect/gateway-${platform}/bin/agent-connect-gateway`,
+      `@open-agent-connect/gateway-${platform}/bin/agent-connect`,
     );
   } catch {
     fail(

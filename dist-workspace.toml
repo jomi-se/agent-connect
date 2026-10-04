@@ -35,6 +35,6 @@ aarch64-unknown-linux-musl = "ubuntu-24.04-arm"
 global = "ubuntu-24.04"
 
 [dist.binaries]
-aarch64-apple-darwin = ["agent-connect", "agent-connect-gateway"]
-x86_64-unknown-linux-musl = ["agent-connect", "agent-connect-gateway"]
-aarch64-unknown-linux-musl = ["agent-connect", "agent-connect-gateway"]
+aarch64-apple-darwin = ["agent-connect"]
+x86_64-unknown-linux-musl = ["agent-connect"]
+aarch64-unknown-linux-musl = ["agent-connect"]

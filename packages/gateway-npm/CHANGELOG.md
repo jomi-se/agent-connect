@@ -2,16 +2,16 @@
 
 ## 0.0.1
 
-- First ACP prerelease: grant-scoped WebSocket gateway, resumable transport and
-  container-per-session isolation.
-- Dedicated harness-home login and private configuration.
-- Gateway-hosted owner passphrase sign-in, optional TOTP enrollment, exact-origin
-  OAuth consent for fixed application tools and individual grant revocation.
-- Short-lived access tokens, rotating refresh tokens and stable grant ownership;
-  keep owner authentication state outside the shared harness home.
-- Retain manual bearer setup only behind explicit `--headless-static-bearer`;
-  normal init creates no application grant or tool file.
-- Platform launcher for Apple Silicon, Linux x64 and Linux ARM64. Adapters and
-  unmodified harness CLIs are pinned inside the matching session image.
-- ACP, MCP-over-ACP and resume APIs remain unstable. ADR 0016 remains proposed.
-- Add `agent-connect login` with a harness selector and dedicated platform-default homes shared by login, setup and serve; preserve explicit options and existing config homes. Keep `agent-connect-gateway` as a compatibility command.
+- First release of the Agent Connect gateway and `agent-connect` CLI.
+- Host owner passphrase sign-in, optional TOTP, exact-origin OAuth consent for
+  fixed tools, rotating grants, session inspection and revocation.
+- Run pinned ACP adapters and harness CLIs in Docker sessions with dedicated
+  harness homes, restricted owned egress and cleanup before releasing capacity.
+- Provide setup, owner-run login, doctor, systemd/launchd user service management,
+  offline TOTP recovery, upgrade and explicit headless configuration.
+- Package native executables for Apple Silicon macOS, Linux x64 and Linux ARM64
+  through optional npm platform dependencies, with no runtime binary download.
+- Keep ACP, MCP-over-ACP and transport resumption experimental. ADR 0016 remains
+  proposed; publication is an owner gate.
+
+See the [install guide](https://github.com/jomi-se/agent-connect/blob/main/docs/install/README.md).
