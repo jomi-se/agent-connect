@@ -43,8 +43,8 @@ function commandFor(target, binary) {
   if (os === "linux" && process.platform === "linux") {
     const runner =
       arch === "x64"
-        ? (process.env.ACP_RELEASE_RUNNER_X86_64 ?? "qemu-x86_64")
-        : (process.env.ACP_RELEASE_RUNNER_ARM64 ?? "qemu-aarch64");
+        ? (process.env.AGENT_CONNECT_RELEASE_RUNNER_X86_64 ?? "qemu-x86_64")
+        : (process.env.AGENT_CONNECT_RELEASE_RUNNER_ARM64 ?? "qemu-aarch64");
     return [runner, [binary, "release-info"]];
   }
   throw new Error(
@@ -59,7 +59,7 @@ export async function verifyArchiveReleaseInfo({
   record = false,
 }) {
   const expected = { target, version, sessionImage };
-  const directory = await mkdtemp(join(tmpdir(), "acp-release-info-"));
+  const directory = await mkdtemp(join(tmpdir(), "release-info-"));
   try {
     const entries = run("tar", ["-tf", archive]).trim().split("\n");
     if (
@@ -127,7 +127,7 @@ export async function verifyArchiveReleaseInfo({
           throw new Error("Invalid release-info evidence fields");
       } catch (error) {
         throw new Error(
-          `Missing or invalid release-info evidence for ${target}; run scripts/acp-release-info.mjs record on a native runner or with QEMU`,
+          `Missing or invalid release-info evidence for ${target}; run scripts/release-info.mjs record on a native runner or with QEMU`,
           { cause: error },
         );
       }
@@ -168,7 +168,7 @@ if (
     !values.image
   )
     throw new Error(
-      "Usage: acp-release-info.mjs record --target <target> --version <version> --image <ref> [--artifacts <directory>]",
+      "Usage: release-info.mjs record --target <target> --version <version> --image <ref> [--artifacts <directory>]",
     );
   await verifyArchiveReleaseInfo({
     archive: resolve(

@@ -5,8 +5,7 @@ live in `docs/plan/current-work.md`; decisions live in `docs/decisions/`.
 
 ## Product boundary
 
-Agent Connect lets web applications use an agent the user already owns. It ships
-two products:
+Agent Connect lets web applications use an agent the user already owns. It is one product with two components:
 
 - the Rust gateway in `crates/gateway` (CLI `agent-connect`), packaged as
   `@open-agent-connect/gateway` with a digest-pinned Docker session image;
@@ -35,7 +34,7 @@ history.
 - Never forward API-key environment variables into boxes.
 - Never change personal harness logins or services. Harness logins are run by
   the owner through `agent-connect login`; tests never invoke a real login. The
-  accepted shared-home risks are in `docs/plan/acp-gateway-credentials.md`.
+  accepted shared-home risks are in `docs/plan/credentials.md`.
 - Never automatically replay an uncertain prompt or application effect.
 - Release boxed capacity only after owned resources are cleaned up. Never remove
   shared peers or prune unrelated Docker resources.

@@ -2,7 +2,7 @@
 
 Status: completed spike plan, 2026-09-30. Experimental; not an accepted decision.
 Owner: gateway.
-Code: `experiments/acp-gateway/`.
+Code: `experiments/gateway/`.
 Results: [`docs/experiments/acp-gateway.md`](../experiments/acp-gateway.md).
 Proposed decision: [ADR 0016](../../decisions/0016-acp-application-boundary.md).
 
@@ -187,11 +187,11 @@ owner's explicit go-ahead at that point.
 
 ## Phases
 
-Each phase ends in a commit on `spike/acp-gateway`, and findings go into the
+Each phase ends in a commit on `spike/gateway`, and findings go into the
 results doc as they land.
 
 0. **Setup.** User-local Rust toolchain (rustup, stable ≥ 1.88). Create the
-   Cargo workspace in `experiments/acp-gateway/` with the ACP crates pinned to
+   Cargo workspace in `experiments/gateway/` with the ACP crates pinned to
    2.2.x. Pin adapter versions in a small `package.json` under the experiment
    directory. It is not an npm workspace member.
    _Exit:_ `cargo build` passes, and `yopo` runs.

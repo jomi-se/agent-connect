@@ -104,7 +104,7 @@ builds for `linux/amd64` and `linux/arm64`; published gateway binaries embed its
 immutable registry digest. Local-only candidates embed the explicit local tag
 and cannot be promoted by the publish script.
 
-The [protected manual release workflow](../../.github/workflows/acp-release.yml)
+The [protected manual release workflow](../../.github/workflows/release.yml)
 uses cargo-dist's local/global split, trusted npm publishing with OIDC/provenance
 and an ephemeral GHCR job token. It defaults to no-write dry runs. Actual
 publication requires an accepted ADR, an already owner-pushed exact version tag
@@ -134,7 +134,7 @@ No refresh, recovery or new consent replays an uncertain prompt or effect.
 
 Mobile browsers can use the explicit redirect flow. A separately paired mobile
 approval client is a follow-up design, not an implemented app; see the
-[credential plan](acp-gateway-credentials.md#mobile-owner-approval-follow-up).
+[credential plan](credentials.md#mobile-owner-approval-follow-up).
 Hosted authorization has separate deterministic, browser and packaged acceptance
 evidence; earlier static-bearer spike results do not prove hosted pairing. No
 automated check establishes a subscription-backed authorization flow.

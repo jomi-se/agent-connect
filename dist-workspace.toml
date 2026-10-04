@@ -14,7 +14,7 @@ ci = []
 hosting = ["github"]
 # The installers to generate for each app
 installers = ["shell"]
-# scripts/acp-release.mjs owns npm launcher/platform/SDK packaging.
+# scripts/release.mjs owns npm launcher/platform/SDK packaging.
 checksum = "sha256"
 unix-archive = ".tar.xz"
 source-tarball = false

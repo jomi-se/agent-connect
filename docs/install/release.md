@@ -1,8 +1,8 @@
-# ACP release process
+# Release process
 
 Gateway **0.0.1** and browser SDK **0.0.10** are unpublished candidates.
 ADR 0016 remains proposed; publication requires explicit owner acceptance.
-The [manual workflow](../../.github/workflows/acp-release.yml) is the only
+The [manual workflow](../../.github/workflows/release.yml) is the only
 approved automated publication path. Ordinary CI is read-only. Agents may
 prepare and verify artifacts but never push, publish, run this workflow or
 execute npm deprecation.
@@ -11,7 +11,7 @@ execute npm deprecation.
 
 The launcher, platform packages, Rust gateway and session-image manifest share
 version 0.0.1. The SDK is independently versioned at 0.0.10. All packages remain
-on 0.0.x until the API shape is final. `node scripts/acp-release.mjs check` verifies versions
+on 0.0.x until the API shape is final. `node scripts/release.mjs check` verifies versions
 and adapter pins before building. Adapter versions come from the launcher
 manifest and the session-image manifest/lockfile; floating adapter installs are
 not release inputs.
@@ -36,7 +36,7 @@ Each archive and shell installation includes `agent-connect` and the
 the same launcher.
 
 Cargo-dist produces target archives, SHA-256 checksums and the global shell
-installer. npm packaging is owned by `scripts/acp-release.mjs`, avoiding a
+installer. npm packaging is owned by `scripts/release.mjs`, avoiding a
 second cargo-dist npm installer. The collection contains:
 
 - `@open-agent-connect/web`;
@@ -72,9 +72,9 @@ the credential-free acceptance sequence is:
 
 ```sh
 npm ci
-node scripts/acp-release.mjs check
-./deploy/acp-gateway/session/build-local.sh --native-only
-node scripts/build-acp-release-local.mjs
+node scripts/release.mjs check
+./deploy/gateway/session/build-local.sh --native-only
+node scripts/build-release-local.mjs
 npm run verify:full
 cargo test --locked --workspace
 ```
@@ -82,9 +82,9 @@ cargo test --locked --workspace
 The local builder packages the host target; `--all-linux` packages both Linux
 targets when supported. A cross-target local build must execute the foreign
 Linux binary through QEMU when recording its evidence; no validation is skipped.
-Use `ACP_RELEASE_RUNNER_X86_64` or `ACP_RELEASE_RUNNER_ARM64` to select an
+Use `AGENT_CONNECT_RELEASE_RUNNER_X86_64` or `AGENT_CONNECT_RELEASE_RUNNER_ARM64` to select an
 isolated runner executable, or provide `qemu-x86_64`/`qemu-aarch64` on PATH.
-The helper is `node scripts/acp-release-info.mjs record --target <target>
+The helper is `node scripts/release-info.mjs record --target <target>
 --version <version> --image <image-ref>`; native targets run directly. Missing
 execution support fails the build before packing. It embeds the explicitly local session-image tag and
 sets `release.json.localOnly = true`. These are acceptance artifacts, not
@@ -112,7 +112,7 @@ release.
 ## Manual dry run
 
 After the operator has pushed the reviewable workflow to GitHub, dispatch
-**ACP release candidate** with `dry_run=true`, `publish=false`. Leave `tag` empty
+**Release candidate** with `dry_run=true`, `publish=false`. Leave `tag` empty
 to inspect the selected commit, or provide the matching version tag. Dispatch
 does not create a Git ref.
 
@@ -123,7 +123,7 @@ local image tag through `AGENT_CONNECT_SESSION_IMAGE`; collected metadata is
 marked `localOnly`. Install/publish previews use the exact tarballs and
 `npm publish --dry-run`.
 
-Download the `acp-session-image-oci-<version>` and `acp-release-<version>` Actions
+Download the `session-image-oci-<version>` and `release-<version>` Actions
 artifacts, inspect `release.json`, verify `SHA256SUMS`, and review the package
 contents and shell installer. The local tag is not available on other machines
 until the exported image is imported/tagged there; its presence in a dry-run
@@ -135,13 +135,14 @@ The operator must complete these external setup steps separately:
 
 1. Accept ADR 0016 in the reviewed source of truth. A proposed or rejected
    decision cannot authorize the publication jobs.
-2. Create the GitHub environment `acp-first-release`, add the operator as a required reviewer,
+2. Keep the external GitHub environment name `acp-first-release` unchanged.
+   Create it if needed, add the operator as a required reviewer,
    choose the desired self-review policy, and restrict deployment refs to the
    approved version tags. Protect tag creation/movement through repository
    rules. The workflow reads the environment configuration and refuses
    publication if reviewer protection is missing.
 3. Configure each npm package's trusted publisher with the actual repository
-   owner/name, workflow filename **`acp-release.yml`**, and environment
+   owner/name, workflow filename **`release.yml`**, and environment
    **`acp-first-release`**. Allow direct `npm publish`. Arrange package ownership
    and any initial package/bootstrap setup before this run; this workflow does
    not create accounts, alter publisher settings or fall back to an npm token.
@@ -161,7 +162,7 @@ and [GitHub deployment environment protection](https://docs.github.com/en/action
 Dispatch from that **exact tag**, set `tag=v0.0.1`, `dry_run=false`, and
 `publish=true`. The workflow confirms that the tag already exists remotely and
 resolves to the dispatched checkout. Conflicting inputs fail before any write.
-Review the `acp-verified-local-<version>` candidate before approving the image job.
+Review the `verified-local-<version>` candidate before approving the image job.
 
 The protected image job uses only its ephemeral `GITHUB_TOKEN` with
 `packages: write` to push the multiarch session image. Its resulting immutable
@@ -170,9 +171,9 @@ The protected image job uses only its ephemeral `GITHUB_TOKEN` with
 There is no mutable registry tag fallback in a publishable candidate. See
 [GHCR authentication with GITHUB_TOKEN](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
-Review the resulting `acp-release-<version>` artifacts before approving the final
+Review the resulting `release-<version>` artifacts before approving the final
 publication job. It repeats the decision/tag checks, verifies artifact hashes,
-and invokes `scripts/acp-release.mjs publish` on those exact npm tarballs with
+and invokes `scripts/release.mjs publish` on those exact npm tarballs with
 OIDC, `--provenance` and `--tag next`. Only this job receives `id-token: write` and
 `contents: write`. No long-lived npm token or model credential is required.
 

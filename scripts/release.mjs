@@ -16,13 +16,13 @@ import { parseArgs } from "node:util";
 import {
   verifyArchiveReleaseInfo,
   releaseInfoFilename,
-} from "./acp-release-info.mjs";
+} from "./release-info.mjs";
 
 const repo = resolve(import.meta.dirname, "..");
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
-    directory: { type: "string", default: "dist/acp-release" },
+    directory: { type: "string", default: "dist/release" },
     image: { type: "string" },
     local: { type: "boolean", default: false },
     artifacts: { type: "string", default: "target/distrib" },
@@ -34,7 +34,7 @@ const json = async (path) =>
   JSON.parse(await readFile(join(repo, path), "utf8"));
 const sdk = await json("packages/web-sdk/package.json");
 const gateway = await json("packages/gateway-npm/package.json");
-const session = await json("deploy/acp-gateway/session/package.json");
+const session = await json("deploy/gateway/session/package.json");
 const cargo = await readFile(join(repo, "crates/gateway/Cargo.toml"), "utf8");
 const version = gateway.version;
 if (
@@ -193,7 +193,7 @@ if (command === "check") {
       );
       if (!executable) throw new Error(`No gateway executable in ${filename}`);
       run(process.execPath, [
-        "scripts/package-acp-gateway.mjs",
+        "scripts/package-gateway.mjs",
         target,
         join(staging, executable),
       ]);
@@ -202,7 +202,7 @@ if (command === "check") {
         : target.startsWith("aarch64")
           ? "linux-arm64"
           : "linux-x64";
-      await pack(`./dist/acp-gateway/${platform}`);
+      await pack(`./dist/gateway/${platform}`);
       await cp(archive, join(output, filename));
     } finally {
       await rm(staging, { recursive: true, force: true });
@@ -276,5 +276,5 @@ if (command === "check") {
   console.log(`ACP ${command} checked ${packages.length} packages`);
 } else
   throw new Error(
-    "Usage: acp-release.mjs check | pack --image <ref> [--local] | publish-dry-run | publish",
+    "Usage: release.mjs check | pack --image <ref> [--local] | publish-dry-run | publish",
   );

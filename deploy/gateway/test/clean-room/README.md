@@ -1,8 +1,8 @@
 # Packed-artifact clean-room acceptance
 
-Run `node scripts/acp-clean-room.mjs [artifact-directory]` after preparing the
-local release. The default directory is the ignored `dist/acp-release`.
-`ACP_RELEASE_DIR` overrides it; `ACP_SESSION_IMAGE` and `ACP_CLEAN_ROOM_IMAGE`
+Run `node scripts/clean-room.mjs [artifact-directory]` after preparing the
+local release. The default directory is the ignored `dist/release`.
+`AGENT_CONNECT_RELEASE_DIR` overrides it; `ACP_SESSION_IMAGE` and `ACP_CLEAN_ROOM_IMAGE`
 select local test image tags. `ACP_DOCKER_SOCKET` can select a local socket.
 The release's session image must already be built.
 

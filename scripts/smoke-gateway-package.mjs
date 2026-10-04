@@ -8,9 +8,9 @@ import assert from "node:assert/strict";
 const [wrapper, platform] = process.argv.slice(2).map((p) => resolve(p));
 if (!wrapper || !platform)
   throw new Error(
-    "Usage: smoke-acp-gateway-package.mjs <launcher.tgz> <platform.tgz>",
+    "Usage: smoke-gateway-package.mjs <launcher.tgz> <platform.tgz>",
   );
-const dir = await mkdtemp(join(tmpdir(), "acp-gateway-consumer-"));
+const dir = await mkdtemp(join(tmpdir(), "gateway-consumer-"));
 const env = {
   PATH: process.env.PATH,
   HOME: dir,

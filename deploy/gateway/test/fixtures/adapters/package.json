@@ -1,5 +1,5 @@
 {
-  "name": "acp-gateway-test-adapters",
+  "name": "gateway-test-adapters",
   "private": true,
   "description": "Pinned ACP harness adapters for the ACP gateway compatibility gates. Not an npm workspace member.",
   "dependencies": {

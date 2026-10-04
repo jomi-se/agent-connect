@@ -26,15 +26,15 @@ function run(bin, args) {
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${bin} failed (${result.status})`);
 }
-run(process.execPath, ["scripts/acp-release.mjs", "check"]);
-await mkdir(join(repo, "dist/acp-release"), { recursive: true });
+run(process.execPath, ["scripts/release.mjs", "check"]);
+await mkdir(join(repo, "dist/release"), { recursive: true });
 const plan = spawnSync(
   dist,
   ["plan", "--tag", `v${version}`, "--output-format=json"],
   { cwd: repo, env, encoding: "utf8" },
 );
 if (plan.status !== 0) throw new Error(`dist plan failed: ${plan.stderr}`);
-await writeFile(join(repo, "dist/acp-release/dist-plan.json"), plan.stdout);
+await writeFile(join(repo, "dist/release/dist-plan.json"), plan.stdout);
 const targets = process.argv.includes("--all-linux")
   ? ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]
   : [
@@ -48,7 +48,7 @@ const targets = process.argv.includes("--all-linux")
     ];
 if (targets.includes("unsupported"))
   throw new Error("Local builds support Apple Silicon and Linux x64/ARM64");
-const compilers = await mkdtemp(join(tmpdir(), "acp-release-compilers-"));
+const compilers = await mkdtemp(join(tmpdir(), "release-compilers-"));
 try {
   for (const target of targets.filter((value) =>
     value.endsWith("-linux-musl"),
@@ -76,7 +76,7 @@ try {
   run(dist, ["build", "--artifacts=global", "--tag", `v${version}`]);
   for (const target of targets) {
     run(process.execPath, [
-      "scripts/acp-release-info.mjs",
+      "scripts/release-info.mjs",
       "record",
       "--target",
       target,
@@ -87,7 +87,7 @@ try {
     ]);
   }
   run(process.execPath, [
-    "scripts/acp-release.mjs",
+    "scripts/release.mjs",
     "pack",
     "--local",
     "--image",

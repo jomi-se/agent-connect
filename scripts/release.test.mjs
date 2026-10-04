@@ -17,7 +17,7 @@ import {
   releaseTargets,
   releaseInfoFilename,
   verifyArchiveReleaseInfo,
-} from "./acp-release-info.mjs";
+} from "./release-info.mjs";
 const version = "0.0.1";
 const sessionImage = `agent-connect-session:${version}`;
 const hostTarget = Object.entries(releaseTargets).find(
@@ -27,7 +27,7 @@ const foreignTarget = Object.keys(releaseTargets).find(
   (target) => target !== hostTarget,
 );
 async function fixture(t, target, info = { version, sessionImage }) {
-  const directory = await mkdtemp(join(tmpdir(), "acp-release-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "release-test-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const files = join(directory, "files");
   await mkdir(files);
@@ -88,7 +88,7 @@ for (const [field, replacement, message] of [
       const result = spawnSync(
         process.execPath,
         [
-          resolve(import.meta.dirname, "acp-release.mjs"),
+          resolve(import.meta.dirname, "release.mjs"),
           "pack",
           "--local",
           "--image",
@@ -182,11 +182,11 @@ test("release checks accept independent SDK versions and reject gateway/image dr
     "scripts",
     "packages/web-sdk",
     "packages/gateway-npm",
-    "deploy/acp-gateway/session",
+    "deploy/gateway/session",
     "crates/gateway",
   ])
     await mkdir(join(directory, folder), { recursive: true });
-  for (const script of ["acp-release.mjs", "acp-release-info.mjs"])
+  for (const script of ["release.mjs", "release-info.mjs"])
     await writeFile(
       join(directory, "scripts", script),
       await readFile(new URL(script, import.meta.url)),
@@ -199,7 +199,7 @@ test("release checks accept independent SDK versions and reject gateway/image dr
     agentConnect: { adapterVersions: { "fixture-adapter": "2.0.1" } },
     optionalDependencies: { "fixture-platform": "0.0.1" },
   });
-  await manifest("deploy/acp-gateway/session/package.json", {
+  await manifest("deploy/gateway/session/package.json", {
     version: "0.0.1",
     dependencies: { "fixture-adapter": "2.0.1" },
   });
@@ -210,7 +210,7 @@ test("release checks accept independent SDK versions and reject gateway/image dr
   const check = () =>
     spawnSync(
       process.execPath,
-      [join(directory, "scripts/acp-release.mjs"), "check"],
+      [join(directory, "scripts/release.mjs"), "check"],
       { encoding: "utf8" },
     );
   assert.equal(check().status, 0);
@@ -219,7 +219,7 @@ test("release checks accept independent SDK versions and reject gateway/image dr
   assert.notEqual(sdkDrift.status, 0);
   assert.match(sdkDrift.stderr, /independently versioned 0.0.x/);
   await manifest("packages/web-sdk/package.json", { version: "0.0.10" });
-  await manifest("deploy/acp-gateway/session/package.json", {
+  await manifest("deploy/gateway/session/package.json", {
     version: "0.0.2",
     dependencies: { "fixture-adapter": "2.0.1" },
   });

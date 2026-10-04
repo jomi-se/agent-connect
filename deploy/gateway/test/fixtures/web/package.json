@@ -1,5 +1,5 @@
 {
-  "name": "acp-gateway-test-web",
+  "name": "gateway-test-web",
   "private": true,
   "description": "Browser page for the ACP gateway compatibility gates. Not an npm workspace member.",
   "scripts": {

@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn login_detection_matches_shipped_image_homes_without_reading_credentials() {
-        let entrypoint = include_str!("../../../deploy/acp-gateway/session/entrypoint.sh");
+        let entrypoint = include_str!("../../../deploy/gateway/session/entrypoint.sh");
         assert!(entrypoint.contains("CODEX_HOME=\"$HOME/codex-home\""));
         assert!(entrypoint.contains("CLAUDE_CONFIG_DIR=\"$HOME/claude-config\""));
         let root =

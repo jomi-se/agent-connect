@@ -24,7 +24,7 @@ const root = await mkdtemp(join(tmpdir(), "agent-connect-teardown-"));
 const suffix = root.split("-").at(-1).toLowerCase();
 const image =
   process.env.ACP_SESSION_IMAGE ??
-  `agent-connect-session:${JSON.parse(await readFile(join(repo, "deploy/acp-gateway/session/package.json"), "utf8")).version}`;
+  `agent-connect-session:${JSON.parse(await readFile(join(repo, "deploy/gateway/session/package.json"), "utf8")).version}`;
 const sourceBinary =
   process.env.ACP_GATEWAY_BIN ??
   join(repo, "target/debug/agent-connect-gateway");
@@ -506,7 +506,7 @@ try {
         "--entrypoint",
         "node",
         "--mount",
-        `type=bind,src=${join(repo, "deploy/acp-gateway/test/fixtures/mock-model/server.mjs")},dst=/fixture.mjs,readonly`,
+        `type=bind,src=${join(repo, "deploy/gateway/test/fixtures/mock-model/server.mjs")},dst=/fixture.mjs,readonly`,
         "--mount",
         `type=bind,src=${join(root, "logs")},dst=/log`,
         "-e",
