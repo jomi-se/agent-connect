@@ -28,6 +28,8 @@ function run(bin, args) {
   if (result.status !== 0) throw new Error(`${bin} failed (${result.status})`);
 }
 run(process.execPath, ["scripts/release.mjs", "check"]);
+// Start empty: tarballs from an earlier version would be packed twice.
+await rm(join(repo, "dist/release"), { recursive: true, force: true });
 await mkdir(join(repo, "dist/release"), { recursive: true });
 const targets = process.argv.includes("--all-linux")
   ? ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]

@@ -34,15 +34,18 @@ const json = async (path) =>
 const sdk = await json("packages/web-sdk/package.json");
 const gateway = await json("packages/gateway-npm/package.json");
 const box = await json("deploy/gateway/box/package.json");
+const sample = await json("examples/acp-chat/package.json");
 const cargo = await readFile(join(repo, "crates/gateway/Cargo.toml"), "utf8");
 const version = gateway.version;
 if (
-  ![box.version, cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1]].every(
-    (v) => v === version,
-  )
+  ![
+    box.version,
+    sample.version,
+    cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1],
+  ].every((v) => v === version)
 )
   throw new Error(
-    "Gateway, Cargo crate and box manifest must share one version",
+    "Gateway, Cargo crate, box manifest and chat sample must share one version",
   );
 if (!/^0\.0\.\d+$/.test(sdk.version) || !/^0\.0\.\d+$/.test(version))
   throw new Error(
