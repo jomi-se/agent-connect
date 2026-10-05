@@ -77,10 +77,39 @@ fn owner_hash(directory: &Path) -> anyhow::Result<Option<String>> {
     Ok(Some(hash_directory(directory)?))
 }
 
+fn test_base_image(value: Option<String>) -> anyhow::Result<String> {
+    let Some(image) = value else {
+        return Ok(DEFAULT_BOX_IMAGE.into());
+    };
+    let tag = image.strip_prefix("agent-connect-box-test:");
+    anyhow::ensure!(
+        tag.is_some_and(|tag| !tag.is_empty()
+            && tag.len() <= 111
+            && tag.starts_with(|c: char| c.is_ascii_alphanumeric())
+            && tag.bytes().all(|c| c.is_ascii_lowercase()
+                || c.is_ascii_digit()
+                || matches!(c, b'.' | b'_' | b'-'))),
+        "AGENT_CONNECT_TEST_BOX_IMAGE must use the agent-connect-box-test namespace"
+    );
+    Ok(image)
+}
+
+fn base_image() -> anyhow::Result<String> {
+    let value = std::env::var_os("AGENT_CONNECT_TEST_BOX_IMAGE")
+        .map(|value| {
+            value
+                .into_string()
+                .map_err(|_| anyhow::anyhow!("invalid test box image"))
+        })
+        .transpose()?;
+    test_base_image(value)
+}
+
 pub(super) fn desired_image() -> anyhow::Result<String> {
+    let base = base_image()?;
     Ok(match owner_hash(&owner_directory()?)? {
-        Some(hash) => format!("{DEFAULT_BOX_IMAGE}-{}", &hash[..16]),
-        None => DEFAULT_BOX_IMAGE.into(),
+        Some(hash) => format!("{base}-{}", &hash[..16]),
+        None => base,
     })
 }
 
@@ -154,6 +183,7 @@ async fn build(
 }
 
 async fn build_selected(selected: &str) -> anyhow::Result<()> {
+    let base_image = base_image()?;
     let architecture = tokio::process::Command::new("docker")
         .args(["info", "--format", "{{.Architecture}}"])
         .output()
@@ -183,20 +213,20 @@ async fn build_selected(selected: &str) -> anyhow::Result<()> {
         .unwrap_or_else(|| executable.parent().unwrap().join("box"));
     let runner = executable.parent().unwrap().join("session-runner");
     let scratch = Scratch::new()?;
-    if !installed(DEFAULT_BOX_IMAGE).await? {
+    if !installed(&base_image).await? {
         let base = scratch.0.join("base");
         copy_directory(&context, &base).context("box build context is missing; install the gateway launcher and matching platform package")?;
         fs::copy(&runner, base.join("session-runner"))
             .context("matching Linux session-runner is missing from the platform package")?;
-        build(&base, &base.join("Dockerfile"), DEFAULT_BOX_IMAGE, platform).await?;
+        build(&base, &base.join("Dockerfile"), &base_image, platform).await?;
     }
-    if selected != DEFAULT_BOX_IMAGE {
+    if selected != base_image {
         let owner = owner_directory()?;
         let snapshot = scratch.0.join("owner");
         copy_directory(&owner, &snapshot)?;
         anyhow::ensure!(
             owner_hash(&snapshot)?
-                .map(|hash| format!("{DEFAULT_BOX_IMAGE}-{}", &hash[..16]))
+                .map(|hash| format!("{base_image}-{}", &hash[..16]))
                 .as_deref()
                 == Some(selected),
             "owner box directory changed during setup; rerun setup"
@@ -206,7 +236,7 @@ async fn build_selected(selected: &str) -> anyhow::Result<()> {
         fs::write(
             &wrapper,
             format!(
-                "FROM {DEFAULT_BOX_IMAGE}\nUSER root\n{lines}\nUSER node\nWORKDIR /work\nENTRYPOINT [\"/usr/local/bin/entrypoint.sh\"]\n"
+                "FROM {base_image}\nUSER root\n{lines}\nUSER node\nWORKDIR /work\nENTRYPOINT [\"/usr/local/bin/entrypoint.sh\"]\n"
             ),
         )?;
         build(&snapshot, &wrapper, selected, platform).await?;
@@ -238,6 +268,23 @@ pub(super) async fn ensure_box(selected: &str, previous: Option<&str>) -> anyhow
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn test_image_override_cannot_select_installed_gateway_tags() {
+        assert_eq!(test_base_image(None).unwrap(), DEFAULT_BOX_IMAGE);
+        let image = "agent-connect-box-test:0.0.1-run123";
+        assert_eq!(test_base_image(Some(image.into())).unwrap(), image);
+        for invalid in [
+            "agent-connect-box:0.0.1",
+            "agent-connect-session:0.0.1",
+            "agent-connect-box-test:",
+            "agent-connect-box-test:-bad",
+            "agent-connect-box-test:bad/tag",
+            "agent-connect-box-test:BAD",
+        ] {
+            assert!(test_base_image(Some(invalid.into())).is_err(), "{invalid}");
+        }
+    }
+
     #[test]
     fn layer_hash_tracks_contents_names_modes_and_rejects_escape_links() {
         let scratch = Scratch::new().unwrap();

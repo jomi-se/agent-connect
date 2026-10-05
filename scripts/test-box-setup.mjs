@@ -11,11 +11,14 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
+import { testBoxImage, removeTestImages } from "./test-box-images.mjs";
 const artifacts = resolve(process.argv[2] ?? "dist/release");
 const release = JSON.parse(
   await readFile(join(artifacts, "release.json"), "utf8"),
 );
 const root = await mkdtemp(join(tmpdir(), "agent-connect-box-acceptance-"));
+const base = testBoxImage(release.version, randomUUID());
 const env = {
   PATH: process.env.PATH,
   HOME: root,
@@ -23,8 +26,8 @@ const env = {
   XDG_STATE_HOME: join(root, "state"),
   XDG_CACHE_HOME: join(root, "cache"),
   npm_config_cache: join(root, "npm-cache"),
+  AGENT_CONNECT_TEST_BOX_IMAGE: base,
 };
-const images = new Map();
 const egress = `box-acceptance-${root.split("-").at(-1).toLowerCase()}`;
 const gateway = join(root, "node_modules/.bin/agent-connect");
 function run(bin, args, { allowFailure = false, extraEnv = {} } = {}) {
@@ -34,7 +37,7 @@ function run(bin, args, { allowFailure = false, extraEnv = {} } = {}) {
     encoding: "utf8",
     maxBuffer: 8 * 1024 * 1024,
   });
-  if (result.error) throw result.error;
+  if (result.error && !allowFailure) throw result.error;
   if (!allowFailure && result.status !== 0)
     throw new Error(
       `${bin} failed (${result.status})\n${result.stdout}${result.stderr}`,
@@ -87,8 +90,18 @@ try {
       `open-agent-connect-gateway-linux-${process.arch}-${release.version}.tgz`,
     ),
   ]);
+  // Old packed binaries must fail before applying setup or building a live tag.
+  assert.equal(
+    JSON.parse(
+      run(
+        gateway,
+        setupArgs.filter((arg) => arg !== "--apply"),
+      ).stdout,
+    ).boxImage,
+    base,
+    "Packed gateway must support isolated test box builds; rebuild the artifacts",
+  );
   const initial = setup();
-  const base = `agent-connect-box:${release.version}`;
   assert.equal(initial.plan.boxImage, base);
   const baseId = inspect(base);
   run("docker", [
@@ -122,10 +135,9 @@ try {
     "warn",
   );
   const first = setup().plan;
-  images.set(first.boxImage, inspect(first.boxImage));
   assert.match(
     first.boxImage,
-    new RegExp(`^agent-connect-box:${release.version}-[a-f0-9]{16}$`),
+    new RegExp(`^${base.replaceAll(".", "\\.")}-[a-f0-9]{16}$`),
   );
   const metadata = JSON.parse(
     run("docker", ["image", "inspect", first.boxImage]).stdout,
@@ -153,7 +165,6 @@ try {
     "warn",
   );
   const changed = setup().plan;
-  images.set(changed.boxImage, inspect(changed.boxImage));
   assert.notEqual(changed.boxImage, first.boxImage);
   assert.equal(
     doctor().checks.find((check) => check.code === "box_current").status,
@@ -195,9 +206,10 @@ try {
     "Packed Linux setup: base tools, one Claude binary, local build/reuse, layer build/content rebuild/removal, doctor and failed-build fallback passed.",
   );
 } finally {
-  run(gateway, ["egress", "stop", "--name", egress], { allowFailure: true });
-  for (const [image, id] of images) {
-    if (inspect(image) === id) run("docker", ["image", "rm", image]);
+  try {
+    run(gateway, ["egress", "stop", "--name", egress], { allowFailure: true });
+    await removeTestImages(base, async (args) => run("docker", args).stdout);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
-  await rm(root, { recursive: true, force: true });
 }

@@ -108,6 +108,8 @@ then runs Rust tests and lint/dependency-boundary checks. A passing synthetic
 acceptance run does not establish live subscription quality or authorize a
 release.
 
+Test/dev box builds and owner layers use unique `agent-connect-box-test:*` tags, clean them up on success and failure, and never build, retag or remove `agent-connect-box:*`.
+
 ## Publication
 
 The workflow compares `packages/web-sdk` and `packages/gateway-npm` versions

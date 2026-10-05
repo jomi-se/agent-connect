@@ -411,6 +411,11 @@ try {
   assert.equal(setupPlan.origin, publicGateway);
   assert.equal(setupPlan.login, false, "planning never invokes provider login");
   assert.equal(setupPlan.service, false);
+  assert.equal(
+    setupPlan.boxImage,
+    boxImage,
+    "Packed gateway must support isolated test box builds; rebuild the artifacts",
+  );
   assert.ok(Array.isArray(setupPlan.steps) && setupPlan.steps.length > 0);
   await assert.rejects(stat(runtime), { code: "ENOENT" });
   report.checks.push(

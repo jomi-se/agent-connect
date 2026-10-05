@@ -1,7 +1,7 @@
 // Local acceptance only. Fresh test container receives artifacts, never a checkout.
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   mkdtemp,
   mkdir,
@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
+import { testBoxImage, removeTestImages } from "./test-box-images.mjs";
 const repo = resolve(import.meta.dirname, "..");
 const artifactDirectory = resolve(
   process.env.AGENT_CONNECT_RELEASE_DIR ??
@@ -21,11 +22,10 @@ const artifactDirectory = resolve(
 );
 const kit = join(repo, "deploy/gateway/test/clean-room");
 const run = await mkdtemp(join(tmpdir(), "acp-clean-room-"));
-const suffix = run.split("-").at(-1).toLowerCase();
+const suffix = randomUUID();
 const name = `acp-clean-room-${suffix}`;
-const image =
-  process.env.ACP_CLEAN_ROOM_IMAGE ??
-  `agent-connect-clean-room:0.0.1-${suffix}`;
+const image = `agent-connect-clean-room-test:0.0.1-${suffix}`;
+let boxImage;
 let createdImageId;
 const children = new Set();
 async function command(binary, args, options = {}) {
@@ -108,20 +108,23 @@ function cleanup() {
       if (network === `acp-clean-model-${suffix}-base`)
         await command("docker", ["network", "rm", network]).catch(() => {});
     }
-    if (createdImageId && !process.env.ACP_CLEAN_ROOM_IMAGE) {
-      // Identical concurrent builds may share an ID under different run tags.
-      // Untag only this run, and leave a tag replaced by another image alone.
-      const taggedId = await command("docker", [
-        "image",
-        "inspect",
-        "--format",
-        "{{.Id}}",
-        image,
-      ]).catch(() => "");
-      if (taggedId.trim() === createdImageId)
-        await command("docker", ["image", "rm", image]).catch(() => {});
-    }
     for (const child of children) child.kill("SIGTERM");
+    // Attempt every owned tag, including builds that failed before ID capture.
+    const results = await Promise.allSettled(
+      [image, boxImage]
+        .filter(Boolean)
+        .map((base) =>
+          removeTestImages(base, (args) => command("docker", args)),
+        ),
+    );
+    const failures = results
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason);
+    if (failures.length)
+      throw new AggregateError(
+        failures,
+        "Clean-room test image cleanup failed",
+      );
   })());
 }
 for (const signal of ["SIGINT", "SIGTERM"])
@@ -173,8 +176,7 @@ try {
     join(repo, "deploy/gateway/test/fixtures/mock-model/server.mjs"),
     join(run, "context/mock-model.mjs"),
   );
-  const boxImage =
-    process.env.ACP_BOX_IMAGE ?? `agent-connect-box:${manifest.version}`;
+  boxImage = testBoxImage(manifest.version, suffix);
   await command("docker", ["build", "-t", image, join(run, "context")]);
   createdImageId = (
     await command("docker", ["image", "inspect", "--format", "{{.Id}}", image])
@@ -232,6 +234,8 @@ try {
       "-e",
       `ACP_BOX_IMAGE=${boxImage}`,
       "-e",
+      `AGENT_CONNECT_TEST_BOX_IMAGE=${boxImage}`,
+      "-e",
       `HOME=${join(run, "work")}`,
       "-e",
       `XDG_STATE_HOME=${join(run, "work/state-home")}`,
@@ -269,7 +273,10 @@ try {
     `PASS ACP clean-room acceptance (diagnostics: ${run}/work/report.json)`,
   );
 } finally {
-  await cleanup();
-  await pruneTestInstallations(run);
-  console.log(`ACP clean-room diagnostics: ${run}/work/report.json`);
+  try {
+    await cleanup();
+  } finally {
+    await pruneTestInstallations(run);
+    console.log(`ACP clean-room diagnostics: ${run}/work/report.json`);
+  }
 }

@@ -2,8 +2,7 @@
 
 Run `node scripts/clean-room.mjs [artifact-directory]` after preparing the
 local release. The default directory is the ignored `dist/release`.
-`AGENT_CONNECT_RELEASE_DIR` overrides it; `ACP_BOX_IMAGE` and `ACP_CLEAN_ROOM_IMAGE`
-select local test image tags. `ACP_DOCKER_SOCKET` can select a local socket.
+`AGENT_CONNECT_RELEASE_DIR` overrides it; `ACP_DOCKER_SOCKET` can select a local socket.
 Setup builds the box from the installed tarball files; no prebuilt box is required.
 
 The directory must contain `release.json`, npm tarballs for the gateway, the
@@ -48,10 +47,9 @@ transcript and verifying that the previous question is not replayed.
 The browser uses full Chromium's new headless mode with back/forward caching
 enabled, and asserts `pageshow.persisted`; synthetic lifecycle events alone
 cannot satisfy this gate. See [Playwright's browser reference](https://playwright.dev/docs/browsers#chromium-new-headless-mode).
-The runner gives each default test image a unique tag, runs the captured immutable
+The runner gives each test image a unique tag, runs the captured immutable
 image ID, and removes only its own matching tag after its containers close. Identical
-concurrent builds may share an image ID; other runs' tags are retained. An explicitly supplied
-`ACP_CLEAN_ROOM_IMAGE` is retained.
+concurrent builds may share an image ID; other runs' tags are retained.
 Containers and session networks created by this run are cleaned on success or
 failure; retained directories are private and contain only generated fixture
 credentials and grants.

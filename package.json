@@ -21,7 +21,7 @@
     "lint": "eslint .",
     "security:hooks:install": "./scripts/install-git-hooks.sh",
     "security:scan": "./scripts/scan-secrets.sh history",
-    "test": "npm run test --workspaces --if-present && node --test scripts/test-fixture-cleanup.test.mjs scripts/release.test.mjs scripts/release-build-env.test.mjs",
+    "test": "npm run test --workspaces --if-present && node --test scripts/test-fixture-cleanup.test.mjs scripts/release.test.mjs scripts/release-build-env.test.mjs scripts/test-box-images.test.mjs",
     "test:package:web": "node scripts/smoke-web-sdk-package.mjs",
     "test:webmcp": "npm run test:webmcp --workspace @open-agent-connect/web",
     "pretypecheck": "npm run build --workspace @open-agent-connect/web",
