@@ -22,7 +22,7 @@ const artifactDirectory = resolve(
 );
 const kit = join(repo, "deploy/gateway/test/clean-room");
 const run = await mkdtemp(join(tmpdir(), "acp-clean-room-"));
-const suffix = randomUUID();
+const suffix = randomUUID().replaceAll("-", "");
 const name = `acp-clean-room-${suffix}`;
 const image = `agent-connect-clean-room-test:0.0.1-${suffix}`;
 let boxImage;
