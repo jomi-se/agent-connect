@@ -8,11 +8,13 @@ release.**
 
 ## 1. Install
 
-You need Node >=24.15, a working Docker engine and a browser. The tested baseline
-is Node 24 LTS (>=24.15, <25). Supported hosts are Apple Silicon macOS, Linux x64
-and Linux ARM64. On macOS, use Docker Desktop with Linux containers. Windows is
-not yet supported. No checkout, Rust compiler or personal harness installation
-is needed.
+You need Node >=24.15, Docker that your user can run without `sudo`, a browser
+and a Codex or Claude Code subscription. The tested baseline is Node 24 LTS
+(>=24.15, <25) with Docker Desktop or Docker Engine and its buildx plugin. Setup
+builds the box locally, so first setup downloads and stores roughly 1.5 GB.
+Supported hosts are Apple Silicon macOS, Linux x64 and Linux ARM64. On macOS,
+use Docker Desktop with Linux containers. Windows is not yet supported. No
+checkout, Rust compiler or personal harness installation is needed.
 
 After publication:
 

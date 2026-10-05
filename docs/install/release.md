@@ -16,12 +16,14 @@ and adapter pins before building. Adapter versions come from the launcher
 manifest and the box manifest/lockfile; floating adapter installs are
 not release inputs.
 
-The build-tool installer pins Rust `1.98.1`, cargo-dist `0.33.0`,
-cargo-zigbuild `0.23.4` and Zig `0.14.1`. CI uses Node `24.15.0` and the publishing
-job uses npm `11.19.1`. The cargo-dist binaries are downloaded from the pinned
-upstream release and checked against recorded SHA-256 values. This installer
-requires GitHub runner environment files and does not configure an operator's
-personal toolchain.
+`rust-toolchain.toml` selects Rust `1.98.1` with both Linux musl targets;
+rustup installs it on first use. `mise.toml` lists the other build tools: Zig
+`0.14`, which is only the C cross-compiler and linker for static musl binaries,
+cargo-zigbuild `0.23` and cargo-dist `0.33.0`. `mise.lock` records their exact
+versions and SHA-256 checksums. In a checkout, run `mise trust && mise install`,
+or install the same versions another way. CI installs them with `mise-action`;
+`scripts/ci-build-env.sh` then exports the musl compiler wrappers and path
+remapping. CI uses Node `24.15.0` and the publishing job uses npm `11.19.1`.
 
 The explicit native matrix is:
 

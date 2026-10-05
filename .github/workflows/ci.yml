@@ -46,8 +46,11 @@ jobs:
       - name: Install pinned provider and native browser test tools
         run: ./scripts/install-ci-test-tools.sh
 
-      - name: Install pinned Rust and release build tools
-        run: ./scripts/install-build-tools.sh
+      - name: Install the build tools in mise.toml
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+
+      - name: Export the release build environment
+        run: ./scripts/ci-build-env.sh
 
       - name: Check ACP versions and adapter pins
         run: node scripts/release.mjs check

@@ -1,0 +1,8 @@
+# Build tools beyond Node and Rust (rust-toolchain.toml selects Rust).
+# Run `mise install` here, or install equivalent versions any other way.
+[tools]
+# Zig is only the C cross-compiler and linker for static musl session-runners.
+zig = "0.14"
+"aqua:rust-cross/cargo-zigbuild" = "0.23"
+# dist checks this against cargo-dist-version in dist-workspace.toml.
+cargo-dist = "0.33.0"
