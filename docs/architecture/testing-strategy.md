@@ -10,7 +10,8 @@ an imitation of its events.
    tools, argument validation, admission, continuation, cancellation, revocation,
    resume and owned resource cleanup. Controlled contract fixtures cover exact
    races and deliberate faults without claiming harness compatibility.
-2. Real adapters with deterministic inference: `npm run verify` runs the pinned
+2. Real adapters with deterministic inference: `npm run verify` (in CI on every
+   PR and push to main) runs the pinned
    Codex and Claude ACP adapters on host and in boxes with isolated HOME/XDG
    state. The clean-room gate installs packed artifacts in a fresh container,
    builds the public sample and exercises owner approval, tools, reconnect,

@@ -31,6 +31,7 @@
     "test:integration:gateway": "node scripts/gateway-scenarios.mjs",
     "test:integration:gateway:boxed": "ACP_BOXED=1 ACP_SCENARIOS=tools,policy,use-chat,shell,cancel,resume,slow-cut,ask-cut,answer-halfopen,expire,discard node scripts/gateway-scenarios.mjs",
     "release:check": "node scripts/release.mjs check",
+    "release:bump": "node scripts/release-bump.mjs",
     "release:prepare-local": "node scripts/build-release-local.mjs",
     "release:dry-run": "node scripts/release.mjs publish-dry-run",
     "build:box-runners": "./deploy/gateway/box/build-local.sh",

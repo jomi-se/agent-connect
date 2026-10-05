@@ -62,17 +62,19 @@ npm run format:check
 npm run typecheck
 npm test
 npm run build
-npm run verify        # full gate, including real adapters and the clean-room sample
 cargo test --locked   # Rust workspace
+node scripts/release.mjs check
 npm run analyze       # report-first metrics; boundary violations are hard failures
 ```
 
-Boxes and release artifacts are built as described in
-`docs/install/release.md`. CI is read-only.
+CI runs the heavy gates (release build, `npm run verify:full` with real adapters
+and the clean-room sample) on every PR and push to `main`, and a release
+publishes only after it passes. Run them locally only to reproduce a CI failure;
+see `docs/install/release.md`. CI is read-only.
 
 Run routine checks through `quiet-run` (on PATH; `scripts/quiet-run.sh` is the
 fallback), which prints one line on success and a bounded tail on failure. Use
-`--detach` for slow runs such as `npm run verify`, then collect with `--status`.
+`--detach` for slow runs, then collect with `--status`.
 Run the formatter once, just before final verification and commit.
 
 ## Testing

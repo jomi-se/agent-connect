@@ -12,12 +12,11 @@ on 2026-10-04, establishes ACP as the product vision and chosen open standard.
 
 ## Run your gateway
 
-After publication, install from npm. Until then, use the matching launcher and
-platform tarballs as described in the [install guide](docs/install/README.md).
-You need Node 24 LTS (>=24.15), Docker and a browser.
+Install from npm. You need Node 24 LTS (>=24.15), Docker, a browser and a Codex
+or Claude Code subscription; see the [install guide](docs/install/README.md).
 
 ```sh
-npm install --global @open-agent-connect/gateway@0.0.2
+npm install --global @open-agent-connect/gateway
 agent-connect setup
 agent-connect login
 agent-connect doctor

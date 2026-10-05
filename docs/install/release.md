@@ -1,16 +1,18 @@
 # Release process
 
-Releases are automatic. Every push to `main` runs the
-[release workflow](../../.github/workflows/release.yml), which publishes each
-package version that is not on npm yet: bump a version in a merged change to
-release it. Main only receives commits that passed the required PR checks, so
-the workflow does not repeat them. Ordinary CI is read-only. Agents may prepare
-and verify artifacts but never push, publish or execute npm deprecation.
+Releases are automatic. Changes reach `main` by direct owner push or by a PR,
+which must pass CI and be rebased on current main. Every push to `main` runs CI;
+only when it succeeds does the
+[release workflow](../../.github/workflows/release.yml) publish, from that exact
+commit, each package version that is not on npm yet. To release, run
+`npm run release:bump <version>` and commit. Ordinary CI is read-only. Agents
+may prepare and verify artifacts but never push, publish or execute npm
+deprecation.
 
 ## Artifacts and pins
 
-The launcher, platform packages, Rust gateway and box manifest share
-version 0.0.2. The SDK is independently versioned at 0.0.10. All packages remain
+The launcher, platform packages, Rust gateway, box manifest and chat sample
+share one version; the SDK is versioned independently. All packages remain
 on 0.0.x until the API shape is final. `node scripts/release.mjs check` verifies versions
 and adapter pins before building. Adapter versions come from the launcher
 manifest and the box manifest/lockfile; floating adapter installs are
@@ -66,10 +68,11 @@ it never calls cargo-dist hosting/publication commands. See the official
 and [CI customization](https://axodotdev.github.io/cargo-dist/book/ci/customizing.html)
 references.
 
-## Local candidate and CI verification
+## CI verification
 
-On a supported **Linux** developer host with the pinned build tools, Node 24 and Docker,
-the credential-free acceptance sequence is:
+CI runs this credential-free acceptance sequence on every PR and push to `main`.
+Run it locally only to reproduce a CI failure, on a supported **Linux** host
+with the `mise.toml` build tools, Node 24 and Docker:
 
 ```sh
 npm ci

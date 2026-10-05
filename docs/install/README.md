@@ -1,7 +1,7 @@
 # Install Agent Connect (ACP prerelease)
 
 Install your gateway, run guided setup, and approve an application's exact
-origin and tools in your browser. **0.0.2 is an early alpha
+origin and tools in your browser. **This is an early alpha
 release.**
 [ADR 0016](../decisions/0016-acp-application-boundary.md) was accepted on
 2026-10-04. ACP, MCP-over-ACP and `agent-connect.resume.v1` remain unstable.
@@ -19,7 +19,7 @@ checkout, Rust compiler or personal harness installation is needed.
 After publication:
 
 ```sh
-npm install --global @open-agent-connect/gateway@0.0.2
+npm install --global @open-agent-connect/gateway
 agent-connect --help
 ```
 
@@ -27,8 +27,8 @@ For a locally built candidate, install the launcher and matching platform tarbal
 together; substitute `linux-x64` or `darwin-arm64` for your host:
 
 ```sh
-npm install --global ./open-agent-connect-gateway-0.0.2.tgz \
-  ./open-agent-connect-gateway-linux-arm64-0.0.2.tgz
+npm install --global ./open-agent-connect-gateway-<version>.tgz \
+  ./open-agent-connect-gateway-linux-arm64-<version>.tgz
 ```
 
 Keep npm optional dependencies enabled: they select the native platform binary.

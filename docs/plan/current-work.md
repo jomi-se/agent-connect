@@ -36,7 +36,7 @@ owner sign-out, immutable supported profiles, multiple entry points and offline
 TOTP recovery. The sample automatically recovers interrupted transport without
 replaying uncertain prompts or application effects.
 
-Release qualification reruns `npm run verify:full` and `cargo test --locked --workspace` against the exact reviewed ACP-only candidate. The artifact-only
+CI runs `npm run verify:full` and `cargo test --locked --workspace` on every push to main, and the release workflow publishes only that verified commit. The artifact-only
 clean-room passes 26 checks, including real browser pairing, setup/doctor,
 offline service lifecycle, sessions/end-session, revoke-all, app tools,
 reconnect/cancel and browser back/forward cache restoration. All six owned hosts
