@@ -2,13 +2,13 @@
 
 `@open-agent-connect/gateway` installs the `agent-connect` CLI for a user-owned
 agent gateway. It authorizes fixed application tools and runs harness sessions
-in disposable Docker boxes. **0.0.1 is an early alpha release.**
+in disposable Docker boxes. **0.0.2 is an early alpha release.**
 ACP, MCP-over-ACP and transport resumption remain experimental.
 
 After publication:
 
 ```sh
-npm install --global @open-agent-connect/gateway@0.0.1
+npm install --global @open-agent-connect/gateway@0.0.2
 agent-connect setup
 agent-connect login
 agent-connect doctor

@@ -1,6 +1,6 @@
 {
   "name": "agent-connect-box",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "dependencies": {
     "@agentclientprotocol/codex-acp": "2.0.1",

@@ -10,7 +10,7 @@ and verify artifacts but never push, publish or execute npm deprecation.
 ## Artifacts and pins
 
 The launcher, platform packages, Rust gateway and box manifest share
-version 0.0.1. The SDK is independently versioned at 0.0.10. All packages remain
+version 0.0.2. The SDK is independently versioned at 0.0.10. All packages remain
 on 0.0.x until the API shape is final. `node scripts/release.mjs check` verifies versions
 and adapter pins before building. Adapter versions come from the launcher
 manifest and the box manifest/lockfile; floating adapter installs are

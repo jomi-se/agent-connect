@@ -2,7 +2,7 @@
 
 `@open-agent-connect/web@0.0.10` is the ACP browser API at the package root.
 ACP, MCP-over-ACP and Agent Connect's resumable transport remain **experimental**.
-The gateway is independently versioned at 0.0.1. Both are early alpha releases.
+The gateway is independently versioned at 0.0.2. Both are early alpha releases.
 
 After publication (use the supplied SDK tarball before then):
 

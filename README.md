@@ -17,7 +17,7 @@ platform tarballs as described in the [install guide](docs/install/README.md).
 You need Node 24 LTS (>=24.15), Docker and a browser.
 
 ```sh
-npm install --global @open-agent-connect/gateway@0.0.1
+npm install --global @open-agent-connect/gateway@0.0.2
 agent-connect setup
 agent-connect login
 agent-connect doctor

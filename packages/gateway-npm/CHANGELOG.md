@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.2
+
+- No user-facing changes. First release built with the mise-declared toolchain.
+- Tests can select an isolated `agent-connect-box-test:` image, so test builds
+  never replace an installed box tag.
+
 ## 0.0.1
 
 - First release of the Agent Connect gateway and `agent-connect` CLI.
