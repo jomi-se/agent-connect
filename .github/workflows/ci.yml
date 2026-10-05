@@ -1,5 +1,6 @@
 name: CI
 
+# Required for PRs. On a push to main, Release runs only after this succeeds.
 on:
   pull_request:
     branches: [main]
