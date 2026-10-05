@@ -109,6 +109,7 @@ acceptance run does not establish live subscription quality or authorize a
 release.
 
 Test/dev box builds and owner layers use unique `agent-connect-box-test:*` tags, clean them up on success and failure, and never build, retag or remove `agent-connect-box:*`.
+`npm run verify` builds this checkout's shared test box once and passes `ACP_BOX_IMAGE` to its gates; standalone box consumers require that variable.
 
 ## Publication
 

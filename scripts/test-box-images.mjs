@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
 
+export function requireBoxImage(image = process.env.ACP_BOX_IMAGE) {
+  if (!image?.trim())
+    throw new Error(
+      "ACP_BOX_IMAGE is required; run npm run verify to build this checkout's test box",
+    );
+  return image;
+}
+
 export function testBoxImage(version, runId) {
   const image = `agent-connect-box-test:${version}-${runId}`;
   assertTestImage(image);

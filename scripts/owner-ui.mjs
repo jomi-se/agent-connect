@@ -19,7 +19,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
 import { runCleanupTasks } from "./test-fixture-cleanup.mjs";
+import { requireBoxImage } from "./test-box-images.mjs";
 
+const boxImage = requireBoxImage();
 const repo = resolve(import.meta.dirname, "..");
 const root = await mkdtemp(join(tmpdir(), "acp-owner-ui-"));
 const screenshots = process.env.OWNER_UI_SCREENSHOTS
@@ -663,10 +665,6 @@ try {
   await new Promise((ok) => probeListener.close(ok));
   const probeOrigin = `http://127.0.0.1:${probePort}`;
   const probeRuntime = join(root, "problem-runtime");
-  const version = JSON.parse(
-    await readFile(join(repo, "packages/gateway-npm/package.json"), "utf8"),
-  ).version;
-  const boxImage = process.env.ACP_BOX_IMAGE ?? `agent-connect-box:${version}`;
   run(binary, [
     "init",
     "--directory",

@@ -14,7 +14,9 @@ import { resolve, join } from "node:path";
 import { createServer } from "node:http";
 import { createServer as tcpServer } from "node:net";
 import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
+import { requireBoxImage } from "./test-box-images.mjs";
 
+const boxImage = requireBoxImage();
 const repo = resolve(import.meta.dirname, "..");
 const fixtures = join(repo, "deploy/gateway/test/fixtures");
 const run = await mkdtemp(join(tmpdir(), "agent-connect-acp-"));
@@ -22,9 +24,6 @@ const children = new Set();
 const dockerContainers = [];
 const dockerNetworks = [];
 const boxed = process.env.ACP_BOXED === "1";
-const boxImage =
-  process.env.ACP_BOX_IMAGE ??
-  `agent-connect-box:${JSON.parse(await readFile(join(repo, "deploy/gateway/box/package.json"), "utf8")).version}`;
 let mockContainer, egressContainer;
 const cleanEnv = {
   PATH: process.env.PATH,
@@ -186,10 +185,11 @@ try {
       join(repo, "deploy/gateway/test/egress-proxy.test.mjs"),
     ]);
     await command("docker", ["image", "inspect", boxImage]);
-    await command("node", [
-      "--test",
-      join(repo, "deploy/gateway/test/box.test.mjs"),
-    ]);
+    await command(
+      "node",
+      ["--test", join(repo, "deploy/gateway/test/box.test.mjs")],
+      { env: { ...cleanEnv, ACP_BOX_IMAGE: boxImage } },
+    );
     const suffix = run.split("-").at(-1).toLowerCase();
     mockContainer = `acp-test-model-${suffix}`;
     egressContainer = `acp-test-egress-${suffix}`;

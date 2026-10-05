@@ -17,14 +17,13 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import WebSocket from "ws";
+import { requireBoxImage } from "./test-box-images.mjs";
 
+const image = requireBoxImage();
 const exec = promisify(execFile);
 const repo = resolve(import.meta.dirname, "..");
 const root = await mkdtemp(join(tmpdir(), "agent-connect-teardown-"));
 const suffix = root.split("-").at(-1).toLowerCase();
-const image =
-  process.env.ACP_BOX_IMAGE ??
-  `agent-connect-box:${JSON.parse(await readFile(join(repo, "deploy/gateway/box/package.json"), "utf8")).version}`;
 const sourceBinary =
   process.env.ACP_GATEWAY_BIN ?? join(repo, "target/debug/agent-connect");
 const binary = join(root, "gateway");
