@@ -685,10 +685,16 @@ pub(super) fn create_private_directory(path: &Path) -> anyhow::Result<()> {
         {
             use std::os::unix::fs::MetadataExt;
             let safe_shared_temporary = meta.uid() == 0 && meta.mode() & 0o1000 != 0;
+            // A umask of 002 with a per-user primary group (the Ubuntu and
+            // Debian default) leaves directories such as the systemd user unit
+            // directory group-writable by that private group.
+            let own_group = meta.gid() == unsafe { libc::getegid() };
+            let unsafe_write = if own_group { 0o002 } else { 0o022 };
             anyhow::ensure!(
                 safe_shared_temporary
-                    || (meta.uid() == unsafe { libc::geteuid() } && meta.mode() & 0o022 == 0),
-                "directory must be owned by this user and not writable by group/others"
+                    || (meta.uid() == unsafe { libc::geteuid() }
+                        && meta.mode() & unsafe_write == 0),
+                "directory must be owned by this user and not writable by other groups or users"
             );
         }
         return Ok(());
@@ -856,12 +862,14 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
-    fn unsafe_existing_directories_are_rejected_without_chmod() {
+    fn writable_existing_directories_are_rejected_without_chmod_unless_own_group() {
         let dir = std::env::temp_dir().join(format!("acp-mode-{}", uuid::Uuid::new_v4()));
         create_private_directory(&dir).unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o775)).unwrap();
+            create_private_directory(&dir).unwrap();
             std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o777)).unwrap();
             assert!(create_private_directory(&dir).is_err());
             assert_eq!(
