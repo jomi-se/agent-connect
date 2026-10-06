@@ -51,9 +51,10 @@ stopped nor that an already-started application effect did not happen.
 Setup acceptance installs the packed launcher and Linux platform package in an
 isolated HOME/XDG environment, builds the local box from their files, and checks
 owner-context hash changes, reuse and failed-build fallback. Box tests check the
-curated tools, one Claude binary selected by the real adapter/SDK, and Codex ACP
-turns without optional voice/code-mode hosts. Runtime proxy and home boundaries
-remain the same; builds use normal network access. See
+curated tools, one Claude binary selected by the real adapter/SDK, the code-mode
+host Codex uses for MCP tools, and Codex ACP turns without the optional voice
+host. Runtime proxy and home boundaries remain the same; builds use normal
+network access. See
 [local box decision](../decisions/0017-local-box-build.md).
 
 Native WebMCP gates allocate a free loopback port and a fresh results directory.

@@ -121,7 +121,7 @@ try {
     base,
     "sh",
     "-ec",
-    'for tool in bash cat sed grep gawk git rg fd jq curl python3 less ps unzip node; do command -v "$tool"; done; test -f /etc/ssl/certs/ca-certificates.crt; test "$(find /opt/adapters/node_modules/@anthropic-ai -type f \\( -name claude -o -name claude.exe \\) | wc -l)" = 1; test -x "$CLAUDE_CODE_EXECUTABLE"; test -z "$(find /opt/adapters -name codex-voice-host -o -name codex-code-mode-host)"; codex --version; claude --version',
+    'for tool in bash cat sed grep gawk git rg fd jq curl python3 less ps unzip node; do command -v "$tool"; done; test -f /etc/ssl/certs/ca-certificates.crt; test "$(find /opt/adapters/node_modules/@anthropic-ai -type f \\( -name claude -o -name claude.exe \\) | wc -l)" = 1; test -x "$CLAUDE_CODE_EXECUTABLE"; test -z "$(find /opt/adapters -name codex-voice-host)"; test "$(find /opt/adapters -type f -perm -u+x -name codex-code-mode-host | wc -l)" = 1; codex --version; claude --version',
   ]);
   const unchanged = await setup();
   assert.match(unchanged.stderr, /Reusing local box/);

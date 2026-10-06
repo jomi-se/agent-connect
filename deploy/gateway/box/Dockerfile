@@ -8,8 +8,7 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
     && chmod 755 "node_modules/@anthropic-ai/claude-code-linux-$cpu/claude" \
     && ln -sf ../@anthropic-ai/claude-code/bin/claude.exe node_modules/.bin/claude \
     && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-* \
-    && find node_modules/@openai -name codex-voice-host -delete \
-    && find node_modules/@openai -name codex-code-mode-host -delete
+    && find node_modules/@openai -name codex-voice-host -delete
 
 FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
 # Curated tools: edit this list when the product's baseline needs change.
