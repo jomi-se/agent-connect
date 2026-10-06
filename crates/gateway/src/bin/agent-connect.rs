@@ -31,7 +31,9 @@ use agent_connect_gateway::config::{
     self, CodexMode, DEFAULT_BOX_IMAGE, InitCli, ServeCli, ServeOptions, UsageError,
 };
 use agent_connect_gateway::credentials::{HarnessHome, default_home, login_args, select_harness};
-use agent_connect_gateway::operations::{self, DoctorCli, ResetTotpCli, ServiceCli, SetupCli};
+use agent_connect_gateway::operations::{
+    self, DoctorCli, ResetPassphraseCli, ResetTotpCli, ServiceCli, SetupCli,
+};
 use agent_connect_gateway::policy::{GrantSessions, PermissionProfile, PolicyConfig, PolicyProxy};
 use agent_connect_gateway::resume::{
     self, AttachError, Host, RESUME_SUBPROTOCOL, Registry, ResumeConfig, ToSocket, close,
@@ -74,6 +76,8 @@ enum Command {
     Service(ServiceCli),
     /// Reset a lost owner TOTP factor offline; stop the service first.
     ResetTotp(ResetTotpCli),
+    /// Replace a lost owner passphrase offline at a terminal; stop the service first.
+    ResetPassphrase(ResetPassphraseCli),
     /// Serve owner sign-in, app consent, grant management and unstable ACP.
     Serve(ServeOptions),
     /// Create a private runtime and owner sign-in for browser pairing.
@@ -283,6 +287,7 @@ async fn run() -> anyhow::Result<()> {
         Command::Doctor(cli) => return operations::doctor(cli).await,
         Command::Service(cli) => return operations::service(cli).await,
         Command::ResetTotp(cli) => return operations::reset_totp(cli).await,
+        Command::ResetPassphrase(cli) => return operations::reset_passphrase(cli).await,
         Command::Egress(cli) => {
             match cli.command {
                 EgressCommand::Start { name, box_image } => {

@@ -298,15 +298,7 @@ impl AuthService {
                     .owner_passphrase
                     .as_deref()
                     .ok_or_else(|| anyhow!("first boot requires an owner passphrase"))?;
-                ensure!(
-                    passphrase.chars().count() >= 12 && passphrase.len() <= 1024,
-                    "owner passphrase must contain at least 12 characters and at most 1024 bytes"
-                );
-                let salt = SaltString::generate(&mut OsRng);
-                let hash = Argon2::default()
-                    .hash_password(passphrase.as_bytes(), &salt)
-                    .map_err(|_| anyhow!("password hashing failed"))?
-                    .to_string();
+                let hash = hash_passphrase(passphrase)?;
                 let stored = Stored {
                     version: 1,
                     issuer: config.public_url.clone(),
@@ -363,53 +355,34 @@ impl AuthService {
     /// Owner-run recovery only: refuse active serving, never bootstrap missing state,
     /// preserve the passphrase and all grants, and record bounded recovery metadata.
     pub fn reset_totp(state_dir: &std::path::Path) -> Result<bool> {
-        let metadata = fs::symlink_metadata(state_dir)?;
-        ensure!(
-            metadata.is_dir() && !metadata.file_type().is_symlink(),
-            "invalid authorization state directory"
-        );
-        #[cfg(unix)]
-        ensure!(
-            metadata.permissions().mode() & 0o077 == 0,
-            "authorization state must be private"
-        );
-        let directory = state_dir.to_path_buf();
-        let _lock = authorization_lock(&directory)?;
-        let path = directory.join("authorization.json");
-        let metadata = fs::symlink_metadata(&path)?;
-        ensure!(
-            metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() <= MAX_STATE,
-            "invalid authorization state file"
-        );
-        #[cfg(unix)]
-        ensure!(
-            metadata.permissions().mode() & 0o077 == 0,
-            "authorization state must be private"
-        );
-        let mut stored: Stored = serde_json::from_slice(&fs::read(path)?)?;
-        ensure!(
-            stored.version == 1 && stored.grants.len() <= MAX_GRANTS,
-            "invalid authorization state"
-        );
-        canonical_origin(&stored.issuer)?;
-        PasswordHash::new(&stored.password_hash)
-            .map_err(|_| anyhow!("invalid stored owner hash"))?;
-        let enrolled = stored.totp_secret.is_some();
-        if enrolled {
-            stored.totp_secret = None;
-            stored.last_totp_step = None;
-            stored.totp_reset_count = stored
-                .totp_reset_count
-                .checked_add(1)
-                .ok_or_else(|| anyhow!("recovery audit capacity"))?;
-            stored.last_totp_reset_at = Some(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)?
-                    .as_secs(),
-            );
-            save(&directory, &stored)?;
-        }
-        Ok(enrolled)
+        recover(state_dir, |stored| {
+            let enrolled = stored.totp_secret.is_some();
+            if enrolled {
+                stored.totp_secret = None;
+                stored.last_totp_step = None;
+                stored.totp_reset_count = stored
+                    .totp_reset_count
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow!("recovery audit capacity"))?;
+                stored.last_totp_reset_at = Some(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_secs(),
+                );
+            }
+            Ok(enrolled)
+        })
+    }
+
+    /// Owner-run recovery only: replace the passphrase hash and preserve the
+    /// authenticator and all grants.
+    pub fn reset_passphrase(state_dir: &std::path::Path, passphrase: &str) -> Result<()> {
+        let hash = hash_passphrase(passphrase)?;
+        recover(state_dir, |stored| {
+            stored.password_hash = hash;
+            Ok(true)
+        })?;
+        Ok(())
     }
 
     fn grant_profile(&self, grant: &Grant) -> PermissionProfile {
@@ -1726,6 +1699,61 @@ async fn endpoint(State(service): State<Arc<AuthService>>, request: Request) -> 
         }
     }
     response
+}
+
+fn hash_passphrase(passphrase: &str) -> Result<String> {
+    ensure!(
+        passphrase.chars().count() >= 12 && passphrase.len() <= 1024,
+        "owner passphrase must contain at least 12 characters and at most 1024 bytes"
+    );
+    let salt = SaltString::generate(&mut OsRng);
+    Ok(Argon2::default()
+        .hash_password(passphrase.as_bytes(), &salt)
+        .map_err(|_| anyhow!("password hashing failed"))?
+        .to_string())
+}
+
+/// Validates private owner state under the exclusive lock, applies an offline
+/// recovery change and saves only when it reports one.
+fn recover(
+    state_dir: &std::path::Path,
+    change: impl FnOnce(&mut Stored) -> Result<bool>,
+) -> Result<bool> {
+    let metadata = fs::symlink_metadata(state_dir)?;
+    ensure!(
+        metadata.is_dir() && !metadata.file_type().is_symlink(),
+        "invalid authorization state directory"
+    );
+    #[cfg(unix)]
+    ensure!(
+        metadata.permissions().mode() & 0o077 == 0,
+        "authorization state must be private"
+    );
+    let directory = state_dir.to_path_buf();
+    let _lock = authorization_lock(&directory)?;
+    let path = directory.join("authorization.json");
+    let metadata = fs::symlink_metadata(&path)?;
+    ensure!(
+        metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() <= MAX_STATE,
+        "invalid authorization state file"
+    );
+    #[cfg(unix)]
+    ensure!(
+        metadata.permissions().mode() & 0o077 == 0,
+        "authorization state must be private"
+    );
+    let mut stored: Stored = serde_json::from_slice(&fs::read(path)?)?;
+    ensure!(
+        stored.version == 1 && stored.grants.len() <= MAX_GRANTS,
+        "invalid authorization state"
+    );
+    canonical_origin(&stored.issuer)?;
+    PasswordHash::new(&stored.password_hash).map_err(|_| anyhow!("invalid stored owner hash"))?;
+    let changed = change(&mut stored)?;
+    if changed {
+        save(&directory, &stored)?;
+    }
+    Ok(changed)
 }
 
 fn authorization_lock(directory: &PathBuf) -> Result<File> {

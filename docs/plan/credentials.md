@@ -70,8 +70,9 @@ There is no app-grant or remote factor-reset authority.
 
 Normal setup now creates gateway-owned sign-in and authorization state, separate
 from the dedicated provider login. `agent-connect init` prompts for a hidden
-owner passphrase of at least 12 characters and confirmation; unattended setup
-requires an owned private `--owner-passphrase-file`. An Argon2 passphrase hash,
+owner passphrase of at least 12 characters and confirmation, only at a terminal:
+no file, argument or environment input exists, so agents cannot create or read
+the owner credential. `reset-passphrase` replaces it offline. An Argon2 passphrase hash,
 optional TOTP secret and grant state live under the runtime's private
 `state/auth` directory, outside the harness home and application access.
 The owner passphrase is not an application bearer and is never sent to a box.

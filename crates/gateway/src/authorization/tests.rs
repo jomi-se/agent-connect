@@ -1645,6 +1645,58 @@ async fn reset_totp_requires_stopped_gateway_preserves_grants_and_passphrase() {
 }
 
 #[tokio::test]
+async fn reset_passphrase_requires_stopped_gateway_and_preserves_grants() {
+    const REPLACEMENT: &str = "replacement owner passphrase";
+    let dir = std::env::temp_dir().join(random("agent-connect-reset-passphrase-"));
+    let auth = AuthService::open(config(dir.clone(), Some(PASSWORD))).unwrap();
+    let owner = login(&auth, "").await;
+    let uri = pushed(&auth).await;
+    let tokens = exchange(
+        &auth,
+        &code(&consent(&auth, &owner, &uri, "approve", "", "3600").await),
+        VERIFIER,
+        APP,
+    )
+    .await
+    .json();
+    let before = auth.inner.lock().unwrap().stored.clone();
+    assert!(
+        AuthService::reset_passphrase(&dir, REPLACEMENT)
+            .unwrap_err()
+            .to_string()
+            .contains("stop the gateway")
+    );
+    drop(auth);
+    assert!(AuthService::reset_passphrase(&dir, "too short").is_err());
+    AuthService::reset_passphrase(&dir, REPLACEMENT).unwrap();
+    let auth = AuthService::open(config(dir.clone(), None)).unwrap();
+    {
+        let inner = auth.inner.lock().unwrap();
+        let hash = PasswordHash::new(&inner.stored.password_hash).unwrap();
+        assert!(
+            Argon2::default()
+                .verify_password(REPLACEMENT.as_bytes(), &hash)
+                .is_ok()
+        );
+        assert!(
+            Argon2::default()
+                .verify_password(PASSWORD.as_bytes(), &hash)
+                .is_err()
+        );
+        assert_eq!(
+            serde_json::to_value(&inner.stored.grants).unwrap(),
+            serde_json::to_value(&before.grants).unwrap()
+        );
+    }
+    assert!(
+        auth.authenticate(tokens["access_token"].as_str().unwrap(), APP)
+            .is_ok()
+    );
+    drop(auth);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[tokio::test]
 async fn entry_points_pair_with_exact_issuer_and_bind_owner_sessions_to_origin() {
     const SECOND: &str = "http://localhost:19840";
     const SECOND_HOST: &str = "localhost:19840";

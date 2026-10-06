@@ -545,9 +545,6 @@ pub struct InitCli {
     /// Canonical external HTTPS gateway origin (HTTP loopback allowed locally).
     #[arg(long)]
     pub public_url: Option<String>,
-    /// Read the owner sign-in passphrase from an existing private file for unattended setup.
-    #[arg(long)]
-    pub owner_passphrase_file: Option<PathBuf>,
     /// Explicitly create a fixed static bearer instead of gateway-hosted consent.
     #[arg(long)]
     pub headless_static_bearer: bool,
@@ -560,21 +557,48 @@ pub struct InitCli {
 }
 
 pub fn init(cli: InitCli) -> anyhow::Result<()> {
-    init_with_output(cli, true)
+    init_with_output(cli, None, true)
 }
 
 /// Setup's structured output uses the same initialization without human progress text.
 pub fn init_quiet(cli: InitCli) -> anyhow::Result<()> {
-    init_with_output(cli, false)
+    init_with_output(cli, None, false)
 }
 
-fn init_with_output(cli: InitCli, output: bool) -> anyhow::Result<()> {
+/// Reads a new owner passphrase twice from the terminal, never echoing it.
+pub(crate) fn prompt_owner_passphrase(prompt: &str) -> anyhow::Result<String> {
+    use std::io::IsTerminal;
+    if !std::io::stdin().is_terminal() {
+        return Err(usage(
+            "owner setup needs a terminal: the owner types the sign-in passphrase",
+        ));
+    }
+    let passphrase = rpassword::prompt_password(prompt)?;
+    let confirmation = rpassword::prompt_password("Confirm owner passphrase: ")?;
+    if passphrase != confirmation {
+        return Err(usage("owner passphrases did not match"));
+    }
+    if passphrase.chars().count() < 12 || passphrase.len() > 1024 {
+        return Err(usage(
+            "owner passphrase must contain at least 12 characters and at most 1024 bytes",
+        ));
+    }
+    Ok(passphrase)
+}
+
+/// The owner types the passphrase at a terminal; there is deliberately no file,
+/// environment or argument input. Unit tests pass `owner_passphrase` directly.
+pub(crate) fn init_with_output(
+    cli: InitCli,
+    owner_passphrase: Option<String>,
+    output: bool,
+) -> anyhow::Result<()> {
     validate_container_name(&cli.egress_container)?;
     if cli.listen.port() == 0 {
         return Err(usage("init requires a nonzero listener port"));
     }
     let public_url = if cli.headless_static_bearer {
-        if cli.public_url.is_some() || cli.owner_passphrase_file.is_some() {
+        if cli.public_url.is_some() {
             return Err(usage("headless setup cannot configure owner pairing"));
         }
         None
@@ -607,35 +631,12 @@ fn init_with_output(cli: InitCli, output: bool) -> anyhow::Result<()> {
     } else {
         None
     };
-    let owner_passphrase = if public_url.is_some() {
-        let passphrase = if let Some(path) = &cli.owner_passphrase_file {
-            String::from_utf8(read_private(path)?)?
-                .trim_end_matches(['\r', '\n'])
-                .to_string()
-        } else {
-            use std::io::IsTerminal;
-            if !std::io::stdin().is_terminal() {
-                return Err(usage(
-                    "owner setup needs a terminal; unattended setup requires --owner-passphrase-file pointing to a private file",
-                ));
-            }
-            let passphrase = rpassword::prompt_password(
-                "Choose an owner sign-in passphrase (at least 12 characters): ",
-            )?;
-            let confirmation = rpassword::prompt_password("Confirm owner passphrase: ")?;
-            if passphrase != confirmation {
-                return Err(usage("owner passphrases did not match"));
-            }
-            passphrase
-        };
-        if passphrase.chars().count() < 12 || passphrase.len() > 1024 {
-            return Err(usage(
-                "owner passphrase must contain at least 12 characters and at most 1024 bytes",
-            ));
-        }
-        Some(passphrase)
-    } else {
-        None
+    let owner_passphrase = match (&public_url, owner_passphrase) {
+        (None, _) => None,
+        (Some(_), Some(passphrase)) => Some(passphrase),
+        (Some(_), None) => Some(prompt_owner_passphrase(
+            "Choose an owner sign-in passphrase (at least 12 characters): ",
+        )?),
     };
     let mut builder = std::fs::DirBuilder::new();
     #[cfg(unix)]

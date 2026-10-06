@@ -97,7 +97,7 @@ and sample into a fresh container and exercises the real adapter using a
 deterministic provider. Setup builds the box from the installed files. It uses no subscription login or personal model key.
 The native WebMCP/provider gates install their separate compatibility pins.
 The extended artifact driver also exercises no-mutation JSON setup planning,
-explicit unattended setup/reruns with synthetic owner credentials, doctor JSON,
+setup that types a synthetic owner passphrase at a terminal prompt, reruns, doctor JSON,
 owned offline service definition lifecycle, owner live-session ending and
 revoke-all. It verifies setup/service operations preserve private state and do
 not invoke provider login. Disposable Linux containers lack a running desktop

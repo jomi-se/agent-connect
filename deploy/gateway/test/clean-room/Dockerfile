@@ -8,5 +8,5 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 RUN npm install --ignore-scripts --no-audit --no-fund \
     && npx playwright install --with-deps chromium \
     && chmod -R a+rX /opt/playwright /opt/acceptance
-COPY run.mjs relay.mjs mock-model.mjs ./
+COPY run.mjs relay.mjs owner-terminal.mjs mock-model.mjs ./
 ENTRYPOINT ["node", "/opt/acceptance/run.mjs"]

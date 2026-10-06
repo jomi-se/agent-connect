@@ -20,6 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
 import { runCleanupTasks } from "./test-fixture-cleanup.mjs";
 import { requireBoxImage } from "./test-box-images.mjs";
+import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 
 const boxImage = requireBoxImage();
 const repo = resolve(import.meta.dirname, "..");
@@ -59,8 +60,6 @@ const fixtureEnv = {
   RUST_LOG: "info",
 };
 const password = "isolated-owner-browser-test";
-const passwordFile = join(root, "passphrase");
-await writeFile(passwordFile, password, { mode: 0o600 });
 const listener = net.createServer();
 await new Promise((ok) => listener.listen(0, "127.0.0.1", ok));
 const port = listener.address().port;
@@ -81,7 +80,7 @@ const build = spawnSync(
   { cwd: repo, encoding: "utf8" },
 );
 assert.equal(build.status, 0, build.stderr);
-const setup = spawnSync(
+const setup = await ownerTerminal(
   binary,
   [
     "init",
@@ -91,12 +90,11 @@ const setup = spawnSync(
     "codex",
     "--public-url",
     origin,
-    "--owner-passphrase-file",
-    passwordFile,
   ],
-  { env: fixtureEnv, encoding: "utf8" },
+  password,
+  { env: fixtureEnv },
 );
-assert.equal(setup.status, 0, setup.stderr);
+assert.equal(setup.code, 0, setup.stderr);
 const configPath = join(root, "runtime/config.json");
 const config = JSON.parse(await readFile(configPath, "utf8"));
 // This first runtime uses a controlled ACP endpoint solely for owner session controls.
@@ -665,19 +663,23 @@ try {
   await new Promise((ok) => probeListener.close(ok));
   const probeOrigin = `http://127.0.0.1:${probePort}`;
   const probeRuntime = join(root, "problem-runtime");
-  run(binary, [
-    "init",
-    "--directory",
-    probeRuntime,
-    "--harness",
-    "codex",
-    "--public-url",
-    probeOrigin,
-    "--harness-home",
-    join(root, "problem-harness-home"),
-    "--owner-passphrase-file",
-    passwordFile,
-  ]);
+  const probeSetup = await ownerTerminal(
+    binary,
+    [
+      "init",
+      "--directory",
+      probeRuntime,
+      "--harness",
+      "codex",
+      "--public-url",
+      probeOrigin,
+      "--harness-home",
+      join(root, "problem-harness-home"),
+    ],
+    password,
+    { env: fixtureEnv, timeout: 60000 },
+  );
+  assert.equal(probeSetup.code, 0, probeSetup.stderr);
   const probeConfigPath = join(probeRuntime, "config.json");
   const probeConfig = JSON.parse(await readFile(probeConfigPath, "utf8"));
   probeConfig.listen = `127.0.0.1:${probePort}`;

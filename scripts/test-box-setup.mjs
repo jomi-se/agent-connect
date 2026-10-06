@@ -13,6 +13,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { testBoxImage, removeTestImages } from "./test-box-images.mjs";
+import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 const artifacts = resolve(process.argv[2] ?? "dist/release");
 const release = JSON.parse(
   await readFile(join(artifacts, "release.json"), "utf8"),
@@ -61,11 +62,21 @@ const setupArgs = [
   "--no-service",
   "--egress-container",
   egress,
-  "--owner-passphrase-file",
-  join(root, "passphrase"),
 ];
-function setup() {
-  const result = run(gateway, setupArgs);
+const passphrase = "synthetic-box-test-passphrase";
+// First-time setup prompts for the owner passphrase, so setup runs on a terminal.
+async function terminalSetup(extraEnv = {}) {
+  return ownerTerminal(gateway, setupArgs, passphrase, {
+    cwd: root,
+    env: { ...env, ...extraEnv },
+  });
+}
+async function setup() {
+  const result = await terminalSetup();
+  if (result.code !== 0)
+    throw new Error(
+      `setup failed (${result.code})\n${result.stdout}${result.stderr}`,
+    );
   return { plan: JSON.parse(result.stdout), stderr: result.stderr };
 }
 function doctor() {
@@ -75,9 +86,6 @@ function doctor() {
 }
 try {
   await writeFile(join(root, "package.json"), '{"private":true}');
-  await writeFile(join(root, "passphrase"), "synthetic-box-test-passphrase", {
-    mode: 0o600,
-  });
   run("npm", [
     "install",
     "--ignore-scripts",
@@ -101,7 +109,7 @@ try {
     base,
     "Packed gateway must support isolated test box builds; rebuild the artifacts",
   );
-  const initial = setup();
+  const initial = await setup();
   assert.equal(initial.plan.boxImage, base);
   const baseId = inspect(base);
   run("docker", [
@@ -115,7 +123,7 @@ try {
     "-ec",
     'for tool in bash cat sed grep gawk git rg fd jq curl python3 less ps unzip node; do command -v "$tool"; done; test -f /etc/ssl/certs/ca-certificates.crt; test "$(find /opt/adapters/node_modules/@anthropic-ai -type f \\( -name claude -o -name claude.exe \\) | wc -l)" = 1; test -x "$CLAUDE_CODE_EXECUTABLE"; test -z "$(find /opt/adapters -name codex-voice-host -o -name codex-code-mode-host)"; codex --version; claude --version',
   ]);
-  const unchanged = setup();
+  const unchanged = await setup();
   assert.match(unchanged.stderr, /Reusing local box/);
   assert.equal(inspect(base), baseId);
   const configBefore = await readFile(initial.plan.config);
@@ -134,7 +142,7 @@ try {
     doctor().checks.find((check) => check.code === "box_current").status,
     "warn",
   );
-  const first = setup().plan;
+  const first = (await setup()).plan;
   assert.match(
     first.boxImage,
     new RegExp(`^${base.replaceAll(".", "\\.")}-[a-f0-9]{16}$`),
@@ -158,13 +166,13 @@ try {
     ]).stdout,
     "first",
   );
-  assert.match(setup().stderr, /Reusing local box/);
+  assert.match((await setup()).stderr, /Reusing local box/);
   await writeFile(join(layer, "marker"), "changed-" + root.split("-").at(-1));
   assert.equal(
     doctor().checks.find((check) => check.code === "box_current").status,
     "warn",
   );
-  const changed = setup().plan;
+  const changed = (await setup()).plan;
   assert.notEqual(changed.boxImage, first.boxImage);
   assert.equal(
     doctor().checks.find((check) => check.code === "box_current").status,
@@ -175,7 +183,7 @@ try {
     join(layer, "Dockerfile"),
     "RUN echo intentional-build-failure >&2; exit 23\n",
   );
-  const fallback = setup();
+  const fallback = await setup();
   assert.equal(fallback.plan.boxImage, changed.boxImage);
   assert.match(fallback.stderr, /intentional-build-failure/);
   assert.match(fallback.stderr, /Keeping previously built box/);
@@ -185,15 +193,12 @@ try {
     "warn",
   );
   const freshState = join(root, "fresh-state");
-  const failedInstall = run(gateway, setupArgs, {
-    allowFailure: true,
-    extraEnv: { XDG_STATE_HOME: freshState },
-  });
-  assert.equal(failedInstall.status, 1);
+  const failedInstall = await terminalSetup({ XDG_STATE_HOME: freshState });
+  assert.equal(failedInstall.code, 1);
   assert.match(failedInstall.stderr, /intentional-build-failure/);
   await assert.rejects(stat(freshState), { code: "ENOENT" });
   await rm(layer, { recursive: true });
-  assert.equal(setup().plan.boxImage, base);
+  assert.equal((await setup()).plan.boxImage, base);
   assert.deepEqual(await readFile(initial.plan.config), configBefore);
   assert.deepEqual(
     await readFile(

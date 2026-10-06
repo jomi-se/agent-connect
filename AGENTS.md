@@ -35,6 +35,9 @@ history.
 - Never change personal harness logins or services. Harness logins are run by
   the owner through `agent-connect login`; tests never invoke a real login. The
   accepted shared-home risks are in `docs/plan/credentials.md`.
+- The owner types the owner passphrase at a terminal prompt; the gateway stores
+  only its hash. Never add file, argument or environment input for it, or write
+  one down.
 - Never automatically replay an uncertain prompt or application effect.
 - Release boxed capacity only after owned resources are cleaned up. Never remove
   shared peers or prune unrelated Docker resources unless the owner asks.

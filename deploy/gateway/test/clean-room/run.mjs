@@ -13,6 +13,7 @@ import {
 import { join } from "node:path";
 import { createServer } from "node:net";
 import { chromium } from "playwright";
+import { ownerTerminal } from "./owner-terminal.mjs";
 
 const work = process.env.ACP_CLEAN_WORK;
 const suffix = process.env.ACP_CLEAN_SUFFIX;
@@ -374,8 +375,6 @@ try {
   const origin = `http://127.0.0.1:${appPort}`;
   const publicGateway = `http://127.0.0.1:${relayPort}`;
   const ownerPassphrase = `disposable-owner-${suffix}-acceptance-only`;
-  const passphraseFile = join(work, "owner-passphrase.txt");
-  await writeFile(passphraseFile, ownerPassphrase, { mode: 0o600 });
   const preview = service(
     "npm",
     ["run", "preview", "--", "--port", String(appPort)],
@@ -390,8 +389,6 @@ try {
     "codex",
     "--origin",
     publicGateway,
-    "--owner-passphrase-file",
-    passphraseFile,
     "--listen",
     `127.0.0.1:${gatewayPort}`,
     "--egress-container",
@@ -424,13 +421,15 @@ try {
   // Keep cleanup ownership before application in case setup fails after egress creation.
   resources.containers.push(egressName);
   await recordResources();
-  const appliedSetup = await commandResult(gateway, [
-    ...setupArgs,
-    "--apply",
-    "--non-interactive",
-    "--json",
-  ]);
+  // First-time setup takes the owner passphrase only at a terminal prompt.
+  const appliedSetup = await ownerTerminal(
+    gateway,
+    [...setupArgs, "--apply", "--non-interactive", "--json"],
+    ownerPassphrase,
+    { cwd: work },
+  );
   assert.equal(appliedSetup.code, 0, appliedSetup.stderr);
+  assert.equal(appliedSetup.answered, 2, "setup asks for the passphrase twice");
   assert.equal(jsonResult(appliedSetup, "setup apply").login, false);
   const rerunPlanResult = await commandResult(gateway, [
     ...setupArgs,
@@ -439,7 +438,7 @@ try {
   assert.equal(rerunPlanResult.code, 0, rerunPlanResult.stderr);
   assert.equal(jsonResult(rerunPlanResult, "setup rerun plan").existing, true);
   report.checks.push(
-    "artifact-installed setup applies synthetic owner initialization non-interactively without provider login and preserves owner/runtime state across applied reruns",
+    "artifact-installed setup takes the owner passphrase at a terminal prompt, skips provider login and preserves owner/runtime state across applied reruns",
   );
   assert.equal((await stat(join(runtime, "config.json"))).mode & 0o077, 0);
   await assert.rejects(stat(join(runtime, "grant.json")), { code: "ENOENT" });
@@ -494,10 +493,7 @@ try {
     unitContent.includes(install + "/node_modules/"),
     "service launches the installed artifact",
   );
-  assert.ok(
-    !unitContent.includes(ownerPassphrase) &&
-      !unitContent.includes(passphraseFile),
-  );
+  assert.ok(!unitContent.includes(ownerPassphrase));
   assert.equal((await stat(unit)).mode & 0o077, 0);
   const offlineVerify = await commandResult("systemd-analyze", [
     "verify",

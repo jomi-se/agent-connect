@@ -43,8 +43,6 @@ pub struct SetupCli {
     pub listen: Option<SocketAddr>,
     #[arg(long)]
     pub egress_container: Option<String>,
-    #[arg(long)]
-    pub owner_passphrase_file: Option<PathBuf>,
     /// Apply the plan. Without this, a terminal guides setup and asks for confirmation.
     #[arg(long)]
     pub apply: bool,
@@ -107,6 +105,38 @@ pub async fn reset_totp(cli: ResetTotpCli) -> anyhow::Result<()> {
         } else {
             "Owner authenticator was already disabled; private state was preserved."
         }
+    );
+    Ok(())
+}
+
+#[derive(Args)]
+pub struct ResetPassphraseCli {
+    #[arg(long, env = "AGENT_CONNECT_CONFIG", hide_env_values = true)]
+    pub config: Option<PathBuf>,
+}
+
+pub async fn reset_passphrase(cli: ResetPassphraseCli) -> anyhow::Result<()> {
+    let path = cli.config.map(Ok).unwrap_or_else(|| {
+        Ok::<_, anyhow::Error>(default_runtime_directory()?.join("config.json"))
+    })?;
+    let configured = config::ServeOptions {
+        config: Some(path),
+        ..Default::default()
+    }
+    .resolve()?;
+    if configured.headless_static_bearer {
+        return Err(usage("headless runtimes have no owner passphrase"));
+    }
+    let passphrase = config::prompt_owner_passphrase(
+        "New owner sign-in passphrase (at least 12 characters; stop the gateway first): ",
+    )?;
+    let state = configured.state_dir.join("auth");
+    tokio::task::spawn_blocking(move || {
+        crate::authorization::AuthService::reset_passphrase(&state, &passphrase)
+    })
+    .await??;
+    println!(
+        "Owner passphrase replaced. Restart the gateway and sign in with the new passphrase; applications and authenticator are retained."
     );
     Ok(())
 }
@@ -390,9 +420,9 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         print_plan(&plan, cli.json)?;
         return Ok(());
     }
-    if !plan.existing && (!terminal || cli.non_interactive) && cli.owner_passphrase_file.is_none() {
+    if !plan.existing && !std::io::stdin().is_terminal() {
         return Err(usage(
-            "unattended setup requires --owner-passphrase-file with a private passphrase file",
+            "first-time setup needs the owner at a terminal to type the sign-in passphrase",
         ));
     }
     // Fail prerequisites before creating private authentication state.
@@ -452,7 +482,6 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             allow_origin: None,
             tools: None,
             public_url: Some(plan.origin.clone()),
-            owner_passphrase_file: cli.owner_passphrase_file,
             headless_static_bearer: false,
             listen: plan.listen,
             box_image: plan.box_image.clone(),
@@ -689,7 +718,6 @@ mod tests {
             permissions: None,
             listen: None,
             egress_container: None,
-            owner_passphrase_file: None,
             apply: false,
             json: true,
             non_interactive: true,
@@ -722,8 +750,6 @@ mod tests {
     fn setup_policy_is_persisted_validated_and_preserved_on_reruns() {
         let dir = std::env::temp_dir().join(format!("acp-setup-policy-{}", uuid::Uuid::new_v4()));
         create_private_directory(&dir).unwrap();
-        let passphrase = dir.join("owner-passphrase.txt");
-        private_write(&passphrase, b"fixture-only-owner-passphrase").unwrap();
         let mut cli = options(dir.clone());
         let parent_component = dir.join("existing-parent");
         create_private_directory(&parent_component).unwrap();
@@ -732,19 +758,22 @@ mod tests {
         cli.profiles = Some(vec![PermissionProfile::ReadOnly]);
         cli.permissions = Some(PermissionProfile::ReadOnly);
         let plan = setup_plan(&cli).unwrap();
-        config::init_quiet(config::InitCli {
-            directory: plan.directory.clone(),
-            harness: plan.harness,
-            harness_home: Some(plan.harness_home.clone()),
-            allow_origin: None,
-            tools: None,
-            public_url: Some(plan.origin.clone()),
-            owner_passphrase_file: Some(passphrase),
-            headless_static_bearer: false,
-            listen: plan.listen,
-            box_image: plan.box_image.clone(),
-            egress_container: plan.egress_container.clone(),
-        })
+        config::init_with_output(
+            config::InitCli {
+                directory: plan.directory.clone(),
+                harness: plan.harness,
+                harness_home: Some(plan.harness_home.clone()),
+                allow_origin: None,
+                tools: None,
+                public_url: Some(plan.origin.clone()),
+                headless_static_bearer: false,
+                listen: plan.listen,
+                box_image: plan.box_image.clone(),
+                egress_container: plan.egress_container.clone(),
+            },
+            Some("fixture-only-owner-passphrase".into()),
+            false,
+        )
         .unwrap();
         let owner_path = plan.directory.join("state/auth/authorization.json");
         let owner_state = std::fs::read(&owner_path).unwrap();

@@ -106,17 +106,17 @@ Preview the plan without making changes:
 agent-connect setup --origin https://gateway.example --json
 ```
 
-Explicit unattended application uses `--apply --non-interactive` and
-`--owner-passphrase-file <private-file>`. The file must be an owned regular file
-with mode 0600 or stricter. Keep it outside the harness home and remove it when
-provisioning no longer needs it. Never put the passphrase in CLI arguments,
-environment variables or app code. Automation never performs provider login;
-the owner runs `agent-connect login --config <config> --harness codex` separately.
-Use `setup --help` for the complete option list.
+`--apply --non-interactive` applies the plan without guided questions. First-time
+setup still asks for the owner passphrase at the terminal, twice, and stores
+only its Argon2 hash. There is deliberately no file, argument or environment
+input for it, so an agent or script cannot create the owner on your behalf; keep
+the passphrase in your password manager. Reruns and upgrades of an existing
+runtime need no passphrase. Automation never performs provider login; the owner
+runs `agent-connect login --config <config> --harness codex` separately. Use
+`setup --help` for the complete option list.
 
 ```sh
-agent-connect setup --origin https://gateway.example --apply --non-interactive \
-  --owner-passphrase-file /path/to/private-passphrase
+agent-connect setup --origin https://gateway.example --apply --non-interactive
 ```
 
 ## 3. Connect an application
@@ -200,8 +200,9 @@ sample retains its transcript and reports interruption without automatically
 replaying prompts or uncertain effects. Provider transcripts do not create a
 general restoration API. See the [SDK recovery contract](../../packages/web-sdk/README.md).
 
-Lost authenticator access has a local owner-run
-[`reset-totp` recovery](troubleshooting.md#lost-authenticator). Stop the gateway
+A lost authenticator or passphrase has a local owner-run recovery:
+[`reset-totp`](troubleshooting.md#lost-authenticator) or
+[`reset-passphrase`](troubleshooting.md#lost-passphrase). Stop the gateway
 before recovery; provider authentication is separate.
 
 ## Upgrade or uninstall

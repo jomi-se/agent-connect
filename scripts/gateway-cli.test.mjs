@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 const cliHome = await mkdtemp(join(tmpdir(), "acp-cli-isolated-home-"));
 const cliState = join(cliHome, "state");
 const binary = resolve(import.meta.dirname, "../target/debug/agent-connect");
@@ -61,7 +62,7 @@ test("help, version and invalid argument exit codes are stable", () => {
   assert.equal(spawnSync(binary, ["--help"]).status, 0);
   const version = spawnSync(binary, ["--version"], { encoding: "utf8" });
   assert.equal(version.status, 0);
-  assert.match(version.stdout, /0\.0\.1/);
+  assert.match(version.stdout, /^agent-connect \d+\.\d+\.\d+/);
   const usage = spawnSync(binary, ["serve", "--unknown-option"], {
     encoding: "utf8",
   });
@@ -69,16 +70,20 @@ test("help, version and invalid argument exit codes are stable", () => {
   assert.match(usage.stderr, /unexpected argument/);
 });
 
-function command(args, env = {}) {
+function cliEnv(env = {}) {
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(
       ([name]) => !name.startsWith("AGENT_CONNECT_"),
     ),
   );
+  return { ...inherited, HOME: cliHome, XDG_STATE_HOME: cliState, ...env };
+}
+
+function command(args, env = {}) {
   return spawnSync(binary, args, {
     timeout: 5000,
     encoding: "utf8",
-    env: { ...inherited, HOME: cliHome, XDG_STATE_HOME: cliState, ...env },
+    env: cliEnv(env),
   });
 }
 
@@ -438,12 +443,6 @@ test("egress uses read-only same-image proxy and verifies ownership before delet
   assert.deepEqual(args, ["rm", "--force", id]);
 });
 
-test("release-info reports only the compiled gateway version", () => {
-  const result = command(["release-info"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { version: "0.0.1" });
-});
-
 test("relative config argument resolves a dedicated production home to an absolute path", async () => {
   const fixture = await setup();
   assert.equal(command(fixture.args).status, 0);
@@ -632,23 +631,23 @@ test(
 test("normal init enrolls owner auth without issuing an app bearer", async () => {
   const { stat } = await import("node:fs/promises");
   const root = await mkdtemp(join(tmpdir(), "acp-owner-setup-"));
-  const passwordFile = join(root, "owner-passphrase");
-  await writeFile(passwordFile, "isolated-owner-test-passphrase", {
-    mode: 0o600,
-  });
   const directory = join(root, "runtime");
-  const result = command([
-    "init",
-    "--directory",
-    directory,
-    "--harness",
-    "codex",
-    "--public-url",
-    "https://gateway.example",
-    "--owner-passphrase-file",
-    passwordFile,
-  ]);
-  assert.equal(result.status, 0, result.stderr);
+  const result = await ownerTerminal(
+    binary,
+    [
+      "init",
+      "--directory",
+      directory,
+      "--harness",
+      "codex",
+      "--public-url",
+      "https://gateway.example",
+    ],
+    "isolated-owner-test-passphrase",
+    { env: cliEnv() },
+  );
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.answered, 2, "setup asks for the passphrase twice");
   assert.match(
     result.stdout,
     /https:\/\/gateway\.example\/agent-connect\/owner/,
@@ -708,28 +707,27 @@ test("owner setup rejects unattended prompts and invalid public origins before c
 test("owner setup rejects runtime inside harness mount, including canonical aliases", async () => {
   const { symlink, stat } = await import("node:fs/promises");
   const root = await mkdtemp(join(tmpdir(), "acp-owner-boundary-"));
-  const passwordFile = join(root, "password");
-  await writeFile(passwordFile, "isolated-owner-test-passphrase", {
-    mode: 0o600,
-  });
   const home = join(root, "harness");
   await mkdir(home, { mode: 0o700 });
   const alias = join(root, "alias");
   await symlink(home, alias);
   for (const parent of [home, alias]) {
     const runtime = join(parent, "runtime");
-    const result = command([
-      "init",
-      "--directory",
-      runtime,
-      "--harness",
-      "codex",
-      "--harness-home",
-      home,
-      "--owner-passphrase-file",
-      passwordFile,
-    ]);
-    assert.equal(result.status, 2, result.stderr);
+    const result = await ownerTerminal(
+      binary,
+      [
+        "init",
+        "--directory",
+        runtime,
+        "--harness",
+        "codex",
+        "--harness-home",
+        home,
+      ],
+      "isolated-owner-test-passphrase",
+      { env: cliEnv() },
+    );
+    assert.equal(result.code, 2, result.stderr);
     assert.match(result.stderr, /outside the mounted harness home/);
     await assert.rejects(stat(runtime), { code: "ENOENT" });
   }

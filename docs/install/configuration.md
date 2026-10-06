@@ -21,8 +21,8 @@ its selected location. Existing config homes retain precedence for login and
 serve; they are not relocated automatically.
 
 `setup --json` previews a plan. `--apply --non-interactive` applies it with no
-provider login; new owner initialization requires a protected
-`--owner-passphrase-file`. Guided setup confirms application, offers provider
+provider login; new owner initialization still prompts for the passphrase at a
+terminal. Guided setup confirms application, offers provider
 login and installs/starts the user service. `--no-service` uses another supervisor.
 Existing owner state and application policy are preserved; conflicting requested
 policy changes are rejected. Setup rebuilds and selects the box when the gateway
@@ -80,10 +80,9 @@ config, defaults**. Each key supports `AGENT_CONNECT_<UPPER_SNAKE_KEY>`;
 | `durable_home` / `--durable-home`                     | Legacy deterministic-fixture named-volume option; use dedicated home for production                                  |
 
 Normal config contains `public_url` and operator policy, without `token`,
-`allow_origin` or `tools`. `init` prompts for a hidden owner passphrase and
-confirmation, or accepts `--owner-passphrase-file <private-file>` for unattended
-setup. Setup and init read an owned regular file, mode 0600 or stricter;
-the gateway persists an Argon2 passphrase hash, never the plaintext passphrase.
+`allow_origin` or `tools`. `init` and first-time `setup` prompt at the terminal for a hidden owner
+passphrase and confirmation; there is no file, argument or environment input.
+The gateway persists an Argon2 passphrase hash, never the plaintext passphrase.
 `init` defaults `public_url` to its loopback listener URL; remote listeners need
 an explicit canonical HTTPS origin. Normal `serve` requires the initialized
 private authorization state under `state_dir/auth` (`authorization.json` plus

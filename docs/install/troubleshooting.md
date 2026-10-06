@@ -102,6 +102,19 @@ printing any secret. Sign in with the existing passphrase and set up a new
 authenticator from Security. Recovery does not grant access to a lost owner passphrase or
 authenticate the provider.
 
+## Lost passphrase
+
+Replace it locally at a terminal; the gateway keeps no copy to recover:
+
+```sh
+agent-connect service stop
+agent-connect reset-passphrase --config <config>
+agent-connect service start
+```
+
+It prompts twice for the new passphrase and refuses to proceed while the gateway
+holds its state lock. The authenticator and application grants are preserved.
+
 ## Docker cleanup and capacity
 
 Capacity is released only after the owned session container and network are

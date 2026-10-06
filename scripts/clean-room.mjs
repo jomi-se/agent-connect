@@ -110,16 +110,11 @@ function cleanup() {
     }
     for (const child of children) child.kill("SIGTERM");
     // Attempt every owned tag, including builds that failed before ID capture.
-    const results = await Promise.allSettled(
-      [image, boxImage]
-        .filter(Boolean)
-        .map((base) =>
-          removeTestImages(base, (args) => command("docker", args)),
-        ),
-    );
-    const failures = results
-      .filter((result) => result.status === "rejected")
-      .map((result) => result.reason);
+    const failures = [];
+    for (const base of [image, boxImage].filter(Boolean))
+      await removeTestImages(base, (args) => command("docker", args)).catch(
+        (error) => failures.push(error),
+      );
     if (failures.length)
       throw new AggregateError(
         failures,
@@ -170,7 +165,13 @@ try {
     );
   for (const file of ["release.json", ...files])
     await copyFile(join(artifactDirectory, file), join(run, "artifacts", file));
-  for (const file of ["Dockerfile", "package.json", "run.mjs", "relay.mjs"])
+  for (const file of [
+    "Dockerfile",
+    "package.json",
+    "run.mjs",
+    "relay.mjs",
+    "owner-terminal.mjs",
+  ])
     await copyFile(join(kit, file), join(run, "context", file));
   await copyFile(
     join(repo, "deploy/gateway/test/fixtures/mock-model/server.mjs"),
