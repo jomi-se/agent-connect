@@ -24,8 +24,8 @@ composition evidence, not live subscription evidence. Native plan conversion
 has contract coverage; the selected pinned harness fixtures expose no plan tool.
 
 The browser SDK is **0.0.10** at `@open-agent-connect/web`; gateway, native
-platform packages and box are **0.0.2**, prepared on 2026-10-05 with no
-user-facing changes to exercise the mise-based release workflow. Versions are independent and
+platform packages and box are **0.0.3**, prepared on 2026-10-06 to keep the
+Codex code-mode host in the box and accept group-private setup directories. Versions are independent and
 remain on 0.0.x until the shape is final. Applications import the ACP browser API from the package root.
 
 Local product parity is complete. `agent-connect setup` provides guided and
