@@ -170,6 +170,7 @@ test("release checks accept independent SDK versions and reject gateway/box drif
     "packages/gateway-npm",
     "deploy/gateway/box",
     "crates/gateway",
+    "examples/acp-chat",
   ])
     await mkdir(join(directory, folder), { recursive: true });
   for (const script of ["release.mjs", "release-info.mjs"])
@@ -188,6 +189,7 @@ test("release checks accept independent SDK versions and reject gateway/box drif
     version: "0.0.1",
     dependencies: { "fixture-adapter": "2.0.1" },
   });
+  await manifest("examples/acp-chat/package.json", { version: "0.0.1" });
   await writeFile(
     join(directory, "crates/gateway/Cargo.toml"),
     '[package]\nversion = "0.0.1"\n',
@@ -211,6 +213,14 @@ test("release checks accept independent SDK versions and reject gateway/box drif
   const boxDrift = check();
   assert.notEqual(boxDrift.status, 0);
   assert.match(boxDrift.stderr, /must share one version/);
+  await manifest("deploy/gateway/box/package.json", {
+    version: "0.0.1",
+    dependencies: { "fixture-adapter": "2.0.1" },
+  });
+  await manifest("examples/acp-chat/package.json", { version: "0.0.2" });
+  const sampleDrift = check();
+  assert.notEqual(sampleDrift.status, 0);
+  assert.match(sampleDrift.stderr, /must share one version/);
 });
 
 for (const prefix of ["/home/example/", "/Users/example/"]) {
