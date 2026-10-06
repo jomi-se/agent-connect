@@ -37,7 +37,7 @@ history.
   accepted shared-home risks are in `docs/plan/credentials.md`.
 - Never automatically replay an uncertain prompt or application effect.
 - Release boxed capacity only after owned resources are cleaned up. Never remove
-  shared peers or prune unrelated Docker resources.
+  shared peers or prune unrelated Docker resources unless the owner asks.
 - Agents never push, publish, run the release workflow or `npm deprecate`
   without explicit owner authorization.
 
