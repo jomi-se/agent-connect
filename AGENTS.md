@@ -67,9 +67,22 @@ node scripts/release.mjs check
 npm run analyze       # report-first metrics; boundary violations are hard failures
 ```
 
-CI runs the heavy gates (release build, `npm run verify:full` with real adapters
-and the clean-room sample) on every PR and push to `main`, and a release
-publishes only after it passes. Run them locally only to reproduce a CI failure;
+`npm run check` runs the fast gates above (except analyze) plus `cargo test`; run
+it after every change. Then run only the box-backed gates your change touches;
+`npm run verify -- <step>...` builds this checkout's test box and runs them:
+
+| Change                       | Steps                                                                 |
+| ---------------------------- | --------------------------------------------------------------------- |
+| Owner pages                  | `test:ui:owner`                                                       |
+| Gateway sessions or protocol | `test:integration:gateway`                                            |
+| Box, sandbox or egress       | `test:integration:gateway:boxed`, `test:integration:gateway:teardown` |
+| SDK exports                  | `npm run test:package:web`                                            |
+| WebMCP                       | `npm run test:webmcp`                                                 |
+| Packaging or setup           | `test:integration:gateway:clean-room`                                 |
+
+CI runs everything (release build, `npm run verify:full` with real adapters and
+the clean-room sample) on every PR and push to `main`, and a release publishes
+only after it passes. Run the full set locally only to reproduce a CI failure;
 see `docs/install/release.md`. CI is read-only.
 
 Run routine checks through `quiet-run` (on PATH; `scripts/quiet-run.sh` is the

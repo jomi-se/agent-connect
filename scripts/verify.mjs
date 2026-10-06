@@ -32,10 +32,41 @@ async function command(binary, args, { cwd, env, capture = false }) {
   return output;
 }
 
+export const steps = [
+  "format:check",
+  "typecheck",
+  "test:docs",
+  "test",
+  "build",
+  "test:ui:owner",
+  "test:integration:gateway",
+  "test:integration:gateway:boxed",
+  "test:integration:gateway:teardown",
+  "test:integration:gateway:clean-room",
+];
+
+async function timed(label, action) {
+  const start = Date.now();
+  try {
+    return await action();
+  } finally {
+    console.log(
+      `verify: ${label} ${((Date.now() - start) / 1000).toFixed(1)}s`,
+    );
+  }
+}
+
+// Runs the given steps (default: all) against one test box built from this checkout.
 export async function verify({
   repository = resolve(import.meta.dirname, ".."),
   run = command,
+  only = steps,
 } = {}) {
+  const unknown = only.filter((step) => !steps.includes(step));
+  if (unknown.length)
+    throw new Error(
+      `Unknown verify step: ${unknown.join(", ")}; choose from ${steps.join(", ")}`,
+    );
   const box = join(repository, "deploy/gateway/box");
   const { version } = JSON.parse(
     await readFile(join(box, "package.json"), "utf8"),
@@ -51,10 +82,8 @@ export async function verify({
       env: { ...env, DOCKER_CONFIG: join(work, "docker-config") },
     });
   try {
-    await run(
-      "./deploy/gateway/box/build-local.sh",
-      ["--runners-only"],
-      options,
+    await timed("session-runners", () =>
+      run("./deploy/gateway/box/build-local.sh", ["--runners-only"], options),
     );
     const architecture = (
       await docker(["info", "--format", "{{.Architecture}}"], true)
@@ -88,27 +117,11 @@ export async function verify({
       join(repository, `target/distrib/session-runner-linux-${arch}`),
       join(context, "session-runner"),
     );
-    await docker([
-      "build",
-      "--platform",
-      `linux/${arch}`,
-      "--tag",
-      image,
-      context,
-    ]);
-    for (const step of [
-      "format:check",
-      "typecheck",
-      "test:docs",
-      "test",
-      "build",
-      "test:ui:owner",
-      "test:integration:gateway",
-      "test:integration:gateway:boxed",
-      "test:integration:gateway:teardown",
-      "test:integration:gateway:clean-room",
-    ])
-      await run("npm", ["run", step], options);
+    await timed("test box", () =>
+      docker(["build", "--platform", `linux/${arch}`, "--tag", image, context]),
+    );
+    for (const step of only)
+      await timed(step, () => run("npm", ["run", step], options));
   } finally {
     try {
       await removeTestImages(image, (args) => docker(args, true));
@@ -123,7 +136,8 @@ if (
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
   try {
-    await verify();
+    const only = process.argv.slice(2);
+    await verify(only.length ? { only } : {});
   } catch (error) {
     console.error(error.message);
     process.exitCode = error.exitCode ?? 1;

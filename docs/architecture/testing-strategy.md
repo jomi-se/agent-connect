@@ -28,8 +28,9 @@ pins live in the gateway and box manifests. Native browser gates use
 `config/webmcp-test-compat.json`.
 
 ```sh
-npm run verify
-npm run verify:full
+npm run check                           # fast gates, after every change
+npm run verify -- test:ui:owner         # only the box-backed steps you touched
+npm run verify:full                     # everything; CI runs this
 cargo test --locked --workspace
 ```
 

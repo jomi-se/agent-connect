@@ -26,6 +26,7 @@
     "test:webmcp": "npm run test:webmcp --workspace @open-agent-connect/web",
     "pretypecheck": "npm run build --workspace @open-agent-connect/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "check": "npm run format:check && npm run typecheck && npm run test:docs && npm test && cargo test --locked --workspace && node scripts/release.mjs check",
     "verify": "node scripts/verify.mjs",
     "verify:full": "npm run verify && npm run test:package:web && npm run test:webmcp",
     "test:integration:gateway": "node scripts/gateway-scenarios.mjs",

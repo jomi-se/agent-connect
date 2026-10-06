@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { verify } from "./verify.mjs";
+import { steps, verify } from "./verify.mjs";
 
 for (const failure of [undefined, "build", "test:ui:owner"]) {
   test(`verify builds one checkout box and cleans it after ${failure ?? "success"}`, async () => {
@@ -109,18 +109,7 @@ for (const failure of [undefined, "build", "test:ui:owner"]) {
           calls
             .filter((call) => call.binary === "npm")
             .map((call) => call.args[1]),
-          [
-            "format:check",
-            "typecheck",
-            "test:docs",
-            "test",
-            "build",
-            "test:ui:owner",
-            "test:integration:gateway",
-            "test:integration:gateway:boxed",
-            "test:integration:gateway:teardown",
-            "test:integration:gateway:clean-room",
-          ],
+          steps,
         );
     } finally {
       await rm(repository, { recursive: true, force: true });
@@ -148,3 +137,42 @@ for (const path of [
     assert.match(result.stderr, /ACP_BOX_IMAGE is required/);
   });
 }
+
+test("verify runs only the selected steps", async () => {
+  const repository = await mkdtemp(join(tmpdir(), "verify-select-test-"));
+  try {
+    for (const path of [
+      "deploy/gateway/box/Dockerfile",
+      "deploy/gateway/box/package-lock.json",
+      "deploy/gateway/box/entrypoint.sh",
+      "deploy/gateway/egress-proxy.mjs",
+      "deploy/gateway/test/fixtures/codex-config.toml",
+      "target/distrib/session-runner-linux-amd64",
+    ]) {
+      await mkdir(dirname(join(repository, path)), { recursive: true });
+      await writeFile(join(repository, path), "");
+    }
+    await writeFile(
+      join(repository, "deploy/gateway/box/package.json"),
+      '{"version":"0.0.1"}',
+    );
+    const npm = [];
+    const run = async (binary, args) => {
+      if (binary === "npm") npm.push(args[1]);
+      if (binary === "docker" && args[0] === "info") return "x86_64\n";
+      return "";
+    };
+    await verify({
+      repository,
+      run,
+      only: ["test:integration:gateway:boxed"],
+    });
+    assert.deepEqual(npm, ["test:integration:gateway:boxed"]);
+    await assert.rejects(
+      verify({ repository, run, only: ["boxed"] }),
+      /Unknown verify step: boxed/,
+    );
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
