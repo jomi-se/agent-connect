@@ -523,6 +523,9 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         })
         .await?;
     }
+    if let Some(previous) = plan.previous_box_image.as_deref() {
+        box_build::report_superseded(previous, &plan.box_image).await?;
+    }
     print_plan(&plan, cli.json)
 }
 

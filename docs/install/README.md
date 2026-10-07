@@ -221,7 +221,8 @@ agent-connect doctor
 Use `--directory <private-runtime>` when upgrading a non-default runtime, and its
 config for service/doctor commands. Upgrade uses the new installed release's
 box, updates the owned service executable even when its image is
-unchanged, recreates owned egress when needed, and preserves owner
+unchanged, recreates owned egress when needed, names the box images it
+replaced without removing them, and preserves owner
 passphrase, TOTP, grant records, journals and login homes. Image or harness-policy
 changes invalidate existing application authority: pair affected apps again.
 Retaining a grant record does not keep it valid under a changed policy. Never

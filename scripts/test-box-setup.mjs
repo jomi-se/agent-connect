@@ -172,8 +172,16 @@ try {
     doctor().checks.find((check) => check.code === "box_current").status,
     "warn",
   );
-  const changed = (await setup()).plan;
+  const rebuilt = await setup();
+  const changed = rebuilt.plan;
   assert.notEqual(changed.boxImage, first.boxImage);
+  // Setup reports the replaced box and leaves its removal to the owner.
+  assert.ok(
+    rebuilt.stderr.includes(`Previous box ${first.boxImage} is no longer used`),
+    rebuilt.stderr,
+  );
+  assert.equal(inspect(base), baseId);
+  inspect(first.boxImage);
   assert.equal(
     doctor().checks.find((check) => check.code === "box_current").status,
     "pass",
@@ -208,7 +216,7 @@ try {
   );
   assert.equal(inspect(base), baseId);
   console.log(
-    "Packed Linux setup: base tools, one Claude binary, local build/reuse, layer build/content rebuild/removal, doctor and failed-build fallback passed.",
+    "Packed Linux setup: base tools, one Claude binary, local build/reuse, layer build/content rebuild/removal, replaced-box report, doctor and failed-build fallback passed.",
   );
 } finally {
   try {

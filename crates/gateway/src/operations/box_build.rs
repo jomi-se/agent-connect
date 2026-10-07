@@ -265,9 +265,75 @@ pub(super) async fn ensure_box(selected: &str, previous: Option<&str>) -> anyhow
     }
 }
 
+// The previous selection and its package base, when they belong to this
+// gateway's box repository and the new selection no longer uses them.
+fn superseded_images(previous: &str, selected: &str, base: &str) -> Vec<String> {
+    let repository = base.split_once(':').map_or(base, |(name, _)| name);
+    let Some(tag) = previous.strip_prefix(&format!("{repository}:")) else {
+        return Vec::new();
+    };
+    let previous_base = match tag.rsplit_once('-') {
+        Some((version, hash))
+            if hash.len() == 16 && hash.bytes().all(|b| b.is_ascii_hexdigit()) =>
+        {
+            format!("{repository}:{version}")
+        }
+        _ => previous.to_owned(),
+    };
+    let mut images = vec![previous.to_owned()];
+    if previous_base != previous {
+        images.push(previous_base);
+    }
+    images.retain(|image| image != selected && image != base);
+    images
+}
+
+/// Tell the owner which boxes an upgrade left unused. Removing them is the
+/// owner's decision, like any other Docker image.
+pub(super) async fn report_superseded(previous: &str, selected: &str) -> anyhow::Result<()> {
+    for image in superseded_images(previous, selected, &base_image()?) {
+        if installed(&image).await? {
+            eprintln!(
+                "Previous box {image} is no longer used; `docker image rm {image}` frees its space."
+            );
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upgrades_report_only_replaced_boxes_from_this_repository() {
+        let base = "agent-connect-box:0.0.3";
+        let owned = "agent-connect-box:0.0.3-0123456789abcdef";
+        assert_eq!(
+            superseded_images("agent-connect-box:0.0.2", base, base),
+            ["agent-connect-box:0.0.2"]
+        );
+        assert_eq!(
+            superseded_images("agent-connect-box:0.0.2-fedcba9876543210", owned, base),
+            [
+                "agent-connect-box:0.0.2-fedcba9876543210",
+                "agent-connect-box:0.0.2"
+            ]
+        );
+        // A changed owner layer keeps the shared package base.
+        assert_eq!(
+            superseded_images("agent-connect-box:0.0.3-fedcba9876543210", owned, base),
+            ["agent-connect-box:0.0.3-fedcba9876543210"]
+        );
+        assert_eq!(superseded_images(owned, base, base), [owned]);
+        assert!(superseded_images(base, base, base).is_empty());
+        for foreign in ["example/box:0.0.2", "agent-connect-box-test:0.0.2"] {
+            assert!(
+                superseded_images(foreign, base, base).is_empty(),
+                "{foreign}"
+            );
+        }
+    }
     #[test]
     fn test_image_override_cannot_select_installed_gateway_tags() {
         assert_eq!(test_base_image(None).unwrap(), DEFAULT_BOX_IMAGE);
