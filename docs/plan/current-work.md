@@ -77,3 +77,13 @@ Backlog:
   live afterwards.
 - The box ships the test fixture `mock-codex-config.toml`; move it to test-only
   build inputs.
+- CI takes about 25 minutes, roughly half of it build overhead. Speed it up
+  without dropping gates, cheapest first:
+  1. The release build compiles the gateway three times and `verify.mjs`
+     compiles it twice more for the test box (about two minutes each). Let
+     verify reuse the release artifact, which also tests the shipped binary.
+  2. Cache Rust dependencies and Docker box layers between runs.
+  3. Split one serial job into a build job plus parallel jobs for owner UI,
+     gateway scenarios, boxed scenarios with teardown, and clean-room.
+  4. Maybe shorten the test-only waits in `*-cut`, `expire` and `overflow`
+     (8 to 17 seconds each), keeping the timeout behaviour they prove.
