@@ -75,6 +75,13 @@ Backlog:
   expired session, wrong passphrase or code, or the sign-in budget being spent.
   Never log the passphrase, codes or cookie values. Today these failures leave no
   trace, and the owner only sees "Please sign in again".
+- Tell clients apart behind a reverse proxy. Every proxied request reaches the
+  gateway from loopback, so all visitors share one sign-in budget, one anonymous
+  request budget and one pending-sign-in cap, and anyone can exhaust them. Let an
+  entry point name a trusted client-address header (for example
+  `CF-Connecting-IP`), honoured only for that entry point's Host, with a shared
+  fallback bucket when the header is missing. Key the sign-in budget, anonymous
+  limits and pending-sign-in sessions on it.
 - Show recent failed sign-ins on the owner Activity page, along with any active
   sign-in pause and when it ends. Operators decide from these signals whether
   their entry point needs an identity proxy or alerting in front of it.
