@@ -71,6 +71,13 @@ Owner-required work:
 
 Backlog:
 
+- Log every failed owner sign-in with a non-secret reason: missing, duplicate or
+  expired session, wrong passphrase or code, or the sign-in budget being spent.
+  Never log the passphrase, codes or cookie values. Today these failures leave no
+  trace, and the owner only sees "Please sign in again".
+- Show recent failed sign-ins on the owner Activity page, along with any active
+  sign-in pause and when it ends. Operators decide from these signals whether
+  their entry point needs an identity proxy or alerting in front of it.
 - `agent-connect --help` still describes the gateway as "Unreleased".
 - `scripts/release.mjs publish` discards npm's output on success, so a slow or
   unexpected publish result is invisible; print it and confirm each version is
