@@ -95,6 +95,12 @@ Backlog:
   proxy is in front. The SDK already refuses non-loopback HTTP gateway URLs. The
   remaining gap is an owner typing a bare host name on a first visit. Document
   that only an edge redirect or HSTS preload covers that visit.
+- Replace TOTP with passkeys, as a second factor after the passphrase for
+  sign-in and approvals. Record a decision first. Allow one passkey per entry
+  point address, since a passkey is bound to its domain. The first enrollment on
+  each address is first-come, so operators enroll right after exposing an
+  address. Recovery is a host-side `reset-passkey`, matching `reset-totp`. The
+  owner pages' CSP needs a nonce for the WebAuthn script.
 - Keep the pending application approval through a failed sign-in: "Return to
   sign-in" drops `client_id` and `request_uri`. When a sign-in arrives with no
   session cookie or a duplicate one, say so on the page, since that reveals
