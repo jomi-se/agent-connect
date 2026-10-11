@@ -71,6 +71,37 @@ Owner-required work:
 
 Backlog:
 
+- State the deployment topology in `docs/mission.md` and the AGENTS.md product
+  boundary. Any number of users each run their own gateway, at an origin the
+  application cannot know in advance. Each gateway serves whichever application
+  origins its owner approves. Hardening must keep both directions open and stay
+  easy for users. Rule out anything that makes applications list gateway
+  origins (for example a CSP `connect-src` naming gateways) or makes gateways
+  pre-register applications.
+- Bind grants to the browser that paired, using sender-constrained tokens (for
+  example DPoP, RFC 9449, with a non-extractable WebCrypto key). Today the only
+  binding is the `Origin` header, which a non-browser client sets freely. A
+  copied refresh token therefore works from anywhere until the grant expires or
+  reuse detection revokes it. Until this lands, record in `plan/credentials.md`
+  that a stolen token extends the consented-application risk to whoever holds
+  it.
+- On HTTPS entry points, name the owner cookie with the `__Host-` prefix, which
+  requires `Path=/`, `Secure` and no `Domain`. Browsers then reject same-named
+  cookies from sibling subdomains, plain-HTTP responses or other paths. A stale
+  or planted cookie can no longer trigger the duplicate-cookie refusal that locks
+  the owner out. HTTP loopback keeps a plain name.
+- Send `Strict-Transport-Security` (without `includeSubDomains`) from HTTPS entry
+  points, so browsers stop trying plain HTTP after the first visit whatever
+  proxy is in front. The SDK already refuses non-loopback HTTP gateway URLs. The
+  remaining gap is an owner typing a bare host name on a first visit. Document
+  that only an edge redirect or HSTS preload covers that visit.
+- Keep the pending application approval through a failed sign-in: "Return to
+  sign-in" drops `client_id` and `request_uri`. When a sign-in arrives with no
+  session cookie or a duplicate one, say so on the page, since that reveals
+  nothing.
+- Interrupted or hung test runs can leave a test gateway, `quiet-run` sessions
+  and gigabytes of temporary folders behind for days. Make teardown survive
+  interruption.
 - Log every failed owner sign-in with a non-secret reason: missing, duplicate or
   expired session, wrong passphrase or code, or the sign-in budget being spent.
   Never log the passphrase, codes or cookie values. Today these failures leave no
