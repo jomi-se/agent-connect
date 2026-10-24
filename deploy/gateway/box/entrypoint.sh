@@ -6,6 +6,9 @@ export CODEX_HOME="$HOME/codex-home" CLAUDE_CONFIG_DIR="$HOME/claude-config"
 # Credentials and transcripts stay together in the shared mounted home.
 mkdir -p "$CODEX_HOME" "$CLAUDE_CONFIG_DIR"
 if [ "${AGENT_CONNECT_MOCK_MODEL:-0}" = 1 ]; then
+  # The scripted model answers from the tools it is offered; it cannot search
+  # for deferred MCP tools the way a real model does.
+  export ENABLE_TOOL_SEARCH=false
   if [ ! -f "$CODEX_HOME/config.toml" ]; then
     cp /opt/agent-connect/mock-codex-config.toml "$CODEX_HOME/config.toml"
   fi

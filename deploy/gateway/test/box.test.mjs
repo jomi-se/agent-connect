@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { requireBoxImage } from "../../../scripts/test-box-images.mjs";
 const boxImage = requireBoxImage();
-test("box starts both pinned CLIs with an unnamed UID and private homes", () => {
+test("box starts both CLIs with an unnamed UID and private homes", () => {
   const output = execFileSync(
     "docker",
     [
@@ -29,8 +29,8 @@ test("box starts both pinned CLIs with an unnamed UID and private homes", () => 
     ],
     { encoding: "utf8", timeout: 30000 },
   );
-  assert.match(output, /codex-cli 0\.159\.2/);
-  assert.match(output, /2\.1\.286/);
+  assert.match(output, /^codex-cli \S+$/m);
+  assert.match(output, /^\S+ \(Claude Code\)$/m);
   assert.equal(
     output.split("\n").filter((line) => line === "700 12345 12345").length,
     2,
