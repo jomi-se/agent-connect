@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.0.4
 
 - After an upgrade or owner-layer rebuild, setup names the box images it
   replaced and how to remove them. It never removes them itself.
