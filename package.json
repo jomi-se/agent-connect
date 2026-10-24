@@ -55,7 +55,7 @@
     "prettier": "3.9.6",
     "typescript": "6.0.2",
     "typescript-eslint": "8.65.0",
-    "vitest": "4.1.11",
+    "vitest": "4.1.12",
     "ws": "8.21.3"
   },
   "dependencies": {

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Depend on zod 4.6.7, which fixes unbounded memory use while validating
+  oversized constrained collections (GHSA-mrhx-c7xc-m3w5).
+
 ## 0.0.10
 
 - Replace the entire plugin-era API with the experimental ACP API exported from
