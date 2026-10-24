@@ -2,15 +2,19 @@
 
 ## 0.0.4
 
+- The box takes the latest Claude Code, Codex and ACP adapters from npm when
+  setup runs, instead of versions pinned per gateway release. A new harness
+  release changes the box tag: `doctor` warns and `setup` rebuilds. Owners can
+  pin any of them in `versions.json` in the owner box directory. Releases no
+  longer record adapter pins.
 - After an upgrade or owner-layer rebuild, setup names the box images it
   replaced and how to remove them. It never removes them itself.
-- The box is built on Node 24.22.1 and ships Claude Code 2.1.310. Both carry
-  the fixed Brotli decoder for CVE-2026-111497, which the earlier Node 24.21.0
-  base and Claude Code 2.1.286 did not.
-- The box's adapters use zod 4.6.7 and patched MCP SDK, body-parser, fast-uri
-  and ip-address releases. The gateway uses rustls 0.23.46, rustls-webpki
-  0.103.16 and webpki-roots 1.0.11, which fix TLS advisories including
-  acceptance of distrusted intermediates.
+- The box is built on Node 24.22.1, which carries the fixed Brotli decoder for
+  CVE-2026-111497; the earlier Node 24.21.0 base and the previously pinned
+  Claude Code 2.1.286 did not.
+- The gateway uses rustls 0.23.46, rustls-webpki 0.103.16 and webpki-roots
+  1.0.11, which fix TLS advisories including acceptance of distrusted
+  intermediates.
 
 ## 0.0.3
 

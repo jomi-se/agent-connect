@@ -98,12 +98,7 @@ export async function verify({
       throw new Error(`Unsupported Docker architecture: ${architecture}`);
     const context = join(work, "box");
     await mkdir(context);
-    for (const file of [
-      "Dockerfile",
-      "entrypoint.sh",
-      "package.json",
-      "package-lock.json",
-    ])
+    for (const file of ["Dockerfile", "entrypoint.sh", "install-harnesses.sh"])
       await copyFile(join(box, file), join(context, file));
     await copyFile(
       join(repository, "deploy/gateway/egress-proxy.mjs"),

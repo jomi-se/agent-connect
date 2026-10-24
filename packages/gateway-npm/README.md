@@ -23,11 +23,11 @@ before login.
 
 The launcher selects a matching native binary through optional npm dependencies;
 keep them enabled. It downloads no executable at launch and exposes no JavaScript
-library API. The launcher ships the complete box build recipe and locked adapter
-inputs; platform packages ship the matching static Linux session-runner, including
-Linux ARM64 for Apple Silicon. `agentConnect.adapterVersions` records the pins.
-Setup explicitly builds `agent-connect-box:<version>` locally (roughly 1 GB),
-reuses unchanged builds, and supports local owner tools through the XDG config
+library API. The launcher ships the complete box build recipe; platform packages
+ship the matching static Linux session-runner, including Linux ARM64 for Apple
+Silicon. Setup explicitly builds the box locally (roughly 1 GB) with the latest
+Claude Code, Codex and ACP adapters from npm, reuses unchanged builds, and
+supports owner tools and version pins through the XDG config
 `agent-connect/box/` directory. There is no registry box or second publication
 channel. `agent-connect release-info` reports the gateway version.
 

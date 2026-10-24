@@ -51,9 +51,6 @@ if (!/^0\.0\.\d+$/.test(sdk.version) || !/^0\.0\.\d+$/.test(version))
   throw new Error(
     "SDK and gateway must remain on independently versioned 0.0.x releases",
   );
-for (const [name, pin] of Object.entries(gateway.agentConnect.adapterVersions))
-  if (box.dependencies[name] !== pin)
-    throw new Error(`Box adapter pin mismatch: ${name}`);
 // Platform packages are unpublished until release, so the workspace launcher does
 // not declare them (older npm ci rejects lockfiles missing optional packages).
 // The packed launcher declares every platform at the gateway version.
@@ -100,7 +97,6 @@ async function writeMetadata() {
       {
         schemaVersion: 1,
         version,
-        adapterVersions: gateway.agentConnect.adapterVersions,
         sdkVersion: sdk.version,
         targets,
         localOnly: values.local,
@@ -211,12 +207,7 @@ if (command === "check") {
       filter: (path) => !path.split(/[\\/]/).includes("node_modules"),
     });
     await mkdir(join(launcher, "box"));
-    for (const file of [
-      "Dockerfile",
-      "entrypoint.sh",
-      "package.json",
-      "package-lock.json",
-    ])
+    for (const file of ["Dockerfile", "entrypoint.sh", "install-harnesses.sh"])
       await cp(
         join(repo, "deploy/gateway/box", file),
         join(launcher, "box", file),

@@ -1,12 +1,29 @@
-//! Local box construction from package-owned inputs and an optional isolated owner layer.
+//! Local box construction: a package-owned base, then one layer with the resolved
+//! harness versions and the optional isolated owner layer.
 use crate::config::DEFAULT_BOX_IMAGE;
 use anyhow::{Context, bail};
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     process::Stdio,
+    time::Duration,
 };
+
+const CODEX_ACP: &str = "@agentclientprotocol/codex-acp";
+const CLAUDE_ACP: &str = "@agentclientprotocol/claude-agent-acp";
+const CLAUDE_CODE: &str = "@anthropic-ai/claude-code";
+const CODEX: &str = "@openai/codex";
+// Every package the harness layer installs. Each follows npm's `latest` unless the
+// owner pins it, so a new harness release reaches owners without a gateway release.
+const HARNESS_PACKAGES: [&str; 4] = [CODEX_ACP, CLAUDE_ACP, CLAUDE_CODE, CODEX];
+const NPM_REGISTRY: &str = "https://registry.npmjs.org";
+const INSTALL_HARNESSES: &str = "/usr/local/lib/agent-connect/install-harnesses.sh";
+
+/// Exact harness versions by npm package name, as installed in the box layer.
+pub type HarnessVersions = BTreeMap<String, String>;
 
 pub(super) fn owner_directory() -> anyhow::Result<PathBuf> {
     let root = std::env::var_os("XDG_CONFIG_HOME")
@@ -77,6 +94,126 @@ fn owner_hash(directory: &Path) -> anyhow::Result<Option<String>> {
     Ok(Some(hash_directory(directory)?))
 }
 
+// Owner pins from `versions.json`: an exact version or a dist-tag per package.
+fn owner_pins(directory: &Path) -> anyhow::Result<BTreeMap<String, String>> {
+    let path = directory.join("versions.json");
+    if !path.exists() {
+        return Ok(BTreeMap::new());
+    }
+    let pins: BTreeMap<String, String> = serde_json::from_slice(&fs::read(&path)?)
+        .context("versions.json must map package names to versions")?;
+    for (name, spec) in &pins {
+        anyhow::ensure!(
+            HARNESS_PACKAGES.contains(&name.as_str()),
+            "versions.json pins {name}; only {} can be pinned",
+            HARNESS_PACKAGES.join(", ")
+        );
+        anyhow::ensure!(
+            semver::Version::parse(spec).is_ok() || is_dist_tag(spec),
+            "versions.json: {name} must be an exact version such as 1.2.3 or a dist-tag such as latest"
+        );
+    }
+    Ok(pins)
+}
+
+fn is_dist_tag(spec: &str) -> bool {
+    spec.len() <= 64
+        && spec.starts_with(|c: char| c.is_ascii_lowercase())
+        && spec.bytes().all(|c| {
+            c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'.' | b'_' | b'-')
+        })
+}
+
+// npm's abbreviated metadata: enough to resolve tags and read dependency ranges.
+#[derive(Deserialize)]
+struct Packument {
+    #[serde(rename = "dist-tags")]
+    dist_tags: BTreeMap<String, String>,
+    versions: BTreeMap<String, PackageVersion>,
+}
+
+#[derive(Deserialize)]
+struct PackageVersion {
+    #[serde(default)]
+    dependencies: BTreeMap<String, String>,
+}
+
+impl Packument {
+    fn select(&self, name: &str, spec: &str) -> anyhow::Result<String> {
+        let version = if semver::Version::parse(spec).is_ok() {
+            spec
+        } else {
+            self.dist_tags
+                .get(spec)
+                .with_context(|| format!("{name} has no npm dist-tag {spec}"))?
+        };
+        anyhow::ensure!(
+            self.versions.contains_key(version),
+            "{name}@{version} is not on npm"
+        );
+        Ok(version.into())
+    }
+
+    // The newest stable release in a caret, tilde or comparison range. npm and Cargo
+    // agree on those; anything fancier asks the owner to pin.
+    fn newest_matching(&self, name: &str, range: &str) -> anyhow::Result<String> {
+        let requirement = semver::VersionReq::parse(range).with_context(|| {
+            format!("cannot read the {name} range {range}; pin {name} in versions.json")
+        })?;
+        self.versions
+            .keys()
+            .filter_map(|version| semver::Version::parse(version).ok())
+            .filter(|version| requirement.matches(version))
+            .max()
+            .map(|version| version.to_string())
+            .with_context(|| format!("no {name} release matches {range}"))
+    }
+}
+
+async fn packument(client: &reqwest::Client, name: &str) -> anyhow::Result<Packument> {
+    let url = format!("{NPM_REGISTRY}/{}", name.replace('/', "%2f"));
+    let bytes = client
+        .get(url)
+        .header("Accept", "application/vnd.npm.install-v1+json")
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .with_context(|| format!("look up {name} on npm"))?
+        .bytes()
+        .await
+        .with_context(|| format!("download npm metadata for {name}"))?;
+    serde_json::from_slice(&bytes).with_context(|| format!("read npm metadata for {name}"))
+}
+
+/// The harness versions the box should carry now: npm's latest, or the owner's pins.
+/// Codex is the newest release the chosen codex-acp accepts, since that adapter runs it.
+pub(super) async fn resolve_harness() -> anyhow::Result<HarnessVersions> {
+    let pins = owner_pins(&owner_directory()?)?;
+    let spec = |name: &str| pins.get(name).map_or("latest", String::as_str);
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .connect_timeout(Duration::from_secs(10))
+        .build()?;
+    let mut versions = HarnessVersions::new();
+    let mut codex_range = None;
+    for name in [CODEX_ACP, CLAUDE_ACP, CLAUDE_CODE] {
+        let metadata = packument(&client, name).await?;
+        let version = metadata.select(name, spec(name))?;
+        if name == CODEX_ACP {
+            codex_range = metadata.versions[&version].dependencies.get(CODEX).cloned();
+        }
+        versions.insert(name.into(), version);
+    }
+    let codex = packument(&client, CODEX).await?;
+    let version = match (pins.get(CODEX), codex_range) {
+        (Some(pin), _) => codex.select(CODEX, pin)?,
+        (None, Some(range)) => codex.newest_matching(CODEX, &range)?,
+        (None, None) => codex.select(CODEX, "latest")?,
+    };
+    versions.insert(CODEX.into(), version);
+    Ok(versions)
+}
+
 fn test_base_image(value: Option<String>) -> anyhow::Result<String> {
     let Some(image) = value else {
         return Ok(DEFAULT_BOX_IMAGE.into());
@@ -105,12 +242,30 @@ fn base_image() -> anyhow::Result<String> {
     test_base_image(value)
 }
 
-pub(super) fn desired_image() -> anyhow::Result<String> {
-    let base = base_image()?;
-    Ok(match owner_hash(&owner_directory()?)? {
-        Some(hash) => format!("{base}-{}", &hash[..16]),
-        None => base,
-    })
+/// The box for these harness versions and the current owner directory.
+pub(super) fn desired_image(harness: &HarnessVersions) -> anyhow::Result<String> {
+    layer_image(
+        &base_image()?,
+        harness,
+        owner_hash(&owner_directory()?)?.as_deref(),
+    )
+}
+
+// One tag per base, harness set and owner layer, so any change rebuilds and an
+// unchanged selection reuses the installed box.
+fn layer_image(
+    base: &str,
+    harness: &HarnessVersions,
+    owner: Option<&str>,
+) -> anyhow::Result<String> {
+    let mut hash = Sha256::new();
+    hash.update(serde_json::to_vec(harness)?);
+    hash.update([0]);
+    hash.update(owner.unwrap_or_default());
+    Ok(format!(
+        "{base}-{}",
+        &format!("{:x}", hash.finalize())[..16]
+    ))
 }
 
 struct Scratch(PathBuf);
@@ -161,6 +316,7 @@ async fn installed(image: &str) -> anyhow::Result<bool> {
 async fn build(
     context: &Path,
     dockerfile: &Path,
+    target: Option<&str>,
     image: &str,
     platform: &str,
 ) -> anyhow::Result<()> {
@@ -168,7 +324,14 @@ async fn build(
         "Building {image} locally for {platform} from the gateway package (about 1 GB; owner tools add to this). Build steps have normal network access."
     );
     let status = tokio::process::Command::new("docker")
-        .args(["build", "--platform", platform, "--tag", image, "--file"])
+        .args(["build", "--platform", platform, "--tag", image])
+        .args(
+            target
+                .map(|target| ["--target", target])
+                .into_iter()
+                .flatten(),
+        )
+        .arg("--file")
         .arg(dockerfile)
         .arg(context)
         .stdin(Stdio::null())
@@ -182,7 +345,7 @@ async fn build(
     Ok(())
 }
 
-async fn build_selected(selected: &str) -> anyhow::Result<()> {
+async fn build_selected(selected: &str, harness: &HarnessVersions) -> anyhow::Result<()> {
     let base_image = base_image()?;
     let architecture = tokio::process::Command::new("docker")
         .args(["info", "--format", "{{.Architecture}}"])
@@ -218,38 +381,53 @@ async fn build_selected(selected: &str) -> anyhow::Result<()> {
         copy_directory(&context, &base).context("box build context is missing; install the gateway launcher and matching platform package")?;
         fs::copy(&runner, base.join("session-runner"))
             .context("matching Linux session-runner is missing from the platform package")?;
-        build(&base, &base.join("Dockerfile"), &base_image, platform).await?;
+        build(
+            &base,
+            &base.join("Dockerfile"),
+            Some("base"),
+            &base_image,
+            platform,
+        )
+        .await?;
     }
-    if selected != base_image {
-        let owner = owner_directory()?;
-        let snapshot = scratch.0.join("owner");
+    let owner = owner_directory()?;
+    let snapshot = scratch.0.join("owner");
+    let lines = if owner.join("Dockerfile").exists() {
         copy_directory(&owner, &snapshot)?;
-        anyhow::ensure!(
-            owner_hash(&snapshot)?
-                .map(|hash| format!("{base_image}-{}", &hash[..16]))
-                .as_deref()
-                == Some(selected),
-            "owner box directory changed during setup; rerun setup"
-        );
-        let lines = fs::read_to_string(snapshot.join("Dockerfile"))?;
-        let wrapper = scratch.0.join("Dockerfile.owner");
-        fs::write(
-            &wrapper,
-            format!(
-                "FROM {base_image}\nUSER root\n{lines}\nUSER node\nWORKDIR /work\nENTRYPOINT [\"/usr/local/bin/entrypoint.sh\"]\n"
-            ),
-        )?;
-        build(&snapshot, &wrapper, selected, platform).await?;
-    }
-    Ok(())
+        fs::read_to_string(snapshot.join("Dockerfile"))?
+    } else {
+        fs::create_dir(&snapshot)?;
+        String::new()
+    };
+    anyhow::ensure!(
+        layer_image(&base_image, harness, owner_hash(&snapshot)?.as_deref())? == selected,
+        "owner box directory changed during setup; rerun setup"
+    );
+    // Exec form with a JSON string argument: no shell quoting of the versions.
+    let versions = serde_json::to_string(&serde_json::to_string(harness)?)?;
+    let wrapper = scratch.0.join("Dockerfile.layer");
+    fs::write(
+        &wrapper,
+        format!(
+            "FROM {base_image}\nUSER root\nRUN [\"sh\", \"{INSTALL_HARNESSES}\", {versions}]\n{lines}\nUSER node\nWORKDIR /work\nENTRYPOINT [\"/usr/local/bin/entrypoint.sh\"]\n"
+        ),
+    )?;
+    build(&snapshot, &wrapper, None, selected, platform).await
 }
 
-pub(super) async fn ensure_box(selected: &str, previous: Option<&str>) -> anyhow::Result<String> {
+pub(super) async fn ensure_box(
+    selected: &str,
+    previous: Option<&str>,
+    harness: Option<&HarnessVersions>,
+) -> anyhow::Result<String> {
     if installed(selected).await? {
         eprintln!("Reusing local box {selected}.");
         return Ok(selected.into());
     }
-    match build_selected(selected).await {
+    let Some(harness) = harness else {
+        bail!("box {selected} is missing, and npm could not be reached to choose harness versions");
+    };
+    match build_selected(selected, harness).await {
         Ok(()) => Ok(selected.into()),
         Err(error) => {
             if let Some(previous) = previous {
@@ -349,6 +527,67 @@ mod tests {
         ] {
             assert!(test_base_image(Some(invalid.into())).is_err(), "{invalid}");
         }
+    }
+
+    #[test]
+    fn harness_versions_follow_tags_pins_and_the_adapter_codex_range() {
+        let metadata: Packument = serde_json::from_value(serde_json::json!({
+            "dist-tags": { "latest": "0.160.1", "next": "0.161.0-alpha.1" },
+            "versions": {
+                "0.159.2": {}, "0.160.0": {}, "0.160.1": {},
+                "0.161.0-alpha.1": {}, "0.164.0": {}
+            }
+        }))
+        .unwrap();
+        assert_eq!(metadata.select(CODEX, "latest").unwrap(), "0.160.1");
+        assert_eq!(metadata.select(CODEX, "next").unwrap(), "0.161.0-alpha.1");
+        assert_eq!(metadata.select(CODEX, "0.159.2").unwrap(), "0.159.2");
+        assert!(metadata.select(CODEX, "0.1.0").is_err());
+        assert!(metadata.select(CODEX, "beta").is_err());
+        // npm and Cargo read 0.x carets alike: patch releases only.
+        assert_eq!(
+            metadata.newest_matching(CODEX, "^0.160.0").unwrap(),
+            "0.160.1"
+        );
+        assert_eq!(
+            metadata.newest_matching(CODEX, ">=0.159.0").unwrap(),
+            "0.164.0"
+        );
+        assert!(metadata.newest_matching(CODEX, "^0.162.0").is_err());
+    }
+
+    #[test]
+    fn owner_pins_accept_exact_versions_and_tags_for_known_packages_only() {
+        let scratch = Scratch::new().unwrap();
+        assert!(owner_pins(&scratch.0).unwrap().is_empty());
+        let pins = scratch.0.join("versions.json");
+        fs::write(
+            &pins,
+            r#"{"@openai/codex":"0.159.2","@anthropic-ai/claude-code":"stable"}"#,
+        )
+        .unwrap();
+        assert_eq!(owner_pins(&scratch.0).unwrap().len(), 2);
+        for invalid in [
+            r#"{"left-pad":"1.0.0"}"#,
+            r#"{"@openai/codex":"^0.159.0"}"#,
+            r#"{"@openai/codex":"0.159.2; rm -rf /"}"#,
+            r#"["@openai/codex"]"#,
+        ] {
+            fs::write(&pins, invalid).unwrap();
+            assert!(owner_pins(&scratch.0).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn box_tag_changes_with_any_harness_version_or_owner_layer() {
+        let base = "agent-connect-box:0.0.4";
+        let harness: HarnessVersions = [(CODEX.to_owned(), "0.160.1".to_owned())].into();
+        let first = layer_image(base, &harness, None).unwrap();
+        assert_eq!(first, layer_image(base, &harness, None).unwrap());
+        assert!(first.starts_with("agent-connect-box:0.0.4-") && first.len() == base.len() + 17);
+        let newer: HarnessVersions = [(CODEX.to_owned(), "0.160.2".to_owned())].into();
+        assert_ne!(first, layer_image(base, &newer, None).unwrap());
+        assert_ne!(first, layer_image(base, &harness, Some("owner")).unwrap());
     }
 
     #[test]

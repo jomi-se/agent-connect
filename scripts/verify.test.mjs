@@ -23,7 +23,7 @@ for (const failure of [undefined, "build", "test:ui:owner"]) {
       const sources = {
         "deploy/gateway/box/package.json": '{"version":"0.0.1"}',
         "deploy/gateway/box/Dockerfile": "checkout Dockerfile",
-        "deploy/gateway/box/package-lock.json": "checkout lockfile",
+        "deploy/gateway/box/install-harnesses.sh": "checkout installer",
         "deploy/gateway/box/entrypoint.sh": "checkout entrypoint",
         "deploy/gateway/egress-proxy.mjs": "checkout proxy",
         "deploy/gateway/test/fixtures/codex-config.toml": "checkout config",
@@ -143,7 +143,7 @@ test("verify runs only the selected steps", async () => {
   try {
     for (const path of [
       "deploy/gateway/box/Dockerfile",
-      "deploy/gateway/box/package-lock.json",
+      "deploy/gateway/box/install-harnesses.sh",
       "deploy/gateway/box/entrypoint.sh",
       "deploy/gateway/egress-proxy.mjs",
       "deploy/gateway/test/fixtures/codex-config.toml",

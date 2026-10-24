@@ -1,6 +1,7 @@
 # 0017: Build the harness box locally from npm packages
 
-Status: Accepted (2026-10-04)
+Status: Accepted (2026-10-04). Harness versions are superseded by
+[0018](0018-floating-harness-versions.md): they float, and owners can pin.
 
 Agent Connect setup builds `agent-connect-box:<gateway-version>` locally for the
 owner's Docker architecture. This replaces the registry-image design completely:

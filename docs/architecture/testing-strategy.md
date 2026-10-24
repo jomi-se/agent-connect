@@ -23,8 +23,9 @@ an imitation of its events.
 
 ## Commands
 
-Use Node 24 LTS >=24.15 and <25, Docker and the pinned ACP build tools. Adapter
-pins live in the gateway and box manifests. Native browser gates use
+Use Node 24 LTS >=24.15 and <25, Docker and the pinned ACP build tools. Boxed
+gates build the box with the latest harnesses from npm, as owners get them; the
+unboxed compatibility fixtures keep their own adapter pins. Native browser gates use
 `config/webmcp-test-compat.json`.
 
 ```sh

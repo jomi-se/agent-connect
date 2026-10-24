@@ -27,10 +27,6 @@ for (const path of [
   "examples/acp-chat/package.json",
 ])
   await editJson(path, (json) => (json.version = version));
-await editJson("deploy/gateway/box/package-lock.json", (json) => {
-  json.version = version;
-  json.packages[""].version = version;
-});
 await editJson("package-lock.json", (json) => {
   json.packages["packages/gateway-npm"].version = version;
 });

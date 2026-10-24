@@ -28,7 +28,9 @@ const runtime = join(work, "operator");
 const install = join(work, "install");
 const modelName = `acp-clean-model-${suffix}`;
 const egressName = `acp-clean-egress-${suffix}`;
-const boxImage = process.env.ACP_BOX_IMAGE;
+// Setup layers the resolved harness versions on this test base.
+const boxBase = process.env.ACP_BOX_IMAGE;
+let boxImage;
 const services = new Set();
 const resources = { containers: [], networks: [] };
 const report = { packed: {}, checks: [] };
@@ -300,11 +302,6 @@ try {
     `@open-agent-connect/gateway-linux-${process.arch}`,
   );
   const sdkPackage = packages.get("@open-agent-connect/web");
-  assert.deepEqual(
-    gatewayPackage.metadata.agentConnect?.adapterVersions,
-    release.adapterVersions,
-    "Packed adapter pins disagree with release manifest",
-  );
   await writeFile(
     join(install, "package.json"),
     JSON.stringify({ private: true, type: "module" }),
@@ -408,11 +405,12 @@ try {
   assert.equal(setupPlan.origin, publicGateway);
   assert.equal(setupPlan.login, false, "planning never invokes provider login");
   assert.equal(setupPlan.service, false);
-  assert.equal(
+  assert.match(
     setupPlan.boxImage,
-    boxImage,
+    new RegExp(`^${boxBase.replaceAll(".", "\\.")}-[a-f0-9]{16}$`),
     "Packed gateway must support isolated test box builds; rebuild the artifacts",
   );
+  boxImage = setupPlan.boxImage;
   assert.ok(Array.isArray(setupPlan.steps) && setupPlan.steps.length > 0);
   await assert.rejects(stat(runtime), { code: "ENOENT" });
   report.checks.push(

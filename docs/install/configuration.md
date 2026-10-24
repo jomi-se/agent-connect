@@ -309,11 +309,37 @@ under root's home are not available to the session user; use shared paths such
 as `/usr/local/bin`.
 
 Run `agent-connect setup` after editing the directory. The resulting tag is
-`agent-connect-box:<version>-<16-character-content-hash>`; unchanged versions
-and directory contents reuse the existing box. Names, bytes, permissions and
+`agent-connect-box:<version>-<16-character-content-hash>`, hashing the harness
+versions below and this directory; unchanged versions and directory contents
+reuse the existing box. Names, bytes, permissions and
 empty directories contribute to the hash, including ignored files. A failed
 Docker build prints Docker's output and keeps the previously configured box in
 use; first installation fails if no previous box exists. `agent-connect doctor`
 reports pending changes with “run agent-connect setup to rebuild”. The owner
 layer stays local and is never published. Sessions receive no build context or
 Docker socket.
+
+## Harness versions
+
+Each setup installs the latest `@agentclientprotocol/codex-acp`,
+`@agentclientprotocol/claude-agent-acp` and `@anthropic-ai/claude-code` from
+npm, and the newest `@openai/codex` that codex-acp accepts, since codex-acp
+runs it. A new release changes the box tag, so `agent-connect doctor` warns and
+the next `agent-connect setup` rebuilds. `agent-connect setup --json` lists the
+chosen versions as `harnessVersions`. If npm is unreachable, setup keeps the
+configured box.
+
+To hold one back or move ahead, put `versions.json` in the owner box directory
+above, mapping any of those four packages to an exact version or an npm
+dist-tag:
+
+```json
+{
+  "@anthropic-ai/claude-code": "2.1.310",
+  "@openai/codex": "0.164.0"
+}
+```
+
+A pinned Codex replaces the release codex-acp would choose, even outside the
+range it declares; pin codex-acp alongside it if the two disagree. Remove a pin
+to follow npm again.

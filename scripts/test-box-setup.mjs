@@ -20,6 +20,8 @@ const release = JSON.parse(
 );
 const root = await mkdtemp(join(tmpdir(), "agent-connect-box-acceptance-"));
 const base = testBoxImage(release.version, randomUUID());
+// Setup layers the resolved harness versions (and any owner layer) on the base.
+const boxPattern = new RegExp(`^${base.replaceAll(".", "\\.")}-[a-f0-9]{16}$`);
 const env = {
   PATH: process.env.PATH,
   HOME: root,
@@ -99,18 +101,19 @@ try {
     ),
   ]);
   // Old packed binaries must fail before applying setup or building a live tag.
-  assert.equal(
+  assert.match(
     JSON.parse(
       run(
         gateway,
         setupArgs.filter((arg) => arg !== "--apply"),
       ).stdout,
     ).boxImage,
-    base,
+    boxPattern,
     "Packed gateway must support isolated test box builds; rebuild the artifacts",
   );
   const initial = await setup();
-  assert.equal(initial.plan.boxImage, base);
+  assert.match(initial.plan.boxImage, boxPattern);
+  assert.ok(initial.plan.harnessVersions["@anthropic-ai/claude-code"]);
   const baseId = inspect(base);
   run("docker", [
     "run",
@@ -118,7 +121,7 @@ try {
     "--rm",
     "--network",
     "none",
-    base,
+    initial.plan.boxImage,
     "sh",
     "-ec",
     'for tool in bash cat sed grep gawk git rg fd jq curl python3 less ps unzip node; do command -v "$tool"; done; test -f /etc/ssl/certs/ca-certificates.crt; test "$(find /opt/adapters/node_modules/@anthropic-ai -type f \\( -name claude -o -name claude.exe \\) | wc -l)" = 1; test -x "$CLAUDE_CODE_EXECUTABLE"; test -z "$(find /opt/adapters -name codex-voice-host)"; test "$(find /opt/adapters -type f -perm -u+x -name codex-code-mode-host | wc -l)" = 1; codex --version; claude --version',
@@ -143,10 +146,8 @@ try {
     "warn",
   );
   const first = (await setup()).plan;
-  assert.match(
-    first.boxImage,
-    new RegExp(`^${base.replaceAll(".", "\\.")}-[a-f0-9]{16}$`),
-  );
+  assert.match(first.boxImage, boxPattern);
+  assert.notEqual(first.boxImage, initial.plan.boxImage);
   const metadata = JSON.parse(
     run("docker", ["image", "inspect", first.boxImage]).stdout,
   )[0].Config;
@@ -206,7 +207,7 @@ try {
   assert.match(failedInstall.stderr, /intentional-build-failure/);
   await assert.rejects(stat(freshState), { code: "ENOENT" });
   await rm(layer, { recursive: true });
-  assert.equal((await setup()).plan.boxImage, base);
+  assert.equal((await setup()).plan.boxImage, initial.plan.boxImage);
   assert.deepEqual(await readFile(initial.plan.config), configBefore);
   assert.deepEqual(
     await readFile(

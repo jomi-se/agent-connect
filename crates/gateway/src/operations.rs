@@ -163,6 +163,9 @@ pub struct SetupPlan {
     pub steps: Vec<&'static str>,
     pub upgrade: bool,
     pub previous_box_image: Option<String>,
+    /// The harness versions this run resolved from npm; absent when npm was
+    /// unreachable and the configured box stays in use.
+    pub harness_versions: Option<box_build::HarnessVersions>,
 }
 
 fn usage(message: impl Into<String>) -> anyhow::Error {
@@ -187,7 +190,10 @@ fn absolute(path: &Path) -> anyhow::Result<PathBuf> {
     })
 }
 
-pub fn setup_plan(cli: &SetupCli) -> anyhow::Result<SetupPlan> {
+pub fn setup_plan(
+    cli: &SetupCli,
+    harness_versions: Option<&box_build::HarnessVersions>,
+) -> anyhow::Result<SetupPlan> {
     let directory = absolute(
         &cli.directory
             .clone()
@@ -234,7 +240,12 @@ pub fn setup_plan(cli: &SetupCli) -> anyhow::Result<SetupPlan> {
     let egress_container = select!(egress_container, "agent-connect-egress".into());
     config::validate_container_name(&egress_container)?;
     let previous_box_image = previous.as_ref().and_then(|c| c.box_image.clone());
-    let box_image = box_build::desired_image()?;
+    let box_image = match harness_versions {
+        Some(versions) => box_build::desired_image(versions)?,
+        None => previous_box_image.clone().context(
+            "npm is unreachable, so setup cannot choose harness versions for a first box",
+        )?,
+    };
     let home = absolute(&home)?;
     let home = if home.exists() || home.is_symlink() {
         anyhow::ensure!(
@@ -364,6 +375,7 @@ pub fn setup_plan(cli: &SetupCli) -> anyhow::Result<SetupPlan> {
         ],
         upgrade: cli.upgrade,
         previous_box_image,
+        harness_versions: harness_versions.cloned(),
     })
 }
 
@@ -375,8 +387,19 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             "provider login requires an owner terminal and human output; use agent-connect login separately",
         ));
     }
+    // Resolve once per run so every plan below selects the same box.
+    let harness_versions = match box_build::resolve_harness().await {
+        Ok(versions) => Some(versions),
+        Err(error) => {
+            eprintln!(
+                "{error:#}\nCannot check npm for harness releases; keeping the configured box."
+            );
+            None
+        }
+    };
+    let harness_versions = harness_versions.as_ref();
     if guided {
-        let preliminary = setup_plan(&cli)?;
+        let preliminary = setup_plan(&cli, harness_versions)?;
         if !preliminary.existing && cli.harness.is_none() {
             let Some(harness) = credentials::select_harness(
                 &mut std::io::stdin().lock(),
@@ -392,7 +415,7 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             cli.origin = Some(prompt("Gateway origin", &preliminary.origin)?);
         }
     }
-    let mut plan = setup_plan(&cli)?;
+    let mut plan = setup_plan(&cli, harness_versions)?;
     if guided {
         eprintln!(
             "Runtime: {}\nOwner sign-in: {}/agent-connect/owner\nHarness: {:?}\nEntry points: {}\nProfiles: {} (default {})\nService: {}",
@@ -426,11 +449,15 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         ));
     }
     // Fail prerequisites before creating private authentication state.
-    plan.box_image =
-        box_build::ensure_box(&plan.box_image, plan.previous_box_image.as_deref()).await?;
+    plan.box_image = box_build::ensure_box(
+        &plan.box_image,
+        plan.previous_box_image.as_deref(),
+        harness_versions,
+    )
+    .await?;
     let box_changed = plan.existing && plan.previous_box_image.as_deref() != Some(&plan.box_image);
     if plan.upgrade || box_changed {
-        let fresh = setup_plan(&cli)?;
+        let fresh = setup_plan(&cli, harness_versions)?;
         anyhow::ensure!(
             fresh.previous_box_image == plan.previous_box_image
                 && fresh.origin == plan.origin
@@ -716,6 +743,14 @@ pub(super) fn create_private_directory(path: &Path) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn test_harness() -> box_build::HarnessVersions {
+        [
+            ("@openai/codex", "0.160.1"),
+            ("@anthropic-ai/claude-code", "2.1.310"),
+        ]
+        .map(|(name, version)| (name.to_owned(), version.to_owned()))
+        .into()
+    }
     fn options(directory: PathBuf) -> SetupCli {
         SetupCli {
             harness_home: Some(directory.join("dedicated-home")),
@@ -739,7 +774,7 @@ mod tests {
     fn planning_creates_nothing_and_rejects_unsafe_options() {
         let dir = std::env::temp_dir().join(format!("acp-plan-{}", uuid::Uuid::new_v4()));
         let mut cli = options(dir.clone());
-        let plan = setup_plan(&cli).unwrap();
+        let plan = setup_plan(&cli, Some(&test_harness())).unwrap();
         assert!(!dir.exists());
         assert!(!plan.existing);
         assert!(!plan.login);
@@ -751,7 +786,7 @@ mod tests {
         );
         assert_eq!(plan.permissions, PermissionProfile::Sandboxed);
         cli.origin = Some("https://example.test/path".into());
-        assert!(setup_plan(&cli).is_err());
+        assert!(setup_plan(&cli, Some(&test_harness())).is_err());
         cli.origin = None;
         assert!(!dir.exists());
     }
@@ -766,7 +801,7 @@ mod tests {
         cli.entry_points = Some(vec!["https://alternate.example".into()]);
         cli.profiles = Some(vec![PermissionProfile::ReadOnly]);
         cli.permissions = Some(PermissionProfile::ReadOnly);
-        let plan = setup_plan(&cli).unwrap();
+        let plan = setup_plan(&cli, Some(&test_harness())).unwrap();
         config::init_with_output(
             config::InitCli {
                 directory: plan.directory.clone(),
@@ -805,7 +840,7 @@ mod tests {
         assert_eq!(raw["state_dir"], "state");
         assert_eq!(raw["permissions"], "read-only");
         assert_eq!(std::fs::read(&owner_path).unwrap(), owner_state);
-        let resumed = setup_plan(&cli).unwrap();
+        let resumed = setup_plan(&cli, Some(&test_harness())).unwrap();
         assert!(resumed.existing);
         assert_eq!(resumed.harness_home, config.harness_home.unwrap());
         assert_eq!(resumed.profiles, plan.profiles);
@@ -814,13 +849,18 @@ mod tests {
             let ancestor_alias = dir.join("ancestor-alias");
             std::os::unix::fs::symlink(&dir, &ancestor_alias).unwrap();
             cli.harness_home = Some(ancestor_alias.join("dedicated-home"));
-            assert_eq!(setup_plan(&cli).unwrap().harness_home, resumed.harness_home);
+            assert_eq!(
+                setup_plan(&cli, Some(&test_harness()))
+                    .unwrap()
+                    .harness_home,
+                resumed.harness_home
+            );
             assert_eq!(std::fs::read(&owner_path).unwrap(), owner_state);
         }
         cli.entry_points = None;
         cli.profiles = None;
         cli.permissions = None;
-        let inherited = setup_plan(&cli).unwrap();
+        let inherited = setup_plan(&cli, Some(&test_harness())).unwrap();
         assert_eq!(inherited.entry_points, plan.entry_points);
         assert_eq!(inherited.profiles, plan.profiles);
         assert_eq!(inherited.permissions, plan.permissions);
@@ -829,7 +869,7 @@ mod tests {
             PermissionProfile::ReadOnly,
         ]);
         cli.permissions = Some(PermissionProfile::Sandboxed);
-        assert!(setup_plan(&cli).is_err());
+        assert!(setup_plan(&cli, Some(&test_harness())).is_err());
         assert_eq!(std::fs::read(&owner_path).unwrap(), owner_state);
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -839,11 +879,11 @@ mod tests {
         let mut cli = options(dir.clone());
         cli.profiles = Some(vec![PermissionProfile::DenyAll]);
         cli.permissions = Some(PermissionProfile::DenyAll);
-        assert!(setup_plan(&cli).is_err());
+        assert!(setup_plan(&cli, Some(&test_harness())).is_err());
         cli.profiles = None;
         cli.permissions = None;
         cli.entry_points = Some(vec!["http://127.0.0.1:18940".into()]);
-        assert!(setup_plan(&cli).is_err());
+        assert!(setup_plan(&cli, Some(&test_harness())).is_err());
         assert!(!dir.exists());
     }
     #[test]

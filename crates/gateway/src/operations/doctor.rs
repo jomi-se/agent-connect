@@ -165,24 +165,28 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
             Some("Run agent-connect setup to build the local box"),
         ),
     }
-    match super::box_build::desired_image() {
+    let desired = match super::box_build::resolve_harness().await {
+        Ok(harness) => super::box_build::desired_image(&harness),
+        Err(error) => Err(error),
+    };
+    match desired {
         Ok(image) if image == configured.box_image => report.add(
             "box_current",
             CheckStatus::Pass,
-            "Box matches this gateway version and owner layer",
+            "Box matches this gateway version, the current harness releases and the owner layer",
             None,
         ),
         Ok(_) => report.add(
             "box_current",
             CheckStatus::Warn,
-            "Gateway version or owner box directory changed since the last build",
+            "A newer harness release, gateway version or owner box change is waiting",
             Some("Run agent-connect setup to rebuild"),
         ),
         Err(error) => report.add(
             "box_current",
-            CheckStatus::Fail,
-            format!("Cannot inspect owner box directory: {error}"),
-            Some("Repair the owner box directory, then run agent-connect setup to rebuild"),
+            CheckStatus::Warn,
+            format!("Cannot check whether the box is current: {error:#}"),
+            Some("Check the network and the owner box directory, then run agent-connect doctor again"),
         ),
     }
     if let Some(egress) = configured.egress_container.clone() {

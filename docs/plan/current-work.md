@@ -25,7 +25,8 @@ has contract coverage; the selected pinned harness fixtures expose no plan tool.
 
 The browser SDK is **0.0.10** at `@open-agent-connect/web`; gateway, native
 platform packages and box are **0.0.4**, prepared on 2026-10-24 to ship the
-Brotli decoder fix (CVE-2026-111497) and resolve open dependency advisories. Versions are independent and
+Brotli decoder fix (CVE-2026-111497), resolve open dependency advisories and let
+the box take the latest harnesses with owner pins (ADR 0018). Versions are independent and
 remain on 0.0.x until the shape is final. Applications import the ACP browser API from the package root.
 
 Local product parity is complete. `agent-connect setup` provides guided and

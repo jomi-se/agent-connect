@@ -181,14 +181,8 @@ test("release checks accept independent SDK versions and reject gateway/box drif
   const manifest = async (file, value) =>
     writeFile(join(directory, file), JSON.stringify(value));
   await manifest("packages/web-sdk/package.json", { version: "0.0.10" });
-  await manifest("packages/gateway-npm/package.json", {
-    version: "0.0.1",
-    agentConnect: { adapterVersions: { "fixture-adapter": "2.0.1" } },
-  });
-  await manifest("deploy/gateway/box/package.json", {
-    version: "0.0.1",
-    dependencies: { "fixture-adapter": "2.0.1" },
-  });
+  await manifest("packages/gateway-npm/package.json", { version: "0.0.1" });
+  await manifest("deploy/gateway/box/package.json", { version: "0.0.1" });
   await manifest("examples/acp-chat/package.json", { version: "0.0.1" });
   await writeFile(
     join(directory, "crates/gateway/Cargo.toml"),
@@ -206,17 +200,11 @@ test("release checks accept independent SDK versions and reject gateway/box drif
   assert.notEqual(sdkDrift.status, 0);
   assert.match(sdkDrift.stderr, /independently versioned 0.0.x/);
   await manifest("packages/web-sdk/package.json", { version: "0.0.10" });
-  await manifest("deploy/gateway/box/package.json", {
-    version: "0.0.2",
-    dependencies: { "fixture-adapter": "2.0.1" },
-  });
+  await manifest("deploy/gateway/box/package.json", { version: "0.0.2" });
   const boxDrift = check();
   assert.notEqual(boxDrift.status, 0);
   assert.match(boxDrift.stderr, /must share one version/);
-  await manifest("deploy/gateway/box/package.json", {
-    version: "0.0.1",
-    dependencies: { "fixture-adapter": "2.0.1" },
-  });
+  await manifest("deploy/gateway/box/package.json", { version: "0.0.1" });
   await manifest("examples/acp-chat/package.json", { version: "0.0.2" });
   const sampleDrift = check();
   assert.notEqual(sampleDrift.status, 0);

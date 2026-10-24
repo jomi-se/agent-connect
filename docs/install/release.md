@@ -14,9 +14,9 @@ deprecation.
 The launcher, platform packages, Rust gateway, box manifest and chat sample
 share one version; the SDK is versioned independently. All packages remain
 on 0.0.x until the API shape is final. `node scripts/release.mjs check` verifies versions
-and adapter pins before building. Adapter versions come from the launcher
-manifest and the box manifest/lockfile; floating adapter installs are
-not release inputs.
+before building. Releases carry no harness or adapter pins: setup installs the
+latest at build time and owners can pin them
+([ADR 0018](../decisions/0018-floating-harness-versions.md)).
 
 `rust-toolchain.toml` selects Rust `1.98.1` with both Linux musl targets;
 rustup installs it on first use. `mise.toml` lists the other build tools: Zig
@@ -48,7 +48,7 @@ distributed executables must not contain personal builder paths. The collection 
 - three native gateway archives, checksum sidecars and hash-bound executable
   `release-info` evidence;
 - the shell installer and the standalone `acp-chat-sample.tgz`;
-- `release.json` with gateway/SDK versions, targets, adapter pins and artifact
+- `release.json` with gateway/SDK versions, targets and artifact
   hashes, plus aggregate `SHA256SUMS`.
 
 Before producing any npm package, the packer checks all available gateway
