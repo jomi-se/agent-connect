@@ -4,6 +4,9 @@
 
 - After an upgrade or owner-layer rebuild, setup names the box images it
   replaced and how to remove them. It never removes them itself.
+- The box is built on Node 24.22.1 and ships Claude Code 2.1.310. Both carry
+  the fixed Brotli decoder for CVE-2026-111497, which the earlier Node 24.21.0
+  base and Claude Code 2.1.286 did not.
 
 ## 0.0.3
 
