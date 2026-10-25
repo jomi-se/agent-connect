@@ -5,14 +5,13 @@ The application supplies its UI and a fixed set of approved tools; your gateway
 provides scoped access to your chosen harness and model.
 
 One product: the Rust gateway (`agent-connect`) and browser SDK
-(`@open-agent-connect/web`). Gateway **0.0.1** and SDK **0.0.10** are early alpha
-releases. ACP, MCP-over-ACP and transport resumption are **experimental and
+(`@open-agent-connect/web`). Both are early alpha releases. ACP, MCP-over-ACP and transport resumption are **experimental and
 unstable**. [ADR 0016](docs/decisions/0016-acp-application-boundary.md), accepted
 on 2026-10-04, establishes ACP as the product vision and chosen open standard.
 
 ## Run your gateway
 
-Install from npm. You need Node 24 LTS (>=24.15), Docker, a browser and a Codex
+Install from npm. You need Node 24 LTS, Docker, a browser and a Codex
 or Claude Code subscription; see the [install guide](docs/install/README.md).
 
 ```sh
@@ -36,8 +35,7 @@ tool snapshot, restricted profile and duration. Try the
 
 ## Add it to your application
 
-Install `@open-agent-connect/web@0.0.10` after publication, or its supplied tarball
-beforehand. Import from the package root. Call pairing from an explicit user
+Install `@open-agent-connect/web` and import from the package root. Call pairing from an explicit user
 action, then pass the returned transport to AI SDK `useChat`:
 
 ```ts
@@ -85,9 +83,9 @@ transport and provider when leaving the feature. The
 
 ## Develop
 
-Use Node 24 LTS >=24.15 and <25. The [release guide](docs/install/release.md)
+Use Node 24 LTS. The [release guide](docs/install/release.md)
 provides pinned tools, local artifact builds and the full verification sequence.
-Tests exercise real pinned adapters with deterministic inference; real-model
+Tests exercise real adapters with deterministic inference; real-model
 application acceptance is separate evidence.
 
 - [Documentation](docs/README.md), [mission](docs/mission.md) and [architecture](docs/architecture/target-architecture.md)

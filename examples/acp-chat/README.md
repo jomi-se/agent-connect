@@ -1,13 +1,13 @@
 # Reader chat sample (experimental ACP)
 
-Requires Node 24 LTS >=24.15 and <25. This standalone Vite application consumes
+Requires Node 24 LTS. This standalone Vite application consumes
 the public `@open-agent-connect/web` export. It has no repository aliases.
 ACP, MCP-over-ACP and the resume extension remain experimental.
 
 Install the release SDK tarball, then build or start the application:
 
 ```sh
-npm install /path/to/open-agent-connect-web-0.0.10.tgz
+npm install /path/to/open-agent-connect-web-<version>.tgz
 npm run dev
 ```
 

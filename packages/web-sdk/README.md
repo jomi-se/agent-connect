@@ -1,13 +1,11 @@
 # Agent Connect browser SDK
 
-`@open-agent-connect/web@0.0.10` is the ACP browser API at the package root.
+`@open-agent-connect/web` is the ACP browser API at the package root.
 ACP, MCP-over-ACP and Agent Connect's resumable transport remain **experimental**.
 The gateway is versioned independently. Both are early alpha releases.
 
-After publication (use the supplied SDK tarball before then):
-
 ```sh
-npm install @open-agent-connect/web@0.0.10 @ai-sdk/react react
+npm install @open-agent-connect/web @ai-sdk/react react
 ```
 
 ## Pair and chat

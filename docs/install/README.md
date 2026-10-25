@@ -8,9 +8,9 @@ release.**
 
 ## 1. Install
 
-You need Node >=24.15, Docker that your user can run without `sudo`, a browser
-and a Codex or Claude Code subscription. The tested baseline is Node 24 LTS
-(>=24.15, <25) with Docker Desktop or Docker Engine and its buildx plugin. Setup
+You need Node 24 LTS, Docker that your user can run without `sudo`, a browser
+and a Codex or Claude Code subscription. Docker Desktop or Docker Engine with
+its buildx plugin is the tested baseline. Setup
 builds the box locally, so first setup downloads and stores roughly 1.5 GB.
 Supported hosts are Apple Silicon macOS, Linux x64 and Linux ARM64. On macOS,
 use Docker Desktop with Linux containers. Windows is not yet supported. No
@@ -138,13 +138,13 @@ cannot expand on reconnect. Profile availability depends on the harness; the
 Gateway page describes the native authority that remains.
 
 To try the sample, obtain `acp-chat-sample.tgz` and
-`open-agent-connect-web-0.0.10.tgz` from the matching release or artifact
+`open-agent-connect-web-<version>.tgz` from the matching release or artifact
 producer:
 
 ```sh
 tar -xzf acp-chat-sample.tgz
 cd package
-npm install ../open-agent-connect-web-0.0.10.tgz
+npm install ../open-agent-connect-web-<version>.tgz
 npm run dev
 ```
 

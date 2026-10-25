@@ -1,10 +1,12 @@
 # Gateway box and test fixtures
 
 `box/` holds the npm-shipped local build context: slim pinned Node base, curated
-OS tools, locked real ACP adapters and harness CLIs, and the session entrypoint.
-The release packer adds the egress proxy and mock-provider config; the matching
-platform package adds its static Linux session-runner. Setup builds the box on
-the owner's Docker architecture. See [ADR 0017](../../docs/decisions/0017-local-box-build.md).
+OS tools, the harness install script and the session entrypoint. The release
+packer adds the egress proxy and mock-provider config; the matching platform
+package adds its static Linux session-runner. Setup builds the box on the
+owner's Docker architecture with the latest ACP adapters and harness CLIs,
+unless the owner pins them. See [ADR 0017](../../docs/decisions/0017-local-box-build.md)
+and [ADR 0018](../../docs/decisions/0018-floating-harness-versions.md).
 
 Produce local release artifacts with `node scripts/build-release-local.mjs`, then
 run `npm run verify:full`. The packed clean-room setup builds the box from those
