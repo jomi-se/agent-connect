@@ -13,6 +13,7 @@ application integration.
 - [Browser SDK](../packages/web-sdk/README.md)
 - [Testing strategy](architecture/testing-strategy.md)
 - [ACP decision (accepted 2026-10-04)](decisions/0016-acp-application-boundary.md)
+- [Harness action reviewers (2026-10-25)](research/2026-10-25-harness-action-reviewers.md)
 
 Superseded plans, research and decisions preserve historical evidence only.
 They are not current installation or API instructions.

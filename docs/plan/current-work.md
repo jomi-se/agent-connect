@@ -139,3 +139,10 @@ Backlog:
      gateway scenarios, boxed scenarios with teardown, and clean-room.
   4. Maybe shorten the test-only waits in `*-cut`, `expire` and `overflow`
      (8 to 17 seconds each), keeping the timeout behaviour they prove.
+- Reviewer-backed gateway profile (for example `harness-reviewed`): enable
+  Claude Code auto mode or Codex Auto-review from gateway-owned settings, and
+  reject or surface to the owner any permission prompt the reviewer leaves
+  unresolved. The reviewers judge user intent from the conversation, and the
+  application sends the prompts, so the profile is another layer on the
+  approved-tool snapshot, read/write split and box. See
+  [harness action reviewers](../research/2026-10-25-harness-action-reviewers.md).
