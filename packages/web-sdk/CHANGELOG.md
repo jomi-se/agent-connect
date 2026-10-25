@@ -4,6 +4,7 @@
 
 - Depend on zod 4.6.7, which fixes unbounded memory use while validating
   oversized constrained collections (GHSA-mrhx-c7xc-m3w5).
+- Depend on AI SDK `ai` 7.0.143.
 
 ## 0.0.10
 
