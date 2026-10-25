@@ -64,13 +64,36 @@ effective rules.
 
 Headless and SDK entry, from the same docs: `claude -p --permission-mode auto`,
 or SDK `permissionMode: "auto"`. Without a mode, `-p` and the SDK start in
-Manual. This checkout did not re-check that default against the Claude binary.
+Manual. Since Claude Code v2.1.302, a `-p` or SDK run with no mode set denies
+calls that need approval unless an allow rule, a hook or `canUseTool` approves
+them. This checkout did not re-check that default against the Claude binary.
 
-Limits stated by the docs: supported models only (Opus 4.6+, Sonnet 4.6+,
-Haiku 5.5, Fable; "Plan: All plans"). After 3 consecutive or 20 total blocks,
-auto mode falls back to prompting (in the SDK, to `canUseTool`). Organizations
-can disable it with `disableAutoMode`. Classifier calls are billed on
-Enterprise and API accounts.
+Limits stated by the
+[permission-modes](https://code.claude.com/docs/en/permission-modes) page. On
+the Anthropic API and Claude Platform on AWS, auto mode supports Opus 4.6+,
+Sonnet 4.6+, Haiku 5.5 and Fable. On Amazon Bedrock, Google Cloud's Agent
+Platform, Microsoft Foundry and signed-in Claude apps gateway sessions, it
+supports only Sonnet 5+, Opus 4.7+, Haiku 5.5 and Fable. Older models (Sonnet
+4.5, Opus 4.5, Haiku 4.5, claude-3) are unsupported everywhere. On an
+unsupported model the session starts in Manual. Separately, claude-agent-acp
+falls back to `acceptEdits` when the model does not support auto, as described
+below. Plans: "Plan: All plans". After 3 consecutive or 20 total blocks, auto
+mode falls back to prompting (in the SDK, to `canUseTool`). Organizations can
+disable it with `disableAutoMode`. Classifier calls are billed on Enterprise
+and API accounts.
+
+The same page describes server-side classifier review. In auto mode Claude Code
+can ask Anthropic's server to review actions as part of the session's model
+requests: a direct Anthropic API connection, Amazon Bedrock, Google Cloud's
+Agent Platform, Microsoft Foundry, Claude Platform on AWS, or an
+`ANTHROPIC_BASE_URL` that points at an LLM gateway or proxy. If the server
+gives no verdict for an action, the action is denied. If a gateway or proxy
+drops the review results, Claude Code falls back to its own classifier
+requests. `CLAUDE_CODE_AUTO_MODE_SERVER=0` forces local classifier requests.
+The default classifier model is Sonnet 5, overridable with
+`CLAUDE_CODE_AUTO_MODE_MODEL` (v2.1.302+). For Agent Connect, the path between
+the box and Anthropic has to leave those review results intact. Stripping or
+rewriting them makes Claude deny the action.
 
 ACP adapter, from claude-agent-acp 0.95.0: `auto` is a recognised mode, read
 from `permissions.defaultMode` in settings or from
@@ -98,9 +121,14 @@ to treat them "as untrusted evidence." Claude's classifier, by the docs above,
 has tool results stripped before it sees them. Codex's reviewer reads that
 text as evidence.
 
-Outcomes in the docs: low and medium are allowed; high needs sufficient user
-authorization; critical is denied. Failures block. Three consecutive denials
-interrupt the turn.
+Outcomes in the
+[auto-review](https://learn.chatgpt.com/docs/sandboxing/auto-review) doc: low
+and medium are allowed; high needs sufficient user authorization; critical is
+denied. Explicit denials interrupt the turn after 3 consecutive denials, or
+after 10 denials within a rolling window of the last 50 reviews in the same
+turn. Any non-denial resets the consecutive counter. Timeouts are surfaced
+separately from explicit denials, and a timeout alone is not proof the action
+is unsafe.
 
 Keys named by the config reference and approvals docs:
 `approval_policy = "on-request"` or `{ granular = {…} }`;
