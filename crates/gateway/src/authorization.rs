@@ -85,6 +85,20 @@ impl OwnerCookiePolicy {
     }
 }
 
+// Only constructed after validating the sign-in origin, session, CSRF and
+// pending request. The endpoint keeps one shared status/error mapping.
+#[derive(Debug)]
+struct SignInRetry {
+    reason: anyhow::Error,
+    target: String,
+}
+impl std::fmt::Display for SignInRetry {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.reason)
+    }
+}
+impl std::error::Error for SignInRetry {}
+
 pub struct AuthConfig {
     /// A canonical HTTPS origin, or an HTTP loopback origin for local use.
     pub public_url: String,
@@ -613,7 +627,7 @@ impl AuthService {
         inner.rate_count = inner.rate_count.saturating_add(1);
         if inner.rate_count > 600 && self.session_id(&inner, headers, true).is_err() {
             return Ok(if path.starts_with(OWNER) || path == AUTHORIZE {
-                owner_error(StatusCode::TOO_MANY_REQUESTS, "slow_down", path)
+                owner_error(StatusCode::TOO_MANY_REQUESTS, "slow_down", path, None)
             } else {
                 json_response(StatusCode::TOO_MANY_REQUESTS, json!({"error":"slow_down"}))
             });
@@ -643,7 +657,7 @@ impl AuthService {
         }
         if method == Method::GET && path == LOGIN {
             let args = fields(query.as_bytes(), &["client_id", "request_uri"])?;
-            let continuation = self.continuation(&inner, &args)?;
+            let continuation = self.continuation(&inner, &args, &self.request_origin(headers)?)?;
             let (session, cookie) = self.session(&mut inner, headers, false)?;
             let csrf = csrf(&mut inner, &session, &format!("login:{continuation}"), now);
             let waiting = args
@@ -674,29 +688,51 @@ impl AuthService {
                 required(&form, "csrf_token")?,
                 now,
             )?;
-            attempt_budget(
-                &mut inner.login_budgets,
-                peer,
-                now,
-                900,
-                10,
-                "login_rate_limited",
-            )?;
-            let passphrase = required(&form, "passphrase")?;
-            ensure!(passphrase.len() <= 1024, "invalid_credentials");
-            let parsed = PasswordHash::new(&inner.stored.password_hash)
-                .map_err(|_| anyhow!("invalid_credentials"))?;
-            ensure!(
-                Argon2::default()
-                    .verify_password(passphrase.as_bytes(), &parsed)
-                    .is_ok(),
-                "invalid_credentials"
-            );
-            self.verify_factor(
-                &mut inner,
-                form.get("totp").map(String::as_str).unwrap_or(""),
-                peer,
-            )?;
+            // Rebuild the route from live server state, never from an arbitrary
+            // posted URL. The original one-use CSRF remains consumed on failure.
+            let continuation = if continuation.is_empty() {
+                continuation
+            } else {
+                let query = continuation
+                    .strip_prefix(&format!("{AUTHORIZE}?"))
+                    .ok_or_else(|| anyhow!("invalid_request"))?;
+                let args = fields(query.as_bytes(), &["client_id", "request_uri"])?;
+                ensure!(args.len() == 2, "invalid_request");
+                self.continuation(&inner, &args, &self.request_origin(headers)?)?
+            };
+            let retry = match continuation.split_once('?') {
+                Some((_, query)) => format!("{LOGIN}?{query}"),
+                None => LOGIN.to_string(),
+            };
+            let verification: Result<()> = (|| {
+                attempt_budget(
+                    &mut inner.login_budgets,
+                    peer,
+                    now,
+                    900,
+                    10,
+                    "login_rate_limited",
+                )?;
+                let passphrase = required(&form, "passphrase")?;
+                ensure!(passphrase.len() <= 1024, "invalid_credentials");
+                let parsed = PasswordHash::new(&inner.stored.password_hash)
+                    .map_err(|_| anyhow!("invalid_credentials"))?;
+                ensure!(
+                    Argon2::default()
+                        .verify_password(passphrase.as_bytes(), &parsed)
+                        .is_ok(),
+                    "invalid_credentials"
+                );
+                self.verify_factor(
+                    &mut inner,
+                    form.get("totp").map(String::as_str).unwrap_or(""),
+                    peer,
+                )
+            })();
+            verification.map_err(|reason| SignInRetry {
+                reason,
+                target: retry,
+            })?;
             inner.login_budgets.remove(&peer);
             inner.sessions.remove(&session);
             inner.anonymous.remove(&session);
@@ -717,11 +753,6 @@ impl AuthService {
             let target = if continuation.is_empty() {
                 OWNER.to_string()
             } else {
-                // Reparse to defend against forged state from future callers of this method.
-                ensure!(
-                    continuation.starts_with(&format!("{AUTHORIZE}?")),
-                    "invalid_request"
-                );
                 continuation
             };
             return Ok(self.with_cookie(
@@ -1466,14 +1497,21 @@ impl AuthService {
         }
     }
 
-    fn continuation(&self, inner: &Inner, args: &BTreeMap<String, String>) -> Result<String> {
+    fn continuation(
+        &self,
+        inner: &Inner,
+        args: &BTreeMap<String, String>,
+        origin: &str,
+    ) -> Result<String> {
         if args.is_empty() {
             return Ok(String::new());
         }
         let client = required(args, "client_id")?;
         let uri = required(args, "request_uri")?;
         ensure!(
-            inner.pending.get(uri).is_some_and(|p| p.client == client),
+            inner.pending.get(uri).is_some_and(|p| {
+                p.client == client && p.issuer == origin && p.expires > self.now()
+            }),
             "invalid_request"
         );
         Ok(authorize_url(client, uri))
@@ -1551,20 +1589,18 @@ impl AuthService {
                     None => (pair, &[][..]),
                 };
                 if key == policy.name.as_bytes() {
-                    ensure!(
-                        found.is_none()
-                            && !value.is_empty()
-                            && value.len() <= 256
-                            && value.is_ascii(),
-                        "invalid_session"
-                    );
-                    let value =
-                        std::str::from_utf8(value).map_err(|_| anyhow!("invalid_session"))?;
-                    found = Some(hash(value));
+                    ensure!(found.is_none(), "duplicate_session_cookie");
+                    found = Some(value);
                 }
             }
         }
-        let id = found.ok_or_else(|| anyhow!("owner_login_required"))?;
+        let value = found.ok_or_else(|| anyhow!("missing_session_cookie"))?;
+        ensure!(
+            !value.is_empty() && value.len() <= 256 && value.is_ascii(),
+            "invalid_session"
+        );
+        let value = std::str::from_utf8(value).map_err(|_| anyhow!("invalid_session"))?;
+        let id = hash(value);
         ensure!(
             inner
                 .sessions
@@ -1684,6 +1720,8 @@ async fn endpoint(State(service): State<Arc<AuthService>>, request: Request) -> 
         } else if [
             "owner_login_required",
             "invalid_session",
+            "missing_session_cookie",
+            "duplicate_session_cookie",
             "invalid_csrf",
             "invalid_owner_origin",
         ]
@@ -1698,7 +1736,10 @@ async fn endpoint(State(service): State<Arc<AuthService>>, request: Request) -> 
             StatusCode::BAD_REQUEST
         };
         if is_owner {
-            owner_error(status, &message, &path)
+            let retry = error
+                .downcast_ref::<SignInRetry>()
+                .map(|retry| retry.target.as_str());
+            owner_error(status, &message, &path, retry)
         } else {
             json_response(status, json!({"error":code}))
         }
@@ -2127,7 +2168,7 @@ fn html(page: pages::Page) -> Response {
         .unwrap()
 }
 
-fn owner_error(status: StatusCode, reason: &str, path: &str) -> Response {
+fn owner_error(status: StatusCode, reason: &str, path: &str, retry: Option<&str>) -> Response {
     let (title, message) = match reason {
         "invalid_credentials" => (
             "Sign-in did not complete",
@@ -2137,7 +2178,18 @@ fn owner_error(status: StatusCode, reason: &str, path: &str) -> Response {
             "Authenticator code not accepted",
             "Enter a fresh six-digit code from your enrolled authenticator. A code already used for sign-in or approval cannot be reused.",
         ),
-        "owner_login_required" | "invalid_session" => (
+        "missing_session_cookie" if path == LOGIN => (
+            "Please sign in again",
+            "The sign-in session cookie was not sent. Return to sign-in and allow cookies for this gateway before trying again.",
+        ),
+        "duplicate_session_cookie" if path == LOGIN => (
+            "Please sign in again",
+            "More than one sign-in session cookie was sent. Clear this gateway's cookies, then return to sign-in.",
+        ),
+        "owner_login_required"
+        | "invalid_session"
+        | "missing_session_cookie"
+        | "duplicate_session_cookie" => (
             "Please sign in again",
             "Your owner session is missing or has expired. Sign in to review the request or manage application access.",
         ),
@@ -2174,12 +2226,18 @@ fn owner_error(status: StatusCode, reason: &str, path: &str) -> Response {
             "This request may have expired or contains information the gateway cannot accept. Review pending requests from the owner console, or start a fresh connection from the application.",
         ),
     };
-    let (target, label) =
-        if path == LOGIN || matches!(reason, "owner_login_required" | "invalid_session") {
-            (LOGIN, "Return to sign-in")
-        } else {
-            (OWNER, "Back to Activity")
-        };
+    let (target, label) = if path == LOGIN
+        || matches!(
+            reason,
+            "owner_login_required"
+                | "invalid_session"
+                | "missing_session_cookie"
+                | "duplicate_session_cookie"
+        ) {
+        (retry.unwrap_or(LOGIN), "Return to sign-in")
+    } else {
+        (OWNER, "Back to Activity")
+    };
     let mut response = html(pages::error(title, message, target, label));
     *response.status_mut() = status;
     response

@@ -46,6 +46,11 @@ documents HSTS scope and first-visit limits. Repository checks, the owner UI
 gate and gateway integration scenarios pass. The TLS browser probe verifies
 cookie enforcement and HSTS emission; it does not establish HSTS learning.
 
+Failed owner sign-in now preserves a validated pending application approval
+through the retry link, rechecking its entry point and expiry with fresh CSRF.
+Missing and duplicate session cookies receive specific, non-secret explanations.
+Repository checks, the owner UI gate and gateway integration scenarios pass.
+
 CI runs `npm run verify:full` and `cargo test --locked --workspace` on every push to main, and the release workflow publishes only that verified commit. The artifact-only
 clean-room passes 26 checks, including real browser pairing, setup/doctor,
 offline service lifecycle, sessions/end-session, revoke-all, app tools,
@@ -101,10 +106,6 @@ Backlog:
   each address is first-come, so operators enroll right after exposing an
   address. Recovery is a host-side `reset-passkey`, matching `reset-totp`. The
   owner pages' CSP needs a nonce for the WebAuthn script.
-- Keep the pending application approval through a failed sign-in: "Return to
-  sign-in" drops `client_id` and `request_uri`. When a sign-in arrives with no
-  session cookie or a duplicate one, say so on the page, since that reveals
-  nothing.
 - Interrupted or hung test runs can leave a test gateway, `quiet-run` sessions
   and gigabytes of temporary folders behind for days. Make teardown survive
   interruption.
