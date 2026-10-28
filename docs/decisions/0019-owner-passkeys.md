@@ -24,7 +24,7 @@ Configured HTTPS addresses and HTTP loopback addresses, including IP literals, a
 
 6. **Make the browser requirement honest.** Update the product's plain-forms requirement: inspection, denial, revocation and navigation remain server-rendered; passkey enrollment and verification require JavaScript/WebAuthn. Unsupported browsers and disabled JavaScript receive useful explanations, never a passphrase-only bypass for an enrolled credential.
 
-7. **Preserve supported entry points before selecting a library.** IP-literal and HTTP-loopback compatibility, and packaging across supported release targets, are hard acceptance gates. A candidate failing either requires a different implementation/library or a separately accepted product change. An actionable error on previously supported addresses does not itself satisfy compatibility. No implicit hostname migration or cross-origin session transfer is approved.
+7. **Decide the owner-origin migration explicitly.** WebAuthn registration and authentication require a domain-form caller origin; IPv4 and IPv6 literals fail before RP-ID selection. `http://localhost:<port>` with RP ID `localhost` is the ordinary local path; HTTPS on a literal IP does not solve the restriction. Replacing the server library cannot preserve direct IP-origin passkey authentication. Decide the supported owner authentication origin and migration before implementation; do not silently remove existing entry points, transfer sessions across origins or downgrade them to passphrase-only authority. [WebAuthn origin checks](https://www.w3.org/TR/webauthn-3/), [Chromium supported origins](https://chromium.googlesource.com/chromium/src/+/HEAD/content/browser/webauth/origins.md).
 
 ## Protocol, state and CSP boundary
 
@@ -42,7 +42,7 @@ Generate a fresh cryptographic nonce for each script-bearing response and share 
 
 `webauthn-rs` 0.5.5 is a candidate, not a selection. Its high-level passkey methods separate browser options from server-held registration/authentication state; persisted credentials support updates after authentication. Prefer these APIs over custom signature verification or low-level internals. [Versioned API](https://docs.rs/webauthn-rs/0.5.5/webauthn_rs/struct.Webauthn.html), [credential updates](https://docs.rs/webauthn-rs/0.5.5/webauthn_rs/prelude/struct.Passkey.html).
 
-Its passkey flow requires user verification and permits synchronized authenticators. Exact-origin/port checks are available, but its builder's domain validation excludes IP-literal origins. That conflicts with current supported entry points and blocks acceptance without resolution. [Versioned source](https://docs.rs/crate/webauthn-rs/0.5.5/source/src/lib.rs).
+Its passkey flow requires user verification and permits synchronized authenticators. Exact-origin/port checks are available; its builder's domain validation excludes IP-literal origins, consistent with the browser restriction above. Owner-origin migration is a product decision rather than a library substitution. [Versioned source](https://docs.rs/crate/webauthn-rs/0.5.5/source/src/lib.rs).
 
 Its core also depends on OpenSSL; upstream requires OpenSSL 3. Every supported release artifact must retain its installation/runtime contract, rather than acquiring an undeclared native dependency. Cross-target build/linking qualification is mandatory. [Versioned manifest](https://docs.rs/crate/webauthn-rs-core/0.5.5/source/Cargo.toml), [upstream requirements](https://github.com/kanidm/webauthn-rs/blob/master/OpenSSL.md). Physical-device and mobile credential-provider behavior also remains unqualified.
 
@@ -50,6 +50,6 @@ Its core also depends on OpenSSL; upstream requires OpenSSL 3. Every supported r
 
 Verify genuine registration/assertion processing; exact-origin and cross-port isolation; session, purpose, CSRF and expiry binding; replay rejection; concurrent enrollment; invalid signatures/user verification; cancellation; unchanged approval selections; denial; and persistence failure without new authority. Prove active-TOTP migration fails closed and offline recovery preserves grants/passphrase.
 
-Exercise actual gateway pages in Chromium with a virtual WebAuthn authenticator, including CSP enforcement and complete login/approval flows. Separately qualify supported real-device browser paths and every existing entry-point category; virtual success does not establish physical-device compatibility. [Chromium WebAuthn protocol](https://chromedevtools.github.io/devtools-protocol/tot/WebAuthn/).
+Exercise actual gateway pages in Chromium with a virtual WebAuthn authenticator, including CSP enforcement and complete login/approval flows. Separately qualify supported real-device browser paths and the accepted migration for IP-literal entry points; virtual success does not establish physical-device compatibility. [Chromium WebAuthn protocol](https://chromedevtools.github.io/devtools-protocol/tot/WebAuthn/).
 
 Resolve the owner choices and candidate-library compatibility before accepting this ADR. The implementation then needs the evidence above; accepting a design does not establish browser or release qualification.
