@@ -27,7 +27,7 @@ case "$(uname -s):$(uname -m)" in
 esac
 
 repo_root=$(git rev-parse --show-toplevel)
-git_dir=$(git -C "$repo_root" rev-parse --absolute-git-dir)
+git_dir=$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)
 install_dir=${GITLEAKS_INSTALL_DIR:-$git_dir/agent-connect-tools}
 target=$install_dir/gitleaks
 
