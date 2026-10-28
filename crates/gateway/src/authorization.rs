@@ -42,7 +42,6 @@ const AUTHORIZE: &str = "/agent-connect/oauth/authorize";
 const TOKEN: &str = "/agent-connect/oauth/token";
 const PAR: &str = "/agent-connect/oauth/par";
 const REVOKE: &str = "/agent-connect/oauth/revoke";
-const COOKIE: &str = "agent_connect_owner";
 const REQUEST_TTL: u64 = 600;
 const CODE_TTL: u64 = 120;
 const ACCESS_TTL: u64 = 300;
@@ -52,6 +51,39 @@ const MAX_GRANTS: usize = 256;
 const MAX_BODY: usize = 128 * 1024;
 const MAX_SPENT_REFRESH: usize = 16384;
 const MAX_STATE: u64 = 32 * 1024 * 1024;
+
+struct OwnerCookiePolicy {
+    name: &'static str,
+    path: &'static str,
+    secure: bool,
+}
+impl OwnerCookiePolicy {
+    fn for_origin(origin: &str) -> Self {
+        if origin.starts_with("https:") {
+            Self {
+                name: "__Host-agent_connect_owner",
+                path: "/",
+                secure: true,
+            }
+        } else {
+            Self {
+                name: "agent_connect_owner",
+                path: "/agent-connect",
+                secure: false,
+            }
+        }
+    }
+
+    fn header(&self, value: &str, max_age: u64) -> HeaderValue {
+        HeaderValue::from_str(&format!(
+            "{}={value}; Path={}; HttpOnly; SameSite=Lax; Max-Age={max_age}{}",
+            self.name,
+            self.path,
+            if self.secure { "; Secure" } else { "" },
+        ))
+        .expect("generated owner cookie is a valid header")
+    }
+}
 
 pub struct AuthConfig {
     /// A canonical HTTPS origin, or an HTTP loopback origin for local use.
@@ -1317,10 +1349,7 @@ impl AuthService {
                 let mut response = redirect(LOGIN)?;
                 response.headers_mut().insert(
                     header::SET_COOKIE,
-                    HeaderValue::from_str(&format!(
-                        "{COOKIE}=; Path=/agent-connect; HttpOnly; SameSite=Lax; Max-Age=0{}",
-                        self.secure_cookie(&self.request_origin(headers)?)
-                    ))?,
+                    OwnerCookiePolicy::for_origin(&self.request_origin(headers)?).header("", 0),
                 );
                 Ok(response)
             }
@@ -1508,15 +1537,30 @@ impl AuthService {
         Ok(())
     }
     fn session_id(&self, inner: &Inner, headers: &HeaderMap, owner: bool) -> Result<String> {
-        // Cookie parsing rejects ambiguous duplicated credentials.
+        let origin = self.request_origin(headers)?;
+        let policy = OwnerCookiePolicy::for_origin(&origin);
+        // Browsers can send non-ASCII bytes in unrelated cookies. Select the
+        // credential by name before validating its value, while rejecting
+        // malformed or ambiguous selected credentials.
         let mut found = None;
         for cookie in headers.get_all(header::COOKIE) {
-            for pair in cookie.to_str()?.split(';') {
-                if let Some((key, value)) = pair.trim().split_once('=') {
-                    if key == COOKIE {
-                        ensure!(found.is_none() && value.len() <= 256, "invalid_session");
-                        found = Some(hash(value));
-                    }
+            for pair in cookie.as_bytes().split(|byte| *byte == b';') {
+                let pair = pair.trim_ascii();
+                let (key, value) = match pair.iter().position(|byte| *byte == b'=') {
+                    Some(index) => (&pair[..index], &pair[index + 1..]),
+                    None => (pair, &[][..]),
+                };
+                if key == policy.name.as_bytes() {
+                    ensure!(
+                        found.is_none()
+                            && !value.is_empty()
+                            && value.len() <= 256
+                            && value.is_ascii(),
+                        "invalid_session"
+                    );
+                    let value =
+                        std::str::from_utf8(value).map_err(|_| anyhow!("invalid_session"))?;
+                    found = Some(hash(value));
                 }
             }
         }
@@ -1532,9 +1576,7 @@ impl AuthService {
                 })
                 .is_some_and(|s| s.expires > self.now()
                     && (!owner || s.owner)
-                    && self
-                        .request_origin(headers)
-                        .is_ok_and(|origin| origin == s.origin)),
+                    && origin == s.origin),
             "owner_login_required"
         );
         Ok(id)
@@ -1572,13 +1614,6 @@ impl AuthService {
         );
         Ok((id, Some(token)))
     }
-    fn secure_cookie(&self, origin: &str) -> &str {
-        if origin.starts_with("https:") {
-            "; Secure"
-        } else {
-            ""
-        }
-    }
     fn with_cookie(
         &self,
         mut response: Response,
@@ -1586,7 +1621,10 @@ impl AuthService {
         origin: &str,
     ) -> Response {
         if let Some(cookie) = cookie {
-            response.headers_mut().insert(header::SET_COOKIE,HeaderValue::from_str(&format!("{COOKIE}={cookie}; Path=/agent-connect; HttpOnly; SameSite=Lax; Max-Age=43200{}",self.secure_cookie(origin))).unwrap());
+            response.headers_mut().insert(
+                header::SET_COOKIE,
+                OwnerCookiePolicy::for_origin(origin).header(&cookie, 43200),
+            );
         }
         response
     }

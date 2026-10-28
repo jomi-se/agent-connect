@@ -4,6 +4,7 @@
 pub mod authorization;
 pub mod config;
 pub mod credentials;
+pub mod http_security;
 pub mod operations;
 pub mod policy;
 pub mod resume;

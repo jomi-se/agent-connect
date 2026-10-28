@@ -1437,11 +1437,9 @@ async fn logout_expires_owner_cookie_without_revoking_application() {
     )
     .await;
     assert_eq!(reply.status, StatusCode::FOUND);
-    assert!(
-        reply.headers[header::SET_COOKIE]
-            .to_str()
-            .unwrap()
-            .contains("Max-Age=0")
+    assert_eq!(
+        reply.headers[header::SET_COOKIE],
+        "__Host-agent_connect_owner=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure"
     );
     assert!(
         auth.authenticate(tokens["access_token"].as_str().unwrap(), APP)
@@ -1452,6 +1450,341 @@ async fn logout_expires_owner_cookie_without_revoking_application() {
             .await
             .status,
         StatusCode::FOUND
+    );
+}
+
+#[tokio::test]
+async fn owner_cookie_policy_follows_each_entry_point_through_login_and_logout() {
+    let dir = std::env::temp_dir().join(random("agent-connect-cookie-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points = vec![
+        "http://localhost:19840".into(),
+        "https://second.example".into(),
+        "https://gateway.example:9443".into(),
+    ];
+    let fixture = Fixture {
+        dir,
+        auth: AuthService::open(configuration).unwrap(),
+    };
+    let auth = &fixture.auth;
+    let endpoints = [
+        (
+            ISSUER,
+            "gateway.example",
+            "__Host-agent_connect_owner",
+            "/",
+            "; Secure",
+        ),
+        (
+            "http://localhost:19840",
+            "localhost:19840",
+            "agent_connect_owner",
+            "/agent-connect",
+            "",
+        ),
+        (
+            "https://second.example",
+            "second.example",
+            "__Host-agent_connect_owner",
+            "/",
+            "; Secure",
+        ),
+        (
+            "https://gateway.example:9443",
+            "gateway.example:9443",
+            "__Host-agent_connect_owner",
+            "/",
+            "; Secure",
+        ),
+    ];
+    let mut owners = Vec::new();
+    for (origin, host, name, path, secure) in endpoints {
+        let page = request_at(auth, Method::GET, LOGIN, None, None, Some(host), &[]).await;
+        let anonymous = cookie(&page);
+        assert!(anonymous.starts_with(&format!("{name}=anonymous_")));
+        assert_eq!(
+            page.headers[header::SET_COOKIE],
+            format!("{anonymous}; Path={path}; HttpOnly; SameSite=Lax; Max-Age=43200{secure}")
+        );
+        let reply = request_at(
+            auth,
+            Method::POST,
+            LOGIN,
+            Some(origin),
+            Some(&anonymous),
+            Some(host),
+            &[
+                ("csrf_token", &input(&page.text, "csrf_token")),
+                ("passphrase", PASSWORD),
+            ],
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::FOUND, "{}", reply.text);
+        let owner = cookie(&reply);
+        assert!(owner.starts_with(&format!("{name}=owner_")));
+        assert_eq!(
+            reply.headers[header::SET_COOKIE],
+            format!("{owner}; Path={path}; HttpOnly; SameSite=Lax; Max-Age=43200{secure}")
+        );
+        assert_ne!(anonymous, owner);
+        // The anonymous credential is retired, not promoted in place.
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, HeaderValue::from_str(host).unwrap());
+        headers.insert(header::COOKIE, HeaderValue::from_str(&anonymous).unwrap());
+        assert!(
+            auth.session_id(&auth.inner.lock().unwrap(), &headers, false)
+                .is_err()
+        );
+        owners.push(owner);
+    }
+    for (index, (origin, host, name, path, secure)) in endpoints.into_iter().enumerate() {
+        for (other, owner) in owners.iter().enumerate() {
+            // Rename copied credentials to the destination policy so origin binding
+            // is tested independently of the HTTPS/HTTP cookie-name distinction.
+            let copied = format!("{name}={}", owner.split_once('=').unwrap().1);
+            let page = request_at(
+                auth,
+                Method::GET,
+                OWNER,
+                None,
+                Some(&copied),
+                Some(host),
+                &[],
+            )
+            .await;
+            assert_eq!(
+                page.status,
+                if index == other {
+                    StatusCode::OK
+                } else {
+                    StatusCode::FOUND
+                }
+            );
+        }
+        let owner = &owners[index];
+        let page = request_at(auth, Method::GET, OWNER, None, Some(owner), Some(host), &[]).await;
+        let reply = request_at(
+            auth,
+            Method::POST,
+            "/agent-connect/owner/logout",
+            Some(origin),
+            Some(owner),
+            Some(host),
+            &[(
+                "csrf_token",
+                &form_token(&page.text, "/agent-connect/owner/logout"),
+            )],
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::FOUND);
+        assert_eq!(
+            reply.headers[header::SET_COOKIE],
+            format!("{name}=; Path={path}; HttpOnly; SameSite=Lax; Max-Age=0{secure}")
+        );
+        assert_eq!(
+            request_at(auth, Method::GET, OWNER, None, Some(owner), Some(host), &[])
+                .await
+                .status,
+            StatusCode::FOUND
+        );
+    }
+}
+
+#[tokio::test]
+async fn https_owner_cookie_ignores_legacy_credentials_during_login() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
+    let anonymous = cookie(&page);
+    let fields = [
+        ("csrf_token", input(&page.text, "csrf_token")),
+        ("passphrase", PASSWORD.into()),
+    ];
+    let fields: Vec<_> = fields
+        .iter()
+        .map(|(name, value)| (*name, value.as_str()))
+        .collect();
+    let legacy = anonymous.strip_prefix("__Host-").unwrap();
+    for invalid in [legacy.to_string(), format!("{anonymous}; {anonymous}")] {
+        let reply = request(
+            auth,
+            Method::POST,
+            LOGIN,
+            Some(ISSUER),
+            Some(&invalid),
+            &fields,
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::FORBIDDEN);
+    }
+    // Even oversized and duplicate legacy values must not poison the selected cookie.
+    let polluted = format!(
+        "agent_connect_owner={}; {anonymous}; {legacy}",
+        "x".repeat(257)
+    );
+    let reply = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&polluted),
+        &fields,
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::FOUND, "{}", reply.text);
+    let owner = cookie(&reply);
+    assert!(owner.starts_with("__Host-agent_connect_owner=owner_"));
+    let polluted = format!("{legacy}; {owner}; agent_connect_owner=other");
+    assert_eq!(
+        request(auth, Method::GET, OWNER, None, Some(&polluted), &[])
+            .await
+            .status,
+        StatusCode::OK
+    );
+    let legacy_owner = owner.strip_prefix("__Host-").unwrap();
+    assert_eq!(
+        request(auth, Method::GET, OWNER, None, Some(legacy_owner), &[])
+            .await
+            .status,
+        StatusCode::FOUND
+    );
+}
+
+#[tokio::test]
+async fn owner_cookie_rejects_invalid_or_duplicate_selected_credentials() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let owner = login(auth, "").await;
+    let invalid = [
+        owner.clone(),
+        "__Host-agent_connect_owner=".into(),
+        "__Host-agent_connect_owner".into(),
+        "__Host-agent_connect_owner=unknown".into(),
+        format!("__Host-agent_connect_owner={}", "x".repeat(257)),
+    ];
+    for extra in &invalid {
+        for separate_headers in [false, true] {
+            for reverse in [false, true] {
+                let (first, second) = if reverse {
+                    (extra, &owner)
+                } else {
+                    (&owner, extra)
+                };
+                let mut builder = axum::http::Request::builder().uri(OWNER);
+                builder = if separate_headers {
+                    builder
+                        .header(header::COOKIE, first)
+                        .header(header::COOKIE, second)
+                } else {
+                    builder.header(header::COOKIE, format!("{first}; {second}"))
+                };
+                let response = auth
+                    .clone()
+                    .router()
+                    .oneshot(builder.body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::FOUND,
+                    "{extra}, separate={separate_headers}, reverse={reverse}"
+                );
+                assert_eq!(response.headers()[header::LOCATION], LOGIN);
+            }
+        }
+    }
+    let response = auth
+        .clone()
+        .router()
+        .oneshot(
+            axum::http::Request::builder()
+                .uri(OWNER)
+                .header(header::COOKIE, "agent_connect_owner=stale")
+                .header(header::COOKIE, &owner)
+                .header(header::COOKIE, "agent_connect_owner=duplicate")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn owner_cookie_ignores_non_ascii_values_in_unrelated_cookie_names() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let owner = login(auth, "").await;
+    for name in ["agent_connect_owner", "unrelated"] {
+        let mut unrelated = format!("{name}=legacy-").into_bytes();
+        unrelated.push(0xff);
+        for separate_headers in [false, true] {
+            for reverse in [false, true] {
+                let (first, second) = if reverse {
+                    (unrelated.as_slice(), owner.as_bytes())
+                } else {
+                    (owner.as_bytes(), unrelated.as_slice())
+                };
+                let mut builder = axum::http::Request::builder()
+                    .uri(OWNER)
+                    .header(header::HOST, "gateway.example");
+                builder = if separate_headers {
+                    builder
+                        .header(header::COOKIE, HeaderValue::from_bytes(first).unwrap())
+                        .header(header::COOKIE, HeaderValue::from_bytes(second).unwrap())
+                } else {
+                    let mut combined = first.to_vec();
+                    combined.extend_from_slice(b"; ");
+                    combined.extend_from_slice(second);
+                    builder.header(header::COOKIE, HeaderValue::from_bytes(&combined).unwrap())
+                };
+                let response = auth
+                    .clone()
+                    .router()
+                    .oneshot(builder.body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::OK,
+                    "{name}, separate={separate_headers}, reverse={reverse}"
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn owner_cookie_rejects_non_ascii_selected_values() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let owner = login(auth, "").await;
+    for bytes in [&[0xff][..], "\u{00ff}".as_bytes()] {
+        let mut invalid = b"__Host-agent_connect_owner=owner-".to_vec();
+        invalid.extend_from_slice(bytes);
+        for with_valid in [false, true] {
+            let mut builder = axum::http::Request::builder()
+                .uri(OWNER)
+                .header(header::HOST, "gateway.example")
+                .header(header::COOKIE, HeaderValue::from_bytes(&invalid).unwrap());
+            if with_valid {
+                builder = builder.header(header::COOKIE, &owner);
+            }
+            let response = auth
+                .clone()
+                .router()
+                .oneshot(builder.body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FOUND);
+            assert_eq!(response.headers()[header::LOCATION], LOGIN);
+        }
+    }
+    assert_eq!(
+        request(auth, Method::GET, OWNER, None, Some(&owner), &[])
+            .await
+            .status,
+        StatusCode::OK
     );
 }
 
