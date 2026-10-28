@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
 import { runCleanupTasks } from "./test-fixture-cleanup.mjs";
+import { gatewayTestBinary } from "./gateway-test-binary.mjs";
 import {
   ownerCookieResolverRules,
   verifyOwnerCookies,
@@ -28,6 +29,17 @@ import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.
 
 const boxImage = requireBoxImage();
 const repo = resolve(import.meta.dirname, "..");
+const binary = await gatewayTestBinary({
+  repository: repo,
+  build: () => {
+    const build = spawnSync(
+      "cargo",
+      ["build", "--locked", "--bin", "agent-connect"],
+      { cwd: repo, encoding: "utf8" },
+    );
+    assert.equal(build.status, 0, build.stderr);
+  },
+});
 const root = await mkdtemp(join(tmpdir(), "acp-owner-ui-"));
 const screenshots = process.env.OWNER_UI_SCREENSHOTS
   ? resolve(process.env.OWNER_UI_SCREENSHOTS)
@@ -76,13 +88,6 @@ const application = createServer((_request, response) => {
 });
 await new Promise((ok) => application.listen(0, "127.0.0.1", ok));
 const appOrigin = `http://127.0.0.1:${application.address().port}`;
-const binary = join(repo, "target/debug/agent-connect");
-const build = spawnSync(
-  "cargo",
-  ["build", "--locked", "--bin", "agent-connect"],
-  { cwd: repo, encoding: "utf8" },
-);
-assert.equal(build.status, 0, build.stderr);
 const setup = await ownerTerminal(
   binary,
   [

@@ -59,9 +59,11 @@ jobs:
       - name: Build the clean-room release artifacts
         run: |
           docker info
-          node scripts/build-release-local.mjs
+          node scripts/build-release-local.mjs --verification-receipt
 
       - name: Run all credential-free verification gates
+        env:
+          AGENT_CONNECT_VERIFY_RELEASE_ARTIFACTS: ${{ github.workspace }}/dist/release
         run: npm run verify:full
 
       - name: Check lint and dependency boundaries

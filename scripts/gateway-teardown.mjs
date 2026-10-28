@@ -19,14 +19,14 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import WebSocket from "ws";
 import { requireBoxImage } from "./test-box-images.mjs";
+import { gatewayTestBinary } from "./gateway-test-binary.mjs";
 
 const image = requireBoxImage();
 const exec = promisify(execFile);
 const repo = resolve(import.meta.dirname, "..");
+const sourceBinary = await gatewayTestBinary({ repository: repo });
 const root = await mkdtemp(join(tmpdir(), "agent-connect-teardown-"));
 const suffix = root.split("-").at(-1).toLowerCase();
-const sourceBinary =
-  process.env.ACP_GATEWAY_BIN ?? join(repo, "target/debug/agent-connect");
 const binary = join(root, "gateway");
 const egressName = `acp-test-egress-${suffix}`;
 const modelName = `acp-test-model-${suffix}`;

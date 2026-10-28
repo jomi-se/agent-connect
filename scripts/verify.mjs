@@ -4,6 +4,13 @@ import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
+import {
+  cleanSourceCommit,
+  prepareReleaseArtifacts,
+  extractVerificationBinaries,
+  dockerReleaseTarget,
+} from "./verification-artifacts.mjs";
 import { testBoxImage, removeTestImages } from "./test-box-images.mjs";
 
 async function command(binary, args, { cwd, env, capture = false }) {
@@ -61,7 +68,15 @@ export async function verify({
   repository = resolve(import.meta.dirname, ".."),
   run = command,
   only = steps,
+  releaseArtifacts,
+  hostPlatform = process.platform,
+  hostArch = process.arch,
 } = {}) {
+  if (
+    releaseArtifacts !== undefined &&
+    (typeof releaseArtifacts !== "string" || !releaseArtifacts.trim())
+  )
+    throw new Error("--release-artifacts requires an artifact directory");
   const unknown = only.filter((step) => !steps.includes(step));
   if (unknown.length)
     throw new Error(
@@ -72,8 +87,14 @@ export async function verify({
     await readFile(join(box, "package.json"), "utf8"),
   );
   const image = testBoxImage(version, randomUUID());
-  const work = await mkdtemp(join(tmpdir(), "agent-connect-verify-"));
+  const work = await mkdtemp(join(resolve(tmpdir()), "agent-connect-verify-"));
   const env = { ...process.env, ACP_BOX_IMAGE: image };
+  // This orchestrator selects the mode; child fixture tests can still run source mode.
+  delete env.ACP_GATEWAY_BIN;
+  delete env.ACP_GATEWAY_MODE;
+  delete env.AGENT_CONNECT_VERIFY_RELEASE_ARTIFACTS;
+  let prepared;
+  let boxAttempted = false;
   const options = { cwd: repository, env };
   const docker = (args, capture = false) =>
     run("docker", args, {
@@ -82,20 +103,40 @@ export async function verify({
       env: { ...env, DOCKER_CONFIG: join(work, "docker-config") },
     });
   try {
-    await timed("session-runners", () =>
-      run("./deploy/gateway/box/build-local.sh", ["--runners-only"], options),
-    );
+    if (releaseArtifacts)
+      prepared = await prepareReleaseArtifacts({
+        repository,
+        directory: resolve(releaseArtifacts),
+        work,
+      });
+    else
+      await timed("session-runners", () =>
+        run("./deploy/gateway/box/build-local.sh", ["--runners-only"], options),
+      );
     const architecture = (
       await docker(["info", "--format", "{{.Architecture}}"], true)
     ).trim();
-    const arch = {
-      aarch64: "arm64",
-      arm64: "arm64",
-      x86_64: "amd64",
-      amd64: "amd64",
-    }[architecture];
-    if (!arch)
-      throw new Error(`Unsupported Docker architecture: ${architecture}`);
+    const { arch } = dockerReleaseTarget(architecture);
+    let runner = join(
+      repository,
+      `target/distrib/session-runner-linux-${arch}`,
+    );
+    if (prepared) {
+      const binaries = await extractVerificationBinaries({
+        prepared,
+        work,
+        architecture,
+        platform: hostPlatform,
+        arch: hostArch,
+        run: (binary, args, extra) =>
+          run(binary, args, { ...options, ...extra }),
+      });
+      runner = binaries.runner;
+      env.ACP_GATEWAY_MODE = "release-artifacts";
+      env.ACP_GATEWAY_BIN = binaries.gateway;
+      env.AGENT_CONNECT_RELEASE_DIR = prepared.directory;
+      await cleanSourceCommit(repository, prepared.commit);
+    }
     const context = join(work, "box");
     await mkdir(context);
     for (const file of ["Dockerfile", "entrypoint.sh", "install-harnesses.sh"])
@@ -104,20 +145,26 @@ export async function verify({
       join(repository, "deploy/gateway/egress-proxy.mjs"),
       join(context, "egress-proxy.mjs"),
     );
-    await copyFile(
-      join(repository, `target/distrib/session-runner-linux-${arch}`),
-      join(context, "session-runner"),
-    );
+    await copyFile(runner, join(context, "session-runner"));
+    boxAttempted = true;
     await timed("test box", () =>
       docker(["build", "--platform", `linux/${arch}`, "--tag", image, context]),
     );
-    for (const step of only)
+    for (const step of only) {
+      if (prepared) await cleanSourceCommit(repository, prepared.commit);
       await timed(step, () => run("npm", ["run", step], options));
+    }
+    if (prepared) await cleanSourceCommit(repository, prepared.commit);
   } finally {
     try {
-      await removeTestImages(image, (args) => docker(args, true));
+      if (prepared) await cleanSourceCommit(repository, prepared.commit);
     } finally {
-      await rm(work, { recursive: true, force: true });
+      try {
+        if (boxAttempted)
+          await removeTestImages(image, (args) => docker(args, true));
+      } finally {
+        await rm(work, { recursive: true, force: true });
+      }
     }
   }
 }
@@ -127,8 +174,23 @@ if (
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
   try {
-    const only = process.argv.slice(2);
-    await verify(only.length ? { only } : {});
+    const { values, positionals } = parseArgs({
+      allowPositionals: true,
+      options: { "release-artifacts": { type: "string" } },
+    });
+    if (
+      process.env.ACP_GATEWAY_MODE !== undefined ||
+      process.env.ACP_GATEWAY_BIN !== undefined
+    )
+      throw new Error(
+        "verify owns gateway selection; use --release-artifacts instead of ACP_GATEWAY_BIN/ACP_GATEWAY_MODE",
+      );
+    await verify({
+      only: positionals.length ? positionals : steps,
+      releaseArtifacts:
+        values["release-artifacts"] ??
+        process.env.AGENT_CONNECT_VERIFY_RELEASE_ARTIFACTS,
+    });
   } catch (error) {
     console.error(error.message);
     process.exitCode = error.exitCode ?? 1;

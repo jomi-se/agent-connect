@@ -16,9 +16,15 @@ import { createServer } from "node:http";
 import { createServer as tcpServer } from "node:net";
 import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
 import { requireBoxImage } from "./test-box-images.mjs";
+import { gatewayTestBinary } from "./gateway-test-binary.mjs";
 
 const boxImage = requireBoxImage();
 const repo = resolve(import.meta.dirname, "..");
+const gatewayBinary = await gatewayTestBinary({
+  repository: repo,
+  build: () =>
+    command(process.env.CARGO ?? "cargo", ["build", "--locked", "--bins"]),
+});
 const fixtures = join(repo, "deploy/gateway/test/fixtures");
 const run = await mkdtemp(join(tmpdir(), "agent-connect-acp-"));
 const children = new Set();
@@ -129,7 +135,6 @@ const pageServer = createServer(async (req, res) => {
   }
 });
 try {
-  await command(process.env.CARGO ?? "cargo", ["build", "--locked", "--bins"]);
   await command("node", ["--test", join(repo, "scripts/gateway-cli.test.mjs")]);
   for (const name of ["adapters", "web"]) {
     await mkdir(join(run, name));
@@ -224,7 +229,7 @@ try {
       "/app/server.mjs",
     ]);
     await command(
-      join(repo, "target/debug/agent-connect"),
+      gatewayBinary,
       ["egress", "start", "--name", egressContainer, "--box-image", boxImage],
       { env: cleanEnv },
     );
@@ -280,7 +285,7 @@ try {
         continue;
       const gatewayPort = await port();
       const gateway = service(
-        join(repo, "target/debug/agent-connect"),
+        gatewayBinary,
         [
           "serve",
           ...(boxed
