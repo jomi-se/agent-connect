@@ -19,6 +19,10 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
 import { runCleanupTasks } from "./test-fixture-cleanup.mjs";
+import {
+  ownerCookieResolverRules,
+  verifyOwnerCookies,
+} from "./owner-cookie-browser.mjs";
 import { requireBoxImage } from "./test-box-images.mjs";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 
@@ -144,7 +148,20 @@ try {
     await new Promise((ok) => setTimeout(ok, 50));
   }
   assert.match(diagnostics, /listening on/);
-  browser = await chromium.launch({ env: fixtureEnv });
+  browser = await chromium.launch({
+    env: fixtureEnv,
+    args: [
+      `--host-resolver-rules=${ownerCookieResolverRules}`,
+      "--no-proxy-server",
+    ],
+  });
+  const ownerCookieChecks = await verifyOwnerCookies({
+    browser,
+    binary,
+    root,
+    fixtureEnv,
+    password,
+  });
   const context = await browser.newContext();
   // Both owner pages and the synthetic app callback are served by real local HTTP.
   const page = await context.newPage();
@@ -194,7 +211,15 @@ try {
     states.push(name);
   }
   const owner = `${origin}/agent-connect/owner`;
-  await page.goto(owner);
+  const httpSignIn = await page.goto(owner);
+  assert.equal(await httpSignIn.headerValue("strict-transport-security"), null);
+  const anonymousCookies = await context.cookies(owner);
+  assert.equal(anonymousCookies.length, 1);
+  assert.equal(anonymousCookies[0].name, "agent_connect_owner");
+  assert.equal(anonymousCookies[0].path, "/agent-connect");
+  assert.equal(anonymousCookies[0].secure, false);
+  assert.equal(anonymousCookies[0].httpOnly, true);
+  assert.equal(anonymousCookies[0].sameSite, "Lax");
   await capture("sign-in", { compact: true });
   await page.keyboard.press("Tab");
   await page.keyboard.press("Tab");
@@ -233,6 +258,13 @@ try {
   await page
     .getByRole("heading", { name: "No apps yet", exact: true })
     .waitFor();
+  const signedInCookies = await context.cookies(owner);
+  assert.equal(signedInCookies.length, 1);
+  assert.equal(signedInCookies[0].name, "agent_connect_owner");
+  assert.equal(signedInCookies[0].path, "/agent-connect");
+  assert.equal(signedInCookies[0].secure, false);
+  assert.ok(signedInCookies[0].value.startsWith("owner_"));
+  assert.ok(signedInCookies[0].value !== anonymousCookies[0].value);
   await capture("activity-empty");
   await page.getByRole("link", { name: "Security", exact: true }).click();
   await page.getByText("Authenticator is off", { exact: true }).waitFor();
@@ -652,8 +684,23 @@ try {
   await page.getByRole("button", { name: "Deny", exact: true }).click();
   await page.waitForURL(`${appOrigin}/**`);
   await page.goto(owner);
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  const [httpLogout] = await Promise.all([
+    page.waitForResponse(
+      (reply) =>
+        reply.url() === `${owner}/logout` &&
+        reply.request().method() === "POST",
+    ),
+    page.getByRole("button", { name: "Sign out", exact: true }).click(),
+  ]);
+  assert.equal(
+    await httpLogout.headerValue("set-cookie"),
+    "agent_connect_owner=; Path=/agent-connect; HttpOnly; SameSite=Lax; Max-Age=0",
+  );
   await page.getByLabel("Authenticator code").waitFor();
+  const signedOutCookies = await context.cookies(owner);
+  assert.equal(signedOutCookies.length, 1);
+  assert.equal(signedOutCookies[0].name, "agent_connect_owner");
+  assert.ok(signedOutCookies[0].value.startsWith("anonymous_"));
   await capture("factor-sign-in", { compact: true });
   // A real, isolated boxed runtime with no agent sessions exercises health UI.
   // Stop only this test's owned egress; no provider credentials or login are used.
@@ -747,6 +794,7 @@ try {
     JSON.stringify(
       {
         status: "passed",
+        ownerCookieChecks,
         states,
         sessionEndCleanup: {
           observed: endedStates,

@@ -478,7 +478,8 @@ async fn run() -> anyhow::Result<()> {
         .route("/healthz", get(health))
         .with_state(gateway);
     if let Some(authorization) = authorization {
-        app = app.merge(authorization.router());
+        app = app.merge(authorization.clone().router());
+        app = agent_connect_gateway::http_security::with_hsts(app, authorization);
     }
     eprintln!("[gateway] listening on ws://{listen}/acp");
     let listener = tokio::net::TcpListener::bind(listen).await.context(

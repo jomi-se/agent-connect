@@ -27,6 +27,9 @@ Use Node 24 LTS >=24.15 and <25, Docker and the pinned ACP build tools. Boxed
 gates build the box with the latest harnesses from npm, as owners get them; the
 unboxed compatibility fixtures keep their own adapter pins. Native browser gates use
 `config/webmcp-test-compat.json`.
+The owner browser gate also requires the `openssl` command to generate a
+temporary test certificate and key; CI uses Ubuntu 24.04. OpenSSL is a test
+tool dependency, not a gateway runtime requirement.
 
 ```sh
 npm run check                           # fast gates, after every change
@@ -39,6 +42,22 @@ Keep all harness homes isolated. Never forward API-key environment variables,
 invoke personal logins, or replay uncertain prompts/effects. Tests own their
 containers, networks and processes; cleanup must leave shared peers alone and
 retain capacity until owned resources are removed.
+
+## Owner cookie and HTTPS evidence
+
+The owner UI gate retains its HTTP loopback checks and adds an isolated gateway
+fixture behind a Node standard-library HTTPS reverse proxy. Chromium exercises
+the real gateway's anonymous and authenticated cookies, rejects attempts to
+shadow the prefixed cookie with `Domain` or another path, and checks legacy
+cookie pollution, session replacement and logout. Credentials and owner state
+are synthetic; no personal login or provider subscription is used.
+
+The proxy certificate and key are generated at runtime with OpenSSL and removed
+during fixture cleanup. Chromium uses `ignoreHTTPSErrors` for this self-signed
+certificate. The probe checks HSTS header emission, but cannot establish browser
+HSTS learning or upgrade behavior with an untrusted certificate. Rust router
+tests cover exact Host selection, forwarding-header spoofing, HTTP exclusion
+and HSTS on success, errors and fallback responses.
 
 ## Fixture storage
 

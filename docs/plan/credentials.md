@@ -1,6 +1,7 @@
 # Plan: harness credentials for boxed sessions
 
-Status: dedicated shared-home direction implemented; hosted owner authorization updated 2026-10-03, unreleased. It addresses the credential-boundary
+Status: dedicated shared-home direction implemented; hosted owner authorization
+hardening updated 2026-10-28, unreleased. It addresses the credential-boundary
 prerequisite of [ADR 0016](../decisions/0016-acp-application-boundary.md). It
 follows the [ACP gateway spike](../archive/experiments/acp-gateway.md), whose boxed runs
 used only a mock model.
@@ -82,10 +83,24 @@ showing the exact requesting application origin, full fixed tools, native boxed
 harness authority, supported restricted profiles and access duration. The selected
 profile is immutable grant authority. Enrolled TOTP is required at login and
 again with a fresh code for each approval. Owner sessions use a separate
-HttpOnly, SameSite=Lax cookie, Secure on HTTPS. Owner forms use CSRF protection;
+HttpOnly, SameSite=Lax cookie. HTTPS entry points use
+`__Host-agent_connect_owner` with `Secure`, `Path=/` and no `Domain`;
+HTTP loopback uses `agent_connect_owner`, `Path=/agent-connect`, no `Domain`
+and no `Secure`. Supporting browsers enforce the
+[cookie-prefix requirements](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie#cookie_prefixes),
+rejecting attempts to set the HTTPS cookie with a domain or another path.
+Owner forms use CSRF protection;
 CSP and frame headers prevent embedding the approval UI in an application.
 Provider device login still uses `agent-connect login`; owner sign-in does not
 log in to the provider, modify personal credentials or alter accepted home risks.
+
+Anonymous sign-in sessions, authenticated sessions and logout use the same
+entry-point cookie policy. Authentication rejects malformed or duplicate
+selected-name credentials, including duplicates across Cookie headers. HTTPS
+never falls back to the plain legacy name; stale legacy cookies are ignored.
+Signing in retires the anonymous credential and issues a fresh owner credential.
+Upgrading from the plain HTTPS cookie requires fresh owner sign-in; this cookie
+change does not revoke application grants.
 
 Apps begin popup or redirect consent through an explicit user action. Requests
 expire after ten minutes; PKCE authorization codes after two minutes; application
@@ -110,13 +125,19 @@ revocation. This design does not require a code for every harness session.
 The HTTPS `public_url` and explicitly configured entry-point origins serve owner
 pages, OAuth metadata/endpoints and the `/acp` socket. A grant is bound to the
 exact entry point used for pairing, including its issuer and socket authority.
-Owner cookies and CSRF checks are origin-specific; cross-entry-point owner
-requests are rejected. Proxies preserve the public Host, browser Origin and
+Browser cookies are scoped to a host, not a port. Server sessions and CSRF
+checks bind to the complete configured origin, including scheme and port;
+cross-entry-point owner requests are rejected even if a browser sends the same
+cookie to another port. Keep third-party applications on a separate hostname.
+Proxies preserve the public Host, browser Origin and
 WebSocket subprotocol headers. HTTP loopback is permitted locally. Normal setup issues no grant
 file. The explicit `--headless-static-bearer` mode retains manual origin/tool
 approval for headless integrations without owner pages or managed refresh.
 These changes do not establish live pairing or provider-refresh acceptance;
 new checks and owner-run live evidence remain separate release gates.
+Configured HTTPS entry points also emit HSTS; its host-wide browser scope and
+first-visit limits are described in the
+[HTTPS configuration reference](../install/configuration.md#https-reverse-proxy).
 
 ### Mobile owner approval follow-up
 

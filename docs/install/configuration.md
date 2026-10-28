@@ -127,8 +127,15 @@ after two minutes. Access tokens last at most five minutes. Owner consent offers
 chain. Refresh-token reuse revokes the grant. Owner revocation affects active
 and detached sessions within one second; authorization is checked before each
 frame is forwarded. Grant ID and tool snapshot remain fixed across token rotation.
-Owner cookies are distinct from app credentials, HttpOnly, SameSite=Lax and
-Secure on HTTPS. Owner forms enforce CSRF and pages prohibit framing.
+Owner cookies are distinct from app credentials and use HttpOnly and
+SameSite=Lax. HTTPS uses `__Host-agent_connect_owner`, `Secure`, `Path=/` and no
+`Domain`; HTTP loopback uses `agent_connect_owner`, `Path=/agent-connect`, no
+`Domain` and no `Secure`. Issuance, acceptance and logout select the same policy
+from the configured entry-point origin. Malformed or duplicate selected-name
+credentials fail authentication. HTTPS ignores the plain legacy name, so an
+upgrade from that cookie requires fresh owner sign-in without revoking app
+grants. See [owner authentication](../plan/credentials.md#gateway-owner-authentication-and-application-consent-2026-10-03).
+Owner forms enforce CSRF and pages prohibit framing.
 Owner secrets and authorization state are never mounted into harness boxes.
 
 The default available profiles are `sandboxed` and `read-only` for Codex, and
@@ -219,7 +226,9 @@ next authenticator interval.
 
 Use distinct hostnames for the gateway owner surface and third-party application
 servers. Browser cookies are not isolated by port: two ports on one hostname do
-not provide separate owner-cookie trust boundaries. The local sample's loopback
+not provide separate owner-cookie trust boundaries, including for `__Host-`
+cookies. Server sessions and CSRF checks still bind to the complete configured
+origin, including scheme and port. The local sample's loopback
 servers are operator-controlled; production examples use `gateway.example` and
 `app.example` as separate hosts.
 
@@ -230,6 +239,24 @@ origin with your existing reverse proxy. These reserved-domain examples assume
 setup used `--origin https://gateway.example`. Forward every route to the same
 gateway: owner pages, OAuth, metadata, `/healthz` and the `/acp` WebSocket. DNS,
 certificate issuance and public ingress remain operator responsibilities.
+
+The hosted gateway emits `Strict-Transport-Security: max-age=31536000` on
+responses for configured HTTPS entry points, including owner/OAuth pages,
+metadata, `/healthz`, `/acp` handshakes, errors and fallback responses. Selection
+uses exactly one configured `Host` (including its port), never `Origin`,
+`X-Forwarded-Proto` or `X-Forwarded-Host`. Missing, duplicate or unknown Hosts
+do not select the primary entry point. HTTP loopback emits no HSTS. The policy
+has neither `includeSubDomains` nor `preload`; headless mode is unchanged.
+
+Browsers learn HSTS only through valid HTTPS. Before that, a first HTTP visit
+still needs an edge redirect to reach HTTPS; the redirect cannot protect that
+first HTTP hop from interception. Separately managed browser preload can avoid
+that hop. Once learned, HSTS covers every port of a hostname: port 80 maps to
+443, while other explicit ports keep their number and require TLS. An HTTP
+loopback entry point on another port of that hostname may therefore stop
+working in that browser. HSTS does not apply to IP literals. See
+[RFC 6797, section 8.3](https://www.rfc-editor.org/rfc/rfc6797.html#section-8.3)
+and [section 8.1](https://www.rfc-editor.org/rfc/rfc6797.html#section-8.1).
 
 Caddy handles WebSocket upgrades automatically:
 

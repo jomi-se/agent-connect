@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-05
+Updated: 2026-10-28
 
 Gateway **0.0.1** and root browser SDK **0.0.10** were published to npm on
 2026-10-04: Rust launcher/platform binaries, hosted owner sign-in/consent/grant management, dedicated login
@@ -36,6 +36,15 @@ includes health/problem guidance, live sessions/end-session, revoke-all,
 owner sign-out, immutable supported profiles, multiple entry points and offline
 TOTP recovery. The sample automatically recovers interrupted transport without
 replaying uncertain prompts or application effects.
+
+HTTPS entry points now use prefixed owner cookies with consistent issuance,
+acceptance and logout, and the complete hosted router emits HSTS for the exact
+configured HTTPS Host. HTTP loopback keeps its plain cookie policy. The
+[credential model](credentials.md) describes fresh owner sign-in after upgrading
+from legacy cookies; [configuration](../install/configuration.md#https-reverse-proxy)
+documents HSTS scope and first-visit limits. Repository checks, the owner UI
+gate and gateway integration scenarios pass. The TLS browser probe verifies
+cookie enforcement and HSTS emission; it does not establish HSTS learning.
 
 CI runs `npm run verify:full` and `cargo test --locked --workspace` on every push to main, and the release workflow publishes only that verified commit. The artifact-only
 clean-room passes 26 checks, including real browser pairing, setup/doctor,
@@ -86,16 +95,6 @@ Backlog:
   reuse detection revokes it. Until this lands, record in `plan/credentials.md`
   that a stolen token extends the consented-application risk to whoever holds
   it.
-- On HTTPS entry points, name the owner cookie with the `__Host-` prefix, which
-  requires `Path=/`, `Secure` and no `Domain`. Browsers then reject same-named
-  cookies from sibling subdomains, plain-HTTP responses or other paths. A stale
-  or planted cookie can no longer trigger the duplicate-cookie refusal that locks
-  the owner out. HTTP loopback keeps a plain name.
-- Send `Strict-Transport-Security` (without `includeSubDomains`) from HTTPS entry
-  points, so browsers stop trying plain HTTP after the first visit whatever
-  proxy is in front. The SDK already refuses non-loopback HTTP gateway URLs. The
-  remaining gap is an owner typing a bare host name on a first visit. Document
-  that only an edge redirect or HSTS preload covers that visit.
 - Replace TOTP with passkeys, as a second factor after the passphrase for
   sign-in and approvals. Record a decision first. Allow one passkey per entry
   point address, since a passkey is bound to its domain. The first enrollment on
