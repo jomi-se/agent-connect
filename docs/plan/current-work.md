@@ -86,22 +86,16 @@ Owner-required work:
 
 Backlog:
 
-- State the deployment topology in `docs/mission.md` and the AGENTS.md product
-  boundary. Any number of users each run their own gateway, at an origin the
-  application cannot know in advance. Each gateway serves whichever application
-  origins its owner approves. Hardening must keep both directions open and stay
-  easy for users. Rule out anything that makes applications list gateway
-  origins (for example a CSP `connect-src` naming gateways) or makes gateways
-  pre-register applications.
 - Bind grants to the browser that paired, using sender-constrained tokens (for
   example DPoP, RFC 9449, with a non-extractable WebCrypto key). Today the only
   binding is the `Origin` header, which a non-browser client sets freely. A
   copied refresh token therefore works from anywhere until the grant expires or
-  reuse detection revokes it. Until this lands, record in `plan/credentials.md`
-  that a stolen token extends the consented-application risk to whoever holds
-  it.
+  reuse detection revokes it. The current bearer-token theft risk is documented
+  in [the credential model](credentials.md).
 - Replace TOTP with passkeys, as a second factor after the passphrase for
-  sign-in and approvals. Record a decision first. Allow one passkey per entry
+  sign-in and approvals. [ADR 0019](../decisions/0019-owner-passkeys.md) is
+  proposed; migration policy and library compatibility remain unresolved.
+  Allow one passkey per entry
   point address, since a passkey is bound to its domain. The first enrollment on
   each address is first-come, so operators enroll right after exposing an
   address. Recovery is a host-side `reset-passkey`, matching `reset-totp`. The

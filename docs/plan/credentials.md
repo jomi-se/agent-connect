@@ -118,6 +118,13 @@ reconnects transport without changing ownership or replaying a prompt.
 Refresh-token reuse revokes the grant; uncertain rotation is not automatically
 retried. SDK default resume only reuses/completes a grant and never opens consent.
 
+Access and refresh tokens are currently bearer credentials, not bound to the
+browser that paired. A non-browser client can supply the approved application's
+`Origin` header, so a stolen token extends that application's consented
+authority to whoever holds it until expiry, revocation or refresh-token reuse
+detection. Origin checks do not prove possession by the paired browser;
+sender-constrained tokens remain planned work.
+
 The hosted owner console can end a live session without revoking its grant,
 revoke one or all grants and forget its owner browser session. Active and detached
 revoked authority ends within one second, and per-frame
