@@ -102,6 +102,12 @@ Signing in retires the anonymous credential and issues a fresh owner credential.
 Upgrading from the plain HTTPS cookie requires fresh owner sign-in; this cookie
 change does not revoke application grants.
 
+After a failed passphrase or authenticator check, the sign-in retry link keeps
+the pending application request when its entry point, session and one-use CSRF
+binding were valid. Retrying rechecks the request and issues a fresh CSRF token.
+Missing or duplicate session cookies receive a specific explanation and a fresh
+sign-in link; no submitted return URL is trusted without that binding.
+
 Apps begin popup or redirect consent through an explicit user action. Requests
 expire after ten minutes; PKCE authorization codes after two minutes; application
 access tokens after five minutes. The owner selects 1 hour (default), 1 day,

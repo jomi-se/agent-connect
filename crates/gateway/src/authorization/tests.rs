@@ -1186,12 +1186,592 @@ async fn owner_post_errors_are_safe_html_and_api_errors_remain_json() {
     assert_eq!(response.headers["referrer-policy"], "no-referrer");
 }
 
+fn sign_in_retry(reply: &Reply) -> String {
+    reply
+        .text
+        .split("class='button wide' href='")
+        .nth(1)
+        .unwrap()
+        .split('\'')
+        .next()
+        .unwrap()
+        .replace("&amp;", "&")
+        .replace("&#39;", "'")
+        .replace("&quot;", "\"")
+}
+
+async fn pending_sign_in(auth: &Arc<AuthService>) -> (String, String, Reply) {
+    let uri = pushed(auth).await;
+    let response = request(
+        auth,
+        Method::GET,
+        &authorize_url(APP, &uri),
+        None,
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(response.status, StatusCode::FOUND);
+    let target = response.headers[header::LOCATION]
+        .to_str()
+        .unwrap()
+        .to_string();
+    let page = request(auth, Method::GET, &target, None, None, &[]).await;
+    assert_eq!(page.status, StatusCode::OK);
+    (uri, target, page)
+}
+
+#[tokio::test]
+async fn failed_sign_in_retries_original_consent_with_fresh_csrf() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let (uri, target, page) = pending_sign_in(auth).await;
+    let anonymous = cookie(&page);
+    let continuation = input(&page.text, "continue");
+    let old_csrf = input(&page.text, "csrf_token");
+    assert_eq!(continuation, authorize_url(APP, &uri));
+    let failed = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&anonymous),
+        &[
+            ("continue", &continuation),
+            ("csrf_token", &old_csrf),
+            ("passphrase", "wrong passphrase"),
+        ],
+    )
+    .await;
+    assert_eq!(failed.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(sign_in_retry(&failed), target);
+    assert!(!failed.headers.contains_key(header::SET_COOKIE));
+    {
+        let inner = auth.inner.lock().unwrap();
+        assert!(inner.stored.grants.is_empty());
+        assert!(inner.codes.is_empty());
+        assert!(inner.sessions.is_empty());
+        assert!(!inner.anonymous_csrf.contains_key(&hash(&old_csrf)));
+    }
+    let retry = request(
+        auth,
+        Method::GET,
+        &sign_in_retry(&failed),
+        None,
+        Some(&anonymous),
+        &[],
+    )
+    .await;
+    assert_eq!(retry.status, StatusCode::OK);
+    assert_eq!(input(&retry.text, "continue"), continuation);
+    let fresh_csrf = input(&retry.text, "csrf_token");
+    assert_ne!(fresh_csrf, old_csrf);
+    let replay = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&anonymous),
+        &[
+            ("continue", &continuation),
+            ("csrf_token", &old_csrf),
+            ("passphrase", PASSWORD),
+        ],
+    )
+    .await;
+    assert_eq!(replay.status, StatusCode::FORBIDDEN);
+    assert_eq!(sign_in_retry(&replay), LOGIN);
+    let signed_in = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&anonymous),
+        &[
+            ("continue", &continuation),
+            ("csrf_token", &fresh_csrf),
+            ("passphrase", PASSWORD),
+        ],
+    )
+    .await;
+    assert_eq!(signed_in.status, StatusCode::FOUND);
+    assert_eq!(signed_in.headers[header::LOCATION], continuation);
+    assert!(auth.inner.lock().unwrap().stored.grants.is_empty());
+    let approved = consent(auth, &cookie(&signed_in), &uri, "approve", "", "3600").await;
+    assert!(!code(&approved).is_empty()); // Also verifies original app state and issuer.
+    assert_eq!(auth.inner.lock().unwrap().stored.grants.len(), 1);
+}
+
+#[tokio::test]
+async fn failed_sign_in_totp_persistence_error_keeps_unavailable_status_and_no_authority() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let secret = base32(&[9; 20]);
+    {
+        let mut inner = auth.inner.lock().unwrap();
+        let mut next = inner.stored.clone();
+        next.totp_secret = Some(secret.clone());
+        next.last_totp_step = None;
+        auth.commit(&mut inner, next).unwrap();
+    }
+    let (_, target, page) = pending_sign_in(auth).await;
+    let anonymous = cookie(&page);
+    let token = input(&page.text, "csrf_token");
+    let factor = totp(&secret, auth.now() / 30).unwrap();
+    assert!(verify_totp(&secret, &factor, auth.now(), None).is_ok());
+    // Keep the original state inside the fixture, but make the atomic save's
+    // destination a directory so even a privileged test runner cannot write it.
+    let state = fixture.dir.join("authorization.json");
+    let saved = fixture.dir.join("before-write-failure.json");
+    fs::rename(&state, &saved).unwrap();
+    fs::create_dir(&state).unwrap();
+    let response = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&anonymous),
+        &[
+            ("continue", &input(&page.text, "continue")),
+            ("csrf_token", &token),
+            ("passphrase", PASSWORD),
+            ("totp", &factor),
+        ],
+    )
+    .await;
+    assert_eq!(response.status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        response.headers[header::CONTENT_TYPE],
+        "text/html; charset=utf-8"
+    );
+    assert_eq!(response.headers[header::CACHE_CONTROL], "no-store");
+    assert!(response.text.contains("Authorization unavailable"));
+    assert_eq!(sign_in_retry(&response), target);
+    assert!(!response.headers.contains_key(header::SET_COOKIE));
+    for private in [
+        PASSWORD,
+        secret.as_str(),
+        factor.as_str(),
+        anonymous.split_once('=').unwrap().1,
+        fixture.dir.to_str().unwrap(),
+        "authorization.json",
+        ".authorization-",
+        "os error",
+        "Is a directory",
+    ] {
+        assert!(
+            !response.text.contains(private),
+            "Private failure details must not reach HTML"
+        );
+    }
+    assert!(!auth.healthy()); // Reached the real persistence failure, not bad credentials.
+    let inner = auth.inner.lock().unwrap();
+    assert!(inner.sessions.is_empty());
+    assert!(inner.stored.grants.is_empty());
+    assert!(inner.codes.is_empty());
+    assert!(inner.stored.last_totp_step.is_none());
+    assert!(!inner.anonymous_csrf.contains_key(&hash(&token)));
+    let persisted: Stored = serde_json::from_slice(&fs::read(saved).unwrap()).unwrap();
+    assert!(persisted.last_totp_step.is_none());
+}
+
+#[tokio::test]
+async fn failed_sign_in_factor_and_budgets_preserve_only_valid_retry() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let (_, target, initial) = pending_sign_in(auth).await;
+    let anonymous = cookie(&initial);
+    auth.inner.lock().unwrap().stored.totp_secret = Some(base32(&[9; 20]));
+    let peer = IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED);
+    for (login_count, factor_count, status, message) in [
+        (
+            0,
+            0,
+            StatusCode::BAD_REQUEST,
+            "Authenticator code not accepted",
+        ),
+        (10, 0, StatusCode::TOO_MANY_REQUESTS, "Too many attempts"),
+        (0, 5, StatusCode::TOO_MANY_REQUESTS, "Too many attempts"),
+    ] {
+        let page = request(auth, Method::GET, &target, None, Some(&anonymous), &[]).await;
+        {
+            let mut inner = auth.inner.lock().unwrap();
+            inner.login_budgets.insert(
+                peer,
+                AttemptBudget {
+                    window: auth.now(),
+                    count: login_count,
+                },
+            );
+            inner.factor_budgets.insert(
+                peer,
+                AttemptBudget {
+                    window: auth.now(),
+                    count: factor_count,
+                },
+            );
+        }
+        let token = input(&page.text, "csrf_token");
+        let reply = request(
+            auth,
+            Method::POST,
+            LOGIN,
+            Some(ISSUER),
+            Some(&anonymous),
+            &[
+                ("continue", &input(&page.text, "continue")),
+                ("csrf_token", &token),
+                ("passphrase", PASSWORD),
+                ("totp", "not-a-code"),
+            ],
+        )
+        .await;
+        assert_eq!(reply.status, status);
+        assert!(reply.text.contains(message));
+        assert_eq!(sign_in_retry(&reply), target);
+        let inner = auth.inner.lock().unwrap();
+        assert!(!inner.anonymous_csrf.contains_key(&hash(&token)));
+        assert!(inner.stored.grants.is_empty());
+        assert!(inner.sessions.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn failed_sign_in_cannot_import_forged_or_cross_session_continuations() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let (uri, target, initial) = pending_sign_in(auth).await;
+    let anonymous = cookie(&initial);
+    let continuation = authorize_url(APP, &uri);
+    for hostile in [
+        "https://evil.example/steal".to_string(),
+        "//evil.example/steal".into(),
+        format!("{AUTHORIZE}/extra?client_id={APP}&request_uri={uri}"),
+        format!("{continuation}&request_uri=forged"),
+        format!("{continuation}&client_id={APP}"),
+        format!("{continuation}&next=https://evil.example"),
+        format!("{AUTHORIZE}?"),
+        authorize_url("https://other.example", &uri),
+        authorize_url(APP, "unknown"),
+    ] {
+        let page = request(auth, Method::GET, &target, None, Some(&anonymous), &[]).await;
+        // Bind a challenge to the hostile continuation deliberately, isolating
+        // the defensive route/pending validation after otherwise valid CSRF.
+        let token = input(&page.text, "csrf_token");
+        auth.inner
+            .lock()
+            .unwrap()
+            .anonymous_csrf
+            .get_mut(&hash(&token))
+            .unwrap()
+            .action = format!("login:{hostile}");
+        let reply = request(
+            auth,
+            Method::POST,
+            LOGIN,
+            Some(ISSUER),
+            Some(&anonymous),
+            &[
+                ("continue", &hostile),
+                ("csrf_token", &token),
+                ("passphrase", "wrong passphrase"),
+            ],
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{hostile}");
+        assert_eq!(sign_in_retry(&reply), LOGIN);
+        assert!(!reply.text.contains("evil.example"));
+        assert!(
+            !auth
+                .inner
+                .lock()
+                .unwrap()
+                .anonymous_csrf
+                .contains_key(&hash(&token))
+        );
+    }
+    for (foreign_session, wrong_origin, tamper_continuation) in [
+        (true, false, false),
+        (false, true, false),
+        (false, false, true),
+    ] {
+        let page = request(auth, Method::GET, &target, None, Some(&anonymous), &[]).await;
+        let other = request(auth, Method::GET, LOGIN, None, None, &[]).await;
+        let selected_cookie = if foreign_session {
+            cookie(&other)
+        } else {
+            anonymous.clone()
+        };
+        let posted = if tamper_continuation {
+            "https://evil.example"
+        } else {
+            &continuation
+        };
+        let reply = request(
+            auth,
+            Method::POST,
+            LOGIN,
+            Some(if wrong_origin { APP } else { ISSUER }),
+            Some(&selected_cookie),
+            &[
+                ("continue", posted),
+                ("csrf_token", &input(&page.text, "csrf_token")),
+                ("passphrase", PASSWORD),
+            ],
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::FORBIDDEN);
+        assert_eq!(sign_in_retry(&reply), LOGIN);
+        assert!(!reply.text.contains("evil.example"));
+    }
+    let inner = auth.inner.lock().unwrap();
+    assert!(inner.sessions.is_empty());
+    assert!(inner.stored.grants.is_empty());
+}
+
+#[tokio::test]
+async fn failed_sign_in_retry_revalidates_pending_expiry_and_entry_point() {
+    const SECOND: &str = "https://second.example";
+    let dir = std::env::temp_dir().join(random("agent-connect-retry-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    let fixture = Fixture {
+        dir,
+        auth: AuthService::open(configuration).unwrap(),
+    };
+    let auth = &fixture.auth;
+    let (uri, target, page) = pending_sign_in(auth).await;
+    let anonymous = cookie(&page);
+    let cross = request_at(
+        auth,
+        Method::GET,
+        &target,
+        None,
+        None,
+        Some("second.example"),
+        &[],
+    )
+    .await;
+    assert_eq!(cross.status, StatusCode::BAD_REQUEST);
+    assert_eq!(sign_in_retry(&cross), LOGIN);
+    assert!(!cross.headers.contains_key(header::SET_COOKIE));
+    let cross_post = request_at(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(SECOND),
+        Some(&anonymous),
+        Some("second.example"),
+        &[
+            ("continue", &input(&page.text, "continue")),
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("passphrase", PASSWORD),
+        ],
+    )
+    .await;
+    assert_eq!(cross_post.status, StatusCode::FORBIDDEN);
+    assert_eq!(sign_in_retry(&cross_post), LOGIN);
+    // Even an otherwise authenticated form cannot recover a request whose
+    // issuer no longer matches. This isolates the pending-record check.
+    auth.inner
+        .lock()
+        .unwrap()
+        .pending
+        .get_mut(&uri)
+        .unwrap()
+        .issuer = SECOND.into();
+    let altered = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&anonymous),
+        &[
+            ("continue", &input(&page.text, "continue")),
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("passphrase", PASSWORD),
+        ],
+    )
+    .await;
+    assert_eq!(altered.status, StatusCode::BAD_REQUEST);
+    assert_eq!(sign_in_retry(&altered), LOGIN);
+    auth.inner
+        .lock()
+        .unwrap()
+        .pending
+        .get_mut(&uri)
+        .unwrap()
+        .issuer = ISSUER.into();
+    let page = request(auth, Method::GET, &target, None, Some(&anonymous), &[]).await;
+    let failed = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&anonymous),
+        &[
+            ("continue", &input(&page.text, "continue")),
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("passphrase", "wrong passphrase"),
+        ],
+    )
+    .await;
+    assert_eq!(sign_in_retry(&failed), target);
+    // A later sign-in page outlives the pending app request. Expiry must be
+    // rechecked even with a still-live session and unused matching CSRF.
+    advance(auth, 100);
+    let later = request(auth, Method::GET, &target, None, None, &[]).await;
+    advance(auth, REQUEST_TTL - 99);
+    let expired_post = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&cookie(&later)),
+        &[
+            ("continue", &input(&later.text, "continue")),
+            ("csrf_token", &input(&later.text, "csrf_token")),
+            ("passphrase", PASSWORD),
+        ],
+    )
+    .await;
+    assert_eq!(expired_post.status, StatusCode::BAD_REQUEST);
+    assert_eq!(sign_in_retry(&expired_post), LOGIN);
+    let expired = request(
+        auth,
+        Method::GET,
+        &sign_in_retry(&failed),
+        None,
+        Some(&anonymous),
+        &[],
+    )
+    .await;
+    assert_eq!(expired.status, StatusCode::BAD_REQUEST);
+    assert_eq!(sign_in_retry(&expired), LOGIN);
+    assert!(!expired.headers.contains_key(header::SET_COOKIE));
+    let inner = auth.inner.lock().unwrap();
+    assert!(inner.sessions.is_empty());
+    assert!(inner.stored.grants.is_empty());
+}
+
+#[tokio::test]
+async fn sign_in_cookie_errors_distinguish_missing_duplicates_and_invalid_values() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let (_, _, page) = pending_sign_in(auth).await;
+    let anonymous = cookie(&page);
+    let fields = [
+        ("continue", input(&page.text, "continue")),
+        ("csrf_token", input(&page.text, "csrf_token")),
+        ("passphrase", "must-not-be-reflected".into()),
+    ];
+    let fields: Vec<_> = fields
+        .iter()
+        .map(|(name, value)| (*name, value.as_str()))
+        .collect();
+    for (cookies, diagnostic) in [
+        (None, "The sign-in session cookie was not sent"),
+        (
+            Some("unrelated=must-not-be-reflected".into()),
+            "The sign-in session cookie was not sent",
+        ),
+        (
+            Some(format!("{anonymous}; {anonymous}")),
+            "More than one sign-in session cookie was sent",
+        ),
+        (
+            Some(format!("__Host-agent_connect_owner; {anonymous}")),
+            "More than one sign-in session cookie was sent",
+        ),
+        (
+            Some("__Host-agent_connect_owner=".into()),
+            "Your owner session is missing or has expired",
+        ),
+        (
+            Some("__Host-agent_connect_owner=must-not-be-reflected".into()),
+            "Your owner session is missing or has expired",
+        ),
+    ] {
+        let reply = request(
+            auth,
+            Method::POST,
+            LOGIN,
+            Some(ISSUER),
+            cookies.as_deref(),
+            &fields,
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::FORBIDDEN);
+        assert!(reply.text.contains(diagnostic));
+        assert_eq!(sign_in_retry(&reply), LOGIN);
+        assert!(!reply.text.contains("must-not-be-reflected"));
+        assert!(!reply.text.contains(anonymous.split_once('=').unwrap().1));
+    }
+    let response = auth
+        .clone()
+        .router()
+        .oneshot(
+            axum::http::Request::builder()
+                .method(Method::POST)
+                .uri(LOGIN)
+                .header(header::ORIGIN, ISSUER)
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .header(header::COOKIE, &anonymous)
+                .header(header::COOKIE, &anonymous)
+                .body(Body::from(serde_urlencoded::to_string(&fields).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let text = String::from_utf8(
+        to_bytes(response.into_body(), MAX_BODY)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(text.contains("More than one sign-in session cookie was sent"));
+    advance(auth, REQUEST_TTL + 1);
+    let expired = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&anonymous),
+        &fields,
+    )
+    .await;
+    assert_eq!(expired.status, StatusCode::FORBIDDEN);
+    assert!(
+        expired
+            .text
+            .contains("Your owner session is missing or has expired")
+    );
+    assert_eq!(sign_in_retry(&expired), LOGIN);
+}
+
+#[test]
+fn error_page_escapes_dynamic_retry_link_and_label() {
+    let page = pages::error(
+        "Error",
+        "Message",
+        "/login?a='&b=<tag>",
+        "Again <script>'\"",
+    );
+    let document = pages::document(&page);
+    assert!(document.contains("href='/login?a=&#39;&amp;b=&lt;tag&gt;'"));
+    assert!(document.contains("Again &lt;script&gt;&#39;&quot;"));
+    assert!(!document.contains("<script>"));
+}
+
 #[tokio::test]
 async fn owner_error_never_reflects_raw_errors_or_untrusted_return_paths() {
     let response = owner_error(
         StatusCode::BAD_REQUEST,
         "<script>secret/path/token</script>",
         "https://evil.example/<script>",
+        None,
     );
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let text = String::from_utf8(

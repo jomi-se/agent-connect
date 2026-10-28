@@ -59,6 +59,13 @@ HSTS learning or upgrade behavior with an untrusted certificate. Rust router
 tests cover exact Host selection, forwarding-header spoofing, HTTP exclusion
 and HSTS on success, errors and fallback responses.
 
+The owner browser gate also follows the actual retry link after a failed
+passphrase check, completes sign-in to the original consent, and checks the
+original application callback and state after denial. A cookie removed before
+submission exercises the missing-session explanation. Rust tests cover
+continuation/issuer/expiry binding, spent CSRF, ambiguous cookies and persistence
+failure without issuing owner authority.
+
 ## Fixture storage
 
 Fixtures live under `deploy/gateway/test/fixtures`. Dependency trees and

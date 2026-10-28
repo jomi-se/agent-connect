@@ -288,7 +288,10 @@ try {
   await capture("gateway");
 
   let pendingAuthorization;
-  async function push({ stress = false } = {}) {
+  async function push({
+    stress = false,
+    state = "synthetic-visual-state",
+  } = {}) {
     const client = stress
       ? `https://${["library".repeat(8), "books".repeat(10), "reading".repeat(8), "app", "example"].join(".")}`
       : appOrigin;
@@ -335,7 +338,7 @@ try {
       resource: `${origin}/acp`,
       response_type: "code",
       scope: "acp",
-      state: "synthetic-visual-state",
+      state,
       code_challenge: createHash("sha256").update(verifier).digest("base64url"),
       code_challenge_method: "S256",
       authorization_details: JSON.stringify([{ type: "agent_connect", tools }]),
@@ -349,6 +352,128 @@ try {
     const { request_uri } = await reply.json();
     return `${origin}/agent-connect/oauth/authorize?${new URLSearchParams({ client_id: client, request_uri })}`;
   }
+  const recoveryContext = await browser.newContext();
+  try {
+    const recoveryPage = await recoveryContext.newPage();
+    recoveryPage.on("pageerror", (error) => errors.push(error.message));
+    const recoveryState = "synthetic-sign-in-recovery-state";
+    const originalRequest = new URL(await push({ state: recoveryState }));
+    const waitingApp =
+      "Sign in to review the request from The evening library.";
+    await recoveryPage.goto(originalRequest.href);
+    await recoveryPage.getByText(waitingApp, { exact: true }).waitFor();
+    await recoveryPage
+      .getByLabel("Owner passphrase")
+      .fill("deliberately-wrong-recovery-passphrase");
+    const [failedSignIn] = await Promise.all([
+      recoveryPage.waitForResponse(
+        (reply) =>
+          reply.url() === `${owner}/login` &&
+          reply.request().method() === "POST",
+      ),
+      recoveryPage
+        .getByRole("button", { name: "Sign in", exact: true })
+        .click(),
+    ]);
+    assert.equal(failedSignIn.status(), 401);
+    await recoveryPage
+      .getByRole("heading", { name: "Sign-in did not complete", exact: true })
+      .waitFor();
+    const retry = recoveryPage.getByRole("link", {
+      name: "Return to sign-in",
+      exact: true,
+    });
+    const retryUrl = new URL(await retry.getAttribute("href"), origin);
+    assert.equal(retryUrl.origin, origin);
+    assert.equal(retryUrl.pathname, "/agent-connect/owner/login");
+    for (const key of ["client_id", "request_uri"])
+      assert.equal(
+        retryUrl.searchParams.get(key),
+        originalRequest.searchParams.get(key),
+      );
+    // Follow the rendered recovery link, rather than reconstructing the request.
+    await retry.click();
+    await recoveryPage.getByText(waitingApp, { exact: true }).waitFor();
+    await recoveryPage.getByLabel("Owner passphrase").fill(password);
+    await recoveryPage
+      .getByRole("button", { name: "Sign in", exact: true })
+      .click();
+    await recoveryPage
+      .getByRole("heading", {
+        name: "Allow The evening library to use your agent?",
+        exact: true,
+      })
+      .waitFor();
+    assert.equal(
+      await recoveryPage.locator('input[name="request_uri"]').inputValue(),
+      originalRequest.searchParams.get("request_uri"),
+    );
+    await recoveryPage
+      .getByRole("button", { name: "Deny", exact: true })
+      .click();
+    await recoveryPage.waitForURL(`${appOrigin}/callback?**`);
+    const recoveredCallback = new URL(recoveryPage.url());
+    assert.equal(recoveredCallback.origin, appOrigin);
+    assert.equal(recoveredCallback.pathname, "/callback");
+    assert.equal(recoveredCallback.searchParams.get("state"), recoveryState);
+    assert.equal(recoveredCallback.searchParams.get("error"), "access_denied");
+    assert.equal(recoveredCallback.searchParams.get("iss"), origin);
+    assert.equal(recoveredCallback.searchParams.has("code"), false);
+  } finally {
+    await recoveryContext.close();
+  }
+  const missingCookieContext = await browser.newContext();
+  try {
+    const missingCookiePage = await missingCookieContext.newPage();
+    missingCookiePage.on("pageerror", (error) => errors.push(error.message));
+    await missingCookiePage.goto(`${owner}/login`);
+    await missingCookiePage.getByLabel("Owner passphrase").waitFor();
+    const omittedCookie = (await missingCookieContext.cookies(owner)).find(
+      ({ name }) => name === "agent_connect_owner",
+    );
+    assert.ok(omittedCookie);
+    const csrf = await missingCookiePage
+      .locator('input[name="csrf_token"]')
+      .inputValue();
+    await missingCookieContext.clearCookies();
+    await missingCookiePage.getByLabel("Owner passphrase").fill(password);
+    const [missingCookieReply] = await Promise.all([
+      missingCookiePage.waitForResponse(
+        (reply) =>
+          reply.url() === `${owner}/login` &&
+          reply.request().method() === "POST",
+      ),
+      missingCookiePage
+        .getByRole("button", { name: "Sign in", exact: true })
+        .click(),
+    ]);
+    assert.equal(missingCookieReply.status(), 403);
+    assert.equal(
+      (await missingCookieReply.request().allHeaders()).cookie,
+      undefined,
+    );
+    await missingCookiePage
+      .getByText(/^The sign-in session cookie was not sent\./)
+      .waitFor();
+    const diagnostic = await missingCookieReply.text();
+    for (const secret of [password, omittedCookie.value, csrf])
+      assert.ok(
+        !diagnostic.includes(secret),
+        "Cookie diagnostic must not echo credentials",
+      );
+    assert.equal(
+      await missingCookiePage
+        .getByRole("link", { name: "Return to sign-in", exact: true })
+        .getAttribute("href"),
+      "/agent-connect/owner/login",
+    );
+  } finally {
+    await missingCookieContext.close();
+  }
+  const signInRecoveryChecks = {
+    pendingRequestPreserved: true,
+    missingCookieDiagnostic: true,
+  };
   const consent = await push();
   await page.goto(owner);
   await page.getByRole("link", { name: "Review", exact: true }).waitFor();
@@ -795,6 +920,7 @@ try {
       {
         status: "passed",
         ownerCookieChecks,
+        signInRecoveryChecks,
         states,
         sessionEndCleanup: {
           observed: endedStates,
