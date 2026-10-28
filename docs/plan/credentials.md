@@ -108,6 +108,13 @@ binding were valid. Retrying rechecks the request and issues a fresh CSRF token.
 Missing or duplicate session cookies receive a specific explanation and a fresh
 sign-in link; no submitted return URL is trusted without that binding.
 
+Every rejected sign-in POST is observed once at the HTTP boundary, including
+body/concurrency limits and request throttling before credential verification.
+Structured events use fixed reason codes rather than raw errors or submitted
+values. Owner Activity shows bounded recent failures and active pause windows;
+the history is ephemeral and does not alter authentication, persisted grants
+or rate-limit enforcement. See [diagnostics](../install/configuration.md).
+
 Apps begin popup or redirect consent through an explicit user action. Requests
 expire after ten minutes; PKCE authorization codes after two minutes; application
 access tokens after five minutes. The owner selects 1 hour (default), 1 day,

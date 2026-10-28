@@ -1325,7 +1325,7 @@ async fn failed_sign_in_totp_persistence_error_keeps_unavailable_status_and_no_a
     let saved = fixture.dir.join("before-write-failure.json");
     fs::rename(&state, &saved).unwrap();
     fs::create_dir(&state).unwrap();
-    let response = request(
+    let (response, events) = sign_in_audit_tests::captured(request(
         auth,
         Method::POST,
         LOGIN,
@@ -1337,8 +1337,9 @@ async fn failed_sign_in_totp_persistence_error_keeps_unavailable_status_and_no_a
             ("passphrase", PASSWORD),
             ("totp", &factor),
         ],
-    )
+    ))
     .await;
+    sign_in_audit_tests::failure(&events, "authorization_unavailable", auth.now(), None);
     assert_eq!(response.status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(
         response.headers[header::CONTENT_TYPE],
@@ -3091,4 +3092,563 @@ async fn consent_client_form_action_and_activity_track_have_hashed_styles() {
     let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
     assert!(page.text.contains("class='track'"));
     assert_style_hashes(&page, 2);
+}
+
+mod sign_in_audit_tests {
+    use super::*;
+    use tracing::instrument::WithSubscriber;
+    use tracing_subscriber::{Layer, layer::Context, prelude::*};
+
+    #[derive(Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<BTreeMap<String, String>>>>);
+
+    struct Fields(BTreeMap<String, String>);
+    impl tracing::field::Visit for Fields {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            self.0.insert(field.name().into(), format!("{value:?}"));
+        }
+        fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+            self.0.insert(field.name().into(), value.into());
+        }
+        fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+            self.0.insert(field.name().into(), value.to_string());
+        }
+    }
+    impl<S: tracing::Subscriber> Layer<S> for Capture {
+        fn on_event(&self, event: &tracing::Event<'_>, _: Context<'_, S>) {
+            if event.metadata().target() == "agent_connect_gateway::owner_sign_in" {
+                let mut fields = Fields(BTreeMap::new());
+                event.record(&mut fields);
+                self.0.lock().unwrap().push(fields.0);
+            }
+        }
+    }
+    pub(super) async fn captured<F: std::future::Future>(
+        future: F,
+    ) -> (F::Output, Vec<BTreeMap<String, String>>) {
+        // tracing-core's JustOne first-registration shortcut consults the
+        // current thread's default. An unrelated, uncaptured test can reach
+        // the callsite while this future awaits, incorrectly caching "never".
+        // Keep two live registrars so it consults registered subscribers;
+        // this inert dispatcher is never installed as a default or global.
+        let _inert = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
+        let capture = Capture::default();
+        let result = future
+            .with_subscriber(tracing_subscriber::registry().with(capture.clone()))
+            .await;
+        let events = capture.0.lock().unwrap().clone();
+        (result, events)
+    }
+    pub(super) fn failure(
+        events: &[BTreeMap<String, String>],
+        code: &str,
+        at: u64,
+        entry: Option<&str>,
+    ) {
+        assert_eq!(
+            events.len(),
+            1,
+            "Exactly one audit event per failed sign-in"
+        );
+        let mut expected = BTreeMap::from([
+            ("event".into(), "owner_sign_in_failed".into()),
+            ("message".into(), "Owner sign-in failed".into()),
+            ("reason".into(), code.into()),
+            ("at".into(), at.to_string()),
+        ]);
+        if let Some(entry) = entry {
+            expected.insert("entry_point".into(), entry.into());
+        }
+        assert_eq!(events[0], expected);
+    }
+    fn history(auth: &AuthService) -> Vec<pages::SignInFailure> {
+        auth.sign_in_audit
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .recent(auth.now())
+    }
+
+    #[tokio::test]
+    async fn audit_sign_in_records_each_form_rejection_once_without_submitted_values() {
+        let fixture = Fixture::new();
+        let auth = &fixture.auth;
+        let marker = "private-marker-not-for-audit";
+        for (case, status, reason) in [
+            ("missing", StatusCode::FORBIDDEN, "missing_session_cookie"),
+            (
+                "duplicate",
+                StatusCode::FORBIDDEN,
+                "duplicate_session_cookie",
+            ),
+            (
+                "malformed",
+                StatusCode::FORBIDDEN,
+                "invalid_or_expired_session",
+            ),
+            (
+                "unknown",
+                StatusCode::FORBIDDEN,
+                "invalid_or_expired_session",
+            ),
+            ("csrf", StatusCode::FORBIDDEN, "invalid_csrf"),
+            ("origin", StatusCode::FORBIDDEN, "invalid_owner_origin"),
+            ("form", StatusCode::BAD_REQUEST, "invalid_request"),
+            ("query", StatusCode::BAD_REQUEST, "invalid_request"),
+            (
+                "passphrase",
+                StatusCode::UNAUTHORIZED,
+                "invalid_credentials",
+            ),
+            ("factor", StatusCode::BAD_REQUEST, "invalid_factor"),
+            (
+                "login_budget",
+                StatusCode::TOO_MANY_REQUESTS,
+                "login_rate_limited",
+            ),
+            (
+                "factor_budget",
+                StatusCode::TOO_MANY_REQUESTS,
+                "factor_rate_limited",
+            ),
+        ] {
+            let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
+            let anonymous = cookie(&page);
+            let cookie_value = match case {
+                "duplicate" => format!("{anonymous}; {anonymous}"),
+                "malformed" => "__Host-agent_connect_owner=".into(),
+                "unknown" => format!("__Host-agent_connect_owner={marker}"),
+                _ => anonymous,
+            };
+            {
+                let mut inner = auth.inner.lock().unwrap();
+                inner.stored.totp_secret =
+                    matches!(case, "factor" | "factor_budget").then(|| base32(&[9; 20]));
+                if case == "login_budget" {
+                    inner.login_budgets.insert(
+                        IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+                        AttemptBudget {
+                            window: auth.now(),
+                            count: 10,
+                        },
+                    );
+                }
+                if case == "factor_budget" {
+                    inner.factor_budgets.insert(
+                        IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+                        AttemptBudget {
+                            window: auth.now(),
+                            count: 5,
+                        },
+                    );
+                }
+            }
+            let csrf_token = input(&page.text, "csrf_token");
+            let mut fields = vec![
+                (
+                    "csrf_token",
+                    if case == "csrf" {
+                        marker
+                    } else {
+                        csrf_token.as_str()
+                    },
+                ),
+                (
+                    "passphrase",
+                    if case == "passphrase" {
+                        marker
+                    } else {
+                        PASSWORD
+                    },
+                ),
+                ("totp", marker),
+            ];
+            if case == "form" {
+                fields.push(("unrecognized", marker));
+            }
+            let path = if case == "query" {
+                format!("{LOGIN}?{marker}")
+            } else {
+                LOGIN.to_string()
+            };
+            let (reply, events) = captured(request_at(
+                auth,
+                Method::POST,
+                &path,
+                Some(if case == "origin" {
+                    "https://private-marker-not-for-audit.example"
+                } else {
+                    ISSUER
+                }),
+                if case == "missing" {
+                    None
+                } else {
+                    Some(&cookie_value)
+                },
+                Some("gateway.example"),
+                &fields,
+            ))
+            .await;
+            assert_eq!(reply.status, status, "{case}");
+            failure(&events, reason, auth.now(), Some(ISSUER));
+            assert!(!format!("{events:?}").contains(marker));
+            let recent = history(auth);
+            assert_eq!(recent.last().unwrap().at, 1_700_000_000);
+            assert!(recent.iter().all(|row| !row.reason.contains(marker)));
+            let mut inner = auth.inner.lock().unwrap();
+            inner.login_budgets.clear();
+            inner.factor_budgets.clear();
+            inner.stored.totp_secret = None;
+        }
+        let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
+        advance(auth, 601);
+        let (reply, events) = captured(request_at(
+            auth,
+            Method::POST,
+            LOGIN,
+            Some(ISSUER),
+            Some(&cookie(&page)),
+            Some("gateway.example"),
+            &[
+                ("csrf_token", &input(&page.text, "csrf_token")),
+                ("passphrase", PASSWORD),
+            ],
+        ))
+        .await;
+        assert_eq!(reply.status, StatusCode::FORBIDDEN);
+        failure(
+            &events,
+            "invalid_or_expired_session",
+            auth.now(),
+            Some(ISSUER),
+        );
+        assert_eq!(history(auth).len(), 13);
+    }
+
+    #[tokio::test]
+    async fn audit_sign_in_covers_body_concurrency_global_and_unavailable_boundaries() {
+        let fixture = Fixture::new();
+        let auth = &fixture.auth;
+        let oversized = axum::http::Request::builder()
+            .method(Method::POST)
+            .uri(LOGIN)
+            .header(header::HOST, "gateway.example")
+            .header(header::ORIGIN, "https://secret-origin.example")
+            .header(header::COOKIE, "secret-cookie")
+            .body(Body::from("secret-body".repeat(MAX_BODY)))
+            .unwrap();
+        let (reply, events) = captured(auth.clone().router().oneshot(oversized)).await;
+        assert_eq!(reply.unwrap().status(), StatusCode::BAD_REQUEST);
+        failure(&events, "invalid_body", auth.now(), Some(ISSUER));
+        let permits = auth.requests.acquire_many(32).await.unwrap();
+        let (reply, events) = captured(request_at(
+            auth,
+            Method::POST,
+            LOGIN,
+            None,
+            None,
+            Some("gateway.example"),
+            &[],
+        ))
+        .await;
+        assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
+        failure(&events, "concurrency_limited", auth.now(), Some(ISSUER));
+        drop(permits);
+        {
+            let mut inner = auth.inner.lock().unwrap();
+            inner.rate_count = 600;
+            inner.rate_window = auth.now();
+        }
+        let (reply, events) = captured(request_at(
+            auth,
+            Method::POST,
+            LOGIN,
+            None,
+            None,
+            Some("gateway.example"),
+            &[],
+        ))
+        .await;
+        assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
+        failure(&events, "request_rate_limited", auth.now(), Some(ISSUER));
+        auth.inner.lock().unwrap().broken = true;
+        let (reply, events) = captured(request_at(
+            auth,
+            Method::POST,
+            LOGIN,
+            None,
+            None,
+            Some("gateway.example"),
+            &[],
+        ))
+        .await;
+        assert_eq!(reply.status, StatusCode::SERVICE_UNAVAILABLE);
+        failure(
+            &events,
+            "authorization_unavailable",
+            auth.now(),
+            Some(ISSUER),
+        );
+        assert_eq!(history(auth).len(), 4);
+    }
+
+    #[tokio::test]
+    async fn audit_sign_in_covers_session_capacity_and_poisoned_authorization_state() {
+        let fixture = Fixture::new();
+        let auth = &fixture.auth;
+        let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
+        {
+            let mut inner = auth.inner.lock().unwrap();
+            for index in 0..MAX_TRANSIENT {
+                inner.sessions.insert(
+                    format!("fixture-owner-{index}"),
+                    Session {
+                        origin: ISSUER.into(),
+                        expires: auth.now() + 3600,
+                        owner: true,
+                        enrollment: None,
+                    },
+                );
+            }
+        }
+        let (reply, events) = captured(request(
+            auth,
+            Method::POST,
+            LOGIN,
+            Some(ISSUER),
+            Some(&cookie(&page)),
+            &[
+                ("csrf_token", &input(&page.text, "csrf_token")),
+                ("passphrase", PASSWORD),
+            ],
+        ))
+        .await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST);
+        failure(&events, "authorization_capacity", auth.now(), None);
+        assert!(!reply.headers.contains_key(header::SET_COOKIE));
+        assert_eq!(auth.inner.lock().unwrap().sessions.len(), MAX_TRANSIENT);
+        let poisoned = auth.clone();
+        assert!(
+            std::thread::spawn(move || {
+                let _guard = poisoned.inner.lock().unwrap();
+                panic!("synthetic authorization lock failure");
+            })
+            .join()
+            .is_err()
+        );
+        let (reply, events) =
+            captured(request(auth, Method::POST, LOGIN, Some(ISSUER), None, &[])).await;
+        assert_eq!(reply.status, StatusCode::SERVICE_UNAVAILABLE);
+        failure(&events, "authorization_unavailable", auth.now(), None);
+        assert_eq!(history(auth).len(), 2);
+    }
+
+    #[tokio::test]
+    async fn audit_sign_in_attribution_uses_only_strict_configured_hosts() {
+        let dir = std::env::temp_dir().join(random("agent-connect-audit-test-"));
+        let mut configuration = config(dir.clone(), Some(PASSWORD));
+        configuration
+            .entry_points
+            .push("https://second.example:9443".into());
+        let fixture = Fixture {
+            dir,
+            auth: AuthService::open(configuration).unwrap(),
+        };
+        let auth = &fixture.auth;
+        for (hosts, entry) in [
+            (vec!["gateway.example"], Some(ISSUER)),
+            (
+                vec!["second.example:9443"],
+                Some("https://second.example:9443"),
+            ),
+            (vec![], None),
+            (vec!["secret-host.example"], None),
+            (vec!["gateway.example", "gateway.example"], None),
+            (vec!["second.example"], None),
+        ] {
+            let mut builder = axum::http::Request::builder()
+                .method(Method::POST)
+                .uri(LOGIN)
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .header(header::ORIGIN, entry.unwrap_or(ISSUER))
+                .header("x-forwarded-host", "secret-forwarded.example")
+                .header("x-forwarded-proto", "secret-proto");
+            for host in &hosts {
+                builder = builder.header(header::HOST, *host);
+            }
+            let (reply, events) = captured(
+                auth.clone()
+                    .router()
+                    .oneshot(builder.body(Body::empty()).unwrap()),
+            )
+            .await;
+            let expected = if hosts.is_empty() || entry.is_some() {
+                "missing_session_cookie"
+            } else {
+                "invalid_target"
+            };
+            assert!(reply.unwrap().status().is_client_error());
+            failure(&events, expected, auth.now(), entry);
+            assert!(!format!("{events:?}").contains("secret-"));
+            assert_eq!(history(auth)[0].entry_point.as_deref(), entry);
+        }
+    }
+
+    #[tokio::test]
+    async fn audit_sign_in_ignores_success_get_and_other_endpoints() {
+        let fixture = Fixture::new();
+        let auth = &fixture.auth;
+        let (page, events) = captured(request(auth, Method::GET, LOGIN, None, None, &[])).await;
+        assert_eq!(page.status, StatusCode::OK);
+        assert!(events.is_empty());
+        let (signed_in, events) = captured(request(
+            auth,
+            Method::POST,
+            LOGIN,
+            Some(ISSUER),
+            Some(&cookie(&page)),
+            &[
+                ("csrf_token", &input(&page.text, "csrf_token")),
+                ("passphrase", PASSWORD),
+            ],
+        ))
+        .await;
+        assert_eq!(signed_in.status, StatusCode::FOUND);
+        assert!(events.is_empty());
+        for (method, path) in [
+            (Method::GET, "/agent-connect/owner/login?invalid=secret"),
+            (Method::POST, AUTHORIZE),
+            (Method::POST, "/agent-connect/owner/logout"),
+        ] {
+            let (reply, events) =
+                captured(request(auth, method, path, Some(ISSUER), None, &[])).await;
+            assert!(reply.status.is_client_error());
+            assert!(events.is_empty());
+        }
+        assert!(history(auth).is_empty());
+    }
+
+    #[tokio::test]
+    async fn audit_sign_in_history_is_bounded_expires_and_does_not_persist() {
+        let dir = std::env::temp_dir().join(random("agent-connect-audit-restart-test-"));
+        struct Directory(PathBuf);
+        impl Drop for Directory {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let _directory = Directory(dir.clone());
+        let auth = AuthService::open(config(dir.clone(), Some(PASSWORD))).unwrap();
+        let (_, events) = captured(async {
+            for _ in 0..65 {
+                assert_eq!(
+                    request(&auth, Method::POST, LOGIN, Some(ISSUER), None, &[])
+                        .await
+                        .status,
+                    StatusCode::FORBIDDEN
+                );
+                advance(&auth, 1);
+            }
+        })
+        .await;
+        assert_eq!(events.len(), 65);
+        let recent = history(&auth);
+        assert_eq!(recent.len(), 64);
+        assert_eq!(recent[0].at, 1_700_000_064);
+        assert_eq!(recent[63].at, 1_700_000_001);
+        advance(&auth, 24 * 3600 - 1);
+        assert!(history(&auth).is_empty());
+        request(&auth, Method::POST, LOGIN, Some(ISSUER), None, &[]).await;
+        assert_eq!(history(&auth).len(), 1);
+        drop(auth);
+        let restarted = AuthService::open(config(dir.clone(), None)).unwrap();
+        assert!(history(&restarted).is_empty());
+        let stored = fs::read_to_string(dir.join("authorization.json")).unwrap();
+        assert!(!stored.contains("sign_in"));
+    }
+
+    #[tokio::test]
+    async fn audit_sign_in_poisoned_observer_does_not_change_authentication_response() {
+        let fixture = Fixture::new();
+        let auth = fixture.auth.clone();
+        let poisoned = auth.clone();
+        assert!(
+            std::thread::spawn(move || {
+                let _guard = poisoned.sign_in_audit.lock().unwrap();
+                panic!("synthetic observer failure");
+            })
+            .join()
+            .is_err()
+        );
+        let (reply, events) =
+            captured(request(&auth, Method::POST, LOGIN, Some(ISSUER), None, &[])).await;
+        assert_eq!(reply.status, StatusCode::FORBIDDEN);
+        failure(&events, "missing_session_cookie", auth.now(), None);
+        assert_eq!(history(&auth).len(), 1);
+    }
+
+    #[tokio::test]
+    async fn audit_sign_in_pauses_use_budget_windows_latest_reset_and_owner_exemption() {
+        let fixture = Fixture::new();
+        let auth = &fixture.auth;
+        let owner = login(auth, "").await;
+        let now = auth.now();
+        {
+            let mut inner = auth.inner.lock().unwrap();
+            for (index, age, count) in [(1, 10, 10), (2, 100, 10), (3, 901, 10), (4, 0, 9)] {
+                inner.login_budgets.insert(
+                    format!("192.0.2.{index}").parse().unwrap(),
+                    AttemptBudget {
+                        window: now - age,
+                        count,
+                    },
+                );
+            }
+            for (index, age, count) in [(1, 5, 5), (2, 50, 5), (3, 61, 5), (4, 0, 4)] {
+                inner.factor_budgets.insert(
+                    format!("192.0.2.{index}").parse().unwrap(),
+                    AttemptBudget {
+                        window: now - age,
+                        count,
+                    },
+                );
+            }
+            inner.rate_window = now - 20;
+            inner.rate_count = 600;
+            let pauses = sign_in_audit::pauses(&inner, now);
+            assert_eq!(pauses.len(), 3);
+            assert_eq!(
+                (pauses[0].label, pauses[0].affected_clients, pauses[0].until),
+                ("Sign-in attempts", Some(2), now + 890)
+            );
+            assert_eq!(
+                (pauses[1].label, pauses[1].affected_clients, pauses[1].until),
+                ("Authenticator attempts", Some(2), now + 55)
+            );
+            assert_eq!(
+                (pauses[2].label, pauses[2].affected_clients, pauses[2].until),
+                ("Unauthenticated requests", None, now + 40)
+            );
+        }
+        let (page, events) =
+            captured(request(auth, Method::GET, OWNER, None, Some(&owner), &[])).await;
+        assert_eq!(page.status, StatusCode::OK);
+        assert!(events.is_empty());
+        assert!(!page.text.contains("192.0.2."));
+        let (reply, events) =
+            captured(request(auth, Method::POST, LOGIN, Some(ISSUER), None, &[])).await;
+        assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
+        failure(&events, "request_rate_limited", now, None);
+        advance(auth, 40);
+        assert_eq!(
+            sign_in_audit::pauses(&auth.inner.lock().unwrap(), auth.now()).len(),
+            2
+        );
+        advance(auth, 15);
+        assert_eq!(
+            sign_in_audit::pauses(&auth.inner.lock().unwrap(), auth.now()).len(),
+            1
+        );
+        advance(auth, 835);
+        assert!(sign_in_audit::pauses(&auth.inner.lock().unwrap(), auth.now()).is_empty());
+    }
 }

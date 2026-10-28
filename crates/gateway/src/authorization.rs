@@ -155,6 +155,7 @@ pub struct AuthService {
     config: AuthConfig,
     inner: Mutex<Inner>,
     runtime: Mutex<Option<Arc<dyn OwnerRuntime>>>,
+    sign_in_audit: Mutex<sign_in_audit::Audit>,
     // Holding the file holds the exclusive process lock until service shutdown.
     _lock: File,
     requests: tokio::sync::Semaphore,
@@ -365,6 +366,7 @@ impl AuthService {
             config,
             _lock: lock,
             runtime: Mutex::new(None),
+            sign_in_audit: Mutex::new(sign_in_audit::Audit::default()),
             requests: tokio::sync::Semaphore::new(32),
             inner: Mutex::new(Inner {
                 stored,
@@ -904,6 +906,12 @@ impl AuthService {
             return Ok(html(pages::console(pages::Console {
                 now,
                 logout_token,
+                sign_in_failures: self
+                    .sign_in_audit
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .recent(now),
+                sign_in_pauses: sign_in_audit::pauses(&inner, now),
                 problems: runtime_view
                     .as_ref()
                     .map(|view| {
@@ -1650,6 +1658,24 @@ impl AuthService {
         );
         Ok((id, Some(token)))
     }
+    fn record_sign_in_failure(&self, reason: sign_in_audit::Reason, entry_point: Option<String>) {
+        let at = self.now();
+        self.sign_in_audit
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .record(at, reason, entry_point.clone());
+        // Emit after releasing the audit lock. No submitted values or raw errors
+        // enter either the event or the history, even when authentication is broken.
+        tracing::warn!(
+            target: "agent_connect_gateway::owner_sign_in",
+            event = "owner_sign_in_failed",
+            at,
+            reason = reason.code(),
+            entry_point = entry_point.as_deref(),
+            "Owner sign-in failed"
+        );
+    }
+
     fn with_cookie(
         &self,
         mut response: Response,
@@ -1682,7 +1708,15 @@ async fn endpoint(State(service): State<Arc<AuthService>>, request: Request) -> 
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
     let is_owner = path.starts_with(OWNER) || path == AUTHORIZE;
+    let is_sign_in = parts.method == Method::POST && path == LOGIN;
+    let entry_point = if is_sign_in {
+        service.entry_point(&parts.headers).ok()
+    } else {
+        None
+    };
+    let mut sign_in_reason = None;
     let result = if permit.is_err() {
+        sign_in_reason = Some(sign_in_audit::Reason::ConcurrencyLimited);
         Err(anyhow!("slow_down"))
     } else {
         match to_bytes(body, MAX_BODY).await {
@@ -1695,11 +1729,15 @@ async fn endpoint(State(service): State<Arc<AuthService>>, request: Request) -> 
                 .await
                 .unwrap_or_else(|_| Err(anyhow!("authorization unavailable")))
             }
-            Err(_) => Err(anyhow!("invalid_request")),
+            Err(_) => {
+                sign_in_reason = Some(sign_in_audit::Reason::InvalidBody);
+                Err(anyhow!("invalid_request"))
+            }
         }
     };
     let mut response = result.unwrap_or_else(|error| {
         let message = error.to_string();
+        sign_in_reason.get_or_insert_with(|| sign_in_audit::Reason::from_error(&message));
         let code = if [
             "invalid_client",
             "invalid_target",
@@ -1744,6 +1782,17 @@ async fn endpoint(State(service): State<Arc<AuthService>>, request: Request) -> 
             json_response(status, json!({"error":code}))
         }
     });
+    if is_sign_in && (response.status().is_client_error() || response.status().is_server_error()) {
+        // The global request limit returns an Ok(429) from dispatch before form
+        // validation; capture it here alongside every Err rejection exactly once.
+        let reason =
+            sign_in_reason.unwrap_or(if response.status() == StatusCode::TOO_MANY_REQUESTS {
+                sign_in_audit::Reason::RequestRateLimited
+            } else {
+                sign_in_audit::Reason::InvalidRequest
+            });
+        service.record_sign_in_failure(reason, entry_point);
+    }
     let headers = response.headers_mut();
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
@@ -2317,6 +2366,7 @@ fn verify_totp(secret: &str, code: &str, now: u64, last: Option<u64>) -> Result<
 }
 
 mod pages;
+mod sign_in_audit;
 #[cfg(test)]
 mod tests;
 

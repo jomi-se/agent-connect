@@ -133,6 +133,20 @@ pub(super) struct Console {
     pub live: Option<Vec<Live>>,
     pub events: Vec<Event>,
     pub addresses: Vec<String>,
+    pub sign_in_failures: Vec<SignInFailure>,
+    pub sign_in_pauses: Vec<SignInPause>,
+}
+
+pub(super) struct SignInFailure {
+    pub at: u64,
+    pub reason: &'static str,
+    pub entry_point: Option<String>,
+}
+
+pub(super) struct SignInPause {
+    pub label: &'static str,
+    pub affected_clients: Option<usize>,
+    pub until: u64,
 }
 
 pub(super) struct Request {
@@ -215,6 +229,11 @@ pub(super) fn console(view: Console) -> Page {
     if view.live.is_none() {
         body.push_str("<div class='alert' role='status'><strong>Session status is unavailable.</strong><p>Check the gateway before relying on session controls.</p></div>");
     }
+    body.push_str(&sign_in_security(
+        now,
+        &view.sign_in_failures,
+        &view.sign_in_pauses,
+    ));
     if view.requests.is_empty() && live.is_empty() && view.events.is_empty() {
         let _ = write!(
             body,
@@ -281,6 +300,62 @@ pub(super) fn console(view: Console) -> Page {
         body.push_str("</ol></section>");
     }
     owner_page("Activity", Tab::Activity, view.logout_token, body, css)
+}
+
+fn sign_in_security(now: u64, failures: &[SignInFailure], pauses: &[SignInPause]) -> String {
+    let pauses: Vec<_> = pauses.iter().filter(|pause| pause.until > now).collect();
+    if failures.is_empty() && pauses.is_empty() {
+        return String::new();
+    }
+    let mut body = String::from(
+        "<section class='sign-in-security' aria-labelledby='sign-in-security-title'><h2 id='sign-in-security-title'>Sign-in security</h2>",
+    );
+    if !pauses.is_empty() {
+        body.push_str("<ul class='sign-in-pauses' aria-label='Active pauses'>");
+        for pause in pauses {
+            let scope = match pause.affected_clients {
+                Some(count) => format!(
+                    "Paused for {count} client address{}. Latest reset:",
+                    if count == 1 { "" } else { "es" }
+                ),
+                None => "Paused for unauthenticated requests across the gateway. Resets:".into(),
+            };
+            let (year, month, day, hour, minute, second) = civil(pause.until);
+            let deadline = stamp(
+                pause.until,
+                &format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC"),
+            );
+            let _ = write!(
+                body,
+                "<li class='sign-in-pause'><p class='event-line'>{}</p><p class='meta'>{scope} {deadline} ({}).</p></li>",
+                escape(pause.label),
+                until(now, pause.until)
+            );
+        }
+        body.push_str("</ul>");
+    }
+    body.push_str("<p class='meta'>Latest failures from the last 24 hours, up to 20. This list resets when the gateway restarts.</p>");
+    if failures.is_empty() {
+        body.push_str("<p class='hint'>No recent sign-in failures.</p>");
+    } else {
+        body.push_str("<ol class='events' aria-label='Recent sign-in failures'>");
+        for failure in failures.iter().take(20) {
+            let address = failure
+                .entry_point
+                .as_ref()
+                .map(|value| format!("<p class='meta'>Gateway address: {}</p>", origin(value)))
+                .unwrap_or_else(|| "<p class='meta'>Gateway address unavailable.</p>".into());
+            let _ = write!(
+                body,
+                "<li class='event sign-in-failure'>{}<span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'>{}</p>{address}</div></li>",
+                when(now, Some(failure.at)),
+                escape(failure.reason)
+            );
+        }
+        body.push_str("</ol>");
+    }
+    body.push_str("</section>");
+    body
 }
 
 fn event_row(now: u64, index: usize, event: &Event, css: &mut String) -> String {
@@ -876,6 +951,11 @@ button:disabled,button:disabled:hover,.secondary.danger:disabled{color:var(--mut
 .event-line .verb{font-weight:500;color:var(--muted)}
 .event--ended .event-line,.event--past .event-line{color:var(--muted)}
 .event-action{margin-top:-.2rem}
+.sign-in-security{margin:1.75rem 0}
+.sign-in-security .meta{overflow-wrap:anywhere}
+.sign-in-pauses{list-style:none;padding:0;margin:.75rem 0}
+.sign-in-pause{padding:.75rem 1rem;background:var(--orange-soft);border:1px solid var(--orange-line);border-radius:.6rem}
+.sign-in-pause+.sign-in-pause{margin-top:.5rem}
 .origin .scheme{color:var(--muted);font-weight:400}
 .origin{font-size:.9375em}
 .track{max-width:14rem;height:3px;margin-top:.6rem;overflow:hidden;background:var(--line);border-radius:2px}
@@ -997,6 +1077,98 @@ summary,.tools>summary,.manual>summary,.fineprint summary{min-height:2.75rem}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sign_in_security_preserves_empty_app_heading_and_escapes_history() {
+        let page = console(Console {
+            now: 1_700_000_000,
+            logout_token: "fixture".into(),
+            problems: vec![],
+            authenticator: true,
+            requests: vec![],
+            live: Some(vec![]),
+            events: vec![],
+            addresses: vec![],
+            sign_in_failures: vec![
+                SignInFailure {
+                    at: 1_699_999_940,
+                    reason: "<script>failure</script>",
+                    entry_point: Some("https://gateway.example/<img src=x>".into()),
+                },
+                SignInFailure {
+                    at: 1_699_999_930,
+                    reason: "The sign-in request could not be verified.",
+                    entry_point: None,
+                },
+            ],
+            sign_in_pauses: vec![],
+        });
+        assert_eq!(page.body.matches("<h1").count(), 1);
+        assert!(page.body.contains("No apps yet"));
+        assert!(
+            page.body.find("Sign-in security").unwrap() < page.body.find("No apps yet").unwrap()
+        );
+        assert!(page.body.contains("&lt;script&gt;failure&lt;/script&gt;"));
+        assert!(page.body.contains("gateway.example/&lt;img src=x&gt;"));
+        assert!(page.body.contains("Gateway address unavailable."));
+        assert!(!page.body.contains("<script>failure"));
+        assert!(page.body.contains("datetime='2023-11-14T22:12:20Z'"));
+        assert!(page.body.contains("last 24 hours, up to 20"));
+        assert!(page.body.contains("resets when the gateway restarts"));
+    }
+
+    #[test]
+    fn sign_in_security_limits_history_to_latest_twenty() {
+        let failures: Vec<_> = (0..64)
+            .map(|index| SignInFailure {
+                at: 1_700_000_000 - index,
+                reason: "The owner passphrase was not accepted.",
+                entry_point: Some(format!("https://gateway-{index}.example")),
+            })
+            .collect();
+        let body = sign_in_security(1_700_000_000, &failures, &[]);
+        assert_eq!(body.matches("class='event sign-in-failure'").count(), 20);
+        assert!(body.contains("gateway-0.example"));
+        assert!(body.contains("gateway-19.example"));
+        assert!(!body.contains("gateway-20.example"));
+        assert!(!body.contains("gateway-63.example"));
+        assert!(sign_in_security(1_700_000_000, &[], &[]).is_empty());
+    }
+
+    #[test]
+    fn sign_in_security_pauses_show_scope_and_exact_reset_deadlines() {
+        let pauses = [
+            SignInPause {
+                label: "Sign-in attempts",
+                affected_clients: Some(1),
+                until: 1_700_000_900,
+            },
+            SignInPause {
+                label: "Authenticator attempts",
+                affected_clients: Some(2),
+                until: 1_700_000_060,
+            },
+            SignInPause {
+                label: "Unauthenticated requests",
+                affected_clients: None,
+                until: 1_700_000_030,
+            },
+            SignInPause {
+                label: "Expired pause",
+                affected_clients: Some(1),
+                until: 1_700_000_000,
+            },
+        ];
+        let body = sign_in_security(1_700_000_000, &[], &pauses);
+        assert!(body.contains("Paused for 1 client address. Latest reset:"));
+        assert!(body.contains("Paused for 2 client addresses. Latest reset:"));
+        assert!(body.contains("Paused for unauthenticated requests across the gateway. Resets:"));
+        assert!(body.contains("2023-11-14 22:28:20 UTC"));
+        assert!(body.contains("datetime='2023-11-14T22:28:20Z'"));
+        assert!(body.contains("No recent sign-in failures."));
+        assert!(!body.contains("Expired pause"));
+        assert!(sign_in_security(1_700_000_000, &[], &pauses[3..]).is_empty());
+    }
 
     #[test]
     fn civil_time_and_spans() {
