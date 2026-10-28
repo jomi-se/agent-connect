@@ -9,6 +9,12 @@ user-owned agent. Applications own their UI, data and effects. The user chooses
 the harness and model and keeps provider credentials in a dedicated harness
 home. Application contracts stay agent- and harness-neutral.
 
+Each user operates their own gateway, at an origin an application cannot know
+in advance. Applications connect to the gateway their user selects; gateways
+serve whichever application origins their owner approves. Hardening must
+preserve both choices without application-maintained gateway allowlists,
+including CSP `connect-src` lists, or gateway-side application preregistration.
+
 The product is the ACP gateway (`agent-connect`) plus `@open-agent-connect/web`
 at the package root. The SDK pairs through owner-hosted OAuth consent, connects
 an ACP provider and supplies `createAcpChatTransport` for AI SDK `useChat`.

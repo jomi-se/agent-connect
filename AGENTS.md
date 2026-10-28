@@ -11,6 +11,11 @@ Agent Connect lets web applications use an agent the user already owns. It is on
   `@open-agent-connect/gateway` with a locally built Docker box;
 - the browser SDK `@open-agent-connect/web`, exported from its package root.
 
+Each user runs their own gateway at an origin applications cannot know in
+advance. Each gateway serves whichever application origins its owner approves.
+Preserve both choices: never require applications to list gateway origins
+(including in CSP `connect-src`) or gateways to preregister applications.
+
 Keep the application-facing API agent- and harness-neutral. Codex, Claude Code
 and their ACP adapters stay behind internal adapter boundaries; harness-specific
 types never appear in shared application contracts. Use **gateway** for the
