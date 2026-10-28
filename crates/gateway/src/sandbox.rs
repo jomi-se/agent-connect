@@ -384,7 +384,8 @@ pub fn box_args(
     if mock {
         // Synthetic local authentication, never a provider credential or API key.
         for (key, value) in [
-            ("AGENT_CONNECT_MOCK_MODEL", "1"),
+            // The deterministic model cannot discover deferred Claude tools.
+            ("ENABLE_TOOL_SEARCH", "false"),
             ("ANTHROPIC_BASE_URL", "http://mock:18931"),
             ("ANTHROPIC_AUTH_TOKEN", "deterministic-fixture"),
             ("NO_PROXY", "mock,localhost,127.0.0.1"),
@@ -1471,6 +1472,15 @@ mod tests {
             assert!(!args.iter().any(|arg| arg.contains("API_KEY")));
             assert_eq!(args.iter().any(|arg| arg.contains("AUTH_TOKEN")), mock);
             assert_eq!(args.iter().any(|arg| arg.contains("BASE_URL")), mock);
+            assert_eq!(
+                args.iter().any(|arg| arg == "ENABLE_TOOL_SEARCH=false"),
+                mock
+            );
+            assert!(
+                !args
+                    .iter()
+                    .any(|arg| arg.contains("AGENT_CONNECT_MOCK_MODEL"))
+            );
             assert!(args.contains(&"--read-only".into()));
             assert!(args.contains(&"no-new-privileges".into()));
         }

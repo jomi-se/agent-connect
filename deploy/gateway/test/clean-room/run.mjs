@@ -1,3 +1,4 @@
+import { seedCodexMock } from "./seed-codex.mjs";
 // Runs inside a disposable container with no checkout and no SDK build outputs.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -298,6 +299,19 @@ try {
     report.packed[name] = packed.metadata.version;
   }
   const gatewayPackage = packages.get("@open-agent-connect/gateway");
+  const launcherListing = await command("tar", ["-tzf", gatewayPackage.file]);
+  // command() bounds output: refuse an oversized listing rather than inspect a tail.
+  assert.ok(
+    launcherListing.length < 7900,
+    "Launcher listing exceeds inspection bound",
+  );
+  const launcherFiles = launcherListing.split("\n");
+  assert.ok(launcherFiles.includes("package/box/entrypoint.sh"));
+  assert.ok(
+    !launcherFiles.some((file) => /mock|seed-codex|fixtures/.test(file)),
+    "Published launcher must not carry test inference fixtures",
+  );
+
   const binaryPackage = packages.get(
     `@open-agent-connect/gateway-linux-${process.arch}`,
   );
@@ -564,6 +578,8 @@ try {
     operatorConfigBytes,
     "service management preserves runtime configuration",
   );
+
+  await seedCodexMock(operatorConfig.harness_home, work);
 
   await copyFile(
     "/opt/acceptance/mock-model.mjs",

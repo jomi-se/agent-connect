@@ -7,11 +7,15 @@ import {
   readFile,
   rm,
   stat,
+  symlink,
+  chmod,
+  readdir,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { steps, verify } from "./verify.mjs";
+import { seedCodexMock } from "../deploy/gateway/test/fixtures/seed-codex.mjs";
 
 for (const failure of [undefined, "build", "test:ui:owner"]) {
   test(`verify builds one checkout box and cleans it after ${failure ?? "success"}`, async () => {
@@ -26,7 +30,6 @@ for (const failure of [undefined, "build", "test:ui:owner"]) {
         "deploy/gateway/box/install-harnesses.sh": "checkout installer",
         "deploy/gateway/box/entrypoint.sh": "checkout entrypoint",
         "deploy/gateway/egress-proxy.mjs": "checkout proxy",
-        "deploy/gateway/test/fixtures/codex-config.toml": "checkout config",
       };
       for (const [path, contents] of Object.entries(sources)) {
         await mkdir(dirname(join(repository, path)), { recursive: true });
@@ -57,6 +60,13 @@ for (const failure of [undefined, "build", "test:ui:owner"]) {
             assert.equal(image, options.env.ACP_BOX_IMAGE);
             assert.deepEqual(args.slice(1, 3), ["--platform", "linux/arm64"]);
             const context = args.at(-1);
+            assert.deepEqual((await readdir(context)).sort(), [
+              "Dockerfile",
+              "egress-proxy.mjs",
+              "entrypoint.sh",
+              "install-harnesses.sh",
+              "session-runner",
+            ]);
             assert.equal(
               await readFile(join(context, "Dockerfile"), "utf8"),
               "checkout Dockerfile",
@@ -65,9 +75,11 @@ for (const failure of [undefined, "build", "test:ui:owner"]) {
               await readFile(join(context, "egress-proxy.mjs"), "utf8"),
               "checkout proxy",
             );
-            assert.equal(
-              await readFile(join(context, "mock-codex-config.toml"), "utf8"),
-              "checkout config",
+            await assert.rejects(
+              stat(join(context, "mock-codex-config.toml")),
+              {
+                code: "ENOENT",
+              },
             );
             assert.equal(
               await readFile(join(context, "session-runner"), "utf8"),
@@ -146,7 +158,6 @@ test("verify runs only the selected steps", async () => {
       "deploy/gateway/box/install-harnesses.sh",
       "deploy/gateway/box/entrypoint.sh",
       "deploy/gateway/egress-proxy.mjs",
-      "deploy/gateway/test/fixtures/codex-config.toml",
       "target/distrib/session-runner-linux-amd64",
     ]) {
       await mkdir(dirname(join(repository, path)), { recursive: true });
@@ -175,4 +186,47 @@ test("verify runs only the selected steps", async () => {
   } finally {
     await rm(repository, { recursive: true, force: true });
   }
+});
+
+test("mock config seeding is private, bounded to the fixture home and never overwrites", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "mock-home-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const home = join(root, "home");
+  await mkdir(home, { mode: 0o700 });
+  await seedCodexMock(home, root);
+  const config = join(home, "codex-home/config.toml");
+  assert.equal((await stat(config)).mode & 0o777, 0o600);
+  assert.equal((await stat(join(home, "codex-home"))).mode & 0o777, 0o700);
+  assert.equal(
+    await readFile(config, "utf8"),
+    await readFile(
+      new URL(
+        "../deploy/gateway/test/fixtures/codex-config.toml",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  await writeFile(config, "existing configuration");
+  await assert.rejects(seedCodexMock(home, root), { code: "EEXIST" });
+  assert.equal(await readFile(config, "utf8"), "existing configuration");
+  await assert.rejects(seedCodexMock(root, root), /inside the disposable/);
+  await assert.rejects(seedCodexMock(root, home), /inside the disposable/);
+  const alias = join(root, "alias");
+  await symlink(home, alias);
+  await assert.rejects(seedCodexMock(alias, root), /private owned directory/);
+  const nested = join(root, "nested");
+  await mkdir(nested, { mode: 0o700 });
+  await symlink(join(home, "codex-home"), join(nested, "codex-home"));
+  await assert.rejects(seedCodexMock(nested, root), /private and owned/);
+  const publicHome = join(root, "public-home");
+  await mkdir(publicHome, { mode: 0o700 });
+  await chmod(publicHome, 0o755);
+  await assert.rejects(
+    seedCodexMock(publicHome, root),
+    /private owned directory/,
+  );
+  await assert.rejects(stat(join(publicHome, "codex-home")), {
+    code: "ENOENT",
+  });
 });
