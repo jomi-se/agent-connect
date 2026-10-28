@@ -1,3 +1,4 @@
+import { seedCodexMock } from "../deploy/gateway/test/fixtures/seed-codex.mjs";
 // Real boxed gateway teardown, without credentials or live model calls.
 // Check gateway-owned resources before the driver's bounded fallback cleanup.
 import assert from "node:assert/strict";
@@ -181,6 +182,7 @@ async function runCase(mode) {
   const dir = join(root, mode);
   sessionDirs.push(dir); // Register before any allocation/readiness failure.
   await mkdir(join(dir, "home"), { recursive: true, mode: 0o700 });
+  await seedCodexMock(join(dir, "home"), root);
   const port = await freePort();
   const fault =
     {

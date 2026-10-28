@@ -177,6 +177,11 @@ try {
     join(repo, "deploy/gateway/test/fixtures/mock-model/server.mjs"),
     join(run, "context/mock-model.mjs"),
   );
+  for (const file of ["codex-config.toml", "seed-codex.mjs"])
+    await copyFile(
+      join(repo, "deploy/gateway/test/fixtures", file),
+      join(run, "context", file),
+    );
   boxImage = testBoxImage(manifest.version, suffix);
   await command("docker", ["build", "-t", image, join(run, "context")]);
   createdImageId = (

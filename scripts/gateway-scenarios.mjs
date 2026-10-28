@@ -1,3 +1,4 @@
+import { seedCodexMock } from "../deploy/gateway/test/fixtures/seed-codex.mjs";
 // Deterministic compatibility gate: real gateway, pinned adapters and Chromium.
 // Every process and home belongs to this run; no personal harness state is used.
 import assert from "node:assert/strict";
@@ -244,7 +245,10 @@ try {
   }
   for (const harness of ["codex", "claude"]) {
     const harnessHome = join(run, `boxed-home-${harness}`);
-    if (boxed) await mkdir(harnessHome, { mode: 0o700 });
+    if (boxed) {
+      await mkdir(harnessHome, { mode: 0o700 });
+      if (harness === "codex") await seedCodexMock(harnessHome, run);
+    }
     for (const [mobile, scenario] of [
       [false, "tools"],
       [false, "policy"],

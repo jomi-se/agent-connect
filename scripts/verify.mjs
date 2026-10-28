@@ -105,10 +105,6 @@ export async function verify({
       join(context, "egress-proxy.mjs"),
     );
     await copyFile(
-      join(repository, "deploy/gateway/test/fixtures/codex-config.toml"),
-      join(context, "mock-codex-config.toml"),
-    );
-    await copyFile(
       join(repository, `target/distrib/session-runner-linux-${arch}`),
       join(context, "session-runner"),
     );

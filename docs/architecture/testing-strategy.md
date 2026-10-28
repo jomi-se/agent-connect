@@ -74,8 +74,17 @@ rate-limit pause presentation without changing the main fixture's budget.
 
 ## Fixture storage
 
-Fixtures live under `deploy/gateway/test/fixtures`. Dependency trees and
-per-run caches are removed after owned processes stop, on success and failure.
+Fixtures live under `deploy/gateway/test/fixtures`. Per-run Codex model
+configuration belongs only to test inputs and disposable
+dedicated harness homes. The production launcher and base image carry no mock
+provider configuration; their entrypoint preserves an existing config or creates
+the file-backed credential-store default. Boxed scenarios and teardown seed only
+private fixture homes. Clean-room carries the seed in its acceptance kit, checks
+the actual launcher archive excludes fixtures, and uses the installed release's
+box without an overlay.
+
+Dependency trees and per-run caches are removed after owned processes stop, on
+success and failure.
 Diagnostic output lives outside repositories. `AGENT_CONNECT_KEEP_TEST_INSTALLS=1`
 is an explicit debugging opt-in, never a default. Clean each temporary artifact
 when no active work needs it. A disconnect proves neither that generation

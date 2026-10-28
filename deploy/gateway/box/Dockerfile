@@ -14,7 +14,6 @@ COPY install-harnesses.sh /usr/local/lib/agent-connect/install-harnesses.sh
 COPY session-runner /usr/local/bin/session-runner
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY egress-proxy.mjs /opt/agent-connect/egress-proxy.mjs
-COPY mock-codex-config.toml /opt/agent-connect/mock-codex-config.toml
 USER node
 WORKDIR /work
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

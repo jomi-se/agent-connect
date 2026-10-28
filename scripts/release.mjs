@@ -218,10 +218,6 @@ if (command === "check") {
       join(repo, "deploy/gateway/egress-proxy.mjs"),
       join(launcher, "box/egress-proxy.mjs"),
     );
-    await cp(
-      join(repo, "deploy/gateway/test/fixtures/codex-config.toml"),
-      join(launcher, "box/mock-codex-config.toml"),
-    );
     await writeFile(
       join(launcher, "package.json"),
       JSON.stringify(

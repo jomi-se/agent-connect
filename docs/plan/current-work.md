@@ -62,6 +62,11 @@ reason codes and bounded ephemeral retention. Default audit output, owner-only
 history and actual pause deadlines pass the browser gate; repository checks and
 gateway integration scenarios pass.
 
+Mock Codex provider configuration now comes only from test fixtures seeded into
+owned disposable homes, rather than the production launcher or box. Fresh local
+package builds, boxed scenarios, teardown and artifact-only clean-room pass,
+including actual archive/image exclusion and default/seeded-config checks.
+
 CI runs `npm run verify:full` and `cargo test --locked --workspace` on every push to main, and the release workflow publishes only that verified commit. The artifact-only
 clean-room passes 26 checks, including real browser pairing, setup/doctor,
 offline service lifecycle, sessions/end-session, revoke-all, app tools,
@@ -121,8 +126,6 @@ Backlog:
   `CF-Connecting-IP`), honoured only for that entry point's Host, with a shared
   fallback bucket when the header is missing. Key the sign-in budget, anonymous
   limits and pending-sign-in sessions on it.
-- The box ships the test fixture `mock-codex-config.toml`; move it to test-only
-  build inputs.
 - CI takes about 25 minutes, roughly half of it build overhead. Speed it up
   without dropping gates, cheapest first:
   1. The release build compiles the gateway three times and `verify.mjs`
