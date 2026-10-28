@@ -51,6 +51,12 @@ through the retry link, rechecking its entry point and expiry with fresh CSRF.
 Missing and duplicate session cookies receive specific, non-secret explanations.
 Repository checks, the owner UI gate and gateway integration scenarios pass.
 
+The gateway publication script streams npm output, requires a successful
+registry version listing before upload and confirms each published version.
+Ambiguous results stop without repeating an upload; only bounded read-only
+confirmation is retried. Repository checks and injected/fake-npm publication
+tests pass.
+
 CI runs `npm run verify:full` and `cargo test --locked --workspace` on every push to main, and the release workflow publishes only that verified commit. The artifact-only
 clean-room passes 26 checks, including real browser pairing, setup/doctor,
 offline service lifecycle, sessions/end-session, revoke-all, app tools,
@@ -117,10 +123,6 @@ Backlog:
 - Show recent failed sign-ins on the owner Activity page, along with any active
   sign-in pause and when it ends. Operators decide from these signals whether
   their entry point needs an identity proxy or alerting in front of it.
-- `agent-connect --help` still describes the gateway as "Unreleased".
-- `scripts/release.mjs publish` discards npm's output on success, so a slow or
-  unexpected publish result is invisible; print it and confirm each version is
-  live afterwards.
 - The box ships the test fixture `mock-codex-config.toml`; move it to test-only
   build inputs.
 - CI takes about 25 minutes, roughly half of it build overhead. Speed it up

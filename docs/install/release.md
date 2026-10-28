@@ -127,7 +127,20 @@ with npm and runs only what is missing:
   session-runners for x64/ARM64, packs the launcher and platform packages with
   `release.json`, then publishes platform packages before the launcher. Setup
   builds the box locally from these packages. A package version already on npm
-  is skipped, so rerunning a partly failed release resumes it.
+  is skipped after a successful registry version listing.
+
+The gateway script streams npm's publish output and confirms each exact version
+is visible before proceeding. A failed or ambiguous version listing stops
+publication; npm's `E404` alone can also mean missing permission. New package
+names require the one-time bootstrap below. Dry-runs request no publication and
+skip post-upload confirmation.
+
+Each package gets at most one upload attempt, with npm fetch retries disabled.
+After npm reports success, read-only confirmation is bounded to 30 seconds.
+An upload error, timeout or unconfirmed result stops the release; inspect that
+exact version in the registry before retrying. Confirmed existing versions are
+skipped on a subsequent authorized run. Confirmation establishes version
+visibility, not a download or independent check of the remote tarball.
 
 npm publication uses trusted publishing (OIDC) with `--provenance` on the
 `latest` dist-tag; only the publishing jobs receive `id-token: write`. No

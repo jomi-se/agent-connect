@@ -18,6 +18,8 @@ import {
   releaseInfoFilename,
 } from "./release-info.mjs";
 
+import { publishPackage } from "./release-publish.mjs";
+
 const repo = resolve(import.meta.dirname, "..");
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -291,27 +293,19 @@ if (command === "check") {
     if (sha !== metadata.artifacts[filename].sha256)
       throw new Error(`Artifact checksum mismatch: ${filename}`);
     const name = `@open-agent-connect/${basename(filename).slice("open-agent-connect-".length, -`-${version}.tgz`.length)}`;
-    const published = spawnSync(
-      "npm",
-      ["view", `${name}@${version}`, "version"],
-      {
-        encoding: "utf8",
-      },
-    );
-    if (published.stdout.trim() === version) {
-      console.log(`${name}@${version} is already published`);
-      continue;
-    }
-    run("npm", [
-      "publish",
+    await publishPackage({
+      name,
+      version,
       path,
-      "--access",
-      "public",
-      "--tag",
-      "latest",
-      "--ignore-scripts",
-      ...(command === "publish-dry-run" ? ["--dry-run"] : ["--provenance"]),
-    ]);
+      dryRun: command === "publish-dry-run",
+      cwd: repo,
+      env: {
+        ...process.env,
+        npm_config_cache:
+          process.env.npm_config_cache ??
+          join(repo, ".agent-connect/npm-cache"),
+      },
+    });
   }
   console.log(`ACP ${command} checked ${packages.length} packages`);
 } else
