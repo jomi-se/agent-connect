@@ -11,7 +11,21 @@ import {
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { encodedReleaseRustflags } from "./release-build-env.mjs";
+import { parseArgs } from "node:util";
+import {
+  cleanSourceCommit,
+  writeVerificationReceipt,
+} from "./verification-artifacts.mjs";
+const { values } = parseArgs({
+  options: {
+    "all-linux": { type: "boolean" },
+    "verification-receipt": { type: "boolean" },
+  },
+});
 const repo = resolve(import.meta.dirname, "..");
+const sourceCommit = values["verification-receipt"]
+  ? await cleanSourceCommit(repo)
+  : undefined;
 const { version } = JSON.parse(
   await readFile(join(repo, "packages/gateway-npm/package.json"), "utf8"),
 );
@@ -31,7 +45,7 @@ run(process.execPath, ["scripts/release.mjs", "check"]);
 // Start empty: tarballs from an earlier version would be packed twice.
 await rm(join(repo, "dist/release"), { recursive: true, force: true });
 await mkdir(join(repo, "dist/release"), { recursive: true });
-const targets = process.argv.includes("--all-linux")
+const targets = values["all-linux"]
   ? ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]
   : [
       process.platform === "darwin" && process.arch === "arm64"
@@ -83,6 +97,13 @@ try {
   }
   run(process.execPath, ["scripts/release.mjs", "pack", "--local"]);
   run(process.execPath, ["scripts/test-box-setup.mjs"]);
+  if (sourceCommit)
+    await writeVerificationReceipt({
+      repository: repo,
+      directory: join(repo, "dist/release"),
+      targets,
+      commit: sourceCommit,
+    });
 } finally {
   await rm(compilers, { recursive: true, force: true });
 }

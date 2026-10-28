@@ -5,9 +5,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
+import { gatewayTestBinary } from "./gateway-test-binary.mjs";
+const binary = await gatewayTestBinary({
+  repository: resolve(import.meta.dirname, ".."),
+});
 const cliHome = await mkdtemp(join(tmpdir(), "acp-cli-isolated-home-"));
 const cliState = join(cliHome, "state");
-const binary = resolve(import.meta.dirname, "../target/debug/agent-connect");
 test("login invokes only the provider CLI with a private shared home and host UID", async () => {
   const root = await mkdtemp(join(tmpdir(), "acp-login-command-"));
   const home = join(root, "dedicated");
@@ -580,10 +583,7 @@ test(
       };
       for (const name of Object.keys(env))
         if (name.startsWith("AGENT_CONNECT_")) delete env[name];
-      const canonical = resolve(
-        import.meta.dirname,
-        "../target/debug/agent-connect",
-      );
+      const canonical = binary;
       const result = spawnSync(
         "/usr/bin/script",
         [

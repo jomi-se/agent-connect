@@ -77,10 +77,44 @@ with the `mise.toml` build tools, Node 24 and Docker:
 ```sh
 npm ci
 node scripts/release.mjs check
-node scripts/build-release-local.mjs
-npm run verify:full
+node scripts/build-release-local.mjs --verification-receipt
+AGENT_CONNECT_VERIFY_RELEASE_ARTIFACTS="$PWD/dist/release" npm run verify:full
 cargo test --locked --workspace
 ```
+
+The optional `--verification-receipt` requires a clean committed checkout before
+and after the build, including untracked source files. It records the commit,
+versions, built targets and complete artifact hashes in
+`dist/release/verification-receipt.json`, without machine paths. Ignored build
+outputs are allowed. This is evidence from the trusted build workflow, not an
+independent signature. The default builder still supports uncommitted development
+changes and does not emit this receipt.
+
+Reuse is explicit: `npm run verify -- --release-artifacts dist/release` or the
+`AGENT_CONNECT_VERIFY_RELEASE_ARTIFACTS` environment variable for `verify:full`.
+Without either, verification keeps its source-build behavior. Reuse rejects a
+missing receipt, a different commit even at the same version, dirty source,
+changed artifact sets, metadata or checksums. Source identity and cleanliness
+are checked before setup, before every gate and after verification, including
+failure paths.
+
+Verification selects the native host gateway and Docker's Linux runner separately;
+both platform payloads must be present. A remote Docker daemon with another
+architecture requires that Linux platform package, never a substituted host
+runner. Platform archives are read with bounded decompression and strict member,
+metadata and internal-checksum validation. Only the expected regular executable
+payloads are written into the owned verification directory. The native gateway's
+`release-info` version is checked again before use. Gateway UI, scenario, CLI
+(including interactive selection) and teardown gates receive that absolute binary
+through `ACP_GATEWAY_BIN`; invalid explicit selections fail without a debug-build
+fallback. A fresh uniquely tagged box is still built from checkout configuration
+and the verified runner. Clean-room acceptance still installs npm tarballs from
+the same verified artifact snapshot. Owned files and image tags are cleaned on
+success and failure.
+
+CI opts into receipt production and reuse. Publication continues to build
+separately in the release workflow; this does not assert byte identity with a
+later published release and does not change the local-only publication guards.
 
 The local builder packages the host target; `--all-linux` packages both Linux
 targets when supported. A cross-target local build must execute the foreign
