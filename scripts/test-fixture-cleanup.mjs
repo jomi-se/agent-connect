@@ -53,3 +53,58 @@ export async function runCleanupTasks(tasks) {
       "Fixture cleanup failed after all owned cleanup tasks were attempted",
     );
 }
+
+// Await termination of one fixture-owned child. A process-group sender may be
+// supplied for children launched with detached:true. Never equate KILL with exit.
+// Return whether KILL was required so callers can retain stricter failure policy.
+export async function stopFixtureChild(
+  child,
+  {
+    exited,
+    signal = (value) => child.kill(value),
+    graceMs = 5000,
+    killMs = 5000,
+  } = {},
+) {
+  if (!child || child.exitCode !== null || child.signalCode !== null)
+    return false;
+  let onExit;
+  const completion =
+    exited ??
+    new Promise((resolve) => {
+      onExit = resolve;
+      child.once("exit", onExit);
+    });
+  function send(value) {
+    try {
+      signal(value);
+    } catch (error) {
+      if (error.code !== "ESRCH") throw error;
+    }
+  }
+  async function stoppedWithin(ms) {
+    let timer;
+    try {
+      return await Promise.race([
+        completion.then(() => true),
+        new Promise((resolve) => {
+          timer = setTimeout(() => resolve(false), ms);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  try {
+    send("SIGTERM");
+    if (await stoppedWithin(graceMs)) return false;
+    send("SIGKILL");
+    if (!(await stoppedWithin(killMs)))
+      throw new Error(
+        "Owned fixture process did not exit after SIGKILL; preserving its files",
+      );
+    return true;
+  } finally {
+    if (onExit) child.removeListener("exit", onExit);
+  }
+}

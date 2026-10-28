@@ -1,18 +1,46 @@
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, readFile, chmod } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  readFile,
+  chmod,
+  rm,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 import { gatewayTestBinary } from "./gateway-test-binary.mjs";
+import { runCleanupTasks } from "./test-fixture-cleanup.mjs";
+
 const binary = await gatewayTestBinary({
   repository: resolve(import.meta.dirname, ".."),
 });
-const cliHome = await mkdtemp(join(tmpdir(), "acp-cli-isolated-home-"));
+const suiteRoots = new Set();
+const suiteChildren = new Set();
+after(async () => {
+  if (suiteChildren.size)
+    throw new Error(
+      "CLI child close was not confirmed; preserving suite temporary roots",
+    );
+  await runCleanupTasks(
+    [...suiteRoots].map(
+      (root) => () => rm(root, { recursive: true, force: true }),
+    ),
+  );
+});
+async function tempRoot(prefix) {
+  const root = await mkdtemp(join(tmpdir(), prefix));
+  suiteRoots.add(root);
+  return root;
+}
+
+const cliHome = await tempRoot("acp-cli-isolated-home-");
 const cliState = join(cliHome, "state");
 test("login invokes only the provider CLI with a private shared home and host UID", async () => {
-  const root = await mkdtemp(join(tmpdir(), "acp-login-command-"));
+  const root = await tempRoot("acp-login-command-");
   const home = join(root, "dedicated");
   await mkdir(join(root, "bin"));
   const docker = join(root, "bin/docker");
@@ -91,7 +119,7 @@ function command(args, env = {}) {
 }
 
 async function setup() {
-  const root = await mkdtemp(join(tmpdir(), "acp-init-"));
+  const root = await tempRoot("acp-init-");
   const tools = join(root, "input-tools.json");
   await writeFile(
     tools,
@@ -209,7 +237,7 @@ test("serve refuses unknown JSON fields and insecure config modes without printi
 });
 
 async function preflightDocker() {
-  const root = await mkdtemp(join(tmpdir(), "acp-preflight-cli-"));
+  const root = await tempRoot("acp-preflight-cli-");
   const image = { Id: `sha256:${"d".repeat(64)}`, Config: { Env: [] } };
   const container = {
     Id: "a".repeat(64),
@@ -263,24 +291,61 @@ async function serveUntilReady(args, env = {}, cwd) {
     env: { ...inherited, HOME: cliHome, XDG_STATE_HOME: cliState, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  suiteChildren.add(child);
   let stderr = "";
   return await new Promise((resolveResult, reject) => {
-    const timeout = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(new Error(`server startup timed out: ${stderr}`));
+    let failure;
+    let stopping = false;
+    let readyTimer;
+    let escalation;
+    let confirmation;
+    const startup = setTimeout(() => {
+      failure = new Error(`server startup timed out: ${stderr}`);
+      stop();
     }, 5000);
+    const clearTimers = () => {
+      for (const timer of [startup, readyTimer, escalation, confirmation])
+        clearTimeout(timer);
+    };
+    function stop() {
+      if (stopping) return;
+      stopping = true;
+      clearTimeout(startup);
+      clearTimeout(readyTimer);
+      child.kill("SIGTERM");
+      escalation = setTimeout(() => {
+        child.kill("SIGKILL");
+        confirmation = setTimeout(() => {
+          clearTimers();
+          // A failed signal or missing close must not turn cleanup into deletion
+          // beneath a potentially live child. Let the suite fail without hanging.
+          child.unref();
+          child.stdout.destroy();
+          child.stderr.destroy();
+          reject(
+            new Error(
+              `server close was not confirmed; preserving temporary roots (pid ${child.pid})`,
+            ),
+          );
+        }, 1000);
+      }, 1000);
+    }
     child.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
+      failure = error;
+      stop();
     });
     child.stderr.on("data", (data) => {
       stderr += data;
-      if (stderr.includes("listening on"))
-        setTimeout(() => child.kill("SIGTERM"), 50);
+      if (stderr.includes("listening on") && !readyTimer && !stopping) {
+        clearTimeout(startup);
+        readyTimer = setTimeout(stop, 50);
+      }
     });
-    child.on("close", (code) => {
-      clearTimeout(timeout);
-      resolveResult({ code, stderr });
+    child.once("close", (code) => {
+      suiteChildren.delete(child);
+      clearTimers();
+      if (failure) reject(failure);
+      else resolveResult({ code, stderr });
     });
   });
 }
@@ -362,7 +427,7 @@ test("production isolation requirements and runtime failures have distinct exits
 });
 
 test("egress uses read-only same-image proxy and verifies ownership before deleting immutable ID", async () => {
-  const root = await mkdtemp(join(tmpdir(), "acp-egress-command-"));
+  const root = await tempRoot("acp-egress-command-");
   await mkdir(join(root, "bin"));
   const docker = join(root, "bin/docker");
   await writeFile(
@@ -459,7 +524,7 @@ test("relative config argument resolves a dedicated production home to an absolu
 
 test("flagless login refuses nonterminal input without allocating a home", async () => {
   const { access } = await import("node:fs/promises");
-  const state = join(await mkdtemp(join(tmpdir(), "acp-no-tty-")), "state");
+  const state = join(await tempRoot("acp-no-tty-"), "state");
   const result = command(["login"], { XDG_STATE_HOME: state });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /needs a terminal.*--harness codex/);
@@ -467,7 +532,7 @@ test("flagless login refuses nonterminal input without allocating a home", async
 });
 
 test("login defaults match init, explicit homes and old configs remain usable", async () => {
-  const root = await mkdtemp(join(tmpdir(), "acp-login-defaults-"));
+  const root = await tempRoot("acp-login-defaults-");
   await mkdir(join(root, "bin"));
   await writeFile(
     join(root, "bin/docker"),
@@ -567,7 +632,7 @@ test(
       ["wrong\n2\n", "claude"],
       ["q\n", null],
     ]) {
-      const root = await mkdtemp(join(tmpdir(), "acp-selector-"));
+      const root = await tempRoot("acp-selector-");
       await mkdir(join(root, "bin"));
       await writeFile(
         join(root, "bin/docker"),
@@ -630,7 +695,7 @@ test(
 
 test("normal init enrolls owner auth without issuing an app bearer", async () => {
   const { stat } = await import("node:fs/promises");
-  const root = await mkdtemp(join(tmpdir(), "acp-owner-setup-"));
+  const root = await tempRoot("acp-owner-setup-");
   const directory = join(root, "runtime");
   const result = await ownerTerminal(
     binary,
@@ -687,7 +752,7 @@ test("normal init enrolls owner auth without issuing an app bearer", async () =>
 
 test("owner setup rejects unattended prompts and invalid public origins before creation", async () => {
   const { stat } = await import("node:fs/promises");
-  const root = await mkdtemp(join(tmpdir(), "acp-owner-invalid-"));
+  const root = await tempRoot("acp-owner-invalid-");
   const directory = join(root, "runtime");
   const args = ["init", "--directory", directory, "--harness", "codex"];
   const noTerminal = command(args);
@@ -706,7 +771,7 @@ test("owner setup rejects unattended prompts and invalid public origins before c
 
 test("owner setup rejects runtime inside harness mount, including canonical aliases", async () => {
   const { symlink, stat } = await import("node:fs/promises");
-  const root = await mkdtemp(join(tmpdir(), "acp-owner-boundary-"));
+  const root = await tempRoot("acp-owner-boundary-");
   const home = join(root, "harness");
   await mkdir(home, { mode: 0o700 });
   const alias = join(root, "alias");
@@ -734,7 +799,7 @@ test("owner setup rejects runtime inside harness mount, including canonical alia
 });
 
 test("serve rejects owner state or config inside harness mount before Docker startup", async () => {
-  const root = await mkdtemp(join(tmpdir(), "acp-serve-owner-boundary-"));
+  const root = await tempRoot("acp-serve-owner-boundary-");
   const home = join(root, "harness");
   await mkdir(home, { mode: 0o700 });
   const outside = join(root, "config.json");

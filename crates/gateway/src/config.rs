@@ -76,6 +76,10 @@ pub struct ServeOptions {
     #[arg(long = "entry-point")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry_points: Option<Vec<String>>,
+    /// Opt-in proxy trust for admission budgets; configured only in private JSON.
+    #[arg(skip)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_address_policies: Option<crate::client_address::ClientAddressPolicies>,
     /// Profiles offered to the owner at consent; each grant keeps its chosen authority.
     #[arg(long = "profile", value_enum)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -171,6 +175,7 @@ pub struct ServeCli {
     pub listen: SocketAddr,
     pub public_url: Option<String>,
     pub entry_points: Vec<String>,
+    pub client_address_policies: crate::client_address::ClientAddressPolicies,
     pub profiles: Vec<PermissionProfile>,
     pub headless_static_bearer: bool,
     pub allow_origin: String,
@@ -224,6 +229,7 @@ impl ServeOptions {
             listen: merged!(listen).unwrap_or_else(|| "127.0.0.1:18940".parse().unwrap()),
             public_url: merged!(public_url),
             entry_points: merged!(entry_points).unwrap_or_default(),
+            client_address_policies: merged!(client_address_policies).unwrap_or_default(),
             profiles: merged!(profiles).unwrap_or_default(),
             headless_static_bearer: merged!(headless_static_bearer).unwrap_or(false),
             allow_origin: merged!(allow_origin).unwrap_or_default(),
@@ -260,7 +266,10 @@ impl ServeOptions {
             if cli.tools.as_os_str().is_empty() {
                 return Err(usage("headless static bearer requires --tools"));
             }
-            if cli.public_url.is_some() || !cli.entry_points.is_empty() {
+            if cli.public_url.is_some()
+                || !cli.entry_points.is_empty()
+                || !cli.client_address_policies.is_empty()
+            {
                 return Err(usage(
                     "--public-url pairing and --headless-static-bearer are mutually exclusive",
                 ));
@@ -348,6 +357,14 @@ impl ServeOptions {
                 return Err(usage("configured entry points must be unique"));
             }
         }
+        cli.client_address_policies
+            .validate(
+                cli.public_url
+                    .iter()
+                    .chain(cli.entry_points.iter())
+                    .map(String::as_str),
+            )
+            .map_err(|_| usage("invalid client address policy"))?;
         if cli.max_sessions == 0 || cli.resume_max_bytes == 0 {
             return Err(usage(
                 "session capacity and retained output limit must be positive",
@@ -694,6 +711,7 @@ pub(crate) fn init_with_output(
                 policy_fingerprint: "setup".into(),
                 owner_passphrase: owner_passphrase.clone(),
                 entry_points: Vec::new(),
+                client_address_policies: Default::default(),
                 profiles: match cli.harness {
                     Harness::Codex => {
                         vec![PermissionProfile::Sandboxed, PermissionProfile::ReadOnly]
@@ -975,6 +993,46 @@ mod tests {
         assert_eq!(
             options.resolve().unwrap().permissions,
             PermissionProfile::ReadOnly
+        );
+    }
+
+    #[test]
+    fn client_address_configuration_is_json_only_opt_in_and_validates_origins() {
+        let policy = serde_json::json!({"https://gateway.example": {"header":"X-Client-IP", "trusted_peers":["192.0.2.10"]}});
+        let mut options = pairing_options(Harness::Codex);
+        options.client_address_policies = Some(serde_json::from_value(policy.clone()).unwrap());
+        let configured = options.resolve().unwrap();
+        assert!(!configured.client_address_policies.is_empty());
+        assert_eq!(
+            serde_json::to_value(configured.client_address_policies).unwrap()["https://gateway.example"]
+                ["header"],
+            "x-client-ip"
+        );
+        assert!(
+            pairing_options(Harness::Codex)
+                .resolve()
+                .unwrap()
+                .client_address_policies
+                .is_empty()
+        );
+        let mut options = pairing_options(Harness::Codex);
+        options.public_url = Some("https://different.example".into());
+        options.client_address_policies = Some(serde_json::from_value(policy.clone()).unwrap());
+        assert!(options.resolve().is_err());
+        let mut options = pairing_options(Harness::Codex);
+        options.headless_static_bearer = Some(true);
+        options.public_url = None;
+        options.token = Some("fixture-token".into());
+        options.tools = Some("fixture-tools.json".into());
+        options.client_address_policies = Some(serde_json::from_value(policy).unwrap());
+        assert!(options.resolve().is_err());
+        let parsed: ServeOptions = serde_json::from_str(r#"{"client_address_policies":{"https://gateway.example":{"header":"x-ip","trusted_peers":["192.0.2.10"]}}}"#).unwrap();
+        assert!(!parsed.client_address_policies.unwrap().is_empty());
+        assert!(
+            serde_json::from_str::<ServeOptions>(
+                r#"{"client_address_policies":{},"client_address_policies":{}}"#
+            )
+            .is_err()
         );
     }
 

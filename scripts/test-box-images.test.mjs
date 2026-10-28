@@ -129,6 +129,10 @@ test("clean-room failure cleans built box, layer and driver tags without touchin
        const images=JSON.parse(readFileSync(file));
        appendFileSync(${JSON.stringify(trace)}, JSON.stringify(args)+'\\n');
        if (args[0]==='build') images.push(args[args.indexOf('-t')+1]);
+       if (args[0]==='inspect') {
+         process.exitCode=1;
+         console.error('Error: No such '+args[2]+': '+args[3]);
+       }
        if (args[0]==='image' && args[1]==='inspect') console.log('sha256:'+'a'.repeat(64));
        if (args[0]==='run') {
          if (args.includes('--name')) {

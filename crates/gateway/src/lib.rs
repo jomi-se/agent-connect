@@ -2,6 +2,7 @@
 //! ACP and MCP-over-ACP APIs are unstable.
 
 pub mod authorization;
+pub mod client_address;
 pub mod config;
 pub mod credentials;
 pub mod http_security;

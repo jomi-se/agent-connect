@@ -14,7 +14,11 @@ import { tmpdir, homedir } from "node:os";
 import { resolve, join } from "node:path";
 import { createServer } from "node:http";
 import { createServer as tcpServer } from "node:net";
-import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
+import {
+  pruneTestInstallations,
+  runCleanupTasks,
+  stopFixtureChild,
+} from "./test-fixture-cleanup.mjs";
 import { requireBoxImage } from "./test-box-images.mjs";
 import { gatewayTestBinary } from "./gateway-test-binary.mjs";
 
@@ -84,18 +88,9 @@ function service(bin, args, env) {
   return child;
 }
 async function stop(child) {
-  if (!child || child.exitCode !== null) return;
-  try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch {}
-  await new Promise((ok) => {
-    child.once("exit", ok);
-    setTimeout(() => {
-      try {
-        process.kill(-child.pid, "SIGKILL");
-      } catch {}
-      ok();
-    }, 3000).unref();
+  await stopFixtureChild(child, {
+    signal: (signal) => process.kill(-child.pid, signal),
+    graceMs: 3000,
   });
   children.delete(child);
 }
@@ -426,12 +421,42 @@ try {
     );
   throw error;
 } finally {
-  await Promise.all([...children].map(stop));
-  for (const name of dockerContainers)
-    await command("docker", ["rm", "-f", name]).catch(() => {});
-  for (const name of dockerNetworks)
-    await command("docker", ["network", "rm", name]).catch(() => {});
-  await new Promise((ok) => pageServer.close(ok));
-  await pruneTestInstallations(run);
+  const failures = [];
+  async function attemptAll(tasks) {
+    await runCleanupTasks(tasks).catch((error) => {
+      failures.push(
+        ...(error instanceof AggregateError ? error.errors : [error]),
+      );
+    });
+  }
+  // Independent shutdown must finish even when one child cannot be stopped.
+  await attemptAll([
+    ...[...children].map((child) => () => stop(child)),
+    () =>
+      new Promise((ok, fail) => {
+        pageServer.close((error) =>
+          error && error.code !== "ERR_SERVER_NOT_RUNNING" ? fail(error) : ok(),
+        );
+        // A failed browser child may still hold an active HTTP connection.
+        pageServer.closeAllConnections();
+      }),
+  ]);
+  await attemptAll(
+    dockerContainers.map((name) => () => command("docker", ["rm", "-f", name])),
+  );
+  // Container removal must settle before attempting the owned networks.
+  await attemptAll(
+    dockerNetworks.map(
+      (name) => () => command("docker", ["network", "rm", name]),
+    ),
+  );
+  // Never delete files that an unconfirmed child may still be using.
+  if (!failures.length)
+    await pruneTestInstallations(run).catch((error) => failures.push(error));
   console.log(`ACP diagnostics: ${run}`);
+  if (failures.length)
+    throw new AggregateError(
+      failures,
+      `Scenario cleanup failed; diagnostics retained at ${run}`,
+    );
 }

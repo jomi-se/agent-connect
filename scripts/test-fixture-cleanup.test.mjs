@@ -154,3 +154,26 @@ test("a synchronous browser-close failure still attempts every process cleanup a
     },
   );
 });
+
+test("owned detached-child sender is not called again after prompt exit", async () => {
+  const { stopFixtureChild } = await import("./test-fixture-cleanup.mjs");
+  const { EventEmitter } = await import("node:events");
+  const child = new EventEmitter();
+  child.exitCode = null;
+  child.signalCode = null;
+  const signals = [];
+  const escalated = await stopFixtureChild(child, {
+    graceMs: 5,
+    signal: (signal) => {
+      signals.push(signal);
+      queueMicrotask(() => {
+        child.exitCode = 0;
+        child.emit("exit", 0);
+      });
+    },
+  });
+  assert.equal(escalated, false);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(signals, ["SIGTERM"]);
+  assert.equal(child.listenerCount("exit"), 0);
+});

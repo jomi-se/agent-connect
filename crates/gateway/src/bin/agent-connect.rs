@@ -430,6 +430,7 @@ async fn run() -> anyhow::Result<()> {
             policy_fingerprint: fingerprint,
             owner_passphrase: None,
             entry_points: cli.entry_points.clone(),
+            client_address_policies: cli.client_address_policies.clone(),
             profiles: cli.profiles.clone(),
             default_profile: cli.permissions,
             harness: cli.harness,

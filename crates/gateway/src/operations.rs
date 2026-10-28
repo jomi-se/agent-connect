@@ -151,6 +151,9 @@ pub struct SetupPlan {
     pub harness_home: PathBuf,
     pub origin: String,
     pub entry_points: Vec<String>,
+    // Used for race/preservation checks; client addresses are not plan output.
+    #[serde(skip)]
+    client_address_policies: crate::client_address::ClientAddressPolicies,
     pub profiles: Vec<PermissionProfile>,
     pub permissions: PermissionProfile,
     pub listen: SocketAddr,
@@ -270,6 +273,9 @@ pub fn setup_plan(
             .entry_points
             .clone()
             .or_else(|| previous.as_ref().and_then(|c| c.entry_points.clone())),
+        client_address_policies: previous
+            .as_ref()
+            .and_then(|c| c.client_address_policies.clone()),
         profiles: cli
             .profiles
             .clone()
@@ -306,7 +312,8 @@ pub fn setup_plan(
             ..Default::default()
         }
         .resolve()?;
-        if configured.entry_points != requested_policy.entry_points
+        if configured.client_address_policies != requested_policy.client_address_policies
+            || configured.entry_points != requested_policy.entry_points
             || configured.profiles != requested_policy.profiles
             || configured.permissions != requested_policy.permissions
         {
@@ -347,6 +354,7 @@ pub fn setup_plan(
         harness_home: home,
         origin,
         entry_points: requested_policy.entry_points,
+        client_address_policies: requested_policy.client_address_policies,
         profiles: requested_policy.profiles,
         permissions: requested_policy.permissions,
         listen,
@@ -464,6 +472,7 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
                 && fresh.harness_home == plan.harness_home
                 && fresh.listen == plan.listen
                 && fresh.entry_points == plan.entry_points
+                && fresh.client_address_policies == plan.client_address_policies
                 && fresh.profiles == plan.profiles
                 && fresh.permissions == plan.permissions,
             "configuration changed during upgrade preparation; rerun from the new private state"
@@ -578,7 +587,11 @@ fn persist_setup_policy(path: &Path, plan: &SetupPlan) -> anyhow::Result<()> {
     configured.entry_points = Some(plan.entry_points.clone());
     configured.profiles = Some(plan.profiles.clone());
     configured.permissions = Some(plan.permissions);
-    configured.resolve()?;
+    let configured = configured.resolve()?;
+    anyhow::ensure!(
+        configured.client_address_policies == plan.client_address_policies,
+        "client address policy changed during setup preparation"
+    );
     let mut value: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
     let object = value
         .as_object_mut()
@@ -864,6 +877,34 @@ mod tests {
         assert_eq!(inherited.entry_points, plan.entry_points);
         assert_eq!(inherited.profiles, plan.profiles);
         assert_eq!(inherited.permissions, plan.permissions);
+        // Explicit private edits opt into trust; setup must preserve the exact
+        // policy and detect a subsequent change before writing or upgrading.
+        let policy = serde_json::json!({"https://alternate.example": {"header":"x-client-ip", "trusted_peers":["192.0.2.10"]}});
+        let mut raw: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&plan.config).unwrap()).unwrap();
+        raw["client_address_policies"] = policy.clone();
+        replace_private_config(&plan.config, &serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+        let trusted = setup_plan(&cli, Some(&test_harness())).unwrap();
+        assert!(!trusted.client_address_policies.is_empty());
+        assert!(
+            !serde_json::to_string(&trusted)
+                .unwrap()
+                .contains("192.0.2.10")
+        );
+        persist_setup_policy(&trusted.config, &trusted).unwrap();
+        let preserved: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&plan.config).unwrap()).unwrap();
+        assert_eq!(preserved["client_address_policies"], policy);
+        raw["client_address_policies"]["https://alternate.example"]["trusted_peers"] =
+            serde_json::json!(["192.0.2.11"]);
+        replace_private_config(&plan.config, &serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
+        assert!(persist_setup_policy(&trusted.config, &trusted).is_err());
+        let changed = setup_plan(&cli, Some(&test_harness())).unwrap();
+        assert_ne!(
+            changed.client_address_policies,
+            trusted.client_address_policies
+        );
+        assert_eq!(std::fs::read(&owner_path).unwrap(), owner_state);
         cli.profiles = Some(vec![
             PermissionProfile::Sandboxed,
             PermissionProfile::ReadOnly,

@@ -385,3 +385,63 @@ dist-tag:
 A pinned Codex replaces the release codex-acp would choose, even outside the
 range it declares; pin codex-acp alongside it if the two disagree. Remove a pin
 to follow npm again.
+
+### Trusted client addresses for admission limits
+
+By default, sign-in and authenticator attempts share the direct transport peer's
+address budget. A proxy can make unrelated clients share that address. An
+operator may opt into client attribution in the private JSON configuration:
+
+```json
+{
+  "client_address_policies": {
+    "https://gateway.example": {
+      "header": "x-client-ip",
+      "trusted_peers": ["192.0.2.10"]
+    }
+  }
+}
+```
+
+This example does not configure an ingress. Each map key must exactly match
+`public_url` or a configured `entry_points` origin. Each policy requires one
+non-reserved HTTP header name and a nonempty list of exact transport IP
+addresses; CIDRs are not supported. IPv4-mapped IPv6 addresses normalize to
+IPv4. Setup reruns and upgrades preserve the private policy; edit it explicitly
+to change trust. There is no implicit trust for loopback or forwarded headers.
+
+The ingress must remove any incoming copy of the selected header and replace
+it with one bare client IP. It must also prevent untrusted direct access to the
+gateway. The gateway first selects an exact configured `Host`, then checks the
+actual transport peer against that policy's allowlist. `Host` alone does not
+prove proxy identity. A trusted transport peer cannot distinguish the ingress
+from another actor sharing that permitted address.
+
+Untrusted or missing transport peers cannot supply trusted header values.
+Absent, duplicate, malformed, or comma-separated values from a trusted peer
+share one fallback group per entry point. Trusted addresses, fallback groups,
+and direct transport peers have separate budgets. Forwarding headers do not
+change gateway authority, origin, session, cookie, CSRF, or grant binding.
+Client addresses and header values are not included in sign-in audit history
+or Activity; counts describe request source groups rather than unique people.
+
+With any policy configured, the whole hosted authorization runtime rejects
+unknown or ambiguous `Host` values before admission and adds a limit of **60
+unauthenticated requests per source per 60 seconds**, while retaining the
+**600 requests per 60 seconds** global ceiling and its owner-session exemption.
+Requests rejected by a source limit do not consume the shared allowance.
+Passphrase and authenticator limits remain **10 attempts per 900 seconds** and
+**5 attempts per 60 seconds**, including consent and authenticator enrollment.
+Each budget map keeps at most 1,024 individual source entries; bounded shared
+fallback groups absorb additional sources without evicting live budgets.
+
+Pending owner sign-in sessions last **600 seconds**, with at most **8 per
+source** and **256 globally**. A valid existing cookie is reused before
+admission; new sessions are rejected when capacity is full rather than evicting
+another client's live session. The address records only admission ownership:
+changing address does not invalidate an otherwise valid session or CSRF token.
+These limits apply across all configured entry points when the feature is on.
+Without a policy, the existing transport-peer budgets and global admission
+behavior remain unchanged. Shared and global ceilings remain deliberate
+resource bounds; this feature does not guarantee isolation from distributed
+traffic or clients sharing an address.

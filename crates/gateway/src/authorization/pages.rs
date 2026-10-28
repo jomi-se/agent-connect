@@ -311,12 +311,13 @@ fn sign_in_security(now: u64, failures: &[SignInFailure], pauses: &[SignInPause]
         "<section class='sign-in-security' aria-labelledby='sign-in-security-title'><h2 id='sign-in-security-title'>Sign-in security</h2>",
     );
     if !pauses.is_empty() {
+        body.push_str("<p class='meta'>Several clients can share one group: they may share an address, or a trusted proxy may not provide a usable client address.</p>");
         body.push_str("<ul class='sign-in-pauses' aria-label='Active pauses'>");
         for pause in pauses {
             let scope = match pause.affected_clients {
                 Some(count) => format!(
-                    "Paused for {count} client address{}. Latest reset:",
-                    if count == 1 { "" } else { "es" }
+                    "Paused for {count} request source group{}. Latest reset:",
+                    if count == 1 { "" } else { "s" }
                 ),
                 None => "Paused for unauthenticated requests across the gateway. Resets:".into(),
             };
@@ -1160,8 +1161,8 @@ mod tests {
             },
         ];
         let body = sign_in_security(1_700_000_000, &[], &pauses);
-        assert!(body.contains("Paused for 1 client address. Latest reset:"));
-        assert!(body.contains("Paused for 2 client addresses. Latest reset:"));
+        assert!(body.contains("Paused for 1 request source group. Latest reset:"));
+        assert!(body.contains("Paused for 2 request source groups. Latest reset:"));
         assert!(body.contains("Paused for unauthenticated requests across the gateway. Resets:"));
         assert!(body.contains("2023-11-14 22:28:20 UTC"));
         assert!(body.contains("datetime='2023-11-14T22:28:20Z'"));
