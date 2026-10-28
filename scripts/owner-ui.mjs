@@ -61,7 +61,6 @@ const fixtureEnv = {
   PATH: process.env.PATH,
   HOME: join(root, "home"),
   XDG_STATE_HOME: join(root, "state"),
-  RUST_LOG: "info",
 };
 const password = "isolated-owner-browser-test";
 const listener = net.createServer();
@@ -114,9 +113,17 @@ let gateway = spawn(binary, ["serve", "--config", configPath], {
   stdio: ["ignore", "ignore", "pipe"],
 });
 let diagnostics = "";
-gateway.stderr.on("data", (chunk) => {
+const auditLines = [];
+let diagnosticRemainder = "";
+function captureGatewayDiagnostics(chunk) {
   diagnostics = (diagnostics + chunk).slice(-4000);
-});
+  const lines = (diagnosticRemainder + chunk).split("\n");
+  diagnosticRemainder = lines.pop();
+  auditLines.push(
+    ...lines.filter((line) => line.includes("owner_sign_in_failed")),
+  );
+}
+gateway.stderr.on("data", captureGatewayDiagnostics);
 let gatewayExit = new Promise((ok) => gateway.once("exit", ok));
 const states = [];
 const views = [
@@ -244,9 +251,11 @@ try {
       .evaluate((button) => button === document.activeElement),
     true,
   );
-  await page
-    .getByLabel("Owner passphrase")
-    .fill("deliberately-wrong-test-passphrase");
+  const failedSignInCsrf = await page
+    .locator('input[name="csrf_token"]')
+    .inputValue();
+  const wrongPassphrase = "deliberately-wrong-test-passphrase";
+  await page.getByLabel("Owner passphrase").fill(wrongPassphrase);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page
     .getByRole("heading", { name: "Sign-in did not complete" })
@@ -265,6 +274,27 @@ try {
   assert.equal(signedInCookies[0].secure, false);
   assert.ok(signedInCookies[0].value.startsWith("owner_"));
   assert.ok(signedInCookies[0].value !== anonymousCookies[0].value);
+  const signInHistory = page.getByRole("region", {
+    name: "Sign-in security",
+    exact: true,
+  });
+  await signInHistory
+    .getByText("The owner passphrase was not accepted.", { exact: true })
+    .waitFor();
+  assert.ok((await signInHistory.innerText()).includes(origin));
+  const auditPrivateValues = [
+    password,
+    wrongPassphrase,
+    failedSignInCsrf,
+    anonymousCookies[0].value,
+    signedInCookies[0].value,
+  ];
+  const signInHistoryHtml = await signInHistory.innerHTML();
+  for (const secret of auditPrivateValues)
+    assert.ok(
+      !signInHistoryHtml.includes(secret),
+      "Sign-in history must not contain submitted secrets",
+    );
   await capture("activity-empty");
   await page.getByRole("link", { name: "Security", exact: true }).click();
   await page.getByText("Authenticator is off", { exact: true }).waitFor();
@@ -356,6 +386,14 @@ try {
   try {
     const recoveryPage = await recoveryContext.newPage();
     recoveryPage.on("pageerror", (error) => errors.push(error.message));
+    await recoveryPage.goto(owner);
+    await recoveryPage.getByLabel("Owner passphrase").waitFor();
+    assert.equal(
+      await recoveryPage
+        .getByRole("region", { name: "Sign-in security", exact: true })
+        .count(),
+      0,
+    );
     const recoveryState = "synthetic-sign-in-recovery-state";
     const originalRequest = new URL(await push({ state: recoveryState }));
     const waitingApp =
@@ -467,6 +505,17 @@ try {
         .getAttribute("href"),
       "/agent-connect/owner/login",
     );
+    const privateErrorMarker = "synthetic-private-request-field-marker";
+    auditPrivateValues.push(privateErrorMarker, omittedCookie.value, csrf);
+    const malformed = await missingCookieContext.request.post(
+      `${owner}/login`,
+      {
+        headers: { Origin: origin },
+        form: { [privateErrorMarker]: "synthetic-private-error-value" },
+      },
+    );
+    assert.equal(malformed.status(), 400);
+    auditPrivateValues.push("synthetic-private-error-value");
   } finally {
     await missingCookieContext.close();
   }
@@ -695,13 +744,12 @@ try {
   });
   await writeFile(authPath, JSON.stringify(stored), { mode: 0o600 });
   diagnostics = "";
+  diagnosticRemainder = "";
   gateway = spawn(binary, ["serve", "--config", configPath], {
     env: fixtureEnv,
     stdio: ["ignore", "ignore", "pipe"],
   });
-  gateway.stderr.on("data", (chunk) => {
-    diagnostics = (diagnostics + chunk).slice(-4000);
-  });
+  gateway.stderr.on("data", captureGatewayDiagnostics);
   gatewayExit = new Promise((ok) => gateway.once("exit", ok));
   for (let attempt = 0; attempt < 100; attempt++) {
     if (diagnostics.includes("listening on")) break;
@@ -713,6 +761,13 @@ try {
   await page.getByLabel("Owner passphrase").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByText("expired", { exact: true }).waitFor();
+  assert.equal(
+    await page
+      .getByRole("region", { name: "Sign-in security", exact: true })
+      .count(),
+    0,
+    "Sign-in history resets when the fixture gateway restarts",
+  );
   await capture("activity-expired");
   await page.goto(await push({ stress: true }));
   await capture("long-app-origin-and-tool-names");
@@ -912,7 +967,97 @@ try {
     0,
   );
   await capture("runtime-problem", { target: problemPage });
+  // Exhaust only this final fixture's budget; the primary runtime stays untouched.
+  const pauseContext = await browser.newContext();
+  try {
+    const pausePage = await pauseContext.newPage();
+    pausePage.on("pageerror", (error) => errors.push(error.message));
+    const probeOwner = `${probeOrigin}/agent-connect/owner`;
+    const marker = "synthetic-audit-secret-marker";
+    const started = Date.now();
+    const submittedSecrets = [password, marker];
+    for (let attempt = 0; attempt < 11; attempt++) {
+      await pausePage.goto(`${probeOwner}/login`);
+      submittedSecrets.push(
+        await pausePage.locator('input[name="csrf_token"]').inputValue(),
+      );
+      await pausePage.getByLabel("Owner passphrase").fill(marker);
+      const [failed] = await Promise.all([
+        pausePage.waitForResponse(
+          (reply) =>
+            reply.url() === `${probeOwner}/login` &&
+            reply.request().method() === "POST",
+        ),
+        pausePage.getByRole("button", { name: "Sign in", exact: true }).click(),
+      ]);
+      assert.equal(failed.status(), attempt < 10 ? 401 : 429);
+    }
+    await pausePage.goto(probeOwner);
+    await pausePage.getByLabel("Owner passphrase").waitFor();
+    assert.equal(
+      await pausePage
+        .getByRole("region", { name: "Sign-in security", exact: true })
+        .count(),
+      0,
+    );
+    await problemPage.reload();
+    await problemPage
+      .getByRole("heading", { name: "No apps yet", exact: true })
+      .waitFor();
+    const history = problemPage.getByRole("region", {
+      name: "Sign-in security",
+      exact: true,
+    });
+    await history
+      .getByText("Sign-in attempts were temporarily paused.", { exact: true })
+      .waitFor();
+    const pause = history
+      .locator(".sign-in-pause")
+      .filter({ hasText: "Sign-in attempts" });
+    assert.match(
+      await pause.innerText(),
+      /Paused for 1 client address\. Latest reset:/,
+    );
+    const reset = Date.parse(
+      await pause.locator("time").first().getAttribute("datetime"),
+    );
+    assert.ok(
+      reset >= started + 890000 && reset <= Date.now() + 900000,
+      "Active sign-in pause shows its actual fifteen-minute reset window",
+    );
+    assert.equal(await history.locator(".sign-in-failure").count(), 11);
+    const historyHtml = await history.innerHTML();
+    for (const secret of submittedSecrets)
+      assert.ok(
+        !historyHtml.includes(secret),
+        "Failure history must not expose submitted secrets",
+      );
+    await capture("sign-in-paused", { target: problemPage });
+  } finally {
+    await pauseContext.close();
+  }
   await problemContext.close();
+  for (const code of [
+    "invalid_credentials",
+    "missing_session_cookie",
+    "invalid_request",
+  ])
+    assert.ok(
+      auditLines.some((line) => line.includes(code)),
+      `Default gateway logger must emit ${code} sign-in audit events`,
+    );
+  for (const secret of auditPrivateValues)
+    assert.ok(
+      auditLines.every((line) => !line.includes(secret)),
+      "Sign-in audit logs must not contain submitted secrets or raw error markers",
+    );
+  const signInAuditChecks = {
+    ownerOnlyHistory: true,
+    secretValuesExcluded: true,
+    defaultLoggerEmitsAudit: true,
+    restartClearsHistory: true,
+    exhaustedBudgetPause: true,
+  };
   assert.deepEqual(errors, []);
   await writeFile(
     join(root, "report.json"),
@@ -921,6 +1066,7 @@ try {
         status: "passed",
         ownerCookieChecks,
         signInRecoveryChecks,
+        signInAuditChecks,
         states,
         sessionEndCleanup: {
           observed: endedStates,

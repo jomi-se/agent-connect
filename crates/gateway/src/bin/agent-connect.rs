@@ -266,9 +266,17 @@ async fn main() -> std::process::ExitCode {
     }
 }
 
+fn diagnostic_filter(directives: Option<&str>) -> tracing_subscriber::EnvFilter {
+    tracing_subscriber::EnvFilter::new(
+        directives
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or("error,agent_connect_gateway::owner_sign_in=warn"),
+    )
+}
+
 async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(diagnostic_filter(std::env::var("RUST_LOG").ok().as_deref()))
         .with_writer(std::io::stderr)
         .init();
     let mut cli = match Cli::parse().command {
@@ -1015,6 +1023,57 @@ async fn start_or_close(
 
 #[cfg(test)]
 mod tests {
+    #[derive(Clone, Default)]
+    struct LogCapture(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for LogCapture {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn captured_diagnostics(directives: Option<&str>) -> String {
+        let capture = LogCapture::default();
+        let writer = capture.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_env_filter(super::diagnostic_filter(directives))
+            .with_ansi(false)
+            .without_time()
+            .with_writer(move || writer.clone())
+            .finish();
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::warn!(target: "agent_connect_gateway::owner_sign_in", "audit-visible");
+            tracing::warn!(target: "other_component", "unrelated-warning");
+            tracing::error!(target: "other_component", "ordinary-error");
+        });
+        let bytes = capture.0.lock().unwrap().clone();
+        String::from_utf8(bytes).unwrap()
+    }
+
+    #[test]
+    fn default_diagnostics_include_sign_in_audit_without_other_warnings() {
+        for directives in [None, Some(""), Some(" ")] {
+            let output = captured_diagnostics(directives);
+            assert!(output.contains("audit-visible"));
+            assert!(output.contains("ordinary-error"));
+            assert!(!output.contains("unrelated-warning"));
+        }
+    }
+
+    #[test]
+    fn explicit_diagnostics_filter_remains_in_control() {
+        assert!(captured_diagnostics(Some("off")).is_empty());
+        let errors = captured_diagnostics(Some("error"));
+        assert!(errors.contains("ordinary-error"));
+        assert!(!errors.contains("audit-visible"));
+        assert!(!errors.contains("unrelated-warning"));
+    }
+
     #[test]
     fn grant_volume_name_is_release_stable_sha256() {
         assert_eq!(

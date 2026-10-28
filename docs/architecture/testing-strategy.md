@@ -66,6 +66,12 @@ submission exercises the missing-session explanation. Rust tests cover
 continuation/issuer/expiry binding, spent CSRF, ambiguous cookies and persistence
 failure without issuing owner authority.
 
+Scoped tracing tests exercise real sign-in rejection boundaries, require one
+event per failure, and verify secret-marker exclusion, strict entry-point
+attribution, retention limits and pause expiry. The browser fixture leaves
+`RUST_LOG` unset to check default audit output, owner-only history and actual
+rate-limit pause presentation without changing the main fixture's budget.
+
 ## Fixture storage
 
 Fixtures live under `deploy/gateway/test/fixtures`. Dependency trees and

@@ -166,6 +166,21 @@ security to bypass this error. Local acceptance observes this namespace refusal
 and absence of a filesystem effect; it does not independently qualify the
 native filesystem policy on a namespace-capable host.
 
+Failed owner sign-in emits `owner_sign_in_failed` events with an allowlisted
+`reason`, timestamp and, when recognized, the configured entry-point address.
+These events contain no submitted passphrases, authenticator codes, cookies,
+CSRF tokens, request bodies or client IP addresses. The default diagnostics
+filter enables these warnings while retaining error-level output elsewhere.
+An explicit nonempty `RUST_LOG` overrides that filter; changing it does not
+disable the in-memory Activity history.
+
+Activity shows the latest 20 failed sign-ins from the last 24 hours. The gateway
+keeps at most 64 failures in memory and clears them on restart; this is not a
+persistent audit log. Current pause summaries show affected client-address
+counts and their latest reset time, or the global pause for unauthenticated
+requests. Client addresses can be shared behind a proxy, and an existing owner
+session is exempt from the global unauthenticated-request rejection.
+
 `RUST_LOG` controls diagnostics. `AGENT_CONNECT_GATEWAY_BIN` overrides the npm
 launcher's executable for local testing. Image selection is also available to
 init/login/egress as `AGENT_CONNECT_BOX_IMAGE`; egress name as
