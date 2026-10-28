@@ -3,7 +3,7 @@ set -eu
 
 mode=${1:-history}
 repo_root=$(git rev-parse --show-toplevel)
-git_dir=$(git -C "$repo_root" rev-parse --absolute-git-dir)
+git_dir=$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)
 
 if test -n "${GITLEAKS_BIN:-}"; then
   gitleaks_bin=$GITLEAKS_BIN
