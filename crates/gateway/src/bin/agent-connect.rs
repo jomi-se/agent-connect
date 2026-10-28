@@ -59,7 +59,7 @@ const MAX_CLIENT_FRAME_BYTES: usize = 1024 * 1024;
 #[command(
     name = "agent-connect",
     version,
-    about = "Unreleased, unstable ACP application gateway",
+    about = "Application gateway for user-owned agents (unstable ACP)",
     after_help = "Example:\n  agent-connect setup\n  agent-connect setup --origin https://gateway.example\n  agent-connect doctor\n  agent-connect service status\n\nExit codes: 0 success; 1 runtime or readiness failure; 2 invalid arguments or configuration. ACP and MCP-over-ACP are unstable."
 )]
 struct Cli {
