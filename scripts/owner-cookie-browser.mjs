@@ -15,7 +15,7 @@ import { createServer } from "node:https";
 import net from "node:net";
 import { join } from "node:path";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
-import { runCleanupTasks } from "./test-fixture-cleanup.mjs";
+import { runCleanupTasks, stopFixtureChild } from "./test-fixture-cleanup.mjs";
 
 export const ownerCookieResolverRules =
   "MAP owner.example.test 127.0.0.1, MAP sibling.example.test 127.0.0.1";
@@ -249,7 +249,7 @@ export async function verifyOwnerCookies({
     gateway.stderr.on("data", (chunk) => {
       diagnostics = (diagnostics + chunk).slice(-4000);
     });
-    gateway.once("error", (error) => {
+    gateway.on("error", (error) => {
       startupError = error;
     });
     gatewayClosed = new Promise((ok) => gateway.once("close", ok));
@@ -443,24 +443,16 @@ export async function verifyOwnerCookies({
           for (const socket of sockets) socket.destroy();
           await closed;
         },
-        async () => {
-          if (
-            !gateway?.pid ||
-            gateway.exitCode !== null ||
-            gateway.signalCode !== null
-          )
-            return;
-          gateway.kill("SIGTERM");
-          const timer = setTimeout(() => gateway.kill("SIGKILL"), 5000);
-          try {
-            await gatewayClosed;
-          } finally {
-            clearTimeout(timer);
-          }
-        },
+        () => stopFixtureChild(gateway, { exited: gatewayClosed }),
       ]);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
+    } catch {
+      const failure = new Error(
+        "Cookie-browser fixture shutdown was not confirmed; disposable runtime retained.",
+      );
+      // The caller must preserve its outer root too while a child may remain.
+      Object.defineProperty(failure, "retainedDirectory", { value: directory });
+      throw failure;
     }
+    await rm(directory, { recursive: true, force: true });
   }
 }

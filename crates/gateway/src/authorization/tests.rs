@@ -28,6 +28,7 @@ fn config(dir: PathBuf, password: Option<&str>) -> AuthConfig {
         state_dir: dir,
         policy_fingerprint: "policy-1".into(),
         entry_points: Vec::new(),
+        client_address_policies: Default::default(),
         profiles: vec![PermissionProfile::Sandboxed],
         default_profile: PermissionProfile::Sandboxed,
         harness: Harness::Codex,
@@ -951,14 +952,61 @@ fn peer_attempt_limits_are_independent_bounded_and_expire() {
     let other: IpAddr = "192.0.2.2".parse().unwrap();
     let mut budgets = HashMap::new();
     for _ in 0..10 {
-        attempt_budget(&mut budgets, first, 1000, 900, 10, "login_rate_limited").unwrap();
+        attempt_budget(
+            &mut budgets,
+            &ClientSource::legacy(Some(first)),
+            1000,
+            900,
+            10,
+            "login_rate_limited",
+            false,
+        )
+        .unwrap();
     }
-    assert!(attempt_budget(&mut budgets, first, 1000, 900, 10, "login_rate_limited").is_err());
-    attempt_budget(&mut budgets, other, 1000, 900, 10, "login_rate_limited").unwrap();
-    attempt_budget(&mut budgets, first, 1900, 900, 10, "login_rate_limited").unwrap();
+    assert!(
+        attempt_budget(
+            &mut budgets,
+            &ClientSource::legacy(Some(first)),
+            1000,
+            900,
+            10,
+            "login_rate_limited",
+            false
+        )
+        .is_err()
+    );
+    attempt_budget(
+        &mut budgets,
+        &ClientSource::legacy(Some(other)),
+        1000,
+        900,
+        10,
+        "login_rate_limited",
+        false,
+    )
+    .unwrap();
+    attempt_budget(
+        &mut budgets,
+        &ClientSource::legacy(Some(first)),
+        1900,
+        900,
+        10,
+        "login_rate_limited",
+        false,
+    )
+    .unwrap();
     for index in 0..2048 {
         let peer = IpAddr::V4(std::net::Ipv4Addr::from(0xc000_0200u32 + index));
-        attempt_budget(&mut budgets, peer, 1900, 900, 10, "login_rate_limited").unwrap();
+        attempt_budget(
+            &mut budgets,
+            &ClientSource::legacy(Some(peer)),
+            1900,
+            900,
+            10,
+            "login_rate_limited",
+            false,
+        )
+        .unwrap();
     }
     assert_eq!(budgets.len(), 1024);
 }
@@ -1398,14 +1446,14 @@ async fn failed_sign_in_factor_and_budgets_preserve_only_valid_retry() {
         {
             let mut inner = auth.inner.lock().unwrap();
             inner.login_budgets.insert(
-                peer,
+                ClientSource::legacy(Some(peer)),
                 AttemptBudget {
                     window: auth.now(),
                     count: login_count,
                 },
             );
             inner.factor_budgets.insert(
-                peer,
+                ClientSource::legacy(Some(peer)),
                 AttemptBudget {
                     window: auth.now(),
                     count: factor_count,
@@ -3225,7 +3273,7 @@ mod sign_in_audit_tests {
                     matches!(case, "factor" | "factor_budget").then(|| base32(&[9; 20]));
                 if case == "login_budget" {
                     inner.login_budgets.insert(
-                        IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+                        ClientSource::legacy(None),
                         AttemptBudget {
                             window: auth.now(),
                             count: 10,
@@ -3234,7 +3282,7 @@ mod sign_in_audit_tests {
                 }
                 if case == "factor_budget" {
                     inner.factor_budgets.insert(
-                        IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+                        ClientSource::legacy(None),
                         AttemptBudget {
                             window: auth.now(),
                             count: 5,
@@ -3402,6 +3450,7 @@ mod sign_in_audit_tests {
                 inner.sessions.insert(
                     format!("fixture-owner-{index}"),
                     Session {
+                        source: None,
                         origin: ISSUER.into(),
                         expires: auth.now() + 3600,
                         owner: true,
@@ -3596,7 +3645,7 @@ mod sign_in_audit_tests {
             let mut inner = auth.inner.lock().unwrap();
             for (index, age, count) in [(1, 10, 10), (2, 100, 10), (3, 901, 10), (4, 0, 9)] {
                 inner.login_budgets.insert(
-                    format!("192.0.2.{index}").parse().unwrap(),
+                    ClientSource::legacy(Some(format!("192.0.2.{index}").parse().unwrap())),
                     AttemptBudget {
                         window: now - age,
                         count,
@@ -3605,7 +3654,7 @@ mod sign_in_audit_tests {
             }
             for (index, age, count) in [(1, 5, 5), (2, 50, 5), (3, 61, 5), (4, 0, 4)] {
                 inner.factor_budgets.insert(
-                    format!("192.0.2.{index}").parse().unwrap(),
+                    ClientSource::legacy(Some(format!("192.0.2.{index}").parse().unwrap())),
                     AttemptBudget {
                         window: now - age,
                         count,
@@ -3650,5 +3699,811 @@ mod sign_in_audit_tests {
         );
         advance(auth, 835);
         assert!(sign_in_audit::pauses(&auth.inner.lock().unwrap(), auth.now()).is_empty());
+    }
+}
+
+mod client_address_tests {
+    use super::*;
+    const SECOND: &str = "https://second.example";
+    const META: &str = "/.well-known/oauth-authorization-server/agent-connect";
+    const PROXY: &str = "192.0.2.10";
+    const CLIENT: &str = "198.51.100.7";
+    const OTHER: &str = "198.51.100.8";
+    fn fixture() -> Fixture {
+        let dir = std::env::temp_dir().join(random("agent-connect-proxy-test-"));
+        let mut configuration = config(dir.clone(), Some(PASSWORD));
+        configuration.entry_points = vec![SECOND.into(), "https://direct.example".into()];
+        configuration.client_address_policies = serde_json::from_value(json!({
+            ISSUER: {"header":"x-client-ip", "trusted_peers":[PROXY]},
+            SECOND: {"header":"x-other-ip", "trusted_peers":[PROXY]},
+        }))
+        .unwrap();
+        Fixture {
+            dir,
+            auth: AuthService::open(configuration).unwrap(),
+        }
+    }
+    fn source(origin: &str, ip: &str) -> ClientSource {
+        ClientSource::Trusted(origin.into(), ip.parse().unwrap())
+    }
+    async fn send(
+        auth: &Arc<AuthService>,
+        method: Method,
+        path: &str,
+        origin: &str,
+        peer: Option<&str>,
+        values: &[(&str, &str)],
+        cookie: Option<&str>,
+        fields: &[(&str, &str)],
+    ) -> Reply {
+        let mut req = axum::http::Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(
+                header::HOST,
+                Url::parse(origin).unwrap().host_str().unwrap(),
+            )
+            .header(header::ORIGIN, origin);
+        if let Some(peer) = peer {
+            req = req.extension(ConnectInfo(SocketAddr::new(peer.parse().unwrap(), 12345)));
+        }
+        for (name, value) in values {
+            req = req.header(*name, *value);
+        }
+        if let Some(cookie) = cookie {
+            req = req.header(header::COOKIE, cookie);
+        }
+        let response = auth
+            .clone()
+            .router()
+            .oneshot(
+                req.body(Body::from(serde_urlencoded::to_string(fields).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (parts, body) = response.into_parts();
+        Reply {
+            status: parts.status,
+            headers: parts.headers,
+            text: String::from_utf8(to_bytes(body, MAX_BODY).await.unwrap().to_vec()).unwrap(),
+        }
+    }
+    async fn get(
+        auth: &Arc<AuthService>,
+        path: &str,
+        origin: &str,
+        ip: &str,
+        cookie: Option<&str>,
+    ) -> Reply {
+        send(
+            auth,
+            Method::GET,
+            path,
+            origin,
+            Some(PROXY),
+            &[(
+                if origin == SECOND {
+                    "x-other-ip"
+                } else {
+                    "x-client-ip"
+                },
+                ip,
+            )],
+            cookie,
+            &[],
+        )
+        .await
+    }
+    fn owner(auth: &AuthService) -> String {
+        let token = random("synthetic-owner-");
+        auth.inner.lock().unwrap().sessions.insert(
+            hash(&token),
+            Session {
+                source: None,
+                origin: ISSUER.into(),
+                expires: auth.now() + 3600,
+                owner: true,
+                enrollment: None,
+            },
+        );
+        format!("__Host-agent_connect_owner={token}")
+    }
+    fn owner_id(cookie: &str) -> String {
+        hash(cookie.split_once('=').unwrap().1)
+    }
+
+    #[tokio::test]
+    async fn client_address_disabled_keeps_global_limits_and_old_session_eviction() {
+        let fixture = Fixture::new();
+        let auth = &fixture.auth;
+        let first = request(auth, Method::GET, LOGIN, None, None, &[]).await;
+        let first_id = owner_id(&cookie(&first));
+        advance(auth, 1);
+        for _ in 0..MAX_TRANSIENT {
+            assert_eq!(
+                send(
+                    auth,
+                    Method::GET,
+                    LOGIN,
+                    ISSUER,
+                    Some(PROXY),
+                    &[("x-client-ip", CLIENT)],
+                    None,
+                    &[]
+                )
+                .await
+                .status,
+                StatusCode::OK
+            );
+            advance(auth, 1);
+        }
+        let inner = auth.inner.lock().unwrap();
+        assert_eq!(inner.anonymous.len(), MAX_TRANSIENT);
+        assert!(!inner.anonymous.contains_key(&first_id));
+        assert!(
+            inner
+                .anonymous
+                .values()
+                .all(|session| session.source.is_none())
+        );
+        assert!(inner.request_budgets.is_empty());
+    }
+
+    #[tokio::test]
+    async fn client_address_request_limits_partition_origins_and_stop_before_global_count() {
+        let fixture = fixture();
+        let auth = &fixture.auth;
+        for (origin, ip) in [(ISSUER, CLIENT), (ISSUER, OTHER), (SECOND, CLIENT)] {
+            for _ in 0..CLIENT_REQUEST_LIMIT {
+                assert_eq!(
+                    get(auth, META, origin, ip, None).await.status,
+                    StatusCode::OK
+                );
+            }
+            let before = auth.inner.lock().unwrap().rate_count;
+            for _ in 0..3 {
+                assert_eq!(
+                    get(auth, META, origin, ip, None).await.status,
+                    StatusCode::TOO_MANY_REQUESTS
+                );
+            }
+            assert_eq!(auth.inner.lock().unwrap().rate_count, before);
+        }
+        assert_eq!(auth.inner.lock().unwrap().rate_count, 180);
+        let owner = owner(auth);
+        assert_eq!(
+            get(auth, OWNER, ISSUER, CLIENT, Some(&owner)).await.status,
+            StatusCode::OK
+        );
+        auth.inner.lock().unwrap().rate_count = 600;
+        assert_eq!(
+            get(auth, OWNER, ISSUER, CLIENT, Some(&owner)).await.status,
+            StatusCode::OK
+        );
+        assert_eq!(
+            get(auth, META, ISSUER, "198.51.100.9", None).await.status,
+            StatusCode::TOO_MANY_REQUESTS
+        );
+        advance(auth, 60);
+        assert_eq!(
+            get(auth, META, ISSUER, CLIENT, None).await.status,
+            StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn client_address_fallback_and_transport_groups_ignore_spoofed_headers() {
+        let fixture = fixture();
+        let auth = &fixture.auth;
+        for headers in [
+            vec![],
+            vec![("x-client-ip", "bad-secret-value")],
+            vec![("x-client-ip", CLIENT), ("x-client-ip", OTHER)],
+            vec![("x-client-ip", "198.51.100.7, 198.51.100.8")],
+        ] {
+            assert_eq!(
+                send(
+                    auth,
+                    Method::GET,
+                    META,
+                    ISSUER,
+                    Some(PROXY),
+                    &headers,
+                    None,
+                    &[]
+                )
+                .await
+                .status,
+                StatusCode::OK
+            );
+        }
+        for peer in [None, Some("192.0.2.11")] {
+            for ip in [CLIENT, OTHER] {
+                assert_eq!(
+                    send(
+                        auth,
+                        Method::GET,
+                        META,
+                        ISSUER,
+                        peer,
+                        &[("x-client-ip", ip)],
+                        None,
+                        &[]
+                    )
+                    .await
+                    .status,
+                    StatusCode::OK
+                );
+            }
+        }
+        assert_eq!(
+            get(auth, META, "https://direct.example", CLIENT, None)
+                .await
+                .status,
+            StatusCode::OK
+        );
+        {
+            let inner = auth.inner.lock().unwrap();
+            assert_eq!(
+                inner.request_budgets[&ClientSource::Missing(ISSUER.into())].count,
+                4
+            );
+            assert_eq!(
+                inner.request_budgets[&ClientSource::Transport(None)].count,
+                2
+            );
+            assert_eq!(
+                inner.request_budgets
+                    [&ClientSource::Transport(Some("192.0.2.11".parse().unwrap()))]
+                    .count,
+                2
+            );
+            assert_eq!(
+                inner.request_budgets[&ClientSource::Transport(Some(PROXY.parse().unwrap()))].count,
+                1
+            );
+        }
+        let before = auth.inner.lock().unwrap().rate_count;
+        assert_eq!(
+            send(
+                auth,
+                Method::GET,
+                META,
+                "https://unknown.example",
+                Some(PROXY),
+                &[
+                    ("x-forwarded-host", "gateway.example"),
+                    ("x-client-ip", CLIENT)
+                ],
+                None,
+                &[]
+            )
+            .await
+            .status,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            send(
+                auth,
+                Method::GET,
+                META,
+                ISSUER,
+                Some(PROXY),
+                &[("host", "gateway.example"), ("x-client-ip", CLIENT)],
+                None,
+                &[]
+            )
+            .await
+            .status,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            request(auth, Method::GET, META, None, None, &[])
+                .await
+                .status,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(auth.inner.lock().unwrap().rate_count, before);
+    }
+
+    #[tokio::test]
+    async fn client_address_session_admission_preserves_other_clients_and_reuses_cookie() {
+        let fixture = fixture();
+        let auth = &fixture.auth;
+        let mut cookies = Vec::new();
+        for _ in 0..CLIENT_SIGN_IN_LIMIT {
+            let page = get(auth, LOGIN, ISSUER, CLIENT, None).await;
+            assert_eq!(page.status, StatusCode::OK);
+            cookies.push(cookie(&page));
+        }
+        let before = auth.inner.lock().unwrap().rate_count;
+        assert_eq!(
+            get(auth, LOGIN, ISSUER, CLIENT, None).await.status,
+            StatusCode::TOO_MANY_REQUESTS
+        );
+        assert_eq!(auth.inner.lock().unwrap().rate_count, before);
+        assert_eq!(
+            get(auth, LOGIN, ISSUER, OTHER, None).await.status,
+            StatusCode::OK
+        );
+        let reused = get(auth, LOGIN, ISSUER, OTHER, Some(&cookies[0])).await;
+        assert_eq!(reused.status, StatusCode::OK);
+        assert!(!reused.headers.contains_key(header::SET_COOKIE));
+        // The address used for a new form or its POST is not session/CSRF authority.
+        let (signed_in, events) = sign_in_audit_tests::captured(send(
+            auth,
+            Method::POST,
+            LOGIN,
+            ISSUER,
+            Some(PROXY),
+            &[("x-client-ip", "198.51.100.9")],
+            Some(&cookies[0]),
+            &[
+                ("csrf_token", &input(&reused.text, "csrf_token")),
+                ("continue", ""),
+                ("passphrase", PASSWORD),
+            ],
+        ))
+        .await;
+        assert_eq!(signed_in.status, StatusCode::FOUND);
+        assert!(events.is_empty());
+        let wrong_origin = get(auth, OWNER, SECOND, OTHER, Some(&cookie(&signed_in))).await;
+        assert_eq!(wrong_origin.status, StatusCode::FOUND);
+        assert_eq!(wrong_origin.headers[header::LOCATION], LOGIN);
+        assert!(auth.inner.lock().unwrap().stored.grants.is_empty());
+        advance(auth, 600);
+        assert_eq!(
+            get(auth, LOGIN, ISSUER, CLIENT, None).await.status,
+            StatusCode::OK
+        );
+        assert_eq!(auth.inner.lock().unwrap().anonymous.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn client_address_global_session_capacity_rejects_without_evicting_live_state() {
+        let fixture = fixture();
+        let auth = &fixture.auth;
+        let first = get(auth, LOGIN, ISSUER, CLIENT, None).await;
+        let cookie = cookie(&first);
+        let id = owner_id(&cookie);
+        {
+            let mut inner = auth.inner.lock().unwrap();
+            for i in 1..MAX_TRANSIENT {
+                inner.anonymous.insert(
+                    format!("synthetic-{i}"),
+                    Session {
+                        source: Some(source(ISSUER, &format!("198.51.100.{}", i % 250 + 1))),
+                        origin: ISSUER.into(),
+                        expires: auth.now() + 600,
+                        owner: false,
+                        enrollment: None,
+                    },
+                );
+            }
+        }
+        let before = auth.inner.lock().unwrap().rate_count;
+        assert_eq!(
+            get(auth, LOGIN, ISSUER, "203.0.113.7", None).await.status,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(auth.inner.lock().unwrap().rate_count, before);
+        assert_eq!(
+            get(auth, LOGIN, ISSUER, OTHER, Some(&cookie)).await.status,
+            StatusCode::OK
+        );
+        let inner = auth.inner.lock().unwrap();
+        assert_eq!(inner.anonymous.len(), MAX_TRANSIENT);
+        assert!(inner.anonymous.contains_key(&id));
+        assert!(
+            inner
+                .anonymous_csrf
+                .values()
+                .any(|record| record.session == id)
+        );
+    }
+
+    #[test]
+    fn client_address_budget_capacity_uses_bounded_overflow_without_resetting_attempts() {
+        let mut budgets = HashMap::new();
+        let first = source(ISSUER, CLIENT);
+        for _ in 0..10 {
+            attempt_budget(
+                &mut budgets,
+                &first,
+                1000,
+                900,
+                10,
+                "login_rate_limited",
+                true,
+            )
+            .unwrap();
+        }
+        for i in 1..MAX_CLIENT_BUDGETS {
+            let key = ClientSource::Trusted(
+                ISSUER.into(),
+                IpAddr::V6(std::net::Ipv6Addr::from(i as u128)),
+            );
+            attempt_budget(
+                &mut budgets,
+                &key,
+                1000,
+                900,
+                10,
+                "login_rate_limited",
+                true,
+            )
+            .unwrap();
+        }
+        for i in 0..10 {
+            let key = ClientSource::Trusted(
+                ISSUER.into(),
+                IpAddr::V6(std::net::Ipv6Addr::from((10000 + i) as u128)),
+            );
+            assert_eq!(
+                attempt_budget(
+                    &mut budgets,
+                    &key,
+                    1000,
+                    900,
+                    10,
+                    "login_rate_limited",
+                    true
+                )
+                .unwrap(),
+                ClientSource::Overflow(Some(ISSUER.into()))
+            );
+        }
+        assert!(
+            attempt_budget(
+                &mut budgets,
+                &source(ISSUER, OTHER),
+                1000,
+                900,
+                10,
+                "login_rate_limited",
+                true
+            )
+            .is_err()
+        );
+        assert!(
+            attempt_budget(
+                &mut budgets,
+                &first,
+                1000,
+                900,
+                10,
+                "login_rate_limited",
+                true
+            )
+            .is_err()
+        );
+        // Releasing individual slots must not reset an active overflow window.
+        let released = budgets
+            .keys()
+            .find(|key| **key != first && !key.reserved())
+            .unwrap()
+            .clone();
+        budgets.get_mut(&released).unwrap().window = 900;
+        assert!(
+            attempt_budget(
+                &mut budgets,
+                &source(ISSUER, "203.0.113.44"),
+                1800,
+                900,
+                10,
+                "login_rate_limited",
+                true
+            )
+            .is_err()
+        );
+        assert!(!budgets.contains_key(&released));
+        let missing = ClientSource::Missing(ISSUER.into());
+        attempt_budget(
+            &mut budgets,
+            &missing,
+            1000,
+            900,
+            10,
+            "login_rate_limited",
+            true,
+        )
+        .unwrap();
+        assert_eq!(budgets.len(), MAX_CLIENT_BUDGETS + 1);
+        attempt_budget(
+            &mut budgets,
+            &first,
+            1900,
+            900,
+            10,
+            "login_rate_limited",
+            true,
+        )
+        .unwrap();
+        assert_eq!(budgets.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn client_address_success_keeps_overflow_until_original_deadline() {
+        let fixture = fixture();
+        let auth = &fixture.auth;
+        let started = auth.now();
+        let released = ClientSource::Trusted(ISSUER.into(), "2001:db8::1".parse().unwrap());
+        {
+            let mut inner = auth.inner.lock().unwrap();
+            for index in 1..=MAX_CLIENT_BUDGETS {
+                let key = ClientSource::Trusted(
+                    ISSUER.into(),
+                    format!("2001:db8::{index:x}").parse().unwrap(),
+                );
+                inner.login_budgets.insert(
+                    key,
+                    AttemptBudget {
+                        window: if index == 1 { started - 899 } else { started },
+                        count: 1,
+                    },
+                );
+            }
+        }
+        // A real failed POST fills overflow while every individual slot is live.
+        let page = get(auth, LOGIN, ISSUER, CLIENT, None).await;
+        let anonymous = cookie(&page);
+        let reply = send(
+            auth,
+            Method::POST,
+            LOGIN,
+            ISSUER,
+            Some(PROXY),
+            &[("x-client-ip", CLIENT)],
+            Some(&anonymous),
+            &[
+                ("csrf_token", &input(&page.text, "csrf_token")),
+                ("continue", ""),
+                ("passphrase", "invalid-fixture"),
+            ],
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+        let overflow = ClientSource::Overflow(Some(ISSUER.into()));
+        assert_eq!(auth.inner.lock().unwrap().login_budgets[&overflow].count, 1);
+        advance(auth, 1);
+        // One individual expires before success; success must not remove the
+        // overflow marker and let the next client claim that free slot.
+        let page = get(auth, LOGIN, ISSUER, CLIENT, Some(&anonymous)).await;
+        let (reply, events) = sign_in_audit_tests::captured(send(
+            auth,
+            Method::POST,
+            LOGIN,
+            ISSUER,
+            Some(PROXY),
+            &[("x-client-ip", CLIENT)],
+            Some(&anonymous),
+            &[
+                ("csrf_token", &input(&page.text, "csrf_token")),
+                ("continue", ""),
+                ("passphrase", PASSWORD),
+            ],
+        ))
+        .await;
+        assert_eq!(reply.status, StatusCode::FOUND);
+        assert!(events.is_empty());
+        {
+            let inner = auth.inner.lock().unwrap();
+            assert!(!inner.login_budgets.contains_key(&released));
+            assert_eq!(inner.login_budgets[&overflow].count, 0);
+            assert_eq!(inner.login_budgets[&overflow].window, started);
+        }
+        for (elapsed, client, overflow_count) in [(0, OTHER, 1), (898, "198.51.100.9", 2)] {
+            advance(auth, elapsed);
+            let page = get(auth, LOGIN, ISSUER, client, None).await;
+            let reply = send(
+                auth,
+                Method::POST,
+                LOGIN,
+                ISSUER,
+                Some(PROXY),
+                &[("x-client-ip", client)],
+                Some(&cookie(&page)),
+                &[
+                    ("csrf_token", &input(&page.text, "csrf_token")),
+                    ("continue", ""),
+                    ("passphrase", "invalid-fixture"),
+                ],
+            )
+            .await;
+            assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+            let inner = auth.inner.lock().unwrap();
+            assert!(!inner.login_budgets.contains_key(&source(ISSUER, client)));
+            assert_eq!(inner.login_budgets[&overflow].count, overflow_count);
+            assert_eq!(inner.login_budgets[&overflow].window, started);
+        }
+        advance(auth, 1);
+        assert_eq!(auth.now(), started + 900);
+        let client = "203.0.113.44";
+        let page = get(auth, LOGIN, ISSUER, client, None).await;
+        let reply = send(
+            auth,
+            Method::POST,
+            LOGIN,
+            ISSUER,
+            Some(PROXY),
+            &[("x-client-ip", client)],
+            Some(&cookie(&page)),
+            &[
+                ("csrf_token", &input(&page.text, "csrf_token")),
+                ("continue", ""),
+                ("passphrase", "invalid-fixture"),
+            ],
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+        let inner = auth.inner.lock().unwrap();
+        assert!(!inner.login_budgets.contains_key(&overflow));
+        assert_eq!(inner.login_budgets[&source(ISSUER, client)].count, 1);
+        assert_eq!(
+            inner.login_budgets[&source(ISSUER, client)].window,
+            started + 900
+        );
+    }
+
+    #[tokio::test]
+    async fn client_address_login_budget_and_audit_use_only_verified_nonsecret_context() {
+        let fixture = fixture();
+        let auth = &fixture.auth;
+        auth.inner.lock().unwrap().login_budgets.insert(
+            source(ISSUER, CLIENT),
+            AttemptBudget {
+                window: auth.now(),
+                count: 10,
+            },
+        );
+        for (ip, expected, reason) in [
+            (CLIENT, StatusCode::TOO_MANY_REQUESTS, "login_rate_limited"),
+            (OTHER, StatusCode::UNAUTHORIZED, "invalid_credentials"),
+        ] {
+            let page = get(auth, LOGIN, ISSUER, ip, None).await;
+            let (reply, events) = sign_in_audit_tests::captured(send(
+                auth,
+                Method::POST,
+                LOGIN,
+                ISSUER,
+                Some(PROXY),
+                &[("x-client-ip", ip)],
+                Some(&cookie(&page)),
+                &[
+                    ("csrf_token", &input(&page.text, "csrf_token")),
+                    ("continue", ""),
+                    ("passphrase", "secret-not-for-history"),
+                ],
+            ))
+            .await;
+            assert_eq!(reply.status, expected);
+            sign_in_audit_tests::failure(&events, reason, auth.now(), Some(ISSUER));
+            let rendered = format!("{events:?}{}", reply.text);
+            for secret in [
+                PROXY,
+                CLIENT,
+                OTHER,
+                "secret-not-for-history",
+                "x-client-ip",
+            ] {
+                assert!(!rendered.contains(secret));
+            }
+        }
+        let owner = owner(auth);
+        let page = get(auth, OWNER, ISSUER, CLIENT, Some(&owner)).await;
+        assert!(page.text.contains("1 request source group"));
+        for secret in [
+            PROXY,
+            CLIENT,
+            OTHER,
+            "secret-not-for-history",
+            "x-client-ip",
+        ] {
+            assert!(!page.text.contains(secret));
+        }
+    }
+
+    #[tokio::test]
+    async fn client_address_all_factor_routes_share_selected_source_budget() {
+        let fixture = fixture();
+        let auth = &fixture.auth;
+        let owner = owner(auth);
+        let id = owner_id(&owner);
+        let secret = base32(&[9; 20]);
+        for (path, action, factor_enabled) in [
+            ("/agent-connect/owner/totp/enroll", "enroll", false),
+            ("/agent-connect/owner/totp/verify", "factor_verify", false),
+            (AUTHORIZE, "consent:pending-fixture", true),
+        ] {
+            for (ip, expected) in [
+                (CLIENT, StatusCode::TOO_MANY_REQUESTS),
+                (OTHER, StatusCode::BAD_REQUEST),
+            ] {
+                let token = {
+                    let mut inner = auth.inner.lock().unwrap();
+                    inner.stored.totp_secret = factor_enabled.then(|| secret.clone());
+                    inner.sessions.get_mut(&id).unwrap().enrollment =
+                        Some((secret.clone(), auth.now() + 600));
+                    inner.pending.insert(
+                        "pending-fixture".into(),
+                        Pending {
+                            issuer: ISSUER.into(),
+                            client: APP.into(),
+                            client_name: "Fixture".into(),
+                            redirect: format!("{APP}/callback"),
+                            state: "fixture-state".into(),
+                            challenge: hash(VERIFIER),
+                            tools: vec![],
+                            expires: auth.now() + 600,
+                        },
+                    );
+                    inner.factor_budgets.insert(
+                        source(ISSUER, CLIENT),
+                        AttemptBudget {
+                            window: auth.now(),
+                            count: 5,
+                        },
+                    );
+                    csrf(&mut inner, &id, action, auth.now())
+                };
+                let mut fields = vec![("csrf_token", token.as_str())];
+                if path.ends_with("/enroll") {
+                    fields.push(("passphrase", "invalid-fixture"));
+                } else if path == AUTHORIZE {
+                    fields.extend([
+                        ("request_uri", "pending-fixture"),
+                        ("decision", "approve"),
+                        ("duration", "3600"),
+                        ("profile", "sandboxed"),
+                        ("totp", "invalid"),
+                    ]);
+                } else {
+                    fields.push(("totp", "invalid"));
+                }
+                let reply = send(
+                    auth,
+                    Method::POST,
+                    path,
+                    ISSUER,
+                    Some(PROXY),
+                    &[("x-client-ip", ip)],
+                    Some(&owner),
+                    &fields,
+                )
+                .await;
+                let expected = if path.ends_with("/enroll") && ip == OTHER {
+                    StatusCode::UNAUTHORIZED
+                } else {
+                    expected
+                };
+                assert_eq!(reply.status, expected, "{path}: {}", reply.text);
+            }
+        }
+        // Login factor verification uses that same bucket after passphrase success.
+        let page = get(auth, LOGIN, ISSUER, CLIENT, None).await;
+        let response = send(
+            auth,
+            Method::POST,
+            LOGIN,
+            ISSUER,
+            Some(PROXY),
+            &[("x-client-ip", CLIENT)],
+            Some(&cookie(&page)),
+            &[
+                ("csrf_token", &input(&page.text, "csrf_token")),
+                ("continue", ""),
+                ("passphrase", PASSWORD),
+                ("totp", "invalid"),
+            ],
+        )
+        .await;
+        assert_eq!(response.status, StatusCode::TOO_MANY_REQUESTS);
+        assert!(auth.inner.lock().unwrap().stored.grants.is_empty());
+        assert_eq!(
+            auth.inner.lock().unwrap().factor_budgets[&source(ISSUER, OTHER)].count,
+            3
+        );
     }
 }

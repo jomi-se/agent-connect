@@ -18,6 +18,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import WebSocket from "ws";
+import { stopFixtureChild } from "./test-fixture-cleanup.mjs";
 import { requireBoxImage } from "./test-box-images.mjs";
 import { gatewayTestBinary } from "./gateway-test-binary.mjs";
 
@@ -90,18 +91,10 @@ async function freePort() {
   return port;
 }
 async function stop(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  child.kill("SIGTERM");
-  try {
-    await waitFor(
-      () => child.exitCode !== null || child.signalCode !== null,
-      "gateway exit",
-      30000,
+  if (await stopFixtureChild(child, { graceMs: 30000 }))
+    throw new Error(
+      "Gateway did not exit during the TERM grace period; KILL exit confirmed",
     );
-  } finally {
-    if (child.exitCode === null && child.signalCode === null)
-      child.kill("SIGKILL");
-  }
 }
 async function sessions(dir) {
   const path = join(dir, "state/sessions");

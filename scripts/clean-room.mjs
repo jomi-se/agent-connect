@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { pruneTestInstallations } from "./test-fixture-cleanup.mjs";
 import { testBoxImage, removeTestImages } from "./test-box-images.mjs";
+import { cleanupSessionResources } from "./clean-room-resources.mjs";
 const repo = resolve(import.meta.dirname, "..");
 const artifactDirectory = resolve(
   process.env.AGENT_CONNECT_RELEASE_DIR ??
@@ -59,6 +60,7 @@ let cleaning;
 function cleanup() {
   return (cleaning ??= (async () => {
     await command("docker", ["rm", "-f", name]).catch(() => {});
+    const failures = [];
     // The driver records only resources created by this run, for host-side recovery.
     const ownership = await readFile(join(run, "work/resources.json"), "utf8")
       .then(JSON.parse)
@@ -67,36 +69,12 @@ function cleanup() {
     const ids = (
       await readdir(join(run, "work/operator/state/sessions")).catch(() => [])
     ).filter((id) => /^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(id));
-    const model = `acp-clean-model-${suffix}`;
-    const info = await command("docker", ["inspect", model])
-      .then(JSON.parse)
-      .catch(() => []);
-    const networks = new Set([
-      ...ids.map((id) => `acp-sess-net-${id}`),
-      ...Object.keys(info[0]?.NetworkSettings?.Networks ?? {}).filter(
-        (network) => network.startsWith("acp-sess-net-"),
-      ),
-    ]);
-    for (const id of ids)
-      await command("docker", ["rm", "-f", `acp-sess-${id}`]).catch(() => {});
-    for (const network of networks) {
-      const attached = await command("docker", ["network", "inspect", network])
-        .then(JSON.parse)
-        .catch(() => []);
-      for (const container of Object.values(attached[0]?.Containers ?? {})) {
-        if (container.Name.startsWith("acp-sess-"))
-          await command("docker", ["rm", "-f", container.Name]).catch(() => {});
-      }
-      for (const container of [model, `acp-clean-egress-${suffix}`])
-        await command("docker", [
-          "network",
-          "disconnect",
-          "--force",
-          network,
-          container,
-        ]).catch(() => {});
-      await command("docker", ["network", "rm", network]).catch(() => {});
-    }
+    await cleanupSessionResources({
+      sessionIds: ids,
+      model: `acp-clean-model-${suffix}`,
+      egress: `acp-clean-egress-${suffix}`,
+      docker: (args) => command("docker", args),
+    }).catch((error) => failures.push(error));
     for (const container of ownership.containers ?? []) {
       if (
         container === `acp-clean-model-${suffix}` ||
@@ -110,21 +88,19 @@ function cleanup() {
     }
     for (const child of children) child.kill("SIGTERM");
     // Attempt every owned tag, including builds that failed before ID capture.
-    const failures = [];
     for (const base of [image, boxImage].filter(Boolean))
       await removeTestImages(base, (args) => command("docker", args)).catch(
         (error) => failures.push(error),
       );
     if (failures.length)
-      throw new AggregateError(
-        failures,
-        "Clean-room test image cleanup failed",
-      );
+      throw new AggregateError(failures, "Clean-room resource cleanup failed");
   })());
 }
 for (const signal of ["SIGINT", "SIGTERM"])
   process.once(signal, () => {
-    void cleanup().finally(() => process.exit(signal === "SIGINT" ? 130 : 143));
+    void cleanup()
+      .catch((error) => console.error(error))
+      .finally(() => process.exit(signal === "SIGINT" ? 130 : 143));
   });
 try {
   const manifest = JSON.parse(

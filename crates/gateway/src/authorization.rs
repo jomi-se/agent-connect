@@ -2,7 +2,11 @@
 //!
 //! ACP and MCP-over-ACP remain unstable. Application bearers are never owner
 //! credentials. Keep this service's private state outside every harness home.
-use crate::{Harness, policy::PermissionProfile};
+use crate::{
+    Harness,
+    client_address::{ClientAddressPolicies, ClientSource},
+    policy::PermissionProfile,
+};
 use anyhow::{Result, anyhow, bail, ensure};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 use axum::{
@@ -47,6 +51,10 @@ const CODE_TTL: u64 = 120;
 const ACCESS_TTL: u64 = 300;
 const MAX_DURATION: u64 = 30 * 24 * 3600;
 const MAX_TRANSIENT: usize = 256;
+// Additional limits only when explicit proxy trust is configured. Global limits stay unchanged.
+const CLIENT_REQUEST_LIMIT: u32 = 60;
+const CLIENT_SIGN_IN_LIMIT: usize = 8;
+const MAX_CLIENT_BUDGETS: usize = 1024;
 const MAX_GRANTS: usize = 256;
 const MAX_BODY: usize = 128 * 1024;
 const MAX_SPENT_REFRESH: usize = 16384;
@@ -106,6 +114,7 @@ pub struct AuthConfig {
     pub policy_fingerprint: String,
     /// Additional trusted origins; each grant uses its selected entry-point issuer.
     pub entry_points: Vec<String>,
+    pub client_address_policies: ClientAddressPolicies,
     pub profiles: Vec<PermissionProfile>,
     pub default_profile: PermissionProfile,
     pub harness: Harness,
@@ -232,6 +241,8 @@ struct Code {
     expires: u64,
 }
 struct Session {
+    // Admission accounting only; never checked when accepting a session or CSRF.
+    source: Option<ClientSource>,
     origin: String,
     expires: u64,
     owner: bool,
@@ -258,8 +269,9 @@ struct Inner {
     broken: bool,
     rate_window: u64,
     rate_count: u32,
-    login_budgets: HashMap<IpAddr, AttemptBudget>,
-    factor_budgets: HashMap<IpAddr, AttemptBudget>,
+    login_budgets: HashMap<ClientSource, AttemptBudget>,
+    factor_budgets: HashMap<ClientSource, AttemptBudget>,
+    request_budgets: HashMap<ClientSource, AttemptBudget>,
 }
 
 impl AuthService {
@@ -281,6 +293,10 @@ impl AuthService {
                 "entry point host and port must be unique"
             );
         }
+        config.client_address_policies.validate(
+            std::iter::once(config.public_url.as_str())
+                .chain(config.entry_points.iter().map(String::as_str)),
+        )?;
         ensure!(
             !config.profiles.is_empty()
                 && config.profiles.len() <= 4
@@ -381,6 +397,7 @@ impl AuthService {
                 rate_count: 0,
                 login_budgets: HashMap::new(),
                 factor_budgets: HashMap::new(),
+                request_budgets: HashMap::new(),
             }),
             #[cfg(test)]
             clock: std::sync::atomic::AtomicU64::new(1_700_000_000),
@@ -599,8 +616,19 @@ impl AuthService {
         query: &str,
         headers: &HeaderMap,
         body: &[u8],
-        peer: IpAddr,
+        peer: Option<IpAddr>,
     ) -> Result<Response> {
+        let partitioned = !self.config.client_address_policies.is_empty();
+        // In opt-in mode, reject unknown/missing/ambiguous Host before allocating
+        // budgets. Host only selects policy; transport peer authenticates ingress.
+        let source = if partitioned {
+            let origin = self.entry_point(headers)?;
+            self.config
+                .client_address_policies
+                .source(&origin, headers, peer)
+        } else {
+            ClientSource::legacy(peer)
+        };
         let runtime_view = if method == Method::GET && path == OWNER {
             self.runtime
                 .lock()
@@ -622,6 +650,39 @@ impl AuthService {
         inner.anonymous.retain(|_, r| r.expires > now);
         inner.anonymous_csrf.retain(|_, r| r.expires > now);
         inner.csrf.retain(|_, r| r.expires > now);
+        if partitioned
+            && method == Method::GET
+            && path == LOGIN
+            && self.session_id(&inner, headers, false).is_err()
+        {
+            // Session admission refusals also leave the shared counter intact.
+            ensure!(
+                inner
+                    .anonymous
+                    .values()
+                    .filter(|session| session.source.as_ref() == Some(&source))
+                    .count()
+                    < CLIENT_SIGN_IN_LIMIT,
+                "slow_down"
+            );
+            ensure!(
+                inner.anonymous.len() < MAX_TRANSIENT,
+                "authorization_capacity"
+            );
+        }
+        // A rejected client must not continue exhausting the shared budget.
+        // Owner traffic retains its existing exemption and global accounting.
+        if partitioned && self.session_id(&inner, headers, true).is_err() {
+            attempt_budget(
+                &mut inner.request_budgets,
+                &source,
+                now,
+                60,
+                CLIENT_REQUEST_LIMIT,
+                "slow_down",
+                true,
+            )?;
+        }
         if now.saturating_sub(inner.rate_window) >= 60 {
             inner.rate_window = now;
             inner.rate_count = 0;
@@ -660,7 +721,7 @@ impl AuthService {
         if method == Method::GET && path == LOGIN {
             let args = fields(query.as_bytes(), &["client_id", "request_uri"])?;
             let continuation = self.continuation(&inner, &args, &self.request_origin(headers)?)?;
-            let (session, cookie) = self.session(&mut inner, headers, false)?;
+            let (session, cookie) = self.session(&mut inner, headers, false, &source)?;
             let csrf = csrf(&mut inner, &session, &format!("login:{continuation}"), now);
             let waiting = args
                 .get("request_uri")
@@ -706,14 +767,16 @@ impl AuthService {
                 Some((_, query)) => format!("{LOGIN}?{query}"),
                 None => LOGIN.to_string(),
             };
+            let mut login_source = source.clone();
             let verification: Result<()> = (|| {
-                attempt_budget(
+                login_source = attempt_budget(
                     &mut inner.login_budgets,
-                    peer,
+                    &source,
                     now,
                     900,
                     10,
                     "login_rate_limited",
+                    partitioned,
                 )?;
                 let passphrase = required(&form, "passphrase")?;
                 ensure!(passphrase.len() <= 1024, "invalid_credentials");
@@ -728,14 +791,22 @@ impl AuthService {
                 self.verify_factor(
                     &mut inner,
                     form.get("totp").map(String::as_str).unwrap_or(""),
-                    peer,
+                    &source,
                 )
             })();
             verification.map_err(|reason| SignInRetry {
                 reason,
                 target: retry,
             })?;
-            inner.login_budgets.remove(&peer);
+            if matches!(&login_source, ClientSource::Overflow(_)) {
+                // Success resets attempts, but overflow assignment stays sticky
+                // until its original window expires, even if a slot opens.
+                if let Some(budget) = inner.login_budgets.get_mut(&login_source) {
+                    budget.count = 0;
+                }
+            } else {
+                inner.login_budgets.remove(&login_source);
+            }
             inner.sessions.remove(&session);
             inner.anonymous.remove(&session);
             ensure!(
@@ -746,6 +817,7 @@ impl AuthService {
             inner.sessions.insert(
                 hash(&token),
                 Session {
+                    source: None,
                     origin: self.request_origin(headers)?,
                     owner: true,
                     expires: now + 12 * 3600,
@@ -952,7 +1024,7 @@ impl AuthService {
             return redirect(OWNER);
         }
         if method == Method::POST && path.starts_with("/agent-connect/owner/") {
-            return self.owner_post(&mut inner, path, headers, body, peer);
+            return self.owner_post(&mut inner, path, headers, body, &source);
         }
         if method == Method::POST && path == PAR {
             let form = form(
@@ -1146,7 +1218,7 @@ impl AuthService {
             self.verify_factor(
                 &mut inner,
                 form.get("totp").map(String::as_str).unwrap_or(""),
-                peer,
+                &source,
             )?;
             let duration: u64 = required(&form, "duration")?.parse()?;
             ensure!((60..=MAX_DURATION).contains(&duration), "invalid_request");
@@ -1342,25 +1414,27 @@ impl AuthService {
         self.commit(inner, next)
     }
 
-    fn verify_factor(&self, inner: &mut Inner, code: &str, peer: IpAddr) -> Result<()> {
+    fn verify_factor(&self, inner: &mut Inner, code: &str, source: &ClientSource) -> Result<()> {
         let Some(secret) = inner.stored.totp_secret.clone() else {
             return Ok(());
         };
-        self.factor_budget(inner, peer)?;
+        self.factor_budget(inner, source)?;
         let step = verify_totp(&secret, code, self.now(), inner.stored.last_totp_step)?;
         let mut next = inner.stored.clone();
         next.last_totp_step = Some(step);
         self.commit(inner, next)
     }
-    fn factor_budget(&self, inner: &mut Inner, peer: IpAddr) -> Result<()> {
+    fn factor_budget(&self, inner: &mut Inner, source: &ClientSource) -> Result<()> {
         attempt_budget(
             &mut inner.factor_budgets,
-            peer,
+            source,
             self.now(),
             60,
             5,
             "factor_rate_limited",
+            !self.config.client_address_policies.is_empty(),
         )
+        .map(|_| ())
     }
     fn owner_post(
         &self,
@@ -1368,7 +1442,7 @@ impl AuthService {
         path: &str,
         headers: &HeaderMap,
         body: &[u8],
-        peer: IpAddr,
+        source: &ClientSource,
     ) -> Result<Response> {
         self.owner_origin(headers)?;
         let session = self.session_id(inner, headers, true)?;
@@ -1441,7 +1515,7 @@ impl AuthService {
                     inner.stored.totp_secret.is_none(),
                     "factor_already_enrolled"
                 );
-                self.factor_budget(inner, peer)?;
+                self.factor_budget(inner, source)?;
                 let passphrase = required(&form, "passphrase")?;
                 ensure!(passphrase.len() <= 1024, "invalid_credentials");
                 let parsed = PasswordHash::new(&inner.stored.password_hash)
@@ -1484,7 +1558,7 @@ impl AuthService {
                     inner.stored.totp_secret.is_none(),
                     "factor_already_enrolled"
                 );
-                self.factor_budget(inner, peer)?;
+                self.factor_budget(inner, source)?;
                 let (secret, expires) = inner
                     .sessions
                     .get(&session)
@@ -1630,9 +1704,26 @@ impl AuthService {
         inner: &mut Inner,
         headers: &HeaderMap,
         owner: bool,
+        source: &ClientSource,
     ) -> Result<(String, Option<String>)> {
         if let Ok(id) = self.session_id(inner, headers, owner) {
             return Ok((id, None));
+        }
+        let partitioned = !self.config.client_address_policies.is_empty();
+        if partitioned {
+            ensure!(
+                inner
+                    .anonymous
+                    .values()
+                    .filter(|session| session.source.as_ref() == Some(source))
+                    .count()
+                    < CLIENT_SIGN_IN_LIMIT,
+                "slow_down"
+            );
+            ensure!(
+                inner.anonymous.len() < MAX_TRANSIENT,
+                "authorization_capacity"
+            );
         }
         if inner.anonymous.len() >= MAX_TRANSIENT {
             if let Some(oldest) = inner
@@ -1650,6 +1741,7 @@ impl AuthService {
         inner.anonymous.insert(
             id.clone(),
             Session {
+                source: partitioned.then(|| source.clone()),
                 origin: self.request_origin(headers)?,
                 owner: false,
                 expires: self.now() + 600,
@@ -1698,8 +1790,7 @@ async fn endpoint(State(service): State<Arc<AuthService>>, request: Request) -> 
     let peer = parts
         .extensions
         .get::<ConnectInfo<SocketAddr>>()
-        .map(|info| info.0.ip())
-        .unwrap_or(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+        .map(|info| info.0.ip());
     let path = parts.uri.path().to_string();
     let query = parts.uri.query().unwrap_or("").to_string();
     let origin = parts
@@ -2371,28 +2462,44 @@ mod sign_in_audit;
 mod tests;
 
 fn attempt_budget(
-    budgets: &mut HashMap<IpAddr, AttemptBudget>,
-    peer: IpAddr,
+    budgets: &mut HashMap<ClientSource, AttemptBudget>,
+    source: &ClientSource,
     now: u64,
     period: u64,
     limit: u32,
     error: &str,
-) -> Result<()> {
+    partitioned: bool,
+) -> Result<ClientSource> {
     budgets.retain(|_, budget| now.saturating_sub(budget.window) < period);
-    if budgets.len() >= 1024 && !budgets.contains_key(&peer) {
-        if let Some(oldest) = budgets
-            .iter()
-            .min_by_key(|(_, b)| b.window)
-            .map(|(ip, _)| *ip)
-        {
-            budgets.remove(&oldest);
+    let mut source = source.clone();
+    if !budgets.contains_key(&source) {
+        if partitioned {
+            // Reserved missing-header groups (at most 17 configured origins) and
+            // overflow groups (those origins plus transport) remain bounded too.
+            // Keep new sources in an active overflow group until its window
+            // expires, even if an individual slot expires earlier.
+            if !source.reserved()
+                && (budgets.contains_key(&source.overflow())
+                    || budgets.keys().filter(|key| !key.reserved()).count() >= MAX_CLIENT_BUDGETS)
+            {
+                source = source.overflow();
+            }
+        } else if budgets.len() >= MAX_CLIENT_BUDGETS {
+            // Preserve the original oldest-IP eviction policy without opt-in.
+            if let Some(oldest) = budgets
+                .iter()
+                .min_by_key(|(_, budget)| budget.window)
+                .map(|(key, _)| key.clone())
+            {
+                budgets.remove(&oldest);
+            }
         }
     }
-    let budget = budgets.entry(peer).or_insert(AttemptBudget {
+    let budget = budgets.entry(source.clone()).or_insert(AttemptBudget {
         window: now,
         count: 0,
     });
     ensure!(budget.count < limit, "{error}");
     budget.count += 1;
-    Ok(())
+    Ok(source)
 }

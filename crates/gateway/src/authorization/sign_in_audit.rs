@@ -138,6 +138,12 @@ pub(super) fn pauses(inner: &Inner, now: u64) -> Vec<pages::SignInPause> {
     for (label, budgets, limit, period) in [
         ("Sign-in attempts", &inner.login_budgets, 10, 900),
         ("Authenticator attempts", &inner.factor_budgets, 5, 60),
+        (
+            "Unauthenticated requests by source",
+            &inner.request_budgets,
+            super::CLIENT_REQUEST_LIMIT,
+            60,
+        ),
     ] {
         let resets: Vec<_> = budgets
             .values()

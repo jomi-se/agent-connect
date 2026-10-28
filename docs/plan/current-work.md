@@ -67,6 +67,29 @@ owned disposable homes, rather than the production launcher or box. Fresh local
 package builds, boxed scenarios, teardown and artifact-only clean-room pass,
 including actual archive/image exclusion and default/seeded-config checks.
 
+Optional [client-address policies](../install/configuration.md#trusted-client-addresses-for-admission-limits)
+partition admission behind trusted proxies using exact configured origins and
+actual transport peers. Untrusted forwarding headers are ignored; unusable trusted
+headers share a bounded fallback group. Source request/sign-in limits retain the
+global ceilings and existing owner-session exemption without address-binding
+cookies or CSRF. Focused real HTTP coverage exercises trust, source isolation,
+shared fallback, pending-session preservation, address changes and audit redaction.
+
+Fixture cleanup checks exact recorded session ownership before removing immutable
+Docker IDs. Shutdown waits for observed child exit before removing its files,
+and CLI tests clean their own roots after success or assertion failure. A linked
+worktree also uses the repository's shared secret scanner installation. Signal
+cancellation during allocation remains separate unfinished work.
+
+CI acceptance now supports explicit reuse of release artifacts with a clean-source
+receipt, complete checksums and strict platform payload validation. All gateway
+binary consumers use the selected native executable; the test box uses the
+separately selected Linux runner. Repository checks and real artifact-mode Node,
+owner UI, complete adapter/boxed, teardown and clean-room gates pass without a
+Cargo rebuild or debug-binary fallback. The [release guide](../install/release.md)
+describes the opt-in mode and its trusted-workflow evidence boundary; publication
+still builds separately.
+
 CI runs `npm run verify:full` and `cargo test --locked --workspace` on every push to main, and the release workflow publishes only that verified commit. The artifact-only
 clean-room passes 26 checks, including real browser pairing, setup/doctor,
 offline service lifecycle, sessions/end-session, revoke-all, app tools,
@@ -107,7 +130,7 @@ Backlog:
   binding is the `Origin` header, which a non-browser client sets freely. A
   copied refresh token therefore works from anywhere until the grant expires or
   reuse detection revokes it. The current bearer-token theft risk is documented
-  in [the credential model](credentials.md).
+  in [the credential model](credentials.md). A [research proposal](../research/2026-10-28-browser-grant-dpop.md) compares browser proof transports; transport, recovery and migration decisions remain open.
 - Replace TOTP with passkeys, as a second factor after the passphrase for
   sign-in and approvals. [ADR 0019](../decisions/0019-owner-passkeys.md) is
   proposed; migration policy and library compatibility remain unresolved.
@@ -119,20 +142,10 @@ Backlog:
 - Interrupted or hung test runs can leave a test gateway, `quiet-run` sessions
   and gigabytes of temporary folders behind for days. Make teardown survive
   interruption.
-- Tell clients apart behind a reverse proxy. Every proxied request reaches the
-  gateway from loopback, so all visitors share one sign-in budget, one anonymous
-  request budget and one pending-sign-in cap, and anyone can exhaust them. Let an
-  entry point name a trusted client-address header (for example
-  `CF-Connecting-IP`), honoured only for that entry point's Host, with a shared
-  fallback bucket when the header is missing. Key the sign-in budget, anonymous
-  limits and pending-sign-in sessions on it.
-- CI takes about 25 minutes, roughly half of it build overhead. Speed it up
-  without dropping gates, cheapest first:
-  1. The release build compiles the gateway three times and `verify.mjs`
-     compiles it twice more for the test box (about two minutes each). Let
-     verify reuse the release artifact, which also tests the shipped binary.
-  2. Cache Rust dependencies and Docker box layers between runs.
-  3. Split one serial job into a build job plus parallel jobs for owner UI,
+- Continue reducing CI time without dropping gates. Release-artifact reuse
+  removes the acceptance runner/gateway rebuilds; remaining possibilities are:
+  1. Cache Rust dependencies and Docker box layers between runs.
+  2. Split one serial job into a build job plus parallel jobs for owner UI,
      gateway scenarios, boxed scenarios with teardown, and clean-room.
-  4. Maybe shorten the test-only waits in `*-cut`, `expire` and `overflow`
+  3. Maybe shorten the test-only waits in `*-cut`, `expire` and `overflow`
      (8 to 17 seconds each), keeping the timeout behaviour they prove.

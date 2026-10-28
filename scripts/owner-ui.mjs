@@ -18,13 +18,14 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
-import { runCleanupTasks } from "./test-fixture-cleanup.mjs";
+import { runCleanupTasks, stopFixtureChild } from "./test-fixture-cleanup.mjs";
 import { gatewayTestBinary } from "./gateway-test-binary.mjs";
 import {
   ownerCookieResolverRules,
   verifyOwnerCookies,
 } from "./owner-cookie-browser.mjs";
 import { requireBoxImage } from "./test-box-images.mjs";
+import { verifyClientAddressPolicy } from "./client-address-fixture.mjs";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 
 const boxImage = requireBoxImage();
@@ -141,6 +142,7 @@ let problemGateway;
 let problemGatewayExit;
 const problemEgress = `acp-owner-ui-egress-${root.split("-").at(-1).toLowerCase()}`;
 let problemEgressAllocated = false;
+let preserveRoot = false;
 function run(binary, args) {
   const result = spawnSync(binary, args, {
     env: fixtureEnv,
@@ -169,6 +171,12 @@ try {
   });
   const ownerCookieChecks = await verifyOwnerCookies({
     browser,
+    binary,
+    root,
+    fixtureEnv,
+    password,
+  });
+  const clientAddressChecks = await verifyClientAddressPolicy({
     binary,
     root,
     fixtureEnv,
@@ -1021,7 +1029,7 @@ try {
       .filter({ hasText: "Sign-in attempts" });
     assert.match(
       await pause.innerText(),
-      /Paused for 1 client address\. Latest reset:/,
+      /Paused for 1 request source group\. Latest reset:/,
     );
     const reset = Date.parse(
       await pause.locator("time").first().getAttribute("datetime"),
@@ -1070,6 +1078,7 @@ try {
       {
         status: "passed",
         ownerCookieChecks,
+        clientAddressChecks,
         signInRecoveryChecks,
         signInAuditChecks,
         states,
@@ -1089,25 +1098,14 @@ try {
     `PASS ACP owner UI (${states.length} states × ${views.length} viewports; keyboard, touch, reflow, screenshots)`,
   );
   console.log(`Owner UI review artifacts: ${join(root, "report.json")}`);
+} catch (error) {
+  // A nested fixture whose child may still run owns this retention decision.
+  preserveRoot =
+    typeof error?.retainedDirectory === "string" &&
+    error.retainedDirectory.length > 0;
+  throw error;
 } finally {
-  async function stopGateway(child, exited) {
-    if (!child || child.exitCode !== null || child.signalCode !== null) return;
-    child.kill("SIGTERM");
-    let timer;
-    try {
-      await Promise.race([
-        exited,
-        new Promise((ok) => {
-          timer = setTimeout(() => {
-            child.kill("SIGKILL");
-            ok();
-          }, 5000);
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
-    }
-  }
+  const stopGateway = (child, exited) => stopFixtureChild(child, { exited });
   // Every owned process gets a cleanup attempt even if egress startup/stop fails.
   await runCleanupTasks([
     () => browser?.close(),
@@ -1121,12 +1119,12 @@ try {
       if (problemEgressAllocated)
         run(binary, ["egress", "stop", "--name", problemEgress]);
     },
-    async () => {
-      // Retain the default review report and screenshots, never fixture secrets.
-      for (const name of await readdir(root)) {
-        if (name === "screenshots" || name === "report.json") continue;
-        await rm(join(root, name), { recursive: true, force: true });
-      }
-    },
   ]);
+  // Stop all users of the private root before deleting their files. If cleanup
+  // fails, retain the root for recovery rather than race a still-running child.
+  if (!preserveRoot)
+    for (const name of await readdir(root)) {
+      if (name === "screenshots" || name === "report.json") continue;
+      await rm(join(root, name), { recursive: true, force: true });
+    }
 }

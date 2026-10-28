@@ -66,6 +66,7 @@ mod tests {
                 state_dir: dir.clone(),
                 policy_fingerprint: "hsts-test-policy".into(),
                 entry_points: additional.iter().map(|origin| (*origin).into()).collect(),
+                client_address_policies: Default::default(),
                 profiles: vec![PermissionProfile::Sandboxed],
                 default_profile: PermissionProfile::Sandboxed,
                 harness: Harness::Codex,
