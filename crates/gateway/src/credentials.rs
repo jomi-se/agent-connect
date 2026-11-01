@@ -1,5 +1,6 @@
 //! Dedicated shared harness homes. No credential contents are read or copied.
 use crate::Harness;
+use crate::engine::Engine;
 use anyhow::{Context, bail};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -144,10 +145,20 @@ impl HarnessHome {
         }
     }
 
-    pub fn docker_args(&self) -> Vec<String> {
+    /// The container user that owns this home once mounted: the owner's own ids
+    /// on a rootful engine, container root (which is the owner) on a rootless one.
+    pub fn box_user(&self, engine: Engine) -> (u32, u32) {
+        match engine {
+            Engine::Rootful => (self.uid, self.gid),
+            Engine::Rootless => (0, 0),
+        }
+    }
+
+    pub fn docker_args(&self, engine: Engine) -> Vec<String> {
+        let (uid, gid) = self.box_user(engine);
         vec![
             "--user".into(),
-            format!("{}:{}", self.uid, self.gid),
+            format!("{uid}:{gid}"),
             "--mount".into(),
             format!("type=bind,src={},dst=/home/node", self.path.display()),
         ]
@@ -156,7 +167,12 @@ impl HarnessHome {
 
 /// Login uses the provider's unmodified CLI; the owner operates the terminal.
 /// Docker receives only explicitly named, non-credential environment values.
-pub fn login_args(home: &HarnessHome, image: &str, harness: Harness) -> Vec<String> {
+pub fn login_args(
+    home: &HarnessHome,
+    engine: Engine,
+    image: &str,
+    harness: Harness,
+) -> Vec<String> {
     let mut args = vec![
         "run".into(),
         "--pull=never".into(),
@@ -167,7 +183,7 @@ pub fn login_args(home: &HarnessHome, image: &str, harness: Harness) -> Vec<Stri
         "-e".into(),
         "HOME=/home/node".into(),
     ];
-    args.extend(home.docker_args());
+    args.extend(home.docker_args(engine));
     args.push(image.into());
     args.extend(match harness {
         Harness::Codex => vec!["codex".into(), "login".into(), "--device-auth".into()],
@@ -262,8 +278,12 @@ mod tests {
     fn shared_home_uses_host_identity_and_private_modes() {
         let dir = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
         let home = HarnessHome::prepare(&dir).unwrap();
-        let args = login_args(&home, "session:test", Harness::Codex);
+        let args = login_args(&home, Engine::Rootful, "session:test", Harness::Codex);
         assert!(args.contains(&format!("{}:{}", home.uid, home.gid)));
+        // Rootless: container root is the owner; the owner's uid would be a stranger.
+        let rootless = login_args(&home, Engine::Rootless, "session:test", Harness::Codex);
+        let user = rootless.iter().position(|arg| arg == "--user").unwrap();
+        assert_eq!(rootless[user + 1], "0:0");
         assert!(args.ends_with(&["codex".into(), "login".into(), "--device-auth".into()]));
         assert!(
             !args
