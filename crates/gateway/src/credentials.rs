@@ -146,10 +146,11 @@ impl HarnessHome {
     }
 
     /// The container user that owns this home once mounted: the owner's own ids
-    /// on a rootful engine, container root (which is the owner) on a rootless one.
+    /// where the engine maps them through (rootful, or a virtual machine's file
+    /// sharing), container root (which is the owner) on a rootless engine.
     pub fn box_user(&self, engine: Engine) -> (u32, u32) {
         match engine {
-            Engine::Rootful => (self.uid, self.gid),
+            Engine::Rootful | Engine::VirtualMachine => (self.uid, self.gid),
             Engine::Rootless => (0, 0),
         }
     }

@@ -166,6 +166,11 @@ pub struct ServeOptions {
     #[arg(long, env = "AGENT_CONNECT_RESUME_MAX_BYTES", hide_env_values = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resume_max_bytes: Option<usize>,
+    /// The owner accepted a rootful container engine, on which this gateway can
+    /// start containers that are host root. Recorded by setup.
+    #[arg(long, env = "AGENT_CONNECT_ALLOW_ROOTFUL_ENGINE", hide_env_values = true, num_args = 0..=1, default_missing_value = "true", require_equals = true)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_rootful_engine: Option<bool>,
 }
 
 #[derive(Clone)]
@@ -195,6 +200,7 @@ pub struct ServeCli {
     pub resume_grace_secs: u64,
     pub durable_home: bool,
     pub resume_max_bytes: usize,
+    pub allow_rootful_engine: bool,
 }
 impl ServeOptions {
     pub fn resolve(mut self) -> anyhow::Result<ServeCli> {
@@ -250,6 +256,7 @@ impl ServeOptions {
             resume_grace_secs: merged!(resume_grace_secs).unwrap_or_else(|| 600),
             durable_home: merged!(durable_home).unwrap_or_else(|| false),
             resume_max_bytes: merged!(resume_max_bytes).unwrap_or_else(|| 8 * 1024 * 1024),
+            allow_rootful_engine: merged!(allow_rootful_engine).unwrap_or_else(|| false),
         };
         if cli.headless_static_bearer {
             validate_origin(&cli.allow_origin)?;

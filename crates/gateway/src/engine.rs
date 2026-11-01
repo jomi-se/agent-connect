@@ -2,42 +2,87 @@
 //! A rootful engine maps container ids one to one onto the host, so whoever
 //! can start containers can start host root. A rootless engine maps container
 //! root onto the invoking user; any other container id is a subordinate id
-//! with no access to that user's files.
+//! with no access to that user's files. An engine inside a virtual machine
+//! (Docker Desktop, any engine on macOS) is rootful only inside that machine.
 use anyhow::{Context, ensure};
+use serde::Deserialize;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Engine {
     Rootful,
     Rootless,
+    VirtualMachine,
 }
+
+/// `docker info` output that `parse_info` reads.
+pub const INFO_FORMAT: &str =
+    r#"{"securityOptions":{{json .SecurityOptions}},"operatingSystem":{{json .OperatingSystem}}}"#;
 
 /// Asks the daemon, never the CLI context name or `DOCKER_HOST`, which can
 /// point anywhere. Fails rather than guessing when the answer is unreadable.
 pub fn detect() -> anyhow::Result<Engine> {
     let output = std::process::Command::new("docker")
-        .args(["info", "--format", "{{json .SecurityOptions}}"])
+        .args(["info", "--format", INFO_FORMAT])
         .output()
         .context("run docker info")?;
     ensure!(
         output.status.success(),
-        "docker info failed; start Docker and verify docker info as your user"
+        "docker info failed; start Docker and verify docker info as your user (other engines behind a docker command are not supported yet)"
     );
-    parse_security_options(&String::from_utf8_lossy(&output.stdout))
+    parse_info(&String::from_utf8_lossy(&output.stdout))
 }
 
-/// Each option is a comma-separated field list such as
+pub fn parse_info(output: &str) -> anyhow::Result<Engine> {
+    classify(output, cfg!(target_os = "macos"))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Info {
+    security_options: Vec<String>,
+    operating_system: String,
+}
+
+/// Each security option is a comma-separated field list such as
 /// `name=seccomp,profile=builtin`; a rootless daemon lists `name=rootless`.
-pub fn parse_security_options(json: &str) -> anyhow::Result<Engine> {
-    let options: Vec<String> =
-        serde_json::from_str(json.trim()).context("unreadable docker security options")?;
-    let rootless = options
-        .iter()
-        .any(|option| option.split(',').any(|field| field == "name=rootless"));
-    Ok(if rootless {
+fn classify(output: &str, macos: bool) -> anyhow::Result<Engine> {
+    let info: Info = serde_json::from_str(output.trim()).context(
+        "unreadable docker info; is this engine Docker? Other engines are not supported yet",
+    )?;
+    let has = |name: &str| {
+        info.security_options
+            .iter()
+            .any(|option| option.split(',').any(|field| field == name))
+    };
+    // A remapped daemon shifts every container id, root included, so neither
+    // the owner's uid nor container root owns the mounted home there.
+    ensure!(
+        !has("name=userns"),
+        "Docker's userns-remap mode is not supported; use rootless mode instead"
+    );
+    Ok(if has("name=rootless") {
         Engine::Rootless
+    } else if macos || info.operating_system == "Docker Desktop" {
+        Engine::VirtualMachine
     } else {
         Engine::Rootful
     })
+}
+
+pub const ROOTFUL_RISK: &str = "The container engine is rootful: whatever can start containers on it, this gateway included, can start host root";
+pub const ROOTFUL_FIX: &str = "Run Docker in rootless mode for this user, or record that you accept the risk with agent-connect setup --allow-rootful-engine";
+
+/// Setup's gate. A new runtime on a rootful engine needs the owner's explicit
+/// acceptance. An existing one keeps working with a warning, so an upgrade
+/// never breaks a gateway that worked before it.
+pub fn admit(engine: Engine, accepted: bool, existing: bool) -> anyhow::Result<Option<String>> {
+    match (engine, accepted, existing) {
+        (Engine::Rootless | Engine::VirtualMachine, ..) | (Engine::Rootful, true, _) => Ok(None),
+        (Engine::Rootful, false, true) => Ok(Some(format!("{ROOTFUL_RISK}.\n{ROOTFUL_FIX}."))),
+        (Engine::Rootful, false, false) => {
+            Err(crate::config::UsageError(format!("{ROOTFUL_RISK}. {ROOTFUL_FIX}.")).into())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -45,21 +90,63 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_rootless_from_the_daemon_options() {
-        let rootless = r#"["name=seccomp,profile=builtin","name=rootless","name=cgroupns"]"#;
-        assert_eq!(parse_security_options(rootless).unwrap(), Engine::Rootless);
-        let rootful = r#"["name=apparmor","name=seccomp,profile=builtin","name=cgroupns"]"#;
-        assert_eq!(parse_security_options(rootful).unwrap(), Engine::Rootful);
+    fn a_new_runtime_needs_the_owner_to_accept_a_rootful_engine() {
+        assert!(admit(Engine::Rootful, false, false).is_err());
+        assert_eq!(admit(Engine::Rootful, true, false).unwrap(), None);
+        assert_eq!(admit(Engine::Rootless, false, false).unwrap(), None);
+        assert_eq!(admit(Engine::VirtualMachine, false, false).unwrap(), None);
+    }
+
+    #[test]
+    fn an_existing_runtime_keeps_working_with_a_warning() {
+        let warning = admit(Engine::Rootful, false, true).unwrap().unwrap();
+        assert!(warning.contains("host root"));
+        assert!(warning.contains("--allow-rootful-engine"));
+        assert_eq!(admit(Engine::Rootful, true, true).unwrap(), None);
+    }
+
+    fn info(options: &str, os: &str) -> String {
+        format!(r#"{{"securityOptions":{options},"operatingSystem":"{os}"}}"#)
+    }
+
+    #[test]
+    fn reads_the_engine_from_the_daemon() {
+        let rootless = info(
+            r#"["name=seccomp,profile=builtin","name=rootless","name=cgroupns"]"#,
+            "Ubuntu 24.04.4 LTS",
+        );
+        assert_eq!(classify(&rootless, false).unwrap(), Engine::Rootless);
+        assert_eq!(classify(&rootless, true).unwrap(), Engine::Rootless);
+        let rootful = info(
+            r#"["name=apparmor","name=seccomp,profile=builtin","name=cgroupns"]"#,
+            "Ubuntu 24.04.4 LTS",
+        );
+        assert_eq!(classify(&rootful, false).unwrap(), Engine::Rootful);
+        // Linux containers on macOS always run in a virtual machine.
+        assert_eq!(classify(&rootful, true).unwrap(), Engine::VirtualMachine);
+        let desktop = info(
+            r#"["name=seccomp,profile=builtin","name=cgroupns"]"#,
+            "Docker Desktop",
+        );
+        assert_eq!(classify(&desktop, false).unwrap(), Engine::VirtualMachine);
     }
 
     #[test]
     fn refuses_to_guess() {
-        assert!(parse_security_options("").is_err());
-        assert!(parse_security_options("<no value>").is_err());
+        assert!(classify("", false).is_err());
+        assert!(classify("<no value>", false).is_err());
+        assert!(classify(r#"{"securityOptions":null}"#, false).is_err());
         // A field must match exactly, not as a substring.
         assert_eq!(
-            parse_security_options(r#"["name=notrootless"]"#).unwrap(),
+            classify(&info(r#"["name=notrootless"]"#, "Debian"), false).unwrap(),
             Engine::Rootful
+        );
+        let remapped = info(r#"["name=apparmor","name=userns"]"#, "Debian");
+        assert!(
+            classify(&remapped, true)
+                .unwrap_err()
+                .to_string()
+                .contains("userns-remap")
         );
     }
 }

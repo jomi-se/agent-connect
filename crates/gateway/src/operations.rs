@@ -59,6 +59,10 @@ pub struct SetupCli {
     /// Upgrade the gateway service while preserving private owner and application state.
     #[arg(long)]
     pub upgrade: bool,
+    /// Accept a rootful container engine, on which this gateway can start
+    /// containers that are host root. Recorded in the configuration.
+    #[arg(long)]
+    pub allow_rootful_engine: bool,
 }
 
 #[derive(Args)]
@@ -169,6 +173,8 @@ pub struct SetupPlan {
     /// The harness versions this run resolved from npm; absent when npm was
     /// unreachable and the configured box stays in use.
     pub harness_versions: Option<box_build::HarnessVersions>,
+    /// Asked for now or recorded by an earlier setup.
+    pub allow_rootful_engine: bool,
 }
 
 fn usage(message: impl Into<String>) -> anyhow::Error {
@@ -243,6 +249,10 @@ pub fn setup_plan(
     let egress_container = select!(egress_container, "agent-connect-egress".into());
     config::validate_container_name(&egress_container)?;
     let previous_box_image = previous.as_ref().and_then(|c| c.box_image.clone());
+    let allow_rootful_engine = cli.allow_rootful_engine
+        || previous
+            .as_ref()
+            .is_some_and(|c| c.allow_rootful_engine == Some(true));
     let box_image = match harness_versions {
         Some(versions) => box_build::desired_image(versions)?,
         None => previous_box_image.clone().context(
@@ -384,6 +394,7 @@ pub fn setup_plan(
         upgrade: cli.upgrade,
         previous_box_image,
         harness_versions: harness_versions.cloned(),
+        allow_rootful_engine,
     })
 }
 
@@ -424,6 +435,15 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         }
     }
     let mut plan = setup_plan(&cli, harness_versions)?;
+    let engine = tokio::task::spawn_blocking(crate::engine::detect).await??;
+    if let Some(warning) = crate::engine::admit(engine, plan.allow_rootful_engine, plan.existing)? {
+        eprintln!("Warning: {warning}");
+    }
+    // Only a rootful engine has a risk to accept; record the owner's choice once.
+    let record_rootful = engine == crate::engine::Engine::Rootful
+        && cli.allow_rootful_engine
+        && !(plan.existing
+            && config::read_config(&plan.config)?.allow_rootful_engine == Some(true));
     if guided {
         eprintln!(
             "Runtime: {}\nOwner sign-in: {}/agent-connect/owner\nHarness: {:?}\nEntry points: {}\nProfiles: {} (default {})\nService: {}",
@@ -526,6 +546,9 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         tokio::task::spawn_blocking(move || config::init_quiet(init)).await??;
         persist_setup_policy(&plan.config, &plan)?;
     }
+    if record_rootful {
+        record_rootful_acceptance(&plan.config)?;
+    }
     if plan.login {
         let status = tokio::process::Command::new(std::env::current_exe()?)
             .args(["login", "--config"])
@@ -606,6 +629,18 @@ fn persist_setup_policy(path: &Path, plan: &SetupPlan) -> anyhow::Result<()> {
         serde_json::to_value(plan.permissions)?,
     );
     replace_private_config(path, &serde_json::to_vec_pretty(&value)?)
+}
+
+fn record_rootful_acceptance(path: &Path) -> anyhow::Result<()> {
+    let mut value: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
+    value
+        .as_object_mut()
+        .ok_or_else(|| usage("configuration must be an object"))?
+        .insert("allow_rootful_engine".into(), true.into());
+    let bytes = serde_json::to_vec_pretty(&value)?;
+    // Validate as the gateway will read it before replacing the private file.
+    serde_json::from_slice::<config::ServeOptions>(&bytes)?;
+    replace_private_config(path, &bytes)
 }
 
 fn replace_private_config(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
@@ -781,6 +816,7 @@ mod tests {
             login: false,
             no_service: true,
             upgrade: false,
+            allow_rootful_engine: false,
         }
     }
     #[test]
@@ -857,6 +893,23 @@ mod tests {
         assert!(resumed.existing);
         assert_eq!(resumed.harness_home, config.harness_home.unwrap());
         assert_eq!(resumed.profiles, plan.profiles);
+        // Accepting a rootful engine is recorded once and remembered by reruns.
+        assert!(!config.allow_rootful_engine && !resumed.allow_rootful_engine);
+        record_rootful_acceptance(&plan.config).unwrap();
+        let accepted = config::ServeOptions {
+            config: Some(plan.config.clone()),
+            ..Default::default()
+        }
+        .resolve()
+        .unwrap();
+        assert!(accepted.allow_rootful_engine);
+        assert_eq!(accepted.permissions, PermissionProfile::ReadOnly);
+        assert!(
+            setup_plan(&cli, Some(&test_harness()))
+                .unwrap()
+                .allow_rootful_engine
+        );
+        assert_eq!(std::fs::read(&owner_path).unwrap(), owner_state);
         #[cfg(unix)]
         {
             let ancestor_alias = dir.join("ancestor-alias");

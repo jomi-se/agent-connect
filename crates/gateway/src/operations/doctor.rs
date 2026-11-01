@@ -1,5 +1,6 @@
 use super::{CommandSpec, NativeRunner, Runner, default_runtime_directory, private_metadata};
 use crate::config;
+use crate::engine::{Engine, ROOTFUL_FIX, ROOTFUL_RISK};
 use clap::Args;
 use serde::Serialize;
 use std::{
@@ -139,6 +140,17 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
             ),
         ),
     }
+    let engine = match runner
+        .run(CommandSpec::new(
+            "docker",
+            ["info", "--format", crate::engine::INFO_FORMAT],
+        ))
+        .await
+    {
+        Ok(result) if result.code == 0 => crate::engine::parse_info(&result.output).ok(),
+        _ => None,
+    };
+    report_engine(&mut report, engine, configured.allow_rootful_engine);
     match runner
         .run(CommandSpec::new(
             "docker",
@@ -257,6 +269,43 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
     report
 }
 
+/// A rootful engine makes the gateway root-equivalent. The gateway keeps
+/// serving either way; doctor reports the risk until the owner records it.
+fn report_engine(report: &mut DoctorReport, engine: Option<Engine>, accepted: bool) {
+    match (engine, accepted) {
+        (Some(Engine::Rootless), _) => report.add(
+            "engine_rootless",
+            CheckStatus::Pass,
+            "The container engine is rootless; boxes cannot start host root",
+            None,
+        ),
+        (Some(Engine::VirtualMachine), _) => report.add(
+            "engine_rootless",
+            CheckStatus::Pass,
+            "The container engine runs in a virtual machine; its root is not host root",
+            None,
+        ),
+        (Some(Engine::Rootful), true) => report.add(
+            "engine_rootless",
+            CheckStatus::Warn,
+            format!("{ROOTFUL_RISK}; the owner accepted this"),
+            Some("Run Docker in rootless mode for this user to remove the risk"),
+        ),
+        (Some(Engine::Rootful), false) => report.add(
+            "engine_rootless",
+            CheckStatus::Fail,
+            ROOTFUL_RISK,
+            Some(ROOTFUL_FIX),
+        ),
+        (None, _) => report.add(
+            "engine_rootless",
+            CheckStatus::Fail,
+            "Cannot tell whether the container engine is rootless",
+            Some("Start Docker and verify docker info as your user"),
+        ),
+    }
+}
+
 async fn health_ready(mut response: reqwest::Response) -> bool {
     let mut body = Vec::new();
     loop {
@@ -287,5 +336,29 @@ mod tests {
         assert_eq!(report.checks[0].code, "config_valid");
         assert!(report.checks[0].fix.is_some());
         assert!(!directory.exists());
+    }
+    #[test]
+    fn a_rootful_engine_fails_until_the_owner_accepts_it() {
+        let status = |engine, accepted| {
+            let mut report = DoctorReport {
+                ok: true,
+                checks: Vec::new(),
+            };
+            report_engine(&mut report, engine, accepted);
+            (report.checks[0].status, report.ok)
+        };
+        assert_eq!(
+            status(Some(Engine::Rootless), false),
+            (CheckStatus::Pass, true)
+        );
+        assert_eq!(
+            status(Some(Engine::Rootful), true),
+            (CheckStatus::Warn, true)
+        );
+        assert_eq!(
+            status(Some(Engine::Rootful), false),
+            (CheckStatus::Fail, false)
+        );
+        assert_eq!(status(None, true), (CheckStatus::Fail, false));
     }
 }
