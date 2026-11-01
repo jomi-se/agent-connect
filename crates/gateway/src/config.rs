@@ -167,8 +167,9 @@ pub struct ServeOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resume_max_bytes: Option<usize>,
     /// The owner accepted a rootful container engine, on which this gateway can
-    /// start containers that are host root. Recorded by setup.
-    #[arg(long, env = "AGENT_CONNECT_ALLOW_ROOTFUL_ENGINE", hide_env_values = true, num_args = 0..=1, default_missing_value = "true", require_equals = true)]
+    /// start containers that are host root. Recorded by setup in the config
+    /// only, so the acceptance is where doctor and the owner can see it.
+    #[arg(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_rootful_engine: Option<bool>,
 }
