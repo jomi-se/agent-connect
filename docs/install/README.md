@@ -266,7 +266,8 @@ become:
 - **Rootless Podman** (recommended on Linux) and **rootless Docker:** no
   container id maps to host root. A compromised gateway can do what the user
   running it can: read the shared harness home, which holds the agent's login,
-  and that user's other files, but not other users' or the system's. Podman
+  and that user's other files, but not other users' or the system's, provided
+  that user is not in the `docker` group and has no passwordless sudo. Podman
   runs boxes as the image's own user, mapped onto yours; rootless Docker runs
   them as container root, which is you, with every capability dropped.
 - **Docker Desktop and OrbStack:** the engine runs in a virtual machine, so
