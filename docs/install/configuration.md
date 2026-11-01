@@ -29,8 +29,9 @@ policy changes are rejected. Setup rebuilds and selects the box when the gateway
 version or owner layer changes. All setup runs preserve private authentication, journals and login homes.
 Setup asks the Docker daemon whether it is rootless. A new runtime on a rootful
 Linux engine needs `--allow-rootful-engine`, which is recorded in the config as
-`allow_rootful_engine`; existing runtimes keep working and setup, serve and
-doctor warn until it is recorded. Docker's userns-remap mode is refused. On a
+`allow_rootful_engine` (config only, no flag or environment variable); existing
+runtimes keep working, setup and serve warn, and doctor fails until it is
+recorded. Docker's userns-remap mode is refused. On a
 rootless engine, boxes that mount the shared harness home run as container root,
 which is the invoking user, with every capability dropped.
 Explicit `setup --upgrade` updates the owned service executable even when the image is
@@ -84,7 +85,7 @@ config, defaults**. Each key supports `AGENT_CONNECT_<UPPER_SNAKE_KEY>`;
 | `mock_url` / `--mock-url`                             | Fixture model URL, default `http://127.0.0.1:18931/v1`                                                               |
 | `mock_container` / `--mock-container`                 | Fixture model container; requires `mock_root`                                                                        |
 | `durable_home` / `--durable-home`                     | Legacy deterministic-fixture named-volume option; use dedicated home for production                                  |
-| `allow_rootful_engine` / `--allow-rootful-engine`     | The owner accepted a rootful engine; recorded by `setup --allow-rootful-engine`; silences the startup warning        |
+| `allow_rootful_engine`                                | The owner accepted a rootful engine; written only by `setup --allow-rootful-engine`                                  |
 
 Normal config contains `public_url` and operator policy, without `token`,
 `allow_origin` or `tools`. `init` and first-time `setup` prompt at the terminal for a hidden owner

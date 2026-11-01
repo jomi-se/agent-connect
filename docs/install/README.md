@@ -14,7 +14,8 @@ its buildx plugin is the tested baseline. On Linux, run Docker Engine in
 [rootless mode](https://docs.docker.com/engine/security/rootless/): on a
 rootful engine, anything that can start containers, this gateway included, can
 start host root, so setup refuses one unless you pass `--allow-rootful-engine`.
-Docker Desktop runs its engine in a virtual machine and needs no flag. Setup
+Docker Desktop and OrbStack run their engine in a virtual machine and need no
+flag; other virtual machines, such as Colima, report as rootful. Setup
 builds the box locally, so first setup downloads and stores roughly 1.5 GB.
 Supported hosts are Apple Silicon macOS, Linux x64 and Linux ARM64. On macOS,
 use Docker Desktop with Linux containers. Windows is not yet supported. No

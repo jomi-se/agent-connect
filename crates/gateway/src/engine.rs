@@ -3,7 +3,7 @@
 //! can start containers can start host root. A rootless engine maps container
 //! root onto the invoking user; any other container id is a subordinate id
 //! with no access to that user's files. An engine inside a virtual machine
-//! (Docker Desktop, any engine on macOS) is rootful only inside that machine.
+//! (Docker Desktop, OrbStack) is rootful only inside that machine.
 use anyhow::{Context, ensure};
 use serde::Deserialize;
 
@@ -32,10 +32,6 @@ pub fn detect() -> anyhow::Result<Engine> {
     parse_info(&String::from_utf8_lossy(&output.stdout))
 }
 
-pub fn parse_info(output: &str) -> anyhow::Result<Engine> {
-    classify(output, cfg!(target_os = "macos"))
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Info {
@@ -45,7 +41,10 @@ struct Info {
 
 /// Each security option is a comma-separated field list such as
 /// `name=seccomp,profile=builtin`; a rootless daemon lists `name=rootless`.
-fn classify(output: &str, macos: bool) -> anyhow::Result<Engine> {
+/// Only the daemon's own report grants the virtual machine pass: a client on
+/// macOS can drive a remote rootful Linux daemon. Other VMs (Colima reports its
+/// guest's distribution) read as rootful and need the owner's acceptance.
+pub fn parse_info(output: &str) -> anyhow::Result<Engine> {
     let info: Info = serde_json::from_str(output.trim()).context(
         "unreadable docker info; is this engine Docker? Other engines are not supported yet",
     )?;
@@ -62,7 +61,10 @@ fn classify(output: &str, macos: bool) -> anyhow::Result<Engine> {
     );
     Ok(if has("name=rootless") {
         Engine::Rootless
-    } else if macos || info.operating_system == "Docker Desktop" {
+    } else if matches!(
+        info.operating_system.as_str(),
+        "Docker Desktop" | "OrbStack"
+    ) {
         Engine::VirtualMachine
     } else {
         Engine::Rootful
@@ -115,35 +117,37 @@ mod tests {
             r#"["name=seccomp,profile=builtin","name=rootless","name=cgroupns"]"#,
             "Ubuntu 24.04.4 LTS",
         );
-        assert_eq!(classify(&rootless, false).unwrap(), Engine::Rootless);
-        assert_eq!(classify(&rootless, true).unwrap(), Engine::Rootless);
+        assert_eq!(parse_info(&rootless).unwrap(), Engine::Rootless);
         let rootful = info(
             r#"["name=apparmor","name=seccomp,profile=builtin","name=cgroupns"]"#,
             "Ubuntu 24.04.4 LTS",
         );
-        assert_eq!(classify(&rootful, false).unwrap(), Engine::Rootful);
-        // Linux containers on macOS always run in a virtual machine.
-        assert_eq!(classify(&rootful, true).unwrap(), Engine::VirtualMachine);
+        // Whatever the client runs on: a macOS CLI can drive this daemon remotely.
+        assert_eq!(parse_info(&rootful).unwrap(), Engine::Rootful);
         let desktop = info(
             r#"["name=seccomp,profile=builtin","name=cgroupns"]"#,
             "Docker Desktop",
         );
-        assert_eq!(classify(&desktop, false).unwrap(), Engine::VirtualMachine);
+        assert_eq!(parse_info(&desktop).unwrap(), Engine::VirtualMachine);
+        let orbstack = info(r#"["name=seccomp,profile=builtin"]"#, "OrbStack");
+        assert_eq!(parse_info(&orbstack).unwrap(), Engine::VirtualMachine);
+        let colima = info(r#"["name=seccomp,profile=builtin"]"#, "Ubuntu 24.04 LTS");
+        assert_eq!(parse_info(&colima).unwrap(), Engine::Rootful);
     }
 
     #[test]
     fn refuses_to_guess() {
-        assert!(classify("", false).is_err());
-        assert!(classify("<no value>", false).is_err());
-        assert!(classify(r#"{"securityOptions":null}"#, false).is_err());
+        assert!(parse_info("").is_err());
+        assert!(parse_info("<no value>").is_err());
+        assert!(parse_info(r#"{"securityOptions":null}"#).is_err());
         // A field must match exactly, not as a substring.
         assert_eq!(
-            classify(&info(r#"["name=notrootless"]"#, "Debian"), false).unwrap(),
+            parse_info(&info(r#"["name=notrootless"]"#, "Debian")).unwrap(),
             Engine::Rootful
         );
         let remapped = info(r#"["name=apparmor","name=userns"]"#, "Debian");
         assert!(
-            classify(&remapped, true)
+            parse_info(&remapped)
                 .unwrap_err()
                 .to_string()
                 .contains("userns-remap")
