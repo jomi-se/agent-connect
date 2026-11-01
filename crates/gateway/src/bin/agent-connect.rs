@@ -321,12 +321,12 @@ async fn run() -> anyhow::Result<()> {
                 } => {
                     let (name, box_image) = match config {
                         Some(path) => {
-                            // Resolving selects the configuration's engine.
                             let configured = ServeOptions {
                                 config: Some(path),
                                 ..Default::default()
                             }
                             .resolve()?;
+                            engine::select(configured.container_engine);
                             let name = configured.egress_container.ok_or_else(|| {
                                 UsageError("configuration names no egress container".into())
                             })?;
@@ -350,6 +350,9 @@ async fn run() -> anyhow::Result<()> {
         Command::Login(cli) => {
             use std::io::IsTerminal;
             let configured = cli.config.as_deref().map(config::read_config).transpose()?;
+            if let Some(program) = configured.as_ref().and_then(|c| c.container_engine) {
+                engine::select(program);
+            }
             let harness = if let Some(harness) = cli.harness {
                 harness
             } else {
@@ -398,6 +401,7 @@ async fn run() -> anyhow::Result<()> {
             return Ok(());
         }
     };
+    engine::select(cli.container_engine);
     cli.codex_mode.get_or_insert_with(|| {
         if cli.boxed {
             CodexMode::AgentFullAccess

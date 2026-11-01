@@ -429,12 +429,20 @@ fn judge_egress(facts: &EgressFacts, image: &BoxImage, running: bool) -> anyhow:
         && facts.no_mounts
         && facts.no_published_ports
         && facts.restart == "unless-stopped"
-        && facts.log_bounded
-        // Podman's creation record must be exactly what this gateway runs, which
-        // catches whatever its inspection leaves out.
-        && facts.created_with.as_ref().is_none_or(|(name, args)| {
-            *args == egress_args(crate::engine::Program::Podman, name, &image.id)
-        });
+        && facts.log_bounded;
+    // Podman's creation record must be exactly what this gateway runs. It is an
+    // attestation the creating client wrote, not tamper-proof, but it catches
+    // what Podman's inspection leaves out (devices) and stale or hand-made
+    // containers. Ground truth for devices would be `linux.devices` in the
+    // runtime config at the inspected OCIConfigPath.
+    let recorded = facts.created_with.as_ref().is_none_or(|(name, args)| {
+        *args == egress_args(crate::engine::Program::Podman, name, &image.id)
+    });
+    if trusted && !recorded {
+        bail!(
+            "owned egress proxy was not created by this gateway version; run agent-connect setup --upgrade to recreate it"
+        );
+    }
     if !trusted {
         bail!(
             "owned egress proxy does not match the selected image and restricted proxy configuration; explicitly stop it and recreate it with agent-connect egress start"
@@ -1166,15 +1174,15 @@ mod tests {
         assert!(
             podman_verdict(set("/HostConfig/Devices", serde_json::json!(["/dev/fuse"]))).is_err()
         );
-        // Podman 4 reports no devices; its creation record shows them.
-        assert!(
-            podman_verdict(|c| {
-                let created = c["Config"]["CreateCommand"].as_array_mut().unwrap();
-                created.insert(1, "/dev/fuse".into());
-                created.insert(1, "--device".into());
-            })
-            .is_err()
-        );
+        // Podman 4 reports no devices; its creation record shows them, and the
+        // owner reading the service log learns how to recover.
+        let stale = podman_verdict(|c| {
+            let created = c["Config"]["CreateCommand"].as_array_mut().unwrap();
+            created.insert(1, "/dev/fuse".into());
+            created.insert(1, "--device".into());
+        })
+        .unwrap_err();
+        assert!(stale.to_string().contains("setup --upgrade"));
         // A record made for another container's name.
         assert!(podman_verdict(set("/Name", serde_json::json!("other-egress"))).is_err());
         assert!(podman_verdict(set("/HostConfig/Tmpfs", serde_json::json!({"/x": "rw"}))).is_err());

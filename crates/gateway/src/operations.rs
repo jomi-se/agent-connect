@@ -256,11 +256,8 @@ pub fn setup_plan(
     let recorded_engine = previous
         .as_ref()
         .map(|c| c.container_engine.unwrap_or_default());
-    if let Some(program) = recorded_engine {
-        crate::engine::select(program);
-    }
     let container_engine =
-        crate::engine::runtime_program(recorded_engine, crate::engine::selected())?;
+        crate::engine::runtime_program(recorded_engine, crate::engine::chosen())?;
     let allow_rootful_engine = cli.allow_rootful_engine
         || previous
             .as_ref()
@@ -419,6 +416,15 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             "provider login requires an owner terminal and human output; use agent-connect login separately",
         ));
     }
+    // With no choice made and no Docker, offer what is there. An existing
+    // runtime that recorded Docker still refuses the switch.
+    if crate::engine::chosen().is_none()
+        && !crate::engine::installed("docker")
+        && crate::engine::installed("podman")
+    {
+        eprintln!("Docker is not installed; using Podman (choose with --container-engine).");
+        crate::engine::select(crate::engine::Program::Podman);
+    }
     // Resolve once per run so every plan below selects the same box.
     let harness_versions = match box_build::resolve_harness().await {
         Ok(versions) => Some(versions),
@@ -448,6 +454,7 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         }
     }
     let mut plan = setup_plan(&cli, harness_versions)?;
+    crate::engine::select(plan.container_engine);
     let engine = tokio::task::spawn_blocking(crate::engine::detect).await??;
     if let Some(warning) = crate::engine::admit(engine, plan.allow_rootful_engine, plan.existing)? {
         eprintln!("Warning: {warning}");
@@ -931,13 +938,22 @@ mod tests {
                 .unwrap()
                 .allow_rootful_engine
         );
-        // The engine is recorded the same way. Read raw: resolving a config, or
-        // planning from it, selects its engine for the whole test process.
+        // The engine is recorded the same way, and a rerun plans with it.
         record_config_value(&plan.config, "container_engine", "podman".into()).unwrap();
+        let podman = setup_plan(&cli, Some(&test_harness())).unwrap();
+        assert_eq!(podman.container_engine, crate::engine::Program::Podman);
         assert_eq!(
-            config::read_config(&plan.config).unwrap().container_engine,
-            Some(crate::engine::Program::Podman)
+            config::ServeOptions {
+                config: Some(plan.config.clone()),
+                ..Default::default()
+            }
+            .resolve()
+            .unwrap()
+            .container_engine,
+            crate::engine::Program::Podman
         );
+        // Planning and resolving are pure: nothing was selected for the process.
+        assert_eq!(crate::engine::chosen(), None);
         record_config_value(&plan.config, "container_engine", "docker".into()).unwrap();
         assert_eq!(std::fs::read(&owner_path).unwrap(), owner_state);
         #[cfg(unix)]
