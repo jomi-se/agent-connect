@@ -486,12 +486,13 @@ fn superseded_images(previous: &str, selected: &str, base: &str) -> Vec<String> 
 }
 
 /// Tell the owner which boxes an upgrade left unused. Removing them is the
-/// owner's decision, like any other Docker image.
+/// owner's decision, like any other container image.
 pub(super) async fn report_superseded(previous: &str, selected: &str) -> anyhow::Result<()> {
+    let program = crate::engine::program();
     for image in superseded_images(previous, selected, &base_image()?) {
         if installed(&image).await? {
             eprintln!(
-                "Previous box {image} is no longer used; `docker image rm {image}` frees its space."
+                "Previous box {image} is no longer used; `{program} image rm {image}` frees its space."
             );
         }
     }
