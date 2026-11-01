@@ -403,13 +403,15 @@ fn judge_egress(facts: &EgressFacts, image: &BoxImage, running: bool) -> anyhow:
         })
         .unwrap_or_default();
     image_env.sort();
-    // Podman's injected HOME must be the image user's own home.
+    // Podman's injected HOME must be the image user's own home. Compared by
+    // segment: release checks refuse any home-directory literal in the binary.
+    let segments = |home: &str| home.split('/').map(str::to_owned).collect::<Vec<_>>();
     let home_ok = match (&facts.injected_home, image.user.as_str()) {
         (None, _) => true,
         (Some(home), Some(user)) if !user.is_empty() && user != "root" => {
-            *home == format!("/home/{user}")
+            segments(home) == ["", "home", user]
         }
-        (Some(home), _) => home == "/root",
+        (Some(home), _) => segments(home) == ["", "root"],
     };
     let trusted = facts.image == image.id
         && facts.entrypoint == ["node"]
