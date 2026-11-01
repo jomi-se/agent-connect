@@ -60,6 +60,8 @@ function inspect(image) {
 }
 const setupArgs = [
   "setup",
+  // CI's engine is rootful; a rootless one records nothing for this flag.
+  "--allow-rootful-engine",
   "--apply",
   "--non-interactive",
   "--json",

@@ -394,6 +394,8 @@ try {
   await ready(origin, preview);
   const setupArgs = [
     "setup",
+    // CI's engine is rootful; a rootless one records nothing for this flag.
+    "--allow-rootful-engine",
     "--directory",
     runtime,
     "--harness",
