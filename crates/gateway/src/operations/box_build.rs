@@ -303,7 +303,7 @@ fn copy_directory(source: &Path, destination: &Path) -> anyhow::Result<()> {
 }
 
 async fn installed(image: &str) -> anyhow::Result<bool> {
-    let status = tokio::process::Command::new("docker")
+    let status = tokio::process::Command::new(crate::engine::program())
         .args(["image", "inspect", image])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -323,7 +323,7 @@ async fn build(
     eprintln!(
         "Building {image} locally for {platform} from the gateway package (about 1 GB; owner tools add to this). Build steps have normal network access."
     );
-    let status = tokio::process::Command::new("docker")
+    let status = tokio::process::Command::new(crate::engine::program())
         .args(["build", "--platform", platform, "--tag", image])
         .args(
             target
@@ -347,14 +347,14 @@ async fn build(
 
 async fn build_selected(selected: &str, harness: &HarnessVersions) -> anyhow::Result<()> {
     let base_image = base_image()?;
-    let architecture = tokio::process::Command::new("docker")
-        .args(["info", "--format", "{{.Architecture}}"])
+    let architecture = tokio::process::Command::new(crate::engine::program())
+        .args(crate::engine::architecture_args())
         .output()
         .await
-        .context("inspect Docker architecture")?;
+        .context("inspect the container engine's architecture")?;
     anyhow::ensure!(
         architecture.status.success(),
-        "Docker is unavailable; start Docker before setup"
+        "the container engine is unavailable; start it before setup"
     );
     let platform = match String::from_utf8(architecture.stdout)?.trim() {
         "aarch64" | "arm64" => "linux/arm64",

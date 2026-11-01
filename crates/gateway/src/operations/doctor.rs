@@ -118,42 +118,34 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
         }
     }
     let mut runner = NativeRunner;
-    match runner
-        .run(CommandSpec::new(
-            "docker",
-            ["info", "--format", "{{.ServerVersion}}"],
-        ))
-        .await
-    {
-        Ok(result) if result.code == 0 => report.add(
-            "docker_available",
-            CheckStatus::Pass,
-            "Docker is available to this user",
-            None,
-        ),
-        _ => report.add(
-            "docker_available",
-            CheckStatus::Fail,
-            "Docker is unavailable or its daemon is inaccessible",
-            Some(
-                "Start Docker and verify docker info as your user; do not run the gateway as root",
-            ),
-        ),
-    }
-    let engine = match runner
-        .run(CommandSpec::new(
-            "docker",
-            ["info", "--format", crate::engine::INFO_FORMAT],
-        ))
-        .await
-    {
-        Ok(result) if result.code == 0 => crate::engine::parse_info(&result.output).ok(),
-        _ => None,
+    let program = crate::engine::program();
+    let info = runner
+        .run(CommandSpec::new(program, crate::engine::info_args()))
+        .await;
+    let engine = match info {
+        Ok(result) if result.code == 0 => {
+            report.add(
+                "engine_available",
+                CheckStatus::Pass,
+                format!("The container engine ({program}) is available to this user"),
+                None,
+            );
+            crate::engine::parse_info(&result.output).ok()
+        }
+        _ => {
+            report.add(
+                "engine_available",
+                CheckStatus::Fail,
+                format!("The container engine ({program}) is unavailable or inaccessible"),
+                Some("Start the engine and verify `docker info` or `podman info` as your user; do not run the gateway as root"),
+            );
+            None
+        }
     };
     report_engine(&mut report, engine, configured.allow_rootful_engine);
     match runner
         .run(CommandSpec::new(
-            "docker",
+            program,
             [
                 "image",
                 "inspect",
@@ -273,7 +265,7 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
 /// serving either way; doctor reports the risk until the owner records it.
 fn report_engine(report: &mut DoctorReport, engine: Option<Engine>, accepted: bool) {
     match (engine, accepted) {
-        (Some(Engine::Rootless), _) => report.add(
+        (Some(Engine::Rootless | Engine::RootlessPodman), _) => report.add(
             "engine_rootless",
             CheckStatus::Pass,
             "The container engine is rootless; boxes cannot start host root",
@@ -289,7 +281,7 @@ fn report_engine(report: &mut DoctorReport, engine: Option<Engine>, accepted: bo
             "engine_rootless",
             CheckStatus::Warn,
             format!("{ROOTFUL_RISK}; the owner accepted this"),
-            Some("Run Docker in rootless mode for this user to remove the risk"),
+            Some("Run rootless Podman or Docker in rootless mode for this user to remove the risk"),
         ),
         (Some(Engine::Rootful), false) => report.add(
             "engine_rootless",
@@ -301,7 +293,7 @@ fn report_engine(report: &mut DoctorReport, engine: Option<Engine>, accepted: bo
             "engine_rootless",
             CheckStatus::Fail,
             "Cannot tell whether the container engine is rootless",
-            Some("Start Docker and verify docker info as your user"),
+            Some("Start the engine and verify `docker info` or `podman info` as your user"),
         ),
     }
 }
