@@ -1,5 +1,5 @@
 //! Per-session containers. The container, not harness prompts, bounds native actions.
-use crate::{Harness, credentials::HarnessHome};
+use crate::{Harness, credentials::HarnessHome, engine::Engine};
 use anyhow::{Context, bail};
 use std::time::{Duration, Instant};
 
@@ -319,12 +319,14 @@ pub fn box_args(
     session: &str,
     mode: &str,
     volume: Option<&str>,
-    home: Option<&HarnessHome>,
+    home: Option<(&HarnessHome, Engine)>,
     image: &str,
     network: &str,
     mock: bool,
 ) -> Vec<String> {
-    let (uid, gid) = home.map(|h| (h.uid, h.gid)).unwrap_or((1000, 1000));
+    let (uid, gid) = home
+        .map(|(h, engine)| h.box_user(engine))
+        .unwrap_or((1000, 1000));
     let mut args: Vec<String> = [
         "docker",
         "run",
@@ -358,8 +360,8 @@ pub fn box_args(
     .iter()
     .map(|s| s.to_string())
     .collect();
-    if let Some(home) = home {
-        args.extend(home.docker_args());
+    if let Some((home, engine)) = home {
+        args.extend(home.docker_args(engine));
     } else if let Some(volume) = volume {
         args.extend(["-v".into(), format!("{volume}:/home/node")]);
     } else {
@@ -380,6 +382,13 @@ pub fn box_args(
         ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
     ] {
         args.extend(["-e".into(), format!("{key}={value}")]);
+    }
+    if matches!(home, Some((_, Engine::Rootless))) {
+        // Container root is the unprivileged invoking user here, with every
+        // capability dropped. Claude Code refuses to skip permissions as root
+        // unless told it is sandboxed. Never set on a rootful engine, where
+        // container root would be host root.
+        args.extend(["-e".into(), "IS_SANDBOX=1".into()]);
     }
     if mock {
         // Synthetic local authentication, never a provider credential or API key.
@@ -1482,6 +1491,41 @@ mod tests {
                     .any(|arg| arg.contains("AGENT_CONNECT_MOCK_MODEL"))
             );
             assert!(args.contains(&"--read-only".into()));
+            assert!(args.contains(&"no-new-privileges".into()));
+        }
+    }
+    #[test]
+    fn shared_home_box_user_follows_the_engine() {
+        let home = HarnessHome {
+            path: "/srv/harness-home".into(),
+            uid: 1234,
+            gid: 2345,
+        };
+        let run = |engine| {
+            box_args(
+                Harness::Claude,
+                "test",
+                "workspace-write",
+                None,
+                Some((&home, engine)),
+                "session:test",
+                "network-test",
+                false,
+            )
+        };
+        let user =
+            |args: &[String]| args[args.iter().position(|a| a == "--user").unwrap() + 1].clone();
+        let rootful = run(Engine::Rootful);
+        assert_eq!(user(&rootful), "1234:2345");
+        assert!(rootful.contains(&"/work:rw,exec,size=512m,uid=1234,gid=2345".into()));
+        assert!(!rootful.iter().any(|arg| arg.contains("IS_SANDBOX")));
+        let rootless = run(Engine::Rootless);
+        assert_eq!(user(&rootless), "0:0");
+        assert!(rootless.contains(&"/work:rw,exec,size=512m,uid=0,gid=0".into()));
+        assert!(rootless.contains(&"IS_SANDBOX=1".into()));
+        for args in [&rootful, &rootless] {
+            assert!(args.contains(&"type=bind,src=/srv/harness-home,dst=/home/node".into()));
+            assert!(args.contains(&"ALL".into()));
             assert!(args.contains(&"no-new-privileges".into()));
         }
     }

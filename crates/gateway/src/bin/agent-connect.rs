@@ -31,6 +31,7 @@ use agent_connect_gateway::config::{
     self, CodexMode, DEFAULT_BOX_IMAGE, InitCli, ServeCli, ServeOptions, UsageError,
 };
 use agent_connect_gateway::credentials::{HarnessHome, default_home, login_args, select_harness};
+use agent_connect_gateway::engine::{self, Engine};
 use agent_connect_gateway::operations::{
     self, DoctorCli, ResetPassphraseCli, ResetTotpCli, ServiceCli, SetupCli,
 };
@@ -136,6 +137,8 @@ enum EgressCommand {
 struct Gateway {
     cli: ServeCli,
     home: Option<HarnessHome>,
+    /// The engine boxes run on, read from the daemon once at startup.
+    engine: Option<Engine>,
     capacity: Arc<tokio::sync::Semaphore>,
     sessions: Mutex<tokio::task::JoinSet<()>>,
     shutdown: tokio::sync::watch::Sender<bool>,
@@ -353,7 +356,7 @@ async fn run() -> anyhow::Result<()> {
                 );
             }
             let status = std::process::Command::new("docker")
-                .args(login_args(&home, &image, harness))
+                .args(login_args(&home, engine::detect()?, &image, harness))
                 .status()?;
             anyhow::ensure!(status.success(), "provider login helper failed");
             eprintln!("Login complete. This dedicated home is ready for boxed sessions.");
@@ -438,9 +441,11 @@ async fn run() -> anyhow::Result<()> {
     } else {
         None
     };
+    let engine = cli.boxed.then(engine::detect).transpose()?;
     let gateway = Arc::new(Gateway {
         hosts,
         home,
+        engine,
         capacity: Arc::new(tokio::sync::Semaphore::new(cli.max_sessions)),
         sessions: Mutex::new(tokio::task::JoinSet::new()),
         shutdown: tokio::sync::watch::channel(false).0,
@@ -864,6 +869,9 @@ async fn run_host(
         let image = gateway.cli.box_image.clone();
         let harness = gateway.cli.harness;
         let home = gateway.home.clone();
+        let engine = gateway
+            .engine
+            .expect("boxed gateways detect their engine at startup");
         let volume = gateway.cli.durable_home.then(|| home_volume(&grant.id));
         let mocked = gateway.cli.mock_root.is_some();
         // Startup rollback and Docker CLI calls belong off the async executor.
@@ -875,7 +883,7 @@ async fn run_host(
                 &session,
                 mode.as_str(),
                 volume.as_deref(),
-                home.as_ref(),
+                home.as_ref().map(|home| (home, engine)),
                 &image,
                 &network.name,
                 mocked,

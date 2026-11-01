@@ -5,6 +5,7 @@ pub mod authorization;
 pub mod client_address;
 pub mod config;
 pub mod credentials;
+pub mod engine;
 pub mod http_security;
 pub mod operations;
 pub mod policy;
