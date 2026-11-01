@@ -2,6 +2,7 @@
 mod box_build;
 mod doctor;
 mod service;
+pub use box_build::warm_owner_mapping;
 pub use doctor::{Check, CheckStatus, DoctorCli, DoctorReport, doctor, doctor_report};
 pub use service::{ServiceAction, ServiceCli, ServiceManager, service};
 
