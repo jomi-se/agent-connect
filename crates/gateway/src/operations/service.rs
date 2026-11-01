@@ -119,8 +119,12 @@ impl ServicePaths {
     fn content(&self) -> String {
         match self.manager {
             ServiceManager::Systemd => format!(
-                "# {MARKER}\n# Runtime: {}\n[Unit]\nDescription=Agent Connect unstable ACP gateway\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart={} serve --config {}\nEnvironment={}\nRestart=on-failure\nRestartSec=5\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
+                "# {MARKER}\n# Runtime: {}\n[Unit]\nDescription=Agent Connect unstable ACP gateway\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStartPre={} egress start --config {}\nExecStart={} serve --config {}\nEnvironment={}\nRestart=on-failure\nRestartSec=5\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
                 self.config.display(),
+                // An engine without a daemon (rootless Podman) restarts nothing at
+                // boot; start or validate the owned egress before serving.
+                systemd_quote(&self.executable),
+                systemd_quote(&self.config),
                 systemd_quote(&self.executable),
                 systemd_quote(&self.config),
                 systemd_environment_quote(&format!("PATH={}", self.search_path))
@@ -775,6 +779,17 @@ mod tests {
         let mut systemd = paths(ServiceManager::Systemd);
         systemd.search_path = path.into();
         let unit = systemd.content();
+        // The owned egress is started or validated before every serve.
+        let pre = unit.find("\nExecStartPre=").unwrap();
+        assert!(pre < unit.find("\nExecStart=").unwrap());
+        assert!(
+            unit[pre..].starts_with("\nExecStartPre=")
+                && unit[pre..]
+                    .lines()
+                    .nth(1)
+                    .unwrap()
+                    .contains(" egress start --config ")
+        );
         assert!(unit.contains("Environment=\"PATH=/example/tools space/%%literal/$literal/\\\"quoted\\\"/&<directory>:/example/bin\"\n"));
         let mut launchd = paths(ServiceManager::Launchd);
         launchd.search_path = path.into();
