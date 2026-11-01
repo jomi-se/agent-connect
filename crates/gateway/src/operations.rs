@@ -519,7 +519,7 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             // is rechecked by egress_stop; unrelated resources are never removed.
             let existing_egress = NativeRunner
                 .run(CommandSpec::new(
-                    "docker",
+                    crate::engine::program(),
                     ["container", "inspect", &plan.egress_container],
                 ))
                 .await?;

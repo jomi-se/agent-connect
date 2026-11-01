@@ -172,6 +172,11 @@ pub struct ServeOptions {
     #[arg(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_rootful_engine: Option<bool>,
+    /// Container engine recorded by setup; the global --container-engine
+    /// option overrides it for one command.
+    #[arg(skip)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub container_engine: Option<crate::engine::Program>,
 }
 
 #[derive(Clone)]
@@ -259,6 +264,9 @@ impl ServeOptions {
             resume_max_bytes: merged!(resume_max_bytes).unwrap_or_else(|| 8 * 1024 * 1024),
             allow_rootful_engine: merged!(allow_rootful_engine).unwrap_or_else(|| false),
         };
+        if let Some(program) = merged!(container_engine) {
+            crate::engine::select(program);
+        }
         if cli.headless_static_bearer {
             validate_origin(&cli.allow_origin)?;
             if cli.token.is_empty()

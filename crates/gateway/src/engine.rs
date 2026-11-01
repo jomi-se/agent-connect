@@ -1,40 +1,107 @@
-//! The container engine behind the `docker` command, as the daemon reports it.
+//! The container engine the gateway drives, as the engine itself reports it.
 //! A rootful engine maps container ids one to one onto the host, so whoever
-//! can start containers can start host root. A rootless engine maps container
+//! can start containers can start host root. Rootless Docker maps container
 //! root onto the invoking user; any other container id is a subordinate id
-//! with no access to that user's files. An engine inside a virtual machine
+//! with no access to that user's files. Rootless Podman can map the invoking
+//! user onto any container id (`keep-id`). An engine inside a virtual machine
 //! (Docker Desktop, OrbStack) is rootful only inside that machine.
 use anyhow::{Context, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
+
+/// The command the gateway runs for every container operation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Program {
+    #[default]
+    Docker,
+    Podman,
+}
+
+static PROGRAM: OnceLock<Program> = OnceLock::new();
+
+/// Fixes the program for this process. The first choice wins: the command
+/// line or environment is applied before any configuration is read.
+pub fn select(program: Program) {
+    let _ = PROGRAM.set(program);
+}
+
+pub fn selected() -> Program {
+    PROGRAM.get().copied().unwrap_or_default()
+}
+
+pub fn program() -> &'static str {
+    match selected() {
+        Program::Docker => "docker",
+        Program::Podman => "podman",
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Engine {
     Rootful,
     Rootless,
+    RootlessPodman,
     VirtualMachine,
 }
 
-/// `docker info` output that `parse_info` reads.
-pub const INFO_FORMAT: &str =
-    r#"{"securityOptions":{{json .SecurityOptions}},"operatingSystem":{{json .OperatingSystem}}}"#;
+impl Engine {
+    /// Mount options that give a tmpfs to the container user: Podman 4 rejects
+    /// `uid=`/`gid=` and has `U`, which chowns to whichever user the box runs as.
+    pub fn tmpfs_owner(self, uid: u32, gid: u32) -> String {
+        match self {
+            Engine::RootlessPodman => "U".into(),
+            _ => format!("uid={uid},gid={gid}"),
+        }
+    }
+}
 
-/// Asks the daemon, never the CLI context name or `DOCKER_HOST`, which can
+const DOCKER_INFO: &str =
+    r#"{"securityOptions":{{json .SecurityOptions}},"operatingSystem":{{json .OperatingSystem}}}"#;
+const PODMAN_INFO: &str = r#"{"rootless":{{json .Host.Security.Rootless}}}"#;
+
+/// The `info` arguments that `parse_info` reads, for the selected program.
+pub fn info_args() -> [&'static str; 3] {
+    match selected() {
+        Program::Docker => ["info", "--format", DOCKER_INFO],
+        Program::Podman => ["info", "--format", PODMAN_INFO],
+    }
+}
+
+/// The `info` arguments that print the engine's machine architecture.
+pub fn architecture_args() -> [&'static str; 3] {
+    match selected() {
+        Program::Docker => ["info", "--format", "{{.Architecture}}"],
+        Program::Podman => ["info", "--format", "{{.Host.Arch}}"],
+    }
+}
+
+/// Asks the engine, never the CLI context name or `DOCKER_HOST`, which can
 /// point anywhere. Fails rather than guessing when the answer is unreadable.
 pub fn detect() -> anyhow::Result<Engine> {
-    let output = std::process::Command::new("docker")
-        .args(["info", "--format", INFO_FORMAT])
+    let output = std::process::Command::new(program())
+        .args(info_args())
         .output()
-        .context("run docker info")?;
+        .with_context(|| format!("run {} info", program()))?;
     ensure!(
         output.status.success(),
-        "docker info failed; start Docker and verify docker info as your user (other engines behind a docker command are not supported yet)"
+        "{} info failed; start the container engine and verify `{} info` as your user",
+        program(),
+        program()
     );
     parse_info(&String::from_utf8_lossy(&output.stdout))
 }
 
+pub fn parse_info(output: &str) -> anyhow::Result<Engine> {
+    match selected() {
+        Program::Docker => parse_docker_info(output),
+        Program::Podman => parse_podman_info(output),
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct Info {
+struct DockerInfo {
     security_options: Vec<String>,
     operating_system: String,
 }
@@ -44,9 +111,9 @@ struct Info {
 /// Only the daemon's own report grants the virtual machine pass: a client on
 /// macOS can drive a remote rootful Linux daemon. Other VMs (Colima reports its
 /// guest's distribution) read as rootful and need the owner's acceptance.
-pub fn parse_info(output: &str) -> anyhow::Result<Engine> {
-    let info: Info = serde_json::from_str(output.trim()).context(
-        "unreadable docker info; is this engine Docker? Other engines are not supported yet",
+fn parse_docker_info(output: &str) -> anyhow::Result<Engine> {
+    let info: DockerInfo = serde_json::from_str(output.trim()).context(
+        "unreadable docker info; is this engine Docker? Choose another with --container-engine",
     )?;
     let has = |name: &str| {
         info.security_options
@@ -71,15 +138,31 @@ pub fn parse_info(output: &str) -> anyhow::Result<Engine> {
     })
 }
 
+#[derive(Deserialize)]
+struct PodmanInfo {
+    rootless: bool,
+}
+
+/// Podman run as root is a rootful engine like any other.
+fn parse_podman_info(output: &str) -> anyhow::Result<Engine> {
+    let info: PodmanInfo = serde_json::from_str(output.trim()).context("unreadable podman info")?;
+    Ok(if info.rootless {
+        Engine::RootlessPodman
+    } else {
+        Engine::Rootful
+    })
+}
+
 pub const ROOTFUL_RISK: &str = "The container engine is rootful: whatever can start containers on it, this gateway included, can start host root";
-pub const ROOTFUL_FIX: &str = "Run Docker in rootless mode for this user, or record that you accept the risk with agent-connect setup --allow-rootful-engine";
+pub const ROOTFUL_FIX: &str = "Run rootless Podman or Docker in rootless mode for this user, or record that you accept the risk with agent-connect setup --allow-rootful-engine";
 
 /// Setup's gate. A new runtime on a rootful engine needs the owner's explicit
 /// acceptance. An existing one keeps working with a warning, so an upgrade
 /// never breaks a gateway that worked before it.
 pub fn admit(engine: Engine, accepted: bool, existing: bool) -> anyhow::Result<Option<String>> {
     match (engine, accepted, existing) {
-        (Engine::Rootless | Engine::VirtualMachine, ..) | (Engine::Rootful, true, _) => Ok(None),
+        (Engine::Rootless | Engine::RootlessPodman | Engine::VirtualMachine, ..)
+        | (Engine::Rootful, true, _) => Ok(None),
         (Engine::Rootful, false, true) => Ok(Some(format!("{ROOTFUL_RISK}.\n{ROOTFUL_FIX}."))),
         (Engine::Rootful, false, false) => {
             Err(crate::config::UsageError(format!("{ROOTFUL_RISK}. {ROOTFUL_FIX}.")).into())
@@ -117,37 +200,54 @@ mod tests {
             r#"["name=seccomp,profile=builtin","name=rootless","name=cgroupns"]"#,
             "Ubuntu 24.04.4 LTS",
         );
-        assert_eq!(parse_info(&rootless).unwrap(), Engine::Rootless);
+        assert_eq!(parse_docker_info(&rootless).unwrap(), Engine::Rootless);
         let rootful = info(
             r#"["name=apparmor","name=seccomp,profile=builtin","name=cgroupns"]"#,
             "Ubuntu 24.04.4 LTS",
         );
         // Whatever the client runs on: a macOS CLI can drive this daemon remotely.
-        assert_eq!(parse_info(&rootful).unwrap(), Engine::Rootful);
+        assert_eq!(parse_docker_info(&rootful).unwrap(), Engine::Rootful);
         let desktop = info(
             r#"["name=seccomp,profile=builtin","name=cgroupns"]"#,
             "Docker Desktop",
         );
-        assert_eq!(parse_info(&desktop).unwrap(), Engine::VirtualMachine);
+        assert_eq!(parse_docker_info(&desktop).unwrap(), Engine::VirtualMachine);
         let orbstack = info(r#"["name=seccomp,profile=builtin"]"#, "OrbStack");
-        assert_eq!(parse_info(&orbstack).unwrap(), Engine::VirtualMachine);
+        assert_eq!(
+            parse_docker_info(&orbstack).unwrap(),
+            Engine::VirtualMachine
+        );
         let colima = info(r#"["name=seccomp,profile=builtin"]"#, "Ubuntu 24.04 LTS");
-        assert_eq!(parse_info(&colima).unwrap(), Engine::Rootful);
+        assert_eq!(parse_docker_info(&colima).unwrap(), Engine::Rootful);
+    }
+
+    #[test]
+    fn reads_rootless_podman() {
+        assert_eq!(
+            parse_podman_info(r#"{"rootless":true}"#).unwrap(),
+            Engine::RootlessPodman
+        );
+        assert_eq!(
+            parse_podman_info(r#"{"rootless":false}"#).unwrap(),
+            Engine::Rootful
+        );
+        assert!(parse_podman_info(r#"{"rootless":null}"#).is_err());
+        assert!(parse_podman_info("").is_err());
     }
 
     #[test]
     fn refuses_to_guess() {
-        assert!(parse_info("").is_err());
-        assert!(parse_info("<no value>").is_err());
-        assert!(parse_info(r#"{"securityOptions":null}"#).is_err());
+        assert!(parse_docker_info("").is_err());
+        assert!(parse_docker_info("<no value>").is_err());
+        assert!(parse_docker_info(r#"{"securityOptions":null}"#).is_err());
         // A field must match exactly, not as a substring.
         assert_eq!(
-            parse_info(&info(r#"["name=notrootless"]"#, "Debian")).unwrap(),
+            parse_docker_info(&info(r#"["name=notrootless"]"#, "Debian")).unwrap(),
             Engine::Rootful
         );
         let remapped = info(r#"["name=apparmor","name=userns"]"#, "Debian");
         assert!(
-            parse_info(&remapped)
+            parse_docker_info(&remapped)
                 .unwrap_err()
                 .to_string()
                 .contains("userns-remap")

@@ -64,6 +64,15 @@ const MAX_CLIENT_FRAME_BYTES: usize = 1024 * 1024;
     after_help = "Example:\n  agent-connect setup\n  agent-connect setup --origin https://gateway.example\n  agent-connect doctor\n  agent-connect service status\n\nExit codes: 0 success; 1 runtime or readiness failure; 2 invalid arguments or configuration. ACP and MCP-over-ACP are unstable."
 )]
 struct Cli {
+    /// Container engine for this command; overrides the configuration's.
+    #[arg(
+        long,
+        global = true,
+        env = "AGENT_CONNECT_CONTAINER_ENGINE",
+        hide_env_values = true,
+        value_enum
+    )]
+    container_engine: Option<engine::Program>,
     #[command(subcommand)]
     command: Command,
 }
@@ -282,7 +291,11 @@ async fn run() -> anyhow::Result<()> {
         .with_env_filter(diagnostic_filter(std::env::var("RUST_LOG").ok().as_deref()))
         .with_writer(std::io::stderr)
         .init();
-    let mut cli = match Cli::parse().command {
+    let parsed = Cli::parse();
+    if let Some(program) = parsed.container_engine {
+        engine::select(program);
+    }
+    let mut cli = match parsed.command {
         Command::Serve(cli) => cli.resolve()?,
         Command::ReleaseInfo => {
             println!(
@@ -355,7 +368,7 @@ async fn run() -> anyhow::Result<()> {
                     "Claude Code usage through Agent Connect is unconfirmed against Anthropic terms."
                 );
             }
-            let status = std::process::Command::new("docker")
+            let status = std::process::Command::new(engine::program())
                 .args(login_args(&home, engine::detect()?, &image, harness))
                 .status()?;
             anyhow::ensure!(status.success(), "provider login helper failed");
@@ -894,7 +907,8 @@ async fn run_host(
                 &session,
                 mode.as_str(),
                 volume.as_deref(),
-                home.as_ref().map(|home| (home, engine)),
+                home.as_ref(),
+                engine,
                 &image,
                 &network.name,
                 mocked,

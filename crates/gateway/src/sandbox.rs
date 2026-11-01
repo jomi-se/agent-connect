@@ -12,7 +12,10 @@ const EGRESS_LABEL: &str = "org.agent-connect.component";
 const EGRESS_OWNER: &str = "acp-egress";
 
 pub fn egress_start_args(name: &str, image: &str) -> Vec<String> {
-    [
+    egress_args(crate::engine::selected(), name, image)
+}
+fn egress_args(program: crate::engine::Program, name: &str, image: &str) -> Vec<String> {
+    let mut args: Vec<String> = [
         "run",
         "--pull=never",
         "--detach",
@@ -39,7 +42,14 @@ pub fn egress_start_args(name: &str, image: &str) -> Vec<String> {
     ]
     .into_iter()
     .map(str::to_string)
-    .collect()
+    .collect();
+    if program == crate::engine::Program::Podman {
+        // A rootless container started without a network gets user-mode
+        // networking (slirp4netns, pasta in Podman 5), which cannot join the
+        // session networks later; the default bridge can.
+        args.splice(1..1, ["--network".to_string(), "podman".to_string()]);
+    }
+    args
 }
 
 pub fn egress_start(name: &str, image: &str) -> anyhow::Result<()> {
@@ -283,7 +293,7 @@ fn validate_egress(
 
 pub fn egress_stop(name: &str) -> anyhow::Result<()> {
     crate::config::validate_container_name(name)?;
-    let output = std::process::Command::new("docker")
+    let output = std::process::Command::new(crate::engine::program())
         .args(["inspect", "--type", "container", name])
         .output()
         .context("Docker is required to stop the egress proxy")?;
@@ -319,16 +329,18 @@ pub fn box_args(
     session: &str,
     mode: &str,
     volume: Option<&str>,
-    home: Option<(&HarnessHome, Engine)>,
+    home: Option<&HarnessHome>,
+    engine: Engine,
     image: &str,
     network: &str,
     mock: bool,
 ) -> Vec<String> {
+    use crate::credentials::{BOX_GID, BOX_UID};
     let (uid, gid) = home
-        .map(|(h, engine)| h.box_user(engine))
-        .unwrap_or((1000, 1000));
+        .map(|h| h.box_user(engine))
+        .unwrap_or((BOX_UID, BOX_GID));
     let mut args: Vec<String> = [
-        "docker",
+        crate::engine::program(),
         "run",
         "--pull=never",
         "-i",
@@ -343,7 +355,7 @@ pub fn box_args(
         network,
         "--read-only",
         "--tmpfs",
-        &format!("/work:rw,exec,size=512m,uid={uid},gid={gid}"),
+        &format!("/work:rw,exec,size=512m,{}", engine.tmpfs_owner(uid, gid)),
         "--tmpfs",
         "/tmp:rw,exec,size=256m",
         "--cap-drop",
@@ -360,14 +372,17 @@ pub fn box_args(
     .iter()
     .map(|s| s.to_string())
     .collect();
-    if let Some((home, engine)) = home {
+    if let Some(home) = home {
         args.extend(home.docker_args(engine));
     } else if let Some(volume) = volume {
         args.extend(["-v".into(), format!("{volume}:/home/node")]);
     } else {
         args.extend([
             "--tmpfs".into(),
-            "/home/node:rw,exec,size=512m,uid=1000,gid=1000".into(),
+            format!(
+                "/home/node:rw,exec,size=512m,{}",
+                engine.tmpfs_owner(BOX_UID, BOX_GID)
+            ),
         ]);
     }
     for (key, value) in [
@@ -383,7 +398,7 @@ pub fn box_args(
     ] {
         args.extend(["-e".into(), format!("{key}={value}")]);
     }
-    if matches!(home, Some((_, Engine::Rootless))) {
+    if home.is_some() && engine == Engine::Rootless {
         // Container root is the unprivileged invoking user here, with every
         // capability dropped. Claude Code refuses to skip permissions as root
         // unless told it is sandboxed. Never set on a rootful engine, where
@@ -475,8 +490,14 @@ impl SessionNetwork {
                     ],
                     deadline,
                 )
-                .and_then(|output| docker_id(&output))
-            {
+                .and_then(|output| match crate::engine::selected() {
+                    crate::engine::Program::Docker => docker_id(&output),
+                    // Podman prints the name; read the ID back by name and owner labels.
+                    crate::engine::Program::Podman => {
+                        inspect_owned_id("network", &network.name, session, docker)?
+                            .ok_or_else(|| anyhow::anyhow!("created network is missing"))
+                    }
+                }) {
                 Ok(id) => network.id = Some(id),
                 Err(error) => {
                     network.recover_created_id("network", docker);
@@ -570,7 +591,7 @@ impl SessionNetwork {
             }
         }
         Ok(vec![
-            "docker".into(),
+            crate::engine::program().into(),
             "start".into(),
             "--attach".into(),
             "--interactive".into(),
@@ -710,8 +731,14 @@ fn inspect_owned_id(
     session: &str,
     docker: &mut impl DockerCommand,
 ) -> anyhow::Result<Option<String>> {
+    // Both engines answer this template alike; their full JSON differs.
+    let format = if kind == "network" {
+        r#"{"id":{{json .ID}},"labels":{{json .Labels}}}"#
+    } else {
+        r#"{"id":{{json .ID}},"labels":{{json .Config.Labels}}}"#
+    };
     let output = match docker.run(
-        &["inspect", "--type", kind, "--format", "{{json .}}", name],
+        &["inspect", "--type", kind, "--format", format, name],
         Instant::now() + CLEANUP_TIMEOUT,
     ) {
         Ok(output) => output,
@@ -719,11 +746,7 @@ fn inspect_owned_id(
         Err(error) => return Err(error),
     };
     let resource: serde_json::Value = serde_json::from_str(&output)?;
-    let labels = resource.pointer(if kind == "network" {
-        "/Labels"
-    } else {
-        "/Config/Labels"
-    });
+    let labels = resource.get("labels");
     if labels
         .and_then(|labels| labels.get(EGRESS_LABEL))
         .and_then(|v| v.as_str())
@@ -737,7 +760,7 @@ fn inspect_owned_id(
     }
     Ok(Some(docker_id(
         resource
-            .get("Id")
+            .get("id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("invalid inspected Docker resource ID"))?,
     )?))
@@ -754,6 +777,7 @@ fn docker_id(output: &str) -> anyhow::Result<String> {
 fn missing_resource(error: &anyhow::Error) -> bool {
     let text = error.to_string();
     text.contains("No such container:")
+        || text.contains("no such container")
         || text.contains("No such network:")
         || (text.contains("network ") && text.contains(" not found"))
 }
@@ -768,7 +792,7 @@ impl DockerCommand for Docker {
         if Instant::now() >= deadline {
             bail!("Docker operation deadline elapsed");
         }
-        let child = Command::new("docker")
+        let child = Command::new(crate::engine::program())
             .args(args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -804,7 +828,7 @@ fn bounded_output(
     String::from_utf8(output.stdout).context("invalid Docker output")
 }
 fn docker(args: &[&str]) -> anyhow::Result<()> {
-    let output = std::process::Command::new("docker")
+    let output = std::process::Command::new(crate::engine::program())
         .args(args)
         .output()
         .context("Docker is required for boxed sessions")?;
@@ -821,6 +845,8 @@ fn docker(args: &[&str]) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use std::collections::VecDeque;
+
+    const OWNED_CONTAINER_FORMAT: &str = r#"{"id":{{json .ID}},"labels":{{json .Config.Labels}}}"#;
 
     struct Fixture(VecDeque<(Vec<String>, Result<String, &'static str>)>);
     impl DockerCommand for Fixture {
@@ -1223,6 +1249,7 @@ mod tests {
             "agent-full-access",
             None,
             None,
+            Engine::Rootful,
             "session:test",
             "reused-network-name",
             false,
@@ -1252,6 +1279,7 @@ mod tests {
             "agent-full-access",
             None,
             None,
+            Engine::Rootful,
             "session:test",
             "network-name",
             false,
@@ -1260,9 +1288,9 @@ mod tests {
         create[0] = "create".into();
         let pos = create.iter().position(|arg| arg == "--network").unwrap();
         create[pos + 1] = network.clone();
-        let inspected = serde_json::json!({"Id": container, "Config": {"Labels": {
+        let inspected = serde_json::json!({"id": container, "labels": {
             EGRESS_LABEL: SESSION_OWNER, SESSION_LABEL: "test"
-        }}})
+        }})
         .to_string();
         let mut docker = Fixture(VecDeque::from([
             (create, Err("injected lost create response")),
@@ -1272,7 +1300,7 @@ mod tests {
                     "--type",
                     "container",
                     "--format",
-                    "{{json .}}",
+                    OWNED_CONTAINER_FORMAT,
                     "acp-sess-test",
                 ],
                 Ok(&inspected),
@@ -1292,9 +1320,9 @@ mod tests {
 
     #[test]
     fn uncertain_allocation_never_adopts_a_replacement_with_foreign_labels() {
-        let inspected = serde_json::json!({"Id": "b".repeat(64), "Config": {"Labels": {
+        let inspected = serde_json::json!({"id": "b".repeat(64), "labels": {
             EGRESS_LABEL: SESSION_OWNER, SESSION_LABEL: "someone-else"
-        }}})
+        }})
         .to_string();
         let mut docker = Fixture(VecDeque::from([step(
             &[
@@ -1302,7 +1330,7 @@ mod tests {
                 "--type",
                 "container",
                 "--format",
-                "{{json .}}",
+                OWNED_CONTAINER_FORMAT,
                 "acp-sess-test",
             ],
             Ok(&inspected),
@@ -1474,6 +1502,7 @@ mod tests {
                 "workspace-write",
                 None,
                 None,
+                Engine::Rootful,
                 "session:test",
                 "network-test",
                 mock,
@@ -1495,6 +1524,39 @@ mod tests {
         }
     }
     #[test]
+    fn podman_boxes_without_a_home_keep_the_default_mapping() {
+        for volume in [None, Some("acp-home-test")] {
+            let args = box_args(
+                Harness::Codex,
+                "test",
+                "workspace-write",
+                volume,
+                None,
+                Engine::RootlessPodman,
+                "session:test",
+                "network-test",
+                false,
+            );
+            // keep-id would make box files the owner's; without a home they stay
+            // on a subordinate id.
+            assert!(!args.iter().any(|arg| arg.starts_with("--userns")));
+            assert!(!args.contains(&"--user".into()));
+            assert!(!args.iter().any(|arg| arg.contains("uid=")));
+            assert!(args.contains(&"/work:rw,exec,size=512m,U".into()));
+        }
+    }
+    #[test]
+    fn podman_egress_starts_on_a_bridge_it_can_leave() {
+        use crate::engine::Program;
+        let docker = egress_args(Program::Docker, "egress-test", "box:test");
+        assert!(!docker.contains(&"--network".into()));
+        let podman = egress_args(Program::Podman, "egress-test", "box:test");
+        let network = podman.iter().position(|arg| arg == "--network").unwrap();
+        assert_eq!(podman[network + 1], "podman");
+        assert_eq!(podman[0], "run");
+        assert_eq!(&podman[3..], &docker[1..]);
+    }
+    #[test]
     fn shared_home_box_user_follows_the_engine() {
         let home = HarnessHome {
             path: "/srv/harness-home".into(),
@@ -1507,7 +1569,8 @@ mod tests {
                 "test",
                 "workspace-write",
                 None,
-                Some((&home, engine)),
+                Some(&home),
+                engine,
                 "session:test",
                 "network-test",
                 false,
@@ -1523,7 +1586,12 @@ mod tests {
         assert_eq!(user(&rootless), "0:0");
         assert!(rootless.contains(&"/work:rw,exec,size=512m,uid=0,gid=0".into()));
         assert!(rootless.contains(&"IS_SANDBOX=1".into()));
-        for args in [&rootful, &rootless] {
+        let podman = run(Engine::RootlessPodman);
+        assert_eq!(user(&podman), "1000:1000");
+        assert!(podman.contains(&"--userns=keep-id:uid=1000,gid=1000".into()));
+        assert!(podman.contains(&"/work:rw,exec,size=512m,U".into()));
+        assert!(!podman.iter().any(|arg| arg.contains("IS_SANDBOX")));
+        for args in [&rootful, &rootless, &podman] {
             assert!(args.contains(&"type=bind,src=/srv/harness-home,dst=/home/node".into()));
             assert!(args.contains(&"ALL".into()));
             assert!(args.contains(&"no-new-privileges".into()));

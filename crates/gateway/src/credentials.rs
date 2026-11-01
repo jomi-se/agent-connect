@@ -92,6 +92,10 @@ pub fn select_harness(
     }
 }
 
+/// The box image's own user (`node`).
+pub const BOX_UID: u32 = 1000;
+pub const BOX_GID: u32 = 1000;
+
 #[derive(Clone, Debug)]
 pub struct HarnessHome {
     pub path: PathBuf,
@@ -147,22 +151,31 @@ impl HarnessHome {
 
     /// The container user that owns this home once mounted: the owner's own ids
     /// where the engine maps them through (rootful, or a virtual machine's file
-    /// sharing), container root (which is the owner) on a rootless engine.
+    /// sharing), container root (which is the owner) on rootless Docker, and the
+    /// image's own user, mapped onto the owner, on rootless Podman.
     pub fn box_user(&self, engine: Engine) -> (u32, u32) {
         match engine {
             Engine::Rootful | Engine::VirtualMachine => (self.uid, self.gid),
             Engine::Rootless => (0, 0),
+            Engine::RootlessPodman => (BOX_UID, BOX_GID),
         }
     }
 
     pub fn docker_args(&self, engine: Engine) -> Vec<String> {
         let (uid, gid) = self.box_user(engine);
-        vec![
+        let mut args = Vec::new();
+        if engine == Engine::RootlessPodman {
+            // Only for a mounted home: other boxes keep the default mapping, where
+            // their files belong to a subordinate id rather than the owner.
+            args.push(format!("--userns=keep-id:uid={uid},gid={gid}"));
+        }
+        args.extend([
             "--user".into(),
             format!("{uid}:{gid}"),
             "--mount".into(),
             format!("type=bind,src={},dst=/home/node", self.path.display()),
-        ]
+        ]);
+        args
     }
 }
 
