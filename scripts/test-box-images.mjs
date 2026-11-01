@@ -1,3 +1,4 @@
+import { localName } from "./container-engine.mjs";
 import assert from "node:assert/strict";
 
 export function requireBoxImage(image = process.env.ACP_BOX_IMAGE) {
@@ -35,7 +36,7 @@ export async function removeTestImages(base, docker) {
     "{{.Repository}}:{{.Tag}}",
   ]);
   const failures = [];
-  for (const image of new Set(output.trim().split(/\s+/))) {
+  for (const image of new Set(output.trim().split(/\s+/).map(localName))) {
     const layer = image.slice(base.length + 1);
     if (
       image !== base &&

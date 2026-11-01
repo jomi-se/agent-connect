@@ -44,7 +44,10 @@ test("login invokes only the provider CLI with a private shared home and host UI
   const home = join(root, "dedicated");
   await mkdir(join(root, "bin"));
   const docker = join(root, "bin/docker");
-  await writeFile(docker, '#!/bin/sh\nprintf "%s\\n" "$@" > "$LOGIN_ARGS"\n');
+  await writeFile(
+    docker,
+    '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":[],"operatingSystem":"Linux"}\'; exit 0; fi\nprintf "%s\\n" "$@" > "$LOGIN_ARGS"\n',
+  );
   await chmod(docker, 0o755);
   for (const harness of ["codex", "claude"]) {
     const result = spawnSync(
@@ -238,7 +241,10 @@ test("serve refuses unknown JSON fields and insecure config modes without printi
 
 async function preflightDocker() {
   const root = await tempRoot("acp-preflight-cli-");
-  const image = { Id: `sha256:${"d".repeat(64)}`, Config: { Env: [] } };
+  const image = {
+    Id: `sha256:${"d".repeat(64)}`,
+    Config: { Env: [], User: "node" },
+  };
   const container = {
     Id: "a".repeat(64),
     Image: image.Id,
@@ -247,11 +253,21 @@ async function preflightDocker() {
       Labels: { "org.agent-connect.component": "acp-egress" },
       Entrypoint: ["node"],
       Cmd: ["/opt/agent-connect/egress-proxy.mjs"],
+      User: image.Config.User,
     },
+    // Docker reports these even when unset (null or empty).
     HostConfig: {
       ReadonlyRootfs: true,
       Privileged: false,
       CapDrop: ["ALL"],
+      CapAdd: null,
+      Devices: [],
+      DeviceRequests: null,
+      PidMode: "",
+      IpcMode: "private",
+      NetworkMode: "bridge",
+      Binds: null,
+      PortBindings: {},
       SecurityOpt: ["no-new-privileges"],
       Memory: 268435456,
       NanoCpus: 1000000000,
@@ -269,7 +285,7 @@ async function preflightDocker() {
   await writeFile(join(root, "container"), JSON.stringify(container));
   await writeFile(
     join(root, "docker"),
-    '#!/bin/sh\nif [ "$1" = image ]; then /bin/cat "$PREFLIGHT_IMAGE"; elif [ "$1" = inspect ]; then /bin/cat "$PREFLIGHT_CONTAINER"; else exit 1; fi\n',
+    '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":[],"operatingSystem":"Linux"}\'; exit 0; fi\nif [ "$1" = image ]; then /bin/cat "$PREFLIGHT_IMAGE"; elif [ "$1" = inspect ]; then /bin/cat "$PREFLIGHT_CONTAINER"; else exit 1; fi\n',
   );
   await chmod(join(root, "docker"), 0o755);
   return {
@@ -432,7 +448,7 @@ test("egress uses read-only same-image proxy and verifies ownership before delet
   const docker = join(root, "bin/docker");
   await writeFile(
     docker,
-    '#!/bin/sh\nprintf "%s\\n" "$@" > "$DOCKER_ARGS"\nif [ "$1" = image ]; then /bin/cat "$DOCKER_IMAGE"; elif [ "$1" = inspect ]; then if [ -f "$DOCKER_INSPECT" ]; then /bin/cat "$DOCKER_INSPECT"; else echo "Error: No such container: fixture" >&2; exit 1; fi; fi\n',
+    '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":[],"operatingSystem":"Linux"}\'; exit 0; fi\nprintf "%s\\n" "$@" > "$DOCKER_ARGS"\nif [ "$1" = image ]; then /bin/cat "$DOCKER_IMAGE"; elif [ "$1" = inspect ]; then if [ -f "$DOCKER_INSPECT" ]; then /bin/cat "$DOCKER_INSPECT"; else echo "Error: No such container: fixture" >&2; exit 1; fi; fi\n',
   );
   await chmod(docker, 0o755);
   const env = {
@@ -536,7 +552,7 @@ test("login defaults match init, explicit homes and old configs remain usable", 
   await mkdir(join(root, "bin"));
   await writeFile(
     join(root, "bin/docker"),
-    '#!/bin/sh\nprintf "%s\\n" "$@" > "$LOGIN_ARGS"\n',
+    '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":[],"operatingSystem":"Linux"}\'; exit 0; fi\nprintf "%s\\n" "$@" > "$LOGIN_ARGS"\n',
   );
   await chmod(join(root, "bin/docker"), 0o755);
   const env = { PATH: join(root, "bin"), LOGIN_ARGS: join(root, "args") };
@@ -636,7 +652,7 @@ test(
       await mkdir(join(root, "bin"));
       await writeFile(
         join(root, "bin/docker"),
-        '#!/bin/sh\nprintf "%s\\n" "$@" > "$LOGIN_ARGS"\n',
+        '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":[],"operatingSystem":"Linux"}\'; exit 0; fi\nprintf "%s\\n" "$@" > "$LOGIN_ARGS"\n',
       );
       await chmod(join(root, "bin/docker"), 0o755);
       const env = {

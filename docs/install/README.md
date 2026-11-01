@@ -254,7 +254,27 @@ variables into boxes. Never put API keys into a browser application.
 
 ## Security boundaries and advanced configuration
 
-Docker isolates execution and the owned egress proxy constrains destinations.
+The container engine isolates execution and the owned egress proxy constrains
+destinations. The gateway itself is a network service that starts containers,
+so what the engine lets a container be is what a compromised gateway can
+become:
+
+- **Rootful Docker:** container root is host root. Anyone who can start
+  containers can mount `/` and own the machine, so a gateway bug is a root
+  compromise. Setup refuses it unless you pass `--allow-rootful-engine`, and
+  doctor reports the risk for as long as it lasts.
+- **Rootless Podman** (recommended on Linux) and **rootless Docker:** no
+  container id maps to host root. A compromised gateway can do what the user
+  running it can: read the shared harness home, which holds the agent's login,
+  and that user's other files. Run the gateway as a user that holds nothing
+  else you need to protect. Podman runs boxes as the image's own user, mapped
+  onto yours; rootless Docker runs them as container root, which is you, with
+  every capability dropped.
+- **Docker Desktop and OrbStack:** the engine runs in a virtual machine, so
+  container root is root of that machine, not of your computer. Desktop shares
+  your home folder into the machine by default, so in practice a container
+  that can mount it reaches what you can, as with a rootless engine.
+
 The shared harness home intentionally includes credentials, configuration and
 all application transcripts. A consented app could induce the harness to disclose
 its dedicated credential through an allowed tool, read another app's transcript

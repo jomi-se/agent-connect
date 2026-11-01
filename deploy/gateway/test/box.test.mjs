@@ -5,11 +5,16 @@ import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requireBoxImage } from "../../../scripts/test-box-images.mjs";
+import {
+  engine,
+  ownerIdentity,
+  tmpfsOwner,
+} from "../../../scripts/container-engine.mjs";
 import { seedCodexMock } from "./fixtures/seed-codex.mjs";
 const boxImage = requireBoxImage();
 test("box starts both CLIs with an unnamed UID and private homes", () => {
   const output = execFileSync(
-    "docker",
+    engine,
     [
       "run",
       "--rm",
@@ -21,9 +26,9 @@ test("box starts both CLIs with an unnamed UID and private homes", () => {
       "--cap-drop=ALL",
       "--security-opt=no-new-privileges",
       "--tmpfs",
-      "/home/node:rw,exec,uid=12345,gid=12345",
+      `/home/node:rw,exec,${tmpfsOwner(12345, 12345)}`,
       "--tmpfs",
-      "/work:rw,exec,uid=12345,gid=12345",
+      `/work:rw,exec,${tmpfsOwner(12345, 12345)}`,
       "--tmpfs",
       "/tmp:rw,exec",
       boxImage,
@@ -53,7 +58,7 @@ for (const seeded of [false, true]) {
         });
         if (id) {
           assert.match(id, /^[a-f0-9]{64}$/);
-          const cleanup = spawnSync("docker", ["rm", "--force", id], {
+          const cleanup = spawnSync(engine, ["rm", "--force", id], {
             encoding: "utf8",
             timeout: 30000,
           });
@@ -75,7 +80,7 @@ for (const seeded of [false, true]) {
       ? await readFile(join(home, "codex-home/config.toml"), "utf8")
       : 'cli_auth_credentials_store = "file"\n';
     const output = execFileSync(
-      "docker",
+      engine,
       [
         "run",
         "--pull=never",
@@ -85,8 +90,7 @@ for (const seeded of [false, true]) {
         "--network",
         "none",
         "--read-only",
-        "--user",
-        `${process.getuid()}:${process.getgid()}`,
+        ...ownerIdentity(`${process.getuid()}:${process.getgid()}`),
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
         "--mount",

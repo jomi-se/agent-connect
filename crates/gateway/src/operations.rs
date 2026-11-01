@@ -418,11 +418,10 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
     }
     // With no choice made and no Docker, offer what is there. An existing
     // runtime that recorded Docker still refuses the switch.
-    if crate::engine::chosen().is_none()
+    let fell_back = crate::engine::chosen().is_none()
         && !crate::engine::installed("docker")
-        && crate::engine::installed("podman")
-    {
-        eprintln!("Docker is not installed; using Podman (choose with --container-engine).");
+        && crate::engine::installed("podman");
+    if fell_back {
         crate::engine::select(crate::engine::Program::Podman);
     }
     // Resolve once per run so every plan below selects the same box.
@@ -454,6 +453,10 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         }
     }
     let mut plan = setup_plan(&cli, harness_versions)?;
+    // Said only once the plan accepted it; a refusal explains itself.
+    if fell_back {
+        eprintln!("Docker is not installed; using Podman (choose with --container-engine).");
+    }
     crate::engine::select(plan.container_engine);
     let engine = tokio::task::spawn_blocking(crate::engine::detect).await??;
     if let Some(warning) = crate::engine::admit(engine, plan.allow_rootful_engine, plan.existing)? {
@@ -503,6 +506,9 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         harness_versions,
     )
     .await?;
+    if engine == crate::engine::Engine::RootlessPodman {
+        box_build::warm_owner_mapping(&plan.box_image).await?;
+    }
     let box_changed = plan.existing && plan.previous_box_image.as_deref() != Some(&plan.box_image);
     if plan.upgrade || box_changed {
         let fresh = setup_plan(&cli, harness_versions)?;

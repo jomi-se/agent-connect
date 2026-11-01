@@ -1,4 +1,5 @@
 // Real Docker setup using only packed npm inputs, isolated owner state and no login.
+import { engine, engineEnv } from "./container-engine.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -23,6 +24,7 @@ const base = testBoxImage(release.version, randomUUID());
 // Setup layers the resolved harness versions (and any owner layer) on the base.
 const boxPattern = new RegExp(`^${base.replaceAll(".", "\\.")}-[a-f0-9]{16}$`);
 const env = {
+  ...engineEnv(),
   PATH: process.env.PATH,
   HOME: root,
   XDG_CONFIG_HOME: join(root, "config"),
@@ -48,7 +50,7 @@ function run(bin, args, { allowFailure = false, extraEnv = {} } = {}) {
   return result;
 }
 function inspect(image) {
-  return run("docker", [
+  return run(engine, [
     "image",
     "inspect",
     "--format",
@@ -115,7 +117,7 @@ try {
   assert.match(initial.plan.boxImage, boxPattern);
   assert.ok(initial.plan.harnessVersions["@anthropic-ai/claude-code"]);
   const baseId = inspect(base);
-  run("docker", [
+  run(engine, [
     "run",
     "--pull=never",
     "--rm",
@@ -149,13 +151,13 @@ try {
   assert.match(first.boxImage, boxPattern);
   assert.notEqual(first.boxImage, initial.plan.boxImage);
   const metadata = JSON.parse(
-    run("docker", ["image", "inspect", first.boxImage]).stdout,
+    run(engine, ["image", "inspect", first.boxImage]).stdout,
   )[0].Config;
   assert.equal(metadata.User, "node");
   assert.equal(metadata.WorkingDir, "/work");
   assert.deepEqual(metadata.Entrypoint, ["/usr/local/bin/entrypoint.sh"]);
   assert.equal(
-    run("docker", [
+    run(engine, [
       "run",
       "--pull=never",
       "--rm",
@@ -222,7 +224,7 @@ try {
 } finally {
   try {
     run(gateway, ["egress", "stop", "--name", egress], { allowFailure: true });
-    await removeTestImages(base, async (args) => run("docker", args).stdout);
+    await removeTestImages(base, async (args) => run(engine, args).stdout);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

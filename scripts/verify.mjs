@@ -1,3 +1,4 @@
+import { architectureFormat, engine } from "./container-engine.mjs";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
@@ -97,7 +98,7 @@ export async function verify({
   let boxAttempted = false;
   const options = { cwd: repository, env };
   const docker = (args, capture = false) =>
-    run("docker", args, {
+    run(engine, args, {
       ...options,
       capture,
       env: { ...env, DOCKER_CONFIG: join(work, "docker-config") },
@@ -114,7 +115,7 @@ export async function verify({
         run("./deploy/gateway/box/build-local.sh", ["--runners-only"], options),
       );
     const architecture = (
-      await docker(["info", "--format", "{{.Architecture}}"], true)
+      await docker(["info", "--format", architectureFormat], true)
     ).trim();
     const { arch } = dockerReleaseTarget(architecture);
     let runner = join(
@@ -150,6 +151,24 @@ export async function verify({
     await timed("test box", () =>
       docker(["build", "--platform", `linux/${arch}`, "--tag", image, context]),
     );
+    // Rootless Podman copies an image once per id mapping on first use; do it
+    // before the box tests' and sessions' timeouts start, as setup does for
+    // owners. The box tests map the owner as itself, sessions onto node.
+    if (engine === "podman")
+      for (const mapping of ["keep-id", "keep-id:uid=1000,gid=1000"])
+        await timed(`test box ${mapping}`, () =>
+          docker([
+            "run",
+            "--rm",
+            "--pull=never",
+            "--network",
+            "none",
+            `--userns=${mapping}`,
+            "--entrypoint",
+            "true",
+            image,
+          ]),
+        );
     for (const step of only) {
       if (prepared) await cleanSourceCommit(repository, prepared.commit);
       await timed(step, () => run("npm", ["run", step], options));

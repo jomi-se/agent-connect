@@ -1,3 +1,4 @@
+import { engine, engineEnv, ownerIdentity } from "./container-engine.mjs";
 import { seedCodexMock } from "../deploy/gateway/test/fixtures/seed-codex.mjs";
 // Deterministic compatibility gate: real gateway, pinned adapters and Chromium.
 // Every process and home belongs to this run; no personal harness state is used.
@@ -37,6 +38,7 @@ const dockerNetworks = [];
 const boxed = process.env.ACP_BOXED === "1";
 let mockContainer, egressContainer;
 const cleanEnv = {
+  ...engineEnv(),
   PATH: process.env.PATH,
   HOME: run,
   LANG: "C.UTF-8",
@@ -185,7 +187,7 @@ try {
       "--test",
       join(repo, "deploy/gateway/test/egress-proxy.test.mjs"),
     ]);
-    await command("docker", ["image", "inspect", boxImage]);
+    await command(engine, ["image", "inspect", boxImage]);
     await command(
       "node",
       ["--test", join(repo, "deploy/gateway/test/box.test.mjs")],
@@ -197,18 +199,17 @@ try {
     await mkdir(join(run, "box-logs"));
     const modelNetwork = `${mockContainer}-base`;
     dockerNetworks.push(modelNetwork);
-    await command("docker", ["network", "create", "--internal", modelNetwork]);
+    await command(engine, ["network", "create", "--internal", modelNetwork]);
     const uid = `${process.getuid()}:${process.getgid()}`;
     dockerContainers.push(mockContainer);
-    await command("docker", [
+    await command(engine, [
       "run",
       "-d",
       "--name",
       mockContainer,
       "--network",
       modelNetwork,
-      "--user",
-      uid,
+      ...ownerIdentity(uid),
       "-v",
       `${join(fixtures, "mock-model")}:/app:ro`,
       "-v",
@@ -232,12 +233,12 @@ try {
     // Retain its immutable ID so cleanup cannot remove a name replacement.
     dockerContainers.push(
       (
-        await command("docker", [
+        await command(engine, [
           "inspect",
           "--type",
           "container",
           "--format",
-          "{{.Id}}",
+          "{{.ID}}",
           egressContainer,
         ])
       ).trim(),
@@ -417,7 +418,7 @@ try {
 } catch (error) {
   for (const name of dockerContainers)
     console.error(
-      (await command("docker", ["logs", name]).catch(String)).slice(-3000),
+      (await command(engine, ["logs", name]).catch(String)).slice(-3000),
     );
   throw error;
 } finally {
@@ -442,12 +443,12 @@ try {
       }),
   ]);
   await attemptAll(
-    dockerContainers.map((name) => () => command("docker", ["rm", "-f", name])),
+    dockerContainers.map((name) => () => command(engine, ["rm", "-f", name])),
   );
   // Container removal must settle before attempting the owned networks.
   await attemptAll(
     dockerNetworks.map(
-      (name) => () => command("docker", ["network", "rm", name]),
+      (name) => () => command(engine, ["network", "rm", name]),
     ),
   );
   // Never delete files that an unconfirmed child may still be using.
