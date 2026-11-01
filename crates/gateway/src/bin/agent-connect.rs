@@ -319,6 +319,7 @@ async fn run() -> anyhow::Result<()> {
                     name,
                     box_image,
                 } => {
+                    let mut shared_home = false;
                     let (name, box_image) = match config {
                         Some(path) => {
                             let configured = ServeOptions {
@@ -327,6 +328,7 @@ async fn run() -> anyhow::Result<()> {
                             }
                             .resolve()?;
                             engine::select(configured.container_engine);
+                            shared_home = configured.boxed && configured.harness_home.is_some();
                             let name = configured.egress_container.ok_or_else(|| {
                                 UsageError("configuration names no egress container".into())
                             })?;
@@ -339,6 +341,16 @@ async fn run() -> anyhow::Result<()> {
                     };
                     egress_start(&name, &box_image)?;
                     println!("Egress proxy started: {name}");
+                    // The service runs this before every serve. The owner's mapped
+                    // copy of the box can vanish without a rebuild (an image prune,
+                    // a reset, a reload by hand), and then the first session would
+                    // spend its whole start deadline remaking it. Warm costs ~0.3 s.
+                    if shared_home
+                        && tokio::task::spawn_blocking(engine::detect).await??
+                            == Engine::RootlessPodman
+                    {
+                        operations::warm_owner_mapping(&box_image).await?;
+                    }
                 }
                 EgressCommand::Stop { name } => {
                     egress_stop(&name)?;

@@ -36,7 +36,10 @@ rootless engine, boxes that mount the shared harness home run as container root,
 which is the invoking user, with every capability dropped. On rootless Podman
 they run as the image's own user, mapped onto the invoking user with
 `--userns=keep-id`, so no box runs as root. Podman 4.9 is the oldest version
-tested.
+tested. Rootless Podman 4 cannot share an image's layers across id
+mappings, so the first box with the owner's mapping waits while Podman copies
+the box with shifted ownership: setup and every service start do this ahead of
+sessions. The copy is about the size of the box and is freed with it.
 Explicit `setup --upgrade` updates the owned service executable even when the image is
 unchanged. Owned egress is recreated when needed. Changed image or harness
 policy invalidates existing grants; apps must pair again. Service operations accept `--config` and optional
