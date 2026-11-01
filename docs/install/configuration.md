@@ -33,7 +33,10 @@ Linux engine needs `--allow-rootful-engine`, which is recorded in the config as
 runtimes keep working, setup and serve warn, and doctor fails until it is
 recorded. Docker's userns-remap mode is refused. On a
 rootless engine, boxes that mount the shared harness home run as container root,
-which is the invoking user, with every capability dropped.
+which is the invoking user, with every capability dropped. On rootless Podman
+they run as the image's own user, mapped onto the invoking user with
+`--userns=keep-id`, so no box runs as root. Podman 4.9 is the oldest version
+tested.
 Explicit `setup --upgrade` updates the owned service executable even when the image is
 unchanged. Owned egress is recreated when needed. Changed image or harness
 policy invalidates existing grants; apps must pair again. Service operations accept `--config` and optional
@@ -60,32 +63,33 @@ config, defaults**. Each key supports `AGENT_CONNECT_<UPPER_SNAKE_KEY>`;
 `AGENT_CONNECT_CONFIG` selects the file. CLI booleans accept `--boxed` or
 `--boxed=false`. Never place real tokens in shell history or checked-in examples.
 
-| JSON key / flag                                       | Meaning / default                                                                                                    |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `harness` / `--harness`                               | Required `codex` or `claude`                                                                                         |
-| `listen` / `--listen`                                 | `127.0.0.1:18940`                                                                                                    |
-| `public_url` / `--public-url`                         | Required canonical external HTTPS origin for hosted owner/OAuth pages and `/acp`; HTTP loopback is permitted locally |
-| `entry_points` / `--entry-point`                      | Additional configured gateway origins; pairing and issuer are bound to the selected entry point                      |
-| `headless_static_bearer` / `--headless-static-bearer` | Default false; explicit headless compatibility mode without owner/OAuth pages                                        |
-| `allow_origin` / `--allow-origin`                     | Headless mode only: required exact HTTP(S) browser origin, no path/trailing slash                                    |
-| `token` / `--token`                                   | Headless mode only: required static application bearer; prefer private config                                        |
-| `tools` / `--tools`                                   | Headless mode only: required fixed snapshot JSON array of tool names and schemas                                     |
-| `harness_home` / `--harness-home`                     | Dedicated whole-home read-write bind mount; defaults to the per-harness Agent Connect home                           |
-| `box_image` / `--box-image`                           | Local tag selected by setup from gateway version and owner context hash                                              |
-| `egress_container` / `--egress-container`             | Required operator-selected proxy; setup uses `agent-connect-egress`                                                  |
-| `boxed` / `--boxed`                                   | Required true in production; set true by setup                                                                       |
-| `permissions` / `--permissions`                       | Default profile; `sandboxed`, `read-only`, `app-tools-only` or `deny-all`, subject to harness limits                 |
-| `profiles` / `--profile`                              | Owner-consent choices; must include the default `permissions`; repeat the flag for each profile                      |
-| `codex_mode` / `--codex-mode`                         | Operator mode; boxed default `agent-full-access`, host fixture `workspace-write`                                     |
-| `state_dir` / `--state-dir`                           | Private action journals and `auth/` owner/grant state; default `.agent-connect/gateway`; keep outside harness home   |
-| `max_sessions` / `--max-sessions`                     | Positive capacity, default 32                                                                                        |
-| `resume_grace_secs` / `--resume-grace-secs`           | Detached session grace, default 600 seconds                                                                          |
-| `resume_max_bytes` / `--resume-max-bytes`             | Unacknowledged output budget, default 8388608 bytes                                                                  |
-| `mock_root` / `--mock-root`                           | Isolated deterministic fixture root; never a production host-mode switch                                             |
-| `mock_url` / `--mock-url`                             | Fixture model URL, default `http://127.0.0.1:18931/v1`                                                               |
-| `mock_container` / `--mock-container`                 | Fixture model container; requires `mock_root`                                                                        |
-| `durable_home` / `--durable-home`                     | Legacy deterministic-fixture named-volume option; use dedicated home for production                                  |
-| `allow_rootful_engine`                                | The owner accepted a rootful engine; written only by `setup --allow-rootful-engine`                                  |
+| JSON key / flag                                       | Meaning / default                                                                                                                                                                                                      |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `harness` / `--harness`                               | Required `codex` or `claude`                                                                                                                                                                                           |
+| `listen` / `--listen`                                 | `127.0.0.1:18940`                                                                                                                                                                                                      |
+| `public_url` / `--public-url`                         | Required canonical external HTTPS origin for hosted owner/OAuth pages and `/acp`; HTTP loopback is permitted locally                                                                                                   |
+| `entry_points` / `--entry-point`                      | Additional configured gateway origins; pairing and issuer are bound to the selected entry point                                                                                                                        |
+| `headless_static_bearer` / `--headless-static-bearer` | Default false; explicit headless compatibility mode without owner/OAuth pages                                                                                                                                          |
+| `allow_origin` / `--allow-origin`                     | Headless mode only: required exact HTTP(S) browser origin, no path/trailing slash                                                                                                                                      |
+| `token` / `--token`                                   | Headless mode only: required static application bearer; prefer private config                                                                                                                                          |
+| `tools` / `--tools`                                   | Headless mode only: required fixed snapshot JSON array of tool names and schemas                                                                                                                                       |
+| `harness_home` / `--harness-home`                     | Dedicated whole-home read-write bind mount; defaults to the per-harness Agent Connect home                                                                                                                             |
+| `box_image` / `--box-image`                           | Local tag selected by setup from gateway version and owner context hash                                                                                                                                                |
+| `egress_container` / `--egress-container`             | Required operator-selected proxy; setup uses `agent-connect-egress`                                                                                                                                                    |
+| `boxed` / `--boxed`                                   | Required true in production; set true by setup                                                                                                                                                                         |
+| `permissions` / `--permissions`                       | Default profile; `sandboxed`, `read-only`, `app-tools-only` or `deny-all`, subject to harness limits                                                                                                                   |
+| `profiles` / `--profile`                              | Owner-consent choices; must include the default `permissions`; repeat the flag for each profile                                                                                                                        |
+| `codex_mode` / `--codex-mode`                         | Operator mode; boxed default `agent-full-access`, host fixture `workspace-write`                                                                                                                                       |
+| `state_dir` / `--state-dir`                           | Private action journals and `auth/` owner/grant state; default `.agent-connect/gateway`; keep outside harness home                                                                                                     |
+| `max_sessions` / `--max-sessions`                     | Positive capacity, default 32                                                                                                                                                                                          |
+| `resume_grace_secs` / `--resume-grace-secs`           | Detached session grace, default 600 seconds                                                                                                                                                                            |
+| `resume_max_bytes` / `--resume-max-bytes`             | Unacknowledged output budget, default 8388608 bytes                                                                                                                                                                    |
+| `mock_root` / `--mock-root`                           | Isolated deterministic fixture root; never a production host-mode switch                                                                                                                                               |
+| `mock_url` / `--mock-url`                             | Fixture model URL, default `http://127.0.0.1:18931/v1`                                                                                                                                                                 |
+| `mock_container` / `--mock-container`                 | Fixture model container; requires `mock_root`                                                                                                                                                                          |
+| `durable_home` / `--durable-home`                     | Legacy deterministic-fixture named-volume option; use dedicated home for production                                                                                                                                    |
+| `container_engine`                                    | `docker` (default) or `podman`, recorded by setup. The global `--container-engine` option or `AGENT_CONNECT_CONTAINER_ENGINE` chooses it for a new runtime or one command; an existing runtime refuses a different one |
+| `allow_rootful_engine`                                | The owner accepted a rootful engine; written only by `setup --allow-rootful-engine`                                                                                                                                    |
 
 Normal config contains `public_url` and operator policy, without `token`,
 `allow_origin` or `tools`. `init` and first-time `setup` prompt at the terminal for a hidden owner

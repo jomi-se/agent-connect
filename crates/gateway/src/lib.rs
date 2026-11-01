@@ -214,6 +214,7 @@ pub fn boxed_harness(
         codex_mode,
         home_volume,
         None,
+        engine::Program::Docker,
         engine::Engine::Rootful,
         "acp-spike-session:dev",
         "acp-internal",

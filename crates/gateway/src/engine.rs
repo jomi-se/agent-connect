@@ -37,6 +37,19 @@ pub fn program() -> &'static str {
     }
 }
 
+/// The program a setup run uses: the one an existing runtime recorded (which
+/// the process then selects), unless this command asked for another, which is
+/// refused like any other change to an existing runtime's identity.
+pub fn runtime_program(recorded: Option<Program>, requested: Program) -> anyhow::Result<Program> {
+    match recorded {
+        Some(recorded) if recorded != requested => Err(crate::config::UsageError(format!(
+            "this runtime uses {recorded:?}; switching engines means editing container_engine in the private configuration, then rerunning setup"
+        ))
+        .into()),
+        _ => Ok(requested),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Engine {
     Rootful,
@@ -45,13 +58,14 @@ pub enum Engine {
     VirtualMachine,
 }
 
-impl Engine {
+impl Program {
     /// Mount options that give a tmpfs to the container user: Podman 4 rejects
-    /// `uid=`/`gid=` and has `U`, which chowns to whichever user the box runs as.
+    /// `uid=`/`gid=`, rootful or not, and has `U`, which chowns to whichever
+    /// user the box runs as.
     pub fn tmpfs_owner(self, uid: u32, gid: u32) -> String {
         match self {
-            Engine::RootlessPodman => "U".into(),
-            _ => format!("uid={uid},gid={gid}"),
+            Program::Docker => format!("uid={uid},gid={gid}"),
+            Program::Podman => "U".into(),
         }
     }
 }
@@ -219,6 +233,20 @@ mod tests {
         );
         let colima = info(r#"["name=seccomp,profile=builtin"]"#, "Ubuntu 24.04 LTS");
         assert_eq!(parse_docker_info(&colima).unwrap(), Engine::Rootful);
+    }
+
+    #[test]
+    fn an_existing_runtime_keeps_its_engine() {
+        assert_eq!(
+            runtime_program(None, Program::Podman).unwrap(),
+            Program::Podman
+        );
+        assert_eq!(
+            runtime_program(Some(Program::Podman), Program::Podman).unwrap(),
+            Program::Podman
+        );
+        assert!(runtime_program(Some(Program::Docker), Program::Podman).is_err());
+        assert!(runtime_program(Some(Program::Podman), Program::Docker).is_err());
     }
 
     #[test]
