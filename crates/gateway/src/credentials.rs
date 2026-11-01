@@ -96,6 +96,11 @@ pub fn select_harness(
 pub const BOX_UID: u32 = 1000;
 pub const BOX_GID: u32 = 1000;
 
+/// Rootless Podman's mapping of the owner onto the box image's own user.
+pub fn podman_owner_mapping() -> String {
+    format!("--userns=keep-id:uid={BOX_UID},gid={BOX_GID}")
+}
+
 #[derive(Clone, Debug)]
 pub struct HarnessHome {
     pub path: PathBuf,
@@ -167,7 +172,7 @@ impl HarnessHome {
         if engine == Engine::RootlessPodman {
             // Only for a mounted home: other boxes keep the default mapping, where
             // their files belong to a subordinate id rather than the owner.
-            args.push(format!("--userns=keep-id:uid={uid},gid={gid}"));
+            args.push(podman_owner_mapping());
         }
         args.extend([
             "--user".into(),

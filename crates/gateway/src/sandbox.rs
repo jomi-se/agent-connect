@@ -823,7 +823,7 @@ impl SessionNetwork {
         let mut last_error = None;
         while Instant::now() < deadline {
             if let Some(id) = &self.container {
-                match docker.run(&["rm", "--force", id], deadline) {
+                match docker.run(&force_remove(crate::engine::selected(), id), deadline) {
                     Ok(_) => self.container = None,
                     Err(error) if missing_resource(&error) => self.container = None,
                     Err(error) => last_error = Some(error),
@@ -933,6 +933,16 @@ fn inspect_owned_id(
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("invalid inspected Docker resource ID"))?,
     )?))
+}
+
+/// Docker's forced removal kills at once; Podman's first waits out the stop
+/// timeout (10 s), longer than session cleanup's deadline, and an abandoned
+/// removal leaves the box stopping. `--time 0` gives Docker's meaning.
+fn force_remove(program: crate::engine::Program, id: &str) -> Vec<&str> {
+    match program {
+        crate::engine::Program::Docker => vec!["rm", "--force", id],
+        crate::engine::Program::Podman => vec!["rm", "--force", "--time", "0", id],
+    }
 }
 
 fn docker_id(output: &str) -> anyhow::Result<String> {
@@ -1890,6 +1900,15 @@ mod tests {
             assert!(!args.iter().any(|arg| arg.contains("uid=")));
             assert!(args.contains(&"/work:rw,exec,size=512m,U".into()));
         }
+    }
+    #[test]
+    fn forced_removal_kills_at_once_on_both_engines() {
+        use crate::engine::Program;
+        assert_eq!(force_remove(Program::Docker, "id"), ["rm", "--force", "id"]);
+        assert_eq!(
+            force_remove(Program::Podman, "id"),
+            ["rm", "--force", "--time", "0", "id"]
+        );
     }
     #[test]
     fn podman_egress_starts_on_a_bridge_it_can_leave() {

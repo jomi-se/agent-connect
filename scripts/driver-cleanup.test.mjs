@@ -268,6 +268,7 @@ for (const failure of ["child", "container", undefined]) {
       "dockerContainers",
       "dockerNetworks",
       "command",
+      "engine",
       "pageServer",
       "pruneTestInstallations",
       "run",
@@ -299,6 +300,7 @@ for (const failure of ["child", "container", undefined]) {
         calls.push(args.join(" "));
         if (failure === "container" && args[2] === "owned-one") throw error;
       },
+      "docker",
       {
         close(callback) {
           calls.push("server close");

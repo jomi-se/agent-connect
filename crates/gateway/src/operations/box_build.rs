@@ -345,6 +345,25 @@ async fn build(
     Ok(())
 }
 
+/// Rootless Podman 4 cannot idmap overlay layers, so the first container with a
+/// new id mapping waits while it copies the image with shifted ownership (about
+/// 20 s for the box). Pay that once here, not inside a session's start deadline.
+pub async fn warm_owner_mapping(image: &str) -> anyhow::Result<()> {
+    let status = tokio::process::Command::new(crate::engine::program())
+        .args(["run", "--rm", "--pull=never", "--network", "none"])
+        .arg(crate::credentials::podman_owner_mapping())
+        .args(["--entrypoint", "true", image])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .await
+        .context("prepare the box for the owner's id mapping")?;
+    anyhow::ensure!(
+        status.success(),
+        "could not prepare the box for the owner's id mapping"
+    );
+    Ok(())
+}
+
 async fn build_selected(selected: &str, harness: &HarnessVersions) -> anyhow::Result<()> {
     let base_image = base_image()?;
     let architecture = tokio::process::Command::new(crate::engine::program())
