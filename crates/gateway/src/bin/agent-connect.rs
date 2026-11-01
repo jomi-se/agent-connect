@@ -441,7 +441,18 @@ async fn run() -> anyhow::Result<()> {
     } else {
         None
     };
-    let engine = cli.boxed.then(engine::detect).transpose()?;
+    let engine = if cli.boxed {
+        Some(tokio::task::spawn_blocking(engine::detect).await??)
+    } else {
+        None
+    };
+    if engine == Some(Engine::Rootful) && !cli.allow_rootful_engine {
+        eprintln!(
+            "Warning: {}.\n{}.",
+            engine::ROOTFUL_RISK,
+            engine::ROOTFUL_FIX
+        );
+    }
     let gateway = Arc::new(Gateway {
         hosts,
         home,
