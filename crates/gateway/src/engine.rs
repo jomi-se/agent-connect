@@ -20,10 +20,22 @@ pub enum Program {
 
 static PROGRAM: OnceLock<Program> = OnceLock::new();
 
-/// Fixes the program for this process. The first choice wins: the command
-/// line or environment is applied before any configuration is read.
+/// Fixes the program for this process. Each command's entry point calls it
+/// once: the command line or environment first, then the configuration, whose
+/// choice is ignored when one was already made. Nothing else selects.
 pub fn select(program: Program) {
     let _ = PROGRAM.set(program);
+}
+
+/// Whether a program of this name is on PATH.
+pub fn installed(name: &str) -> bool {
+    std::env::var_os("PATH")
+        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(name).is_file()))
+}
+
+/// The program chosen so far, if any (the command line, before a config is read).
+pub fn chosen() -> Option<Program> {
+    PROGRAM.get().copied()
 }
 
 pub fn selected() -> Program {
@@ -37,16 +49,22 @@ pub fn program() -> &'static str {
     }
 }
 
-/// The program a setup run uses: the one an existing runtime recorded (which
-/// the process then selects), unless this command asked for another, which is
-/// refused like any other change to an existing runtime's identity.
-pub fn runtime_program(recorded: Option<Program>, requested: Program) -> anyhow::Result<Program> {
-    match recorded {
-        Some(recorded) if recorded != requested => Err(crate::config::UsageError(format!(
-            "this runtime uses {recorded:?}; switching engines means editing container_engine in the private configuration, then rerunning setup"
-        ))
-        .into()),
-        _ => Ok(requested),
+/// The program a setup run uses: the one an existing runtime recorded, unless
+/// this command asked for another, which is refused like any other change to an
+/// existing runtime's identity; a new runtime takes the request or Docker.
+pub fn runtime_program(
+    recorded: Option<Program>,
+    requested: Option<Program>,
+) -> anyhow::Result<Program> {
+    match (recorded, requested) {
+        (Some(recorded), Some(requested)) if recorded != requested => {
+            Err(crate::config::UsageError(format!(
+                "this runtime uses {recorded:?}; switching engines means editing container_engine in the private configuration, then rerunning setup"
+            ))
+            .into())
+        }
+        (Some(program), _) | (None, Some(program)) => Ok(program),
+        (None, None) => Ok(Program::Docker),
     }
 }
 
@@ -237,16 +255,13 @@ mod tests {
 
     #[test]
     fn an_existing_runtime_keeps_its_engine() {
-        assert_eq!(
-            runtime_program(None, Program::Podman).unwrap(),
-            Program::Podman
-        );
-        assert_eq!(
-            runtime_program(Some(Program::Podman), Program::Podman).unwrap(),
-            Program::Podman
-        );
-        assert!(runtime_program(Some(Program::Docker), Program::Podman).is_err());
-        assert!(runtime_program(Some(Program::Podman), Program::Docker).is_err());
+        use Program::{Docker, Podman};
+        assert_eq!(runtime_program(None, Some(Podman)).unwrap(), Podman);
+        assert_eq!(runtime_program(None, None).unwrap(), Docker);
+        assert_eq!(runtime_program(Some(Podman), None).unwrap(), Podman);
+        assert_eq!(runtime_program(Some(Podman), Some(Podman)).unwrap(), Podman);
+        assert!(runtime_program(Some(Docker), Some(Podman)).is_err());
+        assert!(runtime_program(Some(Podman), Some(Docker)).is_err());
     }
 
     #[test]

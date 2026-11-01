@@ -117,6 +117,7 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
             Err(_) => report.add("owner_state", CheckStatus::Fail, "Private owner authentication file is missing or unsafe", Some("Restore the existing private owner state or create a fresh runtime; setup will never overwrite an existing owner identity")),
         }
     }
+    crate::engine::select(configured.container_engine);
     let mut runner = NativeRunner;
     let program = crate::engine::program();
     let info = runner

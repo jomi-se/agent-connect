@@ -207,6 +207,8 @@ pub struct ServeCli {
     pub durable_home: bool,
     pub resume_max_bytes: usize,
     pub allow_rootful_engine: bool,
+    /// The configuration's engine; the command's entry point selects it.
+    pub container_engine: crate::engine::Program,
 }
 impl ServeOptions {
     pub fn resolve(mut self) -> anyhow::Result<ServeCli> {
@@ -263,10 +265,8 @@ impl ServeOptions {
             durable_home: merged!(durable_home).unwrap_or_else(|| false),
             resume_max_bytes: merged!(resume_max_bytes).unwrap_or_else(|| 8 * 1024 * 1024),
             allow_rootful_engine: merged!(allow_rootful_engine).unwrap_or_else(|| false),
+            container_engine: merged!(container_engine).unwrap_or_default(),
         };
-        if let Some(program) = merged!(container_engine) {
-            crate::engine::select(program);
-        }
         if cli.headless_static_bearer {
             validate_origin(&cli.allow_origin)?;
             if cli.token.is_empty()
