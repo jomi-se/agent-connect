@@ -121,16 +121,16 @@ struct EgressCli {
 }
 #[derive(Subcommand)]
 enum EgressCommand {
-    /// Start an isolated proxy; no host port is published.
+    /// Start an isolated proxy, or validate a running one; no host port is published.
     Start {
-        #[arg(
-            long,
-            env = "AGENT_CONNECT_EGRESS_CONTAINER",
-            default_value = "agent-connect-egress"
-        )]
-        name: String,
-        #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE", default_value = DEFAULT_BOX_IMAGE)]
-        box_image: String,
+        /// Take the name, box and container engine from a runtime configuration,
+        /// as the gateway service does before it serves.
+        #[arg(long, conflicts_with_all = ["name", "box_image"])]
+        config: Option<std::path::PathBuf>,
+        #[arg(long, env = "AGENT_CONNECT_EGRESS_CONTAINER")]
+        name: Option<String>,
+        #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE")]
+        box_image: Option<String>,
     },
     /// Remove a proxy only after verifying the gateway ownership label.
     Stop {
@@ -314,7 +314,29 @@ async fn run() -> anyhow::Result<()> {
         Command::ResetPassphrase(cli) => return operations::reset_passphrase(cli).await,
         Command::Egress(cli) => {
             match cli.command {
-                EgressCommand::Start { name, box_image } => {
+                EgressCommand::Start {
+                    config,
+                    name,
+                    box_image,
+                } => {
+                    let (name, box_image) = match config {
+                        Some(path) => {
+                            // Resolving selects the configuration's engine.
+                            let configured = ServeOptions {
+                                config: Some(path),
+                                ..Default::default()
+                            }
+                            .resolve()?;
+                            let name = configured.egress_container.ok_or_else(|| {
+                                UsageError("configuration names no egress container".into())
+                            })?;
+                            (name, configured.box_image)
+                        }
+                        None => (
+                            name.unwrap_or_else(|| "agent-connect-egress".into()),
+                            box_image.unwrap_or_else(|| DEFAULT_BOX_IMAGE.into()),
+                        ),
+                    };
                     egress_start(&name, &box_image)?;
                     println!("Egress proxy started: {name}");
                 }

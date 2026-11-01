@@ -217,6 +217,9 @@ struct EgressFacts {
     no_published_ports: bool,
     restart: String,
     log_bounded: bool,
+    /// Podman's record of how the container was made, after the program name,
+    /// with the container's name; Docker keeps no such record.
+    created_with: Option<(String, Vec<String>)>,
     running: bool,
     restarting: bool,
     unhealthy: bool,
@@ -274,63 +277,74 @@ impl EgressFacts {
         };
         let host = |pointer: &str| string(pointer).map(|mode| mode == "host");
         let mut env = strings(field("/Config/Env")?)?;
-        let (entrypoint, all_caps_dropped, injected_home, log_bounded, no_devices) = match program {
-            Program::Docker => (
-                strings(field("/Config/Entrypoint")?)?,
-                field("/HostConfig/CapDrop")? == &serde_json::json!(["ALL"])
-                    && empty("/HostConfig/CapAdd")?,
-                None,
-                string("/HostConfig/LogConfig/Type")? == "json-file"
-                    && field("/HostConfig/LogConfig/Config/max-size")? == "10m"
-                    && field("/HostConfig/LogConfig/Config/max-file")? == "3",
-                empty("/HostConfig/Devices")? && empty("/HostConfig/DeviceRequests")?,
-            ),
-            Program::Podman => {
-                // Podman 4 reports a single-word entrypoint as a string; a
-                // string with spaces would hide its argument boundaries.
-                let entrypoint = match field("/Config/Entrypoint")? {
-                    Value::String(word)
-                        if !word.is_empty() && !word.contains(char::is_whitespace) =>
-                    {
-                        vec![word.clone()]
-                    }
-                    Value::String(_) => bail!("egress entrypoint is ambiguous"),
-                    other => strings(other)?,
-                };
-                // HostConfig.CapAdd stays empty even when a capability is added
-                // back; EffectiveCaps is what the container really holds, and it
-                // is null only when every capability was dropped.
-                let all_caps_dropped = empty("/EffectiveCaps")?;
-                // Podman adds these three; anything else must match the image.
-                let mut home = None;
-                let mut container_marker = false;
-                env.retain(|entry| match entry.split_once('=') {
-                    Some(("container", "podman")) => {
-                        container_marker = true;
-                        false
-                    }
-                    Some(("HOME", value)) => {
-                        home = Some(value.to_owned());
-                        false
-                    }
-                    Some(("HOSTNAME", _)) => false,
-                    _ => true,
-                });
-                anyhow::ensure!(
-                    container_marker,
-                    "egress inspection lacks Podman's container marker"
-                );
-                (
-                    entrypoint,
-                    all_caps_dropped,
-                    home,
+        let (entrypoint, all_caps_dropped, injected_home, log_bounded, no_devices, created_with) =
+            match program {
+                Program::Docker => (
+                    strings(field("/Config/Entrypoint")?)?,
+                    field("/HostConfig/CapDrop")? == &serde_json::json!(["ALL"])
+                        && empty("/HostConfig/CapAdd")?,
+                    None,
                     string("/HostConfig/LogConfig/Type")? == "json-file"
-                        && string("/HostConfig/LogConfig/Size")? == "10MB",
-                    // Podman has no device requests; GPUs arrive as devices.
-                    empty("/HostConfig/Devices")?,
-                )
-            }
-        };
+                        && field("/HostConfig/LogConfig/Config/max-size")? == "10m"
+                        && field("/HostConfig/LogConfig/Config/max-file")? == "3",
+                    empty("/HostConfig/Devices")? && empty("/HostConfig/DeviceRequests")?,
+                    None,
+                ),
+                Program::Podman => {
+                    // Podman 4 reports a single-word entrypoint as a string; a
+                    // string with spaces would hide its argument boundaries.
+                    let entrypoint = match field("/Config/Entrypoint")? {
+                        Value::String(word)
+                            if !word.is_empty() && !word.contains(char::is_whitespace) =>
+                        {
+                            vec![word.clone()]
+                        }
+                        Value::String(_) => bail!("egress entrypoint is ambiguous"),
+                        other => strings(other)?,
+                    };
+                    // HostConfig.CapAdd stays empty even when a capability is added
+                    // back; EffectiveCaps is what the container really holds, and it
+                    // is null only when every capability was dropped.
+                    let all_caps_dropped = empty("/EffectiveCaps")?;
+                    // Podman adds these three; anything else must match the image.
+                    let mut home = None;
+                    let mut container_marker = false;
+                    env.retain(|entry| match entry.split_once('=') {
+                        Some(("container", "podman")) => {
+                            container_marker = true;
+                            false
+                        }
+                        Some(("HOME", value)) => {
+                            home = Some(value.to_owned());
+                            false
+                        }
+                        Some(("HOSTNAME", _)) => false,
+                        _ => true,
+                    });
+                    anyhow::ensure!(
+                        container_marker,
+                        "egress inspection lacks Podman's container marker"
+                    );
+                    (
+                        entrypoint,
+                        all_caps_dropped,
+                        home,
+                        string("/HostConfig/LogConfig/Type")? == "json-file"
+                            && string("/HostConfig/LogConfig/Size")? == "10MB",
+                        // Podman has no device requests; GPUs arrive as devices. Podman 4
+                        // leaves Devices empty even with one attached, which is why the
+                        // creation record below is required.
+                        empty("/HostConfig/Devices")?,
+                        Some((
+                            string("/Name")?,
+                            strings(field("/Config/CreateCommand")?)?
+                                .into_iter()
+                                .skip(1)
+                                .collect(),
+                        )),
+                    )
+                }
+            };
         env.sort();
         let health = container
             .pointer("/State/Health/Status")
@@ -351,13 +365,25 @@ impl EgressFacts {
             all_caps_dropped,
             security_opt: strings(field("/HostConfig/SecurityOpt")?)?,
             no_devices,
+            // UsernsMode and UTSMode were considered: a host user namespace makes
+            // container root the owner on a rootless engine, which gives the egress
+            // nothing it lacks, and the hostname is not a boundary.
             host_namespace: host("/HostConfig/PidMode")?
                 || host("/HostConfig/IpcMode")?
                 || host("/HostConfig/NetworkMode")?,
-            no_mounts: empty("/HostConfig/Binds")? && empty("/Mounts")?,
+            // `--tmpfs` lands in Tmpfs on both engines, Podman's tmpfs mounts too.
+            // Docker's API declares Tmpfs omitempty (the only such field here),
+            // so there an absent key is its way of saying none.
+            no_mounts: empty("/HostConfig/Binds")?
+                && empty("/Mounts")?
+                && match (program, container.pointer("/HostConfig/Tmpfs")) {
+                    (Program::Docker, None) => true,
+                    _ => empty("/HostConfig/Tmpfs")?,
+                },
             no_published_ports: empty("/HostConfig/PortBindings")?,
             restart: string("/HostConfig/RestartPolicy/Name")?,
             log_bounded,
+            created_with,
             running: flag("/State/Running")?,
             restarting: flag("/State/Restarting")?,
             unhealthy: health == Some("unhealthy"),
@@ -403,7 +429,12 @@ fn judge_egress(facts: &EgressFacts, image: &BoxImage, running: bool) -> anyhow:
         && facts.no_mounts
         && facts.no_published_ports
         && facts.restart == "unless-stopped"
-        && facts.log_bounded;
+        && facts.log_bounded
+        // Podman's creation record must be exactly what this gateway runs, which
+        // catches whatever its inspection leaves out.
+        && facts.created_with.as_ref().is_none_or(|(name, args)| {
+            *args == egress_args(crate::engine::Program::Podman, name, &image.id)
+        });
     if !trusted {
         bail!(
             "owned egress proxy does not match the selected image and restricted proxy configuration; explicitly stop it and recreate it with agent-connect egress start"
@@ -1025,7 +1056,7 @@ mod tests {
                 "SecurityOpt": ["no-new-privileges"], "Memory": 268435456,
                 "NanoCpus": 1000000000, "PidsLimit": 64, "NetworkMode": "bridge",
                 "Devices": [], "DeviceRequests": null, "PidMode": "", "IpcMode": "private",
-                "Binds": null, "PortBindings": {},
+                "Binds": null, "PortBindings": {}, "Tmpfs": null,
                 "RestartPolicy": { "Name": "unless-stopped" },
                 "LogConfig": { "Type": "json-file", "Config": { "max-size": "10m", "max-file": "3" } } },
             "State": { "Running": running, "Restarting": false }, "Mounts": []
@@ -1034,9 +1065,16 @@ mod tests {
 
     /// Trimmed from a real rootless Podman 4.9 egress inspection.
     fn podman_egress_fixture() -> serde_json::Value {
+        let mut created = vec!["podman".to_string()];
+        created.extend(egress_args(
+            crate::engine::Program::Podman,
+            "owned-egress",
+            &"d".repeat(64),
+        ));
         serde_json::json!({
-            "Id": "c".repeat(64), "Image": "d".repeat(64),
+            "Id": "c".repeat(64), "Image": "d".repeat(64), "Name": "owned-egress",
             "Config": { "Labels": { EGRESS_LABEL: EGRESS_OWNER }, "Entrypoint": "node",
+                "CreateCommand": created,
                 "Cmd": ["/opt/agent-connect/egress-proxy.mjs"],
                 "Env": ["container=podman", "PATH=/usr/bin", "HOME=/home/node", "HOSTNAME=c0ffee"],
                 "User": "node" },
@@ -1046,7 +1084,7 @@ mod tests {
                 "SecurityOpt": ["no-new-privileges"], "Memory": 268435456,
                 "NanoCpus": 1000000000, "PidsLimit": 64, "NetworkMode": "bridge",
                 "Devices": [], "PidMode": "private", "IpcMode": "shareable",
-                "Binds": [], "PortBindings": {},
+                "Binds": [], "PortBindings": {}, "Tmpfs": {},
                 "RestartPolicy": { "Name": "unless-stopped" },
                 "LogConfig": { "Type": "json-file", "Config": null, "Size": "10MB" } },
             "State": { "Running": true, "Restarting": false,
@@ -1128,6 +1166,30 @@ mod tests {
         assert!(
             podman_verdict(set("/HostConfig/Devices", serde_json::json!(["/dev/fuse"]))).is_err()
         );
+        // Podman 4 reports no devices; its creation record shows them.
+        assert!(
+            podman_verdict(|c| {
+                let created = c["Config"]["CreateCommand"].as_array_mut().unwrap();
+                created.insert(1, "/dev/fuse".into());
+                created.insert(1, "--device".into());
+            })
+            .is_err()
+        );
+        // A record made for another container's name.
+        assert!(podman_verdict(set("/Name", serde_json::json!("other-egress"))).is_err());
+        assert!(podman_verdict(set("/HostConfig/Tmpfs", serde_json::json!({"/x": "rw"}))).is_err());
+        assert!(
+            podman_verdict(|c| {
+                c["HostConfig"].as_object_mut().unwrap().remove("Tmpfs");
+            })
+            .is_err()
+        );
+        assert!(
+            podman_verdict(|c| {
+                c["Config"].as_object_mut().unwrap().remove("CreateCommand");
+            })
+            .is_err()
+        );
         // A field the engine should report but did not.
         assert!(
             podman_verdict(|c| {
@@ -1155,6 +1217,15 @@ mod tests {
         };
         let container = egress_fixture(&"a".repeat(64), true);
         read(&container).unwrap();
+        let mut tmpfs = container.clone();
+        tmpfs["HostConfig"]["Tmpfs"] = serde_json::json!({"/x": ""});
+        assert!(read(&tmpfs).is_err(), "a --tmpfs mount must refuse");
+        let mut omitted = container.clone();
+        omitted["HostConfig"]
+            .as_object_mut()
+            .unwrap()
+            .remove("Tmpfs");
+        read(&omitted).unwrap();
         for key in ["CapAdd", "Devices", "Binds", "PortBindings"] {
             let mut missing = container.clone();
             missing["HostConfig"].as_object_mut().unwrap().remove(key);
