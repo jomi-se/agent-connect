@@ -10,7 +10,8 @@ release.**
 
 You need Node 24 LTS, Docker that your user can run without `sudo`, a browser
 and a Codex or Claude Code subscription. Docker Desktop or Docker Engine with
-its buildx plugin is the tested baseline. On Linux, run Docker Engine in
+its buildx plugin is the tested baseline. On Linux, use rootless Podman
+(`agent-connect --container-engine podman setup`) or run Docker Engine in
 [rootless mode](https://docs.docker.com/engine/security/rootless/): on a
 rootful engine, anything that can start containers, this gateway included, can
 start host root, so setup refuses one unless you pass `--allow-rootful-engine`.

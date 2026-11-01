@@ -178,117 +178,243 @@ fn validate_egress(
     image: &BoxImage,
     running: bool,
 ) -> anyhow::Result<String> {
-    use serde_json::json;
-    if container
+    let owner = container
         .pointer("/Config/Labels")
         .and_then(|v| v.get(EGRESS_LABEL))
-        .and_then(|v| v.as_str())
-        != Some(EGRESS_OWNER)
-    {
+        .and_then(|v| v.as_str());
+    if owner != Some(EGRESS_OWNER) {
         bail!("container is not labelled as an Agent Connect egress proxy; nothing was changed");
     }
-    let id = docker_id(
-        container
-            .get("Id")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("missing egress container ID"))?,
-    )?;
-    let empty = |value: Option<&serde_json::Value>| {
-        value.is_none_or(|v| {
-            v.is_null()
-                || v.as_array().is_some_and(Vec::is_empty)
-                || v.as_object().is_some_and(serde_json::Map::is_empty)
+    let facts = EgressFacts::read(container, crate::engine::selected())?;
+    judge_egress(&facts, image, running)?;
+    Ok(facts.id)
+}
+
+/// What the egress check judges, read from one engine's inspection. Each fact
+/// has an extractor per engine and a missing field is an error, so a field
+/// only one engine reports is never judged by the other engine's meaning.
+#[derive(Debug)]
+struct EgressFacts {
+    id: String,
+    image: String,
+    entrypoint: Vec<String>,
+    cmd: Vec<String>,
+    /// The container's environment minus what the engine itself injects.
+    env: Vec<String>,
+    /// Engine-injected variables, judged against the image separately.
+    injected_home: Option<String>,
+    user: serde_json::Value,
+    read_only: bool,
+    privileged: bool,
+    memory: i64,
+    nano_cpus: i64,
+    pids_limit: i64,
+    all_caps_dropped: bool,
+    security_opt: Vec<String>,
+    no_devices: bool,
+    host_namespace: bool,
+    no_mounts: bool,
+    no_published_ports: bool,
+    restart: String,
+    log_bounded: bool,
+    running: bool,
+    restarting: bool,
+    unhealthy: bool,
+}
+
+impl EgressFacts {
+    fn read(
+        container: &serde_json::Value,
+        program: crate::engine::Program,
+    ) -> anyhow::Result<Self> {
+        use crate::engine::Program;
+        use serde_json::Value;
+        let field = |pointer: &str| {
+            container
+                .pointer(pointer)
+                .ok_or_else(|| anyhow::anyhow!("egress inspection lacks {pointer}"))
+        };
+        let string = |pointer: &str| {
+            field(pointer)?
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| anyhow::anyhow!("egress inspection {pointer} is not a string"))
+        };
+        let strings = |value: &Value| -> anyhow::Result<Vec<String>> {
+            match value {
+                Value::Null => Ok(Vec::new()),
+                Value::Array(items) => items
+                    .iter()
+                    .map(|item| {
+                        item.as_str().map(str::to_owned).ok_or_else(|| {
+                            anyhow::anyhow!("egress inspection list holds a non-string")
+                        })
+                    })
+                    .collect(),
+                _ => bail!("egress inspection list has an unexpected shape"),
+            }
+        };
+        let number = |pointer: &str| {
+            field(pointer)?
+                .as_i64()
+                .ok_or_else(|| anyhow::anyhow!("egress inspection {pointer} is not a number"))
+        };
+        let flag = |pointer: &str| {
+            field(pointer)?
+                .as_bool()
+                .ok_or_else(|| anyhow::anyhow!("egress inspection {pointer} is not a boolean"))
+        };
+        // Present but null, empty list or empty object.
+        let empty = |pointer: &str| {
+            field(pointer).map(|v| {
+                v.is_null()
+                    || v.as_array().is_some_and(Vec::is_empty)
+                    || v.as_object().is_some_and(serde_json::Map::is_empty)
+            })
+        };
+        let host = |pointer: &str| string(pointer).map(|mode| mode == "host");
+        let mut env = strings(field("/Config/Env")?)?;
+        let (entrypoint, all_caps_dropped, injected_home, log_bounded, no_devices) = match program {
+            Program::Docker => (
+                strings(field("/Config/Entrypoint")?)?,
+                field("/HostConfig/CapDrop")? == &serde_json::json!(["ALL"])
+                    && empty("/HostConfig/CapAdd")?,
+                None,
+                string("/HostConfig/LogConfig/Type")? == "json-file"
+                    && field("/HostConfig/LogConfig/Config/max-size")? == "10m"
+                    && field("/HostConfig/LogConfig/Config/max-file")? == "3",
+                empty("/HostConfig/Devices")? && empty("/HostConfig/DeviceRequests")?,
+            ),
+            Program::Podman => {
+                // Podman 4 reports a single-word entrypoint as a string; a
+                // string with spaces would hide its argument boundaries.
+                let entrypoint = match field("/Config/Entrypoint")? {
+                    Value::String(word)
+                        if !word.is_empty() && !word.contains(char::is_whitespace) =>
+                    {
+                        vec![word.clone()]
+                    }
+                    Value::String(_) => bail!("egress entrypoint is ambiguous"),
+                    other => strings(other)?,
+                };
+                // HostConfig.CapAdd stays empty even when a capability is added
+                // back; EffectiveCaps is what the container really holds, and it
+                // is null only when every capability was dropped.
+                let all_caps_dropped = empty("/EffectiveCaps")?;
+                // Podman adds these three; anything else must match the image.
+                let mut home = None;
+                let mut container_marker = false;
+                env.retain(|entry| match entry.split_once('=') {
+                    Some(("container", "podman")) => {
+                        container_marker = true;
+                        false
+                    }
+                    Some(("HOME", value)) => {
+                        home = Some(value.to_owned());
+                        false
+                    }
+                    Some(("HOSTNAME", _)) => false,
+                    _ => true,
+                });
+                anyhow::ensure!(
+                    container_marker,
+                    "egress inspection lacks Podman's container marker"
+                );
+                (
+                    entrypoint,
+                    all_caps_dropped,
+                    home,
+                    string("/HostConfig/LogConfig/Type")? == "json-file"
+                        && string("/HostConfig/LogConfig/Size")? == "10MB",
+                    // Podman has no device requests; GPUs arrive as devices.
+                    empty("/HostConfig/Devices")?,
+                )
+            }
+        };
+        env.sort();
+        let health = container
+            .pointer("/State/Health/Status")
+            .and_then(Value::as_str);
+        Ok(Self {
+            id: docker_id(&string("/Id")?)?,
+            image: string("/Image")?,
+            entrypoint,
+            cmd: strings(field("/Config/Cmd")?)?,
+            env,
+            injected_home,
+            user: field("/Config/User")?.clone(),
+            read_only: flag("/HostConfig/ReadonlyRootfs")?,
+            privileged: flag("/HostConfig/Privileged")?,
+            memory: number("/HostConfig/Memory")?,
+            nano_cpus: number("/HostConfig/NanoCpus")?,
+            pids_limit: number("/HostConfig/PidsLimit")?,
+            all_caps_dropped,
+            security_opt: strings(field("/HostConfig/SecurityOpt")?)?,
+            no_devices,
+            host_namespace: host("/HostConfig/PidMode")?
+                || host("/HostConfig/IpcMode")?
+                || host("/HostConfig/NetworkMode")?,
+            no_mounts: empty("/HostConfig/Binds")? && empty("/Mounts")?,
+            no_published_ports: empty("/HostConfig/PortBindings")?,
+            restart: string("/HostConfig/RestartPolicy/Name")?,
+            log_bounded,
+            running: flag("/State/Running")?,
+            restarting: flag("/State/Restarting")?,
+            unhealthy: health == Some("unhealthy"),
         })
+    }
+}
+
+fn judge_egress(facts: &EgressFacts, image: &BoxImage, running: bool) -> anyhow::Result<()> {
+    let mut image_env: Vec<String> = image
+        .env
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    image_env.sort();
+    // Podman's injected HOME must be the image user's own home.
+    let home_ok = match (&facts.injected_home, image.user.as_str()) {
+        (None, _) => true,
+        (Some(home), Some(user)) if !user.is_empty() && user != "root" => {
+            *home == format!("/home/{user}")
+        }
+        (Some(home), _) => home == "/root",
     };
-    let trusted = container.get("Image").and_then(|v| v.as_str()) == Some(image.id.as_str())
-        && container.pointer("/Config/Entrypoint") == Some(&json!(["node"]))
-        && container.pointer("/Config/Cmd")
-            == Some(&json!(["/opt/agent-connect/egress-proxy.mjs"]))
-        && container.pointer("/Config/Env") == Some(&image.env)
-        && container
-            .pointer("/Config/User")
-            .unwrap_or(&serde_json::Value::Null)
-            == &image.user
-        && container
-            .pointer("/HostConfig/ReadonlyRootfs")
-            .and_then(|v| v.as_bool())
-            == Some(true)
-        && container
-            .pointer("/HostConfig/Privileged")
-            .and_then(|v| v.as_bool())
-            == Some(false)
-        && container
-            .pointer("/HostConfig/Memory")
-            .and_then(|v| v.as_u64())
-            == Some(256 * 1024 * 1024)
-        && container
-            .pointer("/HostConfig/NanoCpus")
-            .and_then(|v| v.as_u64())
-            == Some(1_000_000_000)
-        && container
-            .pointer("/HostConfig/PidsLimit")
-            .and_then(|v| v.as_u64())
-            == Some(64)
-        && container.pointer("/HostConfig/CapDrop") == Some(&json!(["ALL"]))
-        && container.pointer("/HostConfig/SecurityOpt") == Some(&json!(["no-new-privileges"]))
-        && empty(container.pointer("/HostConfig/CapAdd"))
-        && empty(container.pointer("/HostConfig/Devices"))
-        && empty(container.pointer("/HostConfig/DeviceRequests"))
-        && container
-            .pointer("/HostConfig/PidMode")
-            .and_then(|v| v.as_str())
-            != Some("host")
-        && container
-            .pointer("/HostConfig/IpcMode")
-            .and_then(|v| v.as_str())
-            != Some("host")
-        && empty(container.pointer("/HostConfig/Binds"))
-        && empty(container.get("Mounts"))
-        && empty(container.pointer("/HostConfig/PortBindings"))
-        && container
-            .pointer("/HostConfig/NetworkMode")
-            .and_then(|v| v.as_str())
-            != Some("host")
-        && container
-            .pointer("/HostConfig/RestartPolicy/Name")
-            .and_then(|v| v.as_str())
-            == Some("unless-stopped")
-        && container
-            .pointer("/HostConfig/LogConfig/Type")
-            .and_then(|v| v.as_str())
-            == Some("json-file")
-        && container
-            .pointer("/HostConfig/LogConfig/Config/max-size")
-            .and_then(|v| v.as_str())
-            == Some("10m")
-        && container
-            .pointer("/HostConfig/LogConfig/Config/max-file")
-            .and_then(|v| v.as_str())
-            == Some("3");
+    let trusted = facts.image == image.id
+        && facts.entrypoint == ["node"]
+        && facts.cmd == ["/opt/agent-connect/egress-proxy.mjs"]
+        && facts.env == image_env
+        && home_ok
+        && facts.user == image.user
+        && facts.read_only
+        && !facts.privileged
+        && facts.memory == 256 * 1024 * 1024
+        && facts.nano_cpus == 1_000_000_000
+        && facts.pids_limit == 64
+        && facts.all_caps_dropped
+        && facts.security_opt == ["no-new-privileges"]
+        && facts.no_devices
+        && !facts.host_namespace
+        && facts.no_mounts
+        && facts.no_published_ports
+        && facts.restart == "unless-stopped"
+        && facts.log_bounded;
     if !trusted {
         bail!(
             "owned egress proxy does not match the selected image and restricted proxy configuration; explicitly stop it and recreate it with agent-connect egress start"
         );
     }
-    if running
-        && (container
-            .pointer("/State/Running")
-            .and_then(|v| v.as_bool())
-            != Some(true)
-            || container
-                .pointer("/State/Restarting")
-                .and_then(|v| v.as_bool())
-                == Some(true)
-            || container
-                .pointer("/State/Health/Status")
-                .and_then(|v| v.as_str())
-                == Some("unhealthy"))
-    {
+    if running && (!facts.running || facts.restarting || facts.unhealthy) {
         bail!(
-            "owned egress proxy is stopped, restarting or unhealthy; run agent-connect egress start and inspect its bounded Docker logs"
+            "owned egress proxy is stopped, restarting or unhealthy; run agent-connect egress start and inspect its bounded container logs"
         );
     }
-    Ok(id)
+    Ok(())
 }
 
 pub fn egress_stop(name: &str) -> anyhow::Result<()> {
@@ -330,6 +456,7 @@ pub fn box_args(
     mode: &str,
     volume: Option<&str>,
     home: Option<&HarnessHome>,
+    program: crate::engine::Program,
     engine: Engine,
     image: &str,
     network: &str,
@@ -340,7 +467,10 @@ pub fn box_args(
         .map(|h| h.box_user(engine))
         .unwrap_or((BOX_UID, BOX_GID));
     let mut args: Vec<String> = [
-        crate::engine::program(),
+        match program {
+            crate::engine::Program::Docker => "docker",
+            crate::engine::Program::Podman => "podman",
+        },
         "run",
         "--pull=never",
         "-i",
@@ -355,7 +485,7 @@ pub fn box_args(
         network,
         "--read-only",
         "--tmpfs",
-        &format!("/work:rw,exec,size=512m,{}", engine.tmpfs_owner(uid, gid)),
+        &format!("/work:rw,exec,size=512m,{}", program.tmpfs_owner(uid, gid)),
         "--tmpfs",
         "/tmp:rw,exec,size=256m",
         "--cap-drop",
@@ -381,7 +511,7 @@ pub fn box_args(
             "--tmpfs".into(),
             format!(
                 "/home/node:rw,exec,size=512m,{}",
-                engine.tmpfs_owner(BOX_UID, BOX_GID)
+                program.tmpfs_owner(BOX_UID, BOX_GID)
             ),
         ]);
     }
@@ -883,20 +1013,153 @@ mod tests {
     }
 
     fn image_fixture() -> String {
-        serde_json::json!({ "Id": format!("sha256:{}", "d".repeat(64)), "Config": { "Env": ["PATH=/usr/bin"] } }).to_string()
+        serde_json::json!({ "Id": format!("sha256:{}", "d".repeat(64)), "Config": { "Env": ["PATH=/usr/bin"], "User": "node" } }).to_string()
     }
     fn egress_fixture(id: &str, running: bool) -> serde_json::Value {
         serde_json::json!({
             "Id": id, "Image": format!("sha256:{}", "d".repeat(64)),
             "Config": { "Labels": { EGRESS_LABEL: EGRESS_OWNER }, "Entrypoint": ["node"],
-                "Cmd": ["/opt/agent-connect/egress-proxy.mjs"], "Env": ["PATH=/usr/bin"] },
-            "HostConfig": { "ReadonlyRootfs": true, "Privileged": false, "CapDrop": ["ALL"],
+                "Cmd": ["/opt/agent-connect/egress-proxy.mjs"], "Env": ["PATH=/usr/bin"], "User": "node" },
+            // Docker reports these even when unset (null or empty).
+            "HostConfig": { "ReadonlyRootfs": true, "Privileged": false, "CapDrop": ["ALL"], "CapAdd": null,
                 "SecurityOpt": ["no-new-privileges"], "Memory": 268435456,
                 "NanoCpus": 1000000000, "PidsLimit": 64, "NetworkMode": "bridge",
+                "Devices": [], "DeviceRequests": null, "PidMode": "", "IpcMode": "private",
+                "Binds": null, "PortBindings": {},
                 "RestartPolicy": { "Name": "unless-stopped" },
                 "LogConfig": { "Type": "json-file", "Config": { "max-size": "10m", "max-file": "3" } } },
             "State": { "Running": running, "Restarting": false }, "Mounts": []
         })
+    }
+
+    /// Trimmed from a real rootless Podman 4.9 egress inspection.
+    fn podman_egress_fixture() -> serde_json::Value {
+        serde_json::json!({
+            "Id": "c".repeat(64), "Image": "d".repeat(64),
+            "Config": { "Labels": { EGRESS_LABEL: EGRESS_OWNER }, "Entrypoint": "node",
+                "Cmd": ["/opt/agent-connect/egress-proxy.mjs"],
+                "Env": ["container=podman", "PATH=/usr/bin", "HOME=/home/node", "HOSTNAME=c0ffee"],
+                "User": "node" },
+            "EffectiveCaps": null,
+            "HostConfig": { "ReadonlyRootfs": true, "Privileged": false,
+                "CapDrop": ["CAP_CHOWN", "CAP_KILL"], "CapAdd": [],
+                "SecurityOpt": ["no-new-privileges"], "Memory": 268435456,
+                "NanoCpus": 1000000000, "PidsLimit": 64, "NetworkMode": "bridge",
+                "Devices": [], "PidMode": "private", "IpcMode": "shareable",
+                "Binds": [], "PortBindings": {},
+                "RestartPolicy": { "Name": "unless-stopped" },
+                "LogConfig": { "Type": "json-file", "Config": null, "Size": "10MB" } },
+            "State": { "Running": true, "Restarting": false,
+                "Health": { "Status": "", "FailingStreak": 0, "Log": null } },
+            "Mounts": []
+        })
+    }
+    fn podman_image() -> BoxImage {
+        BoxImage {
+            id: "d".repeat(64),
+            env: serde_json::json!(["PATH=/usr/bin"]),
+            user: serde_json::json!("node"),
+        }
+    }
+    fn podman_verdict(edit: impl FnOnce(&mut serde_json::Value)) -> anyhow::Result<()> {
+        let mut container = podman_egress_fixture();
+        edit(&mut container);
+        let facts = EgressFacts::read(&container, crate::engine::Program::Podman)?;
+        judge_egress(&facts, &podman_image(), true)
+    }
+    #[test]
+    fn podman_egress_is_judged_by_its_own_facts() {
+        podman_verdict(|_| {}).unwrap();
+        // The same document read as Docker's is refused, never half-trusted.
+        let container = podman_egress_fixture();
+        assert!(
+            EgressFacts::read(&container, crate::engine::Program::Docker)
+                .and_then(|facts| judge_egress(&facts, &podman_image(), true))
+                .is_err()
+        );
+    }
+    #[test]
+    fn podman_egress_refusals() {
+        let set = |pointer: &'static str, value: serde_json::Value| {
+            move |c: &mut serde_json::Value| *c.pointer_mut(pointer).unwrap() = value
+        };
+        // A capability back in the container, whatever CapAdd says.
+        assert!(podman_verdict(set("/EffectiveCaps", serde_json::json!(["CAP_NET_RAW"]))).is_err());
+        // Env: one unknown key, a wrong HOME, or a missing marker.
+        let env = |entries: serde_json::Value| set("/Config/Env", entries);
+        assert!(
+            podman_verdict(env(serde_json::json!([
+                "container=podman",
+                "PATH=/usr/bin",
+                "HOME=/home/node",
+                "NODE_OPTIONS=--inspect"
+            ])))
+            .is_err()
+        );
+        assert!(
+            podman_verdict(env(serde_json::json!([
+                "container=podman",
+                "PATH=/usr/bin",
+                "HOME=/tmp"
+            ])))
+            .is_err()
+        );
+        assert!(
+            podman_verdict(env(serde_json::json!(["PATH=/usr/bin", "HOME=/home/node"]))).is_err()
+        );
+        assert!(
+            podman_verdict(env(serde_json::json!([
+                "container=docker",
+                "PATH=/usr/bin"
+            ])))
+            .is_err()
+        );
+        // An entrypoint whose argument boundaries cannot be read.
+        assert!(
+            podman_verdict(set(
+                "/Config/Entrypoint",
+                serde_json::json!("node --inspect")
+            ))
+            .is_err()
+        );
+        assert!(
+            podman_verdict(set("/HostConfig/LogConfig/Size", serde_json::json!("0B"))).is_err()
+        );
+        assert!(
+            podman_verdict(set("/HostConfig/Devices", serde_json::json!(["/dev/fuse"]))).is_err()
+        );
+        // A field the engine should report but did not.
+        assert!(
+            podman_verdict(|c| {
+                c["HostConfig"].as_object_mut().unwrap().remove("PidsLimit");
+            })
+            .is_err()
+        );
+        assert!(
+            podman_verdict(|c| {
+                c.as_object_mut().unwrap().remove("EffectiveCaps");
+            })
+            .is_err()
+        );
+    }
+    #[test]
+    fn docker_egress_missing_fields_fail_closed() {
+        let image = BoxImage {
+            id: format!("sha256:{}", "d".repeat(64)),
+            env: serde_json::json!(["PATH=/usr/bin"]),
+            user: serde_json::json!("node"),
+        };
+        let read = |container: &serde_json::Value| {
+            EgressFacts::read(container, crate::engine::Program::Docker)
+                .and_then(|facts| judge_egress(&facts, &image, true))
+        };
+        let container = egress_fixture(&"a".repeat(64), true);
+        read(&container).unwrap();
+        for key in ["CapAdd", "Devices", "Binds", "PortBindings"] {
+            let mut missing = container.clone();
+            missing["HostConfig"].as_object_mut().unwrap().remove(key);
+            assert!(read(&missing).is_err(), "{key} absent must refuse");
+        }
     }
 
     #[test]
@@ -1249,6 +1512,7 @@ mod tests {
             "agent-full-access",
             None,
             None,
+            crate::engine::Program::Docker,
             Engine::Rootful,
             "session:test",
             "reused-network-name",
@@ -1279,6 +1543,7 @@ mod tests {
             "agent-full-access",
             None,
             None,
+            crate::engine::Program::Docker,
             Engine::Rootful,
             "session:test",
             "network-name",
@@ -1502,6 +1767,7 @@ mod tests {
                 "workspace-write",
                 None,
                 None,
+                crate::engine::Program::Docker,
                 Engine::Rootful,
                 "session:test",
                 "network-test",
@@ -1532,6 +1798,7 @@ mod tests {
                 "workspace-write",
                 volume,
                 None,
+                crate::engine::Program::Podman,
                 Engine::RootlessPodman,
                 "session:test",
                 "network-test",
@@ -1563,13 +1830,15 @@ mod tests {
             uid: 1234,
             gid: 2345,
         };
-        let run = |engine| {
+        use crate::engine::Program;
+        let run = |program, engine| {
             box_args(
                 Harness::Claude,
                 "test",
                 "workspace-write",
                 None,
                 Some(&home),
+                program,
                 engine,
                 "session:test",
                 "network-test",
@@ -1578,20 +1847,31 @@ mod tests {
         };
         let user =
             |args: &[String]| args[args.iter().position(|a| a == "--user").unwrap() + 1].clone();
-        let rootful = run(Engine::Rootful);
+        let rootful = run(Program::Docker, Engine::Rootful);
         assert_eq!(user(&rootful), "1234:2345");
         assert!(rootful.contains(&"/work:rw,exec,size=512m,uid=1234,gid=2345".into()));
         assert!(!rootful.iter().any(|arg| arg.contains("IS_SANDBOX")));
-        let rootless = run(Engine::Rootless);
+        let rootless = run(Program::Docker, Engine::Rootless);
         assert_eq!(user(&rootless), "0:0");
         assert!(rootless.contains(&"/work:rw,exec,size=512m,uid=0,gid=0".into()));
         assert!(rootless.contains(&"IS_SANDBOX=1".into()));
-        let podman = run(Engine::RootlessPodman);
+        let podman = run(Program::Podman, Engine::RootlessPodman);
         assert_eq!(user(&podman), "1000:1000");
         assert!(podman.contains(&"--userns=keep-id:uid=1000,gid=1000".into()));
         assert!(podman.contains(&"/work:rw,exec,size=512m,U".into()));
         assert!(!podman.iter().any(|arg| arg.contains("IS_SANDBOX")));
-        for args in [&rootful, &rootless, &podman] {
+        // Rootful Podman (accepted like any rootful engine) maps ids one to one,
+        // but still takes Podman's tmpfs option.
+        let rootful_podman = run(Program::Podman, Engine::Rootful);
+        assert_eq!(rootful_podman[0], "podman");
+        assert_eq!(user(&rootful_podman), "1234:2345");
+        assert!(rootful_podman.contains(&"/work:rw,exec,size=512m,U".into()));
+        assert!(
+            !rootful_podman
+                .iter()
+                .any(|arg| arg.starts_with("--userns") || arg.contains("uid="))
+        );
+        for args in [&rootful, &rootless, &podman, &rootful_podman] {
             assert!(args.contains(&"type=bind,src=/srv/harness-home,dst=/home/node".into()));
             assert!(args.contains(&"ALL".into()));
             assert!(args.contains(&"no-new-privileges".into()));

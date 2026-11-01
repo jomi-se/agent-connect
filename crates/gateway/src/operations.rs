@@ -175,6 +175,7 @@ pub struct SetupPlan {
     pub harness_versions: Option<box_build::HarnessVersions>,
     /// Asked for now or recorded by an earlier setup.
     pub allow_rootful_engine: bool,
+    pub container_engine: crate::engine::Program,
 }
 
 fn usage(message: impl Into<String>) -> anyhow::Error {
@@ -249,6 +250,17 @@ pub fn setup_plan(
     let egress_container = select!(egress_container, "agent-connect-egress".into());
     config::validate_container_name(&egress_container)?;
     let previous_box_image = previous.as_ref().and_then(|c| c.box_image.clone());
+    // A recorded engine is this runtime's, and one recorded before engines were
+    // a choice is Docker. A command-line choice made first wins the selection
+    // and is then checked against it.
+    let recorded_engine = previous
+        .as_ref()
+        .map(|c| c.container_engine.unwrap_or_default());
+    if let Some(program) = recorded_engine {
+        crate::engine::select(program);
+    }
+    let container_engine =
+        crate::engine::runtime_program(recorded_engine, crate::engine::selected())?;
     let allow_rootful_engine = cli.allow_rootful_engine
         || previous
             .as_ref()
@@ -395,6 +407,7 @@ pub fn setup_plan(
         previous_box_image,
         harness_versions: harness_versions.cloned(),
         allow_rootful_engine,
+        container_engine,
     })
 }
 
@@ -545,6 +558,11 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         };
         tokio::task::spawn_blocking(move || config::init_quiet(init)).await??;
         persist_setup_policy(&plan.config, &plan)?;
+        record_config_value(
+            &plan.config,
+            "container_engine",
+            serde_json::to_value(plan.container_engine)?,
+        )?;
     }
     if record_rootful {
         record_rootful_acceptance(&plan.config)?;
@@ -632,11 +650,15 @@ fn persist_setup_policy(path: &Path, plan: &SetupPlan) -> anyhow::Result<()> {
 }
 
 fn record_rootful_acceptance(path: &Path) -> anyhow::Result<()> {
+    record_config_value(path, "allow_rootful_engine", true.into())
+}
+
+fn record_config_value(path: &Path, key: &str, setting: serde_json::Value) -> anyhow::Result<()> {
     let mut value: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
     value
         .as_object_mut()
         .ok_or_else(|| usage("configuration must be an object"))?
-        .insert("allow_rootful_engine".into(), true.into());
+        .insert(key.into(), setting);
     let bytes = serde_json::to_vec_pretty(&value)?;
     // Validate as the gateway will read it before replacing the private file.
     serde_json::from_slice::<config::ServeOptions>(&bytes)?;
@@ -909,6 +931,14 @@ mod tests {
                 .unwrap()
                 .allow_rootful_engine
         );
+        // The engine is recorded the same way. Read raw: resolving a config, or
+        // planning from it, selects its engine for the whole test process.
+        record_config_value(&plan.config, "container_engine", "podman".into()).unwrap();
+        assert_eq!(
+            config::read_config(&plan.config).unwrap().container_engine,
+            Some(crate::engine::Program::Podman)
+        );
+        record_config_value(&plan.config, "container_engine", "docker".into()).unwrap();
         assert_eq!(std::fs::read(&owner_path).unwrap(), owner_state);
         #[cfg(unix)]
         {

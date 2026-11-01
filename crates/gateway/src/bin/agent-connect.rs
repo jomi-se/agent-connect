@@ -908,6 +908,7 @@ async fn run_host(
                 mode.as_str(),
                 volume.as_deref(),
                 home.as_ref(),
+                engine::selected(),
                 engine,
                 &image,
                 &network.name,
