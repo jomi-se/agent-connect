@@ -158,6 +158,12 @@ struct Gateway {
     paths: SpikePaths,
     hosts: Arc<Registry>,
     readiness: Mutex<Readiness>,
+    /// The box sessions start from. Starts as the configured box; a refresh
+    /// swaps it while it holds every session permit.
+    box_image: std::sync::RwLock<String>,
+    /// Set while a refresh swaps the egress, so readiness is not judged
+    /// against a half-moved box.
+    swapping: std::sync::atomic::AtomicBool,
 }
 
 struct Readiness {
@@ -511,6 +517,7 @@ async fn run() -> anyhow::Result<()> {
             engine::ROOTFUL_FIX
         );
     }
+    let cli_box_image = cli.box_image.clone();
     let gateway = Arc::new(Gateway {
         hosts,
         home,
@@ -527,6 +534,8 @@ async fn run() -> anyhow::Result<()> {
             checked_at: Instant::now(),
             problem: false,
         }),
+        box_image: std::sync::RwLock::new(cli_box_image),
+        swapping: Default::default(),
     });
     if let Some(service) = &authorization {
         service.set_runtime(Arc::new(ConsoleRuntime(Arc::downgrade(&gateway))))?;
@@ -542,7 +551,10 @@ async fn run() -> anyhow::Result<()> {
                 if gateway.capacity.is_closed() {
                     break;
                 }
-                let image = gateway.cli.box_image.clone();
+                if gateway.swapping.load(std::sync::atomic::Ordering::SeqCst) {
+                    continue;
+                }
+                let image = gateway.box_image.read().unwrap().clone();
                 let egress = gateway.cli.egress_container.clone().unwrap();
                 let result = tokio::task::spawn_blocking(move || {
                     agent_connect_gateway::sandbox::preflight(&image, &egress)
@@ -554,6 +566,13 @@ async fn run() -> anyhow::Result<()> {
                 };
             }
         });
+    }
+    if gateway.cli.boxed
+        && gateway.cli.box_refresh
+        && gateway.cli.config_path.is_some()
+        && config::locally_built_box(&gateway.cli.box_image)
+    {
+        tokio::spawn(refresh_box(Arc::downgrade(&gateway)));
     }
     let shutdown_gateway = gateway.clone();
     let mut app = Router::new()
@@ -872,6 +891,133 @@ async fn close_with(socket: &mut WebSocket, code: u16, reason: &'static str) {
 
 /// Track allocation before its first await: graceful shutdown must also collect
 /// sessions whose Docker resources exist before their ACP host is registered.
+/// Keeps the locally built box on the latest harness releases: checks once a
+/// day, builds beside the running box, and swaps only when no session runs.
+async fn refresh_box(gateway: std::sync::Weak<Gateway>) {
+    use agent_connect_gateway::operations::box_refresh::{self, RefreshState};
+    use std::sync::atomic::Ordering;
+    let Some((path, config, egress, warm, max)) = gateway.upgrade().map(|gateway| {
+        (
+            box_refresh::state_path(&gateway.cli.state_dir),
+            gateway.cli.config_path.clone().unwrap(),
+            gateway.cli.egress_container.clone().unwrap(),
+            gateway.engine == Some(Engine::RootlessPodman),
+            gateway.cli.max_sessions,
+        )
+    }) else {
+        return;
+    };
+    let record = |state: &RefreshState| {
+        if let Err(error) = box_refresh::save(&path, state) {
+            tracing::warn!(%error, "could not record the box refresh state");
+        }
+    };
+    // Give a starting service a minute before the first check.
+    let mut wait = Duration::from_secs(60);
+    loop {
+        tokio::time::sleep(wait).await;
+        wait = Duration::from_secs(60);
+        let mut state = box_refresh::load(&path);
+        let now = box_refresh::now();
+        if let Some(due) = state
+            .checked_at
+            .map(|at| at + box_refresh::CHECK_INTERVAL_SECS)
+            && due > now
+        {
+            wait = Duration::from_secs(due - now).max(wait);
+            continue;
+        }
+        let Some(current) = gateway
+            .upgrade()
+            .map(|gateway| gateway.box_image.read().unwrap().clone())
+        else {
+            return;
+        };
+        state.checked_at = Some(now);
+        record(&state);
+        let new = match box_refresh::prepare(&current, warm).await {
+            Ok(Some(new)) => new,
+            Ok(None) => {
+                state.error = None;
+                record(&state);
+                continue;
+            }
+            Err(error) => {
+                eprintln!("[gateway] box refresh failed: {error:#}");
+                state.error = Some(format!("{error:#}"));
+                record(&state);
+                continue;
+            }
+        };
+        eprintln!("[gateway] box {new} is built; it replaces {current} once no session runs");
+        state.pending = Some(new.clone());
+        state.waiting_since = Some(box_refresh::now());
+        state.error = None;
+        record(&state);
+        // Never queue for the permits: the semaphore is fair, so a waiting
+        // acquire would refuse new sessions until the longest one ended.
+        let (gateway, permits) = loop {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            let Some(gateway) = gateway.upgrade() else {
+                return;
+            };
+            if gateway.capacity.is_closed() {
+                return;
+            }
+            if gateway.hosts.live_hosts() == 0
+                && gateway.capacity.available_permits() == max
+                && let Ok(permits) = gateway.capacity.clone().try_acquire_many_owned(max as u32)
+            {
+                break (gateway, permits);
+            }
+        };
+        gateway.swapping.store(true, Ordering::SeqCst);
+        let swap = {
+            let (config, egress, current, new) =
+                (config.clone(), egress.clone(), current.clone(), new.clone());
+            tokio::task::spawn_blocking(move || box_refresh::swap(&config, &egress, &current, &new))
+                .await
+                .map_err(anyhow::Error::from)
+                .and_then(|result| result)
+        };
+        match swap {
+            Ok(()) => {
+                *gateway.box_image.write().unwrap() = new.clone();
+                eprintln!("[gateway] box refreshed to {new}");
+                if let Some(retired) = state.previous.take()
+                    && let Err(error) =
+                        box_refresh::remove_retired(&retired, &config, &[&current, &new]).await
+                {
+                    eprintln!("[gateway] {error:#}");
+                }
+                state.previous = Some(current);
+                state.refreshed_at = Some(box_refresh::now());
+            }
+            Err(error) => {
+                eprintln!("[gateway] box swap failed, {current} stays in use: {error:#}");
+                state.error = Some(format!("{error:#}"));
+            }
+        }
+        // Judge readiness again against the box now in use, whichever it is.
+        let ready = {
+            let (image, egress) = (gateway.box_image.read().unwrap().clone(), egress.clone());
+            tokio::task::spawn_blocking(move || {
+                agent_connect_gateway::sandbox::preflight(&image, &egress)
+            })
+            .await
+        };
+        *gateway.readiness.lock().unwrap() = Readiness {
+            checked_at: Instant::now(),
+            problem: !matches!(ready, Ok(Ok(()))),
+        };
+        gateway.swapping.store(false, Ordering::SeqCst);
+        drop(permits);
+        state.pending = None;
+        state.waiting_since = None;
+        record(&state);
+    }
+}
+
 async fn start_host(
     gateway: &Arc<Gateway>,
     grant: &GrantContext,
@@ -935,7 +1081,7 @@ async fn run_host(
         let mode = grant
             .permissions
             .codex_mode(gateway.cli.codex_mode.unwrap());
-        let image = gateway.cli.box_image.clone();
+        let image = gateway.box_image.read().unwrap().clone();
         let harness = gateway.cli.harness;
         let home = gateway.home.clone();
         let engine = gateway

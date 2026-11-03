@@ -378,8 +378,8 @@ versions below and this directory; unchanged versions and directory contents
 reuse the existing box. Names, bytes, permissions and
 empty directories contribute to the hash, including ignored files. A failed
 Docker build prints Docker's output and keeps the previously configured box in
-use; first installation fails if no previous box exists. `agent-connect doctor`
-reports pending changes with “run agent-connect setup to rebuild”. The owner
+use; first installation fails if no previous box exists. A changed owner layer
+is picked up by the next daily refresh, or at once by `agent-connect setup`. The owner
 layer stays local and is never published. Sessions receive no build context or
 Docker socket.
 
@@ -388,10 +388,30 @@ Docker socket.
 Each setup installs the latest `@agentclientprotocol/codex-acp`,
 `@agentclientprotocol/claude-agent-acp` and `@anthropic-ai/claude-code` from
 npm, and the newest `@openai/codex` that codex-acp accepts, since codex-acp
-runs it. A new release changes the box tag, so `agent-connect doctor` warns and
-the next `agent-connect setup` rebuilds. `agent-connect setup --json` lists the
-chosen versions as `harnessVersions`. If npm is unreachable, setup keeps the
+runs it. A new release changes the box tag. `agent-connect setup --json` lists
+the chosen versions as `harnessVersions`. If npm is unreachable, setup keeps the
 configured box.
+
+A serving boxed gateway keeps a locally built box current on its own. A minute
+after start and then once a day it resolves the versions again; when the box
+tag changes it builds the new box beside the running one, then waits until no
+session is live and no permit is held. The swap holds every session permit,
+so a session that arrives during those seconds is refused as at capacity. It
+moves the egress proxy to the new box, records `box_image` in the
+configuration, and starts new sessions from the new box. If any step fails,
+the egress is put back on the previous box and the configuration is left
+alone. A crash between the two steps is repaired by the next
+`egress start --config`, which the service runs before serving. The box in use
+before the last refresh is kept for rollback; the one before it is removed.
+`box-refresh.json` in the state directory records the last check, swap and
+error. Doctor's `box_current` passes while a refresh is pending, and warns
+when the last check failed, the box has been behind for over two days (for
+example because a session never ended), or refreshing is off and a newer box
+is waiting.
+
+A box the owner named (not the default repository) is never refreshed. To turn
+refreshing off for a locally built box, set `"box_refresh": false` in the
+configuration; `agent-connect setup` then rebuilds as before.
 
 To hold one back or move ahead, put `versions.json` in the owner box directory
 above, mapping any of those four packages to an exact version or an npm

@@ -231,7 +231,7 @@ fn test_base_image(value: Option<String>) -> anyhow::Result<String> {
     Ok(image)
 }
 
-fn base_image() -> anyhow::Result<String> {
+pub(super) fn base_image() -> anyhow::Result<String> {
     let value = std::env::var_os("AGENT_CONNECT_TEST_BOX_IMAGE")
         .map(|value| {
             value
@@ -302,7 +302,7 @@ fn copy_directory(source: &Path, destination: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn installed(image: &str) -> anyhow::Result<bool> {
+pub(super) async fn installed(image: &str) -> anyhow::Result<bool> {
     let status = tokio::process::Command::new(crate::engine::program())
         .args(["image", "inspect", image])
         .stdin(Stdio::null())
