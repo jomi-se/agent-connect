@@ -560,6 +560,10 @@ async fn run() -> anyhow::Result<()> {
                     agent_connect_gateway::sandbox::preflight(&image, &egress)
                 })
                 .await;
+                // A swap that began meanwhile judges readiness itself.
+                if gateway.swapping.load(std::sync::atomic::Ordering::SeqCst) {
+                    continue;
+                }
                 *gateway.readiness.lock().unwrap() = Readiness {
                     checked_at: Instant::now(),
                     problem: !matches!(result, Ok(Ok(()))),
@@ -889,13 +893,14 @@ async fn close_with(socket: &mut WebSocket, code: u16, reason: &'static str) {
         .await;
 }
 
-/// Track allocation before its first await: graceful shutdown must also collect
-/// sessions whose Docker resources exist before their ACP host is registered.
 /// Keeps the locally built box on the latest harness releases: checks once a
-/// day, builds beside the running box, and swaps only when no session runs.
+/// day (hourly after an error), builds beside the running box, and swaps only
+/// when no session runs. A box built before a restart is swapped in at the
+/// first idle moment after it.
 async fn refresh_box(gateway: std::sync::Weak<Gateway>) {
     use agent_connect_gateway::operations::box_refresh::{self, RefreshState};
     use std::sync::atomic::Ordering;
+    const HOUR: u64 = 60 * 60;
     let Some((path, config, egress, warm, max)) = gateway.upgrade().map(|gateway| {
         (
             box_refresh::state_path(&gateway.cli.state_dir),
@@ -912,50 +917,83 @@ async fn refresh_box(gateway: std::sync::Weak<Gateway>) {
             tracing::warn!(%error, "could not record the box refresh state");
         }
     };
+    // A box built but never swapped in would otherwise stay on disk for good.
+    let discard = async |image: &str, keep: &[&str]| {
+        if let Err(error) = box_refresh::remove_retired(image, &config, keep).await {
+            eprintln!("[gateway] {error:#}");
+        }
+    };
     // Give a starting service a minute before the first check.
     let mut wait = Duration::from_secs(60);
     loop {
         tokio::time::sleep(wait).await;
         wait = Duration::from_secs(60);
         let mut state = box_refresh::load(&path);
-        let now = box_refresh::now();
-        if let Some(due) = state
-            .checked_at
-            .map(|at| at + box_refresh::CHECK_INTERVAL_SECS)
-            && due > now
-        {
-            wait = Duration::from_secs(due - now).max(wait);
-            continue;
-        }
         let Some(current) = gateway
             .upgrade()
             .map(|gateway| gateway.box_image.read().unwrap().clone())
         else {
             return;
         };
-        state.checked_at = Some(now);
-        record(&state);
-        let new = match box_refresh::prepare(&current, warm).await {
-            Ok(Some(new)) => new,
-            Ok(None) => {
-                state.error = None;
-                record(&state);
-                continue;
+        let built = match &state.pending {
+            Some(pending) if *pending != current && box_refresh::installed(pending).await => {
+                Some(pending.clone())
             }
-            Err(error) => {
-                eprintln!("[gateway] box refresh failed: {error:#}");
-                state.error = Some(format!("{error:#}"));
+            _ => None,
+        };
+        let new = match built {
+            Some(new) => new,
+            None => {
+                let now = box_refresh::now();
+                let interval = if state.error.is_some() {
+                    HOUR
+                } else {
+                    box_refresh::CHECK_INTERVAL_SECS
+                };
+                if let Some(due) = state.checked_at.map(|at| at + interval)
+                    && due > now
+                {
+                    wait = Duration::from_secs(due - now).max(wait);
+                    continue;
+                }
+                state.checked_at = Some(now);
                 record(&state);
-                continue;
+                match box_refresh::prepare(&current, warm).await {
+                    Ok(Some(new)) => {
+                        if let Some(old) = state.pending.take().filter(|old| *old != new) {
+                            discard(&old, &[&current, &new]).await;
+                        }
+                        eprintln!(
+                            "[gateway] box {new} is built; it replaces {current} once no session runs"
+                        );
+                        state.pending = Some(new.clone());
+                        state.waiting_since = Some(box_refresh::now());
+                        state.error = None;
+                        record(&state);
+                        new
+                    }
+                    Ok(None) => {
+                        // Current already, perhaps by setup run by hand.
+                        if let Some(old) = state.pending.take() {
+                            discard(&old, &[&current]).await;
+                        }
+                        state.waiting_since = None;
+                        state.error = None;
+                        record(&state);
+                        continue;
+                    }
+                    Err(error) => {
+                        eprintln!("[gateway] box refresh failed: {error:#}");
+                        state.error = Some(format!("{error:#}"));
+                        record(&state);
+                        continue;
+                    }
+                }
             }
         };
-        eprintln!("[gateway] box {new} is built; it replaces {current} once no session runs");
-        state.pending = Some(new.clone());
-        state.waiting_since = Some(box_refresh::now());
-        state.error = None;
-        record(&state);
         // Never queue for the permits: the semaphore is fair, so a waiting
         // acquire would refuse new sessions until the longest one ended.
+        let mut polls = 0u32;
         let (gateway, permits) = loop {
             tokio::time::sleep(Duration::from_secs(60)).await;
             let Some(gateway) = gateway.upgrade() else {
@@ -963,6 +1001,13 @@ async fn refresh_box(gateway: std::sync::Weak<Gateway>) {
             };
             if gateway.capacity.is_closed() {
                 return;
+            }
+            // A heartbeat, so doctor can tell waiting for idle from a
+            // gateway that stopped.
+            polls += 1;
+            if polls % 10 == 0 {
+                state.checked_at = Some(box_refresh::now());
+                record(&state);
             }
             if gateway.hosts.live_hosts() == 0
                 && gateway.capacity.available_permits() == max
@@ -984,18 +1029,17 @@ async fn refresh_box(gateway: std::sync::Weak<Gateway>) {
             Ok(()) => {
                 *gateway.box_image.write().unwrap() = new.clone();
                 eprintln!("[gateway] box refreshed to {new}");
-                if let Some(retired) = state.previous.take()
-                    && let Err(error) =
-                        box_refresh::remove_retired(&retired, &config, &[&current, &new]).await
-                {
-                    eprintln!("[gateway] {error:#}");
+                if let Some(retired) = state.previous.take() {
+                    discard(&retired, &[&current, &new]).await;
                 }
                 state.previous = Some(current);
                 state.refreshed_at = Some(box_refresh::now());
+                state.error = None;
             }
             Err(error) => {
                 eprintln!("[gateway] box swap failed, {current} stays in use: {error:#}");
                 state.error = Some(format!("{error:#}"));
+                discard(&new, &[&current]).await;
             }
         }
         // Judge readiness again against the box now in use, whichever it is.
@@ -1018,6 +1062,8 @@ async fn refresh_box(gateway: std::sync::Weak<Gateway>) {
     }
 }
 
+/// Track allocation before its first await: graceful shutdown must also collect
+/// sessions whose Docker resources exist before their ACP host is registered.
 async fn start_host(
     gateway: &Arc<Gateway>,
     grant: &GrantContext,
