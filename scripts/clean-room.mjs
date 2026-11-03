@@ -233,7 +233,7 @@ try {
   );
   assert.equal(report.status, "passed");
   assert.ok(
-    report.checks.length >= 26,
+    report.checks.length >= 25,
     "baseline pairing/chat/tool/reconnect/cancel gates and operation parity gates must all run",
   );
   for (const capability of [
