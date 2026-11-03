@@ -487,6 +487,31 @@ test("login defaults to the platform harness home; a config's home and box apply
     ),
   );
   assert.ok(!loginArgs.includes("fixture-supplied-at-serve-time"));
+  // With no --config, the default runtime's box is the one signed into.
+  const defaultRuntime = join(cliState, "agent-connect/runtime");
+  await mkdir(defaultRuntime, { recursive: true, mode: 0o700 });
+  try {
+    await writeFile(
+      join(defaultRuntime, "config.json"),
+      JSON.stringify({
+        harness: "codex",
+        box_image: "session:default-runtime",
+      }),
+      { mode: 0o600 },
+    );
+    const bare = command(["login", "--harness", "codex"], env);
+    assert.equal(bare.status, 0, bare.stderr);
+    assert.ok(
+      (await readFile(env.LOGIN_ARGS, "utf8")).includes(
+        "session:default-runtime",
+      ),
+    );
+    const other = command(["login", "--harness", "claude"], env);
+    assert.equal(other.status, 2);
+    assert.match(other.stderr, /runtime's configuration/);
+  } finally {
+    await rm(defaultRuntime, { recursive: true, force: true });
+  }
 });
 
 test(
