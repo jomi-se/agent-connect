@@ -43,18 +43,17 @@ pub fn selected() -> Program {
 }
 
 pub fn program() -> &'static str {
-    match selected() {
-        Program::Docker => "docker",
-        Program::Podman => "podman",
-    }
+    selected().name()
 }
 
-/// The program a setup run uses: the one an existing runtime recorded, unless
-/// this command asked for another, which is refused like any other change to an
-/// existing runtime's identity; a new runtime takes the request or Docker.
+/// The program a command uses: the one its runtime recorded, unless the command
+/// line or environment asked for another, which is refused, since the
+/// runtime's network proxy and boxes live on its engine. Without a recorded
+/// one, the request, else `preferred`.
 pub fn runtime_program(
     recorded: Option<Program>,
     requested: Option<Program>,
+    preferred: impl FnOnce() -> Program,
 ) -> anyhow::Result<Program> {
     match (recorded, requested) {
         (Some(recorded), Some(requested)) if recorded != requested => {
@@ -64,8 +63,44 @@ pub fn runtime_program(
             .into())
         }
         (Some(program), _) | (None, Some(program)) => Ok(program),
-        (None, None) => Ok(Program::Docker),
+        (None, None) => Ok(preferred()),
     }
+}
+
+/// Selects the program for this command from its runtime's recorded one, if
+/// it has a runtime. Every command's entry point calls it once it has read its
+/// configuration.
+pub fn for_runtime(recorded: Option<Program>) -> anyhow::Result<Program> {
+    let program = runtime_program(recorded, chosen(), preferred)?;
+    select(program);
+    Ok(program)
+}
+
+/// The program when nothing chose one: the installed engine that runs
+/// rootless. Docker when it answers as rootless or in a virtual machine;
+/// otherwise Podman, which a user runs rootless, when it is installed;
+/// otherwise Docker, whose failure then says what is missing.
+pub fn preferred() -> Program {
+    static PREFERRED: OnceLock<Program> = OnceLock::new();
+    *PREFERRED.get_or_init(|| {
+        if !installed("podman") {
+            return Program::Docker;
+        }
+        let docker = installed("docker")
+            .then(|| {
+                std::process::Command::new("docker")
+                    .args(["info", "--format", DOCKER_INFO])
+                    .output()
+                    .ok()
+            })
+            .flatten()
+            .filter(|output| output.status.success())
+            .and_then(|output| parse_docker_info(&String::from_utf8_lossy(&output.stdout)).ok());
+        match docker {
+            Some(Engine::Rootless | Engine::VirtualMachine) => Program::Docker,
+            _ => Program::Podman,
+        }
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,6 +112,13 @@ pub enum Engine {
 }
 
 impl Program {
+    pub fn name(self) -> &'static str {
+        match self {
+            Program::Docker => "docker",
+            Program::Podman => "podman",
+        }
+    }
+
     /// Mount options that give a tmpfs to the container user: Podman 4 rejects
     /// `uid=`/`gid=`, rootful or not, and has `U`, which chowns to whichever
     /// user the box runs as.
@@ -256,12 +298,22 @@ mod tests {
     #[test]
     fn an_existing_runtime_keeps_its_engine() {
         use Program::{Docker, Podman};
-        assert_eq!(runtime_program(None, Some(Podman)).unwrap(), Podman);
-        assert_eq!(runtime_program(None, None).unwrap(), Docker);
-        assert_eq!(runtime_program(Some(Podman), None).unwrap(), Podman);
-        assert_eq!(runtime_program(Some(Podman), Some(Podman)).unwrap(), Podman);
-        assert!(runtime_program(Some(Docker), Some(Podman)).is_err());
-        assert!(runtime_program(Some(Podman), Some(Docker)).is_err());
+        let preferred = || Podman;
+        assert_eq!(
+            runtime_program(None, Some(Docker), preferred).unwrap(),
+            Docker
+        );
+        assert_eq!(runtime_program(None, None, preferred).unwrap(), Podman);
+        assert_eq!(
+            runtime_program(Some(Docker), None, preferred).unwrap(),
+            Docker
+        );
+        assert_eq!(
+            runtime_program(Some(Podman), Some(Podman), preferred).unwrap(),
+            Podman
+        );
+        assert!(runtime_program(Some(Docker), Some(Podman), preferred).is_err());
+        assert!(runtime_program(Some(Podman), Some(Docker), preferred).is_err());
     }
 
     #[test]

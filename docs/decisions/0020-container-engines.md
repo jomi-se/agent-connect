@@ -30,10 +30,13 @@ host ids.
 
 3. **Two programs, one selection.** `container_engine` (`docker` or `podman`)
    is recorded by setup; the global `--container-engine` option or
-   `AGENT_CONNECT_CONTAINER_ENGINE` chooses it for a new runtime or one
-   command. Each command's entry point selects once; resolving configuration
-   and planning setup are pure. An existing runtime refuses a different engine;
-   switching is a configuration edit.
+   `AGENT_CONNECT_CONTAINER_ENGINE` chooses it for a new runtime or a command
+   without one. With no choice, it is the installed engine that runs rootless:
+   Docker when it reports rootless or a virtual machine, else Podman when
+   installed, else Docker. Every command's entry point selects once through
+   the same check, and a runtime refuses a different engine on every command,
+   doctor included; switching is a configuration edit. Resolving configuration
+   and planning setup select nothing.
 
 4. **The box user follows the engine.** With the shared home mounted: the
    owner's ids on a rootful or virtual-machine engine; container root, which is

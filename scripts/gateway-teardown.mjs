@@ -206,7 +206,12 @@ async function restartAfterCrash() {
     let log = "";
     const child = spawn(binary, serveArgs(dir, egressName, await freePort()), {
       stdio: ["ignore", "ignore", "pipe"],
-      env: { PATH: process.env.PATH, HOME: dir, LANG: "C.UTF-8" },
+      env: {
+        PATH: process.env.PATH,
+        HOME: dir,
+        LANG: "C.UTF-8",
+        AGENT_CONNECT_CONTAINER_ENGINE: "docker",
+      },
     });
     children.add(child);
     child.stderr.on("data", (data) => {
@@ -271,6 +276,8 @@ async function runCase(mode) {
         PATH: `${join(root, "bin")}:${process.env.PATH}`,
         HOME: dir,
         LANG: "C.UTF-8",
+        // A Docker-only suite: left to choose, the gateway may prefer Podman.
+        AGENT_CONNECT_CONTAINER_ENGINE: "docker",
         ACP_REAL_DOCKER: realDocker,
         ACP_TEARDOWN_FAULT: fault,
         ACP_TEARDOWN_MARKER: join(dir, "created"),

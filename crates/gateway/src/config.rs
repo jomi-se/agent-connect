@@ -244,7 +244,7 @@ pub struct ServeCli {
     pub allow_rootful_engine: bool,
     pub box_refresh: bool,
     /// The configuration's engine; the command's entry point selects it.
-    pub container_engine: crate::engine::Program,
+    pub container_engine: Option<crate::engine::Program>,
 }
 impl ServeOptions {
     pub fn resolve(mut self) -> anyhow::Result<ServeCli> {
@@ -301,7 +301,7 @@ impl ServeOptions {
             resume_max_bytes: merged!(resume_max_bytes).unwrap_or_else(|| 8 * 1024 * 1024),
             allow_rootful_engine: merged!(allow_rootful_engine).unwrap_or_else(|| false),
             box_refresh: merged!(box_refresh).unwrap_or_else(|| true),
-            container_engine: merged!(container_engine).unwrap_or_default(),
+            container_engine: merged!(container_engine),
         };
         if cli.headless_static_bearer {
             validate_origin(&cli.allow_origin)?;

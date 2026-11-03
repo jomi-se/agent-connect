@@ -257,14 +257,11 @@ pub fn setup_plan(
     };
     config::validate_container_name(&egress_container)?;
     let previous_box_image = previous.as_ref().and_then(|c| c.box_image.clone());
-    // A recorded engine is this runtime's, and one recorded before engines were
-    // a choice is Docker. A command-line choice made first wins the selection
-    // and is then checked against it.
-    let recorded_engine = previous
-        .as_ref()
-        .map(|c| c.container_engine.unwrap_or_default());
-    let container_engine =
-        crate::engine::runtime_program(recorded_engine, crate::engine::chosen())?;
+    let container_engine = crate::engine::runtime_program(
+        previous.as_ref().and_then(|c| c.container_engine),
+        crate::engine::chosen(),
+        crate::engine::preferred,
+    )?;
     let allow_rootful_engine = cli.allow_rootful_engine
         || previous
             .as_ref()
@@ -428,14 +425,6 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             "provider login requires an owner terminal and human output; use agent-connect login separately",
         ));
     }
-    // With no choice made and no Docker, offer what is there. An existing
-    // runtime that recorded Docker still refuses the switch.
-    let fell_back = crate::engine::chosen().is_none()
-        && !crate::engine::installed("docker")
-        && crate::engine::installed("podman");
-    if fell_back {
-        crate::engine::select(crate::engine::Program::Podman);
-    }
     // Resolve once per run so every plan below selects the same box.
     let harness_versions = match &cli.box_image {
         Some(_) => None,
@@ -469,8 +458,11 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
     }
     let mut plan = setup_plan(&cli, harness_versions)?;
     // Said only once the plan accepted it; a refusal explains itself.
-    if fell_back {
-        eprintln!("Docker is not installed; using Podman (choose with --container-engine).");
+    if !plan.existing && crate::engine::chosen().is_none() {
+        eprintln!(
+            "Using {}, the installed engine that runs rootless (choose with --container-engine).",
+            plan.container_engine.name()
+        );
     }
     crate::engine::select(plan.container_engine);
     let engine = tokio::task::spawn_blocking(crate::engine::detect).await??;
@@ -912,7 +904,7 @@ mod tests {
             .resolve()
             .unwrap()
             .container_engine,
-            crate::engine::Program::Podman
+            Some(crate::engine::Program::Podman)
         );
         // Planning and resolving are pure: nothing was selected for the process.
         assert_eq!(crate::engine::chosen(), None);
