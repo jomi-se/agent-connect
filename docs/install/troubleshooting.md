@@ -117,14 +117,14 @@ agent-connect service start
 It prompts twice for the new passphrase and refuses to proceed while the gateway
 holds its state lock. The authenticator and application grants are preserved.
 
-## Docker cleanup and capacity
+## Container cleanup and capacity
 
 Capacity is released only after the owned session container and network are
 removed. Bounded cleanup failure keeps its slot reserved until operator cleanup
 and process restart; a restart alone does not delete resources from an earlier
 process. Stop active turns, allow graceful shutdown and use service diagnostics
 to identify the failed session. Remove only its identified owned resources;
-retain shared egress and model peers. Never use a broad Docker prune or remove
+retain shared egress and model peers. Never use a broad `docker`/`podman` prune or remove
 another application's resources. Retrying the interrupted prompt can duplicate
 an application effect and is not cleanup.
 

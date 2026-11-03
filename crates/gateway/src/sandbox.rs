@@ -167,7 +167,7 @@ fn egress_start_with(
                 .context("could not replace the egress proxy of the previous box")?;
             let args = egress_start_args(name, &image.id);
             docker.run(&args.iter().map(String::as_str).collect::<Vec<_>>(), deadline)
-                .context("could not create egress proxy; check Docker and any conflicting container name")?;
+                .context("could not create egress proxy; check the container engine and any conflicting container name")?;
         }
         Some(container) => {
             let id = validate_egress(&container, &image, false)?;
@@ -177,7 +177,7 @@ fn egress_start_with(
                 != Some(true)
             {
                 docker.run(&["start", &id], deadline).context(
-                    "could not start owned egress proxy; inspect Docker state before retrying",
+                    "could not start owned egress proxy; inspect the container engine's state before retrying",
                 )?;
             }
             // Inspect the captured ID, never the possibly reused name.
@@ -189,7 +189,7 @@ fn egress_start_with(
         None => {
             let args = egress_start_args(name, &image.id);
             docker.run(&args.iter().map(String::as_str).collect::<Vec<_>>(), deadline)
-                .context("could not create egress proxy; check Docker and any conflicting container name")?;
+                .context("could not create egress proxy; check the container engine and any conflicting container name")?;
         }
     }
     Ok(())
@@ -270,9 +270,9 @@ fn inspect_image(
     deadline: Instant,
 ) -> anyhow::Result<BoxImage> {
     let output = docker.run(&["image", "inspect", "--format", "{{json .}}", image], deadline)
-        .context("selected box is unavailable; Docker must be running and the selected image installed before egress start or serve")?;
+        .context("selected box is unavailable; the container engine must be running and the selected image installed before egress start or serve")?;
     let value: serde_json::Value =
-        serde_json::from_str(&output).context("invalid Docker image inspection")?;
+        serde_json::from_str(&output).context("invalid image inspection")?;
     let id = value
         .get("Id")
         .and_then(|v| v.as_str())
@@ -307,11 +307,11 @@ fn inspect_container(
         deadline,
     ) {
         Ok(output) => Ok(Some(
-            serde_json::from_str(&output).context("invalid Docker egress inspection")?,
+            serde_json::from_str(&output).context("invalid egress inspection")?,
         )),
         Err(error) if missing_resource(&error) => Ok(None),
         Err(error) => Err(error)
-            .context("cannot inspect egress proxy; check that Docker is running and accessible"),
+            .context("cannot inspect egress proxy; check that the container engine is running and accessible"),
     }
 }
 fn checked_egress(
@@ -971,7 +971,7 @@ impl SessionNetwork {
             Ok(id) if kind == "network" => self.id = id,
             Ok(id) => self.container = id,
             Err(error) => {
-                tracing::error!(%error, %name, "could not reconcile uncertain Docker allocation; nothing unowned was removed");
+                tracing::error!(%error, %name, "could not reconcile uncertain container allocation; nothing unowned was removed");
                 self.finish_cleanup(&Err(error));
             }
         }
@@ -1000,7 +1000,7 @@ impl SessionNetwork {
             if result.is_err() {
                 capacity.forget();
                 tracing::error!(container = ?self.container, network = ?self.id,
-                    "session capacity retained after failed Docker cleanup; operator cleanup and gateway restart required");
+                    "session capacity retained after failed container cleanup; operator cleanup and gateway restart required");
             }
         }
     }
@@ -1037,7 +1037,7 @@ impl SessionNetwork {
             std::thread::sleep(Duration::from_millis(100));
         }
         bail!(
-            "session Docker cleanup exceeded {:?}; container {:?}, network {:?}: {}",
+            "session container cleanup exceeded {:?}; container {:?}, network {:?}: {}",
             CLEANUP_TIMEOUT,
             self.container,
             self.id,
@@ -1075,7 +1075,7 @@ impl Drop for SessionNetwork {
             .name("acp-session-cleanup".into())
             .spawn(move || {
                 if let Err(error) = pending.cleanup_with(&mut Docker) {
-                    tracing::error!(%error, "session Docker cleanup failed");
+                    tracing::error!(%error, "session container cleanup failed");
                 }
             })
         {
@@ -1121,7 +1121,7 @@ fn inspect_owned_id(
         resource
             .get("id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("invalid inspected Docker resource ID"))?,
+            .ok_or_else(|| anyhow::anyhow!("invalid inspected resource ID"))?,
     )?))
 }
 
@@ -1138,7 +1138,7 @@ fn force_remove(program: crate::engine::Program, id: &str) -> Vec<&str> {
 fn docker_id(output: &str) -> anyhow::Result<String> {
     let id = output.trim();
     if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
-        bail!("Docker returned an invalid immutable resource ID");
+        bail!("the container engine returned an invalid immutable resource ID");
     }
     Ok(id.into())
 }
@@ -1159,14 +1159,19 @@ impl DockerCommand for Docker {
     fn run(&mut self, args: &[&str], deadline: Instant) -> anyhow::Result<String> {
         use std::process::{Command, Stdio};
         if Instant::now() >= deadline {
-            bail!("Docker operation deadline elapsed");
+            bail!("container engine operation deadline elapsed");
         }
         let child = Command::new(crate::engine::program())
             .args(args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .context("Docker is required for boxed sessions")?;
+            .with_context(|| {
+                format!(
+                    "{} is required for boxed sessions",
+                    crate::engine::program()
+                )
+            })?;
         bounded_output(child, deadline, args)
     }
 }
@@ -1183,27 +1188,32 @@ fn bounded_output(
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            bail!("Docker operation timed out: {}", args.join(" "));
+            bail!("container engine operation timed out: {}", args.join(" "));
         }
         std::thread::sleep(Duration::from_millis(20));
     }
     let output = child.wait_with_output()?;
     if !output.status.success() {
         bail!(
-            "Docker operation failed: {}",
+            "container engine operation failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    String::from_utf8(output.stdout).context("invalid Docker output")
+    String::from_utf8(output.stdout).context("invalid container engine output")
 }
 fn docker(args: &[&str]) -> anyhow::Result<()> {
     let output = std::process::Command::new(crate::engine::program())
         .args(args)
         .output()
-        .context("Docker is required for boxed sessions")?;
+        .with_context(|| {
+            format!(
+                "{} is required for boxed sessions",
+                crate::engine::program()
+            )
+        })?;
     if !output.status.success() {
         bail!(
-            "Docker operation failed: {}",
+            "container engine operation failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
     }

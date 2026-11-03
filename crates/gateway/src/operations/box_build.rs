@@ -340,8 +340,12 @@ async fn build(
         .kill_on_drop(true)
         .status()
         .await
-        .context("run Docker box build")?;
-    anyhow::ensure!(status.success(), "Docker box build failed ({status})");
+        .with_context(|| format!("run {} box build", crate::engine::program()))?;
+    anyhow::ensure!(
+        status.success(),
+        "{} box build failed ({status})",
+        crate::engine::program()
+    );
     Ok(())
 }
 
@@ -378,7 +382,7 @@ async fn build_selected(selected: &str, harness: &HarnessVersions) -> anyhow::Re
     let platform = match String::from_utf8(architecture.stdout)?.trim() {
         "aarch64" | "arm64" => "linux/arm64",
         "x86_64" | "amd64" => "linux/amd64",
-        _ => bail!("unsupported Docker architecture"),
+        _ => bail!("unsupported container engine architecture"),
     };
     let expected = if cfg!(target_arch = "aarch64") {
         "linux/arm64"
@@ -387,7 +391,7 @@ async fn build_selected(selected: &str, harness: &HarnessVersions) -> anyhow::Re
     };
     anyhow::ensure!(
         platform == expected,
-        "Docker architecture must match the installed platform package"
+        "container engine architecture must match the installed platform package"
     );
     let executable = std::env::current_exe()?;
     let context = std::env::var_os("AGENT_CONNECT_BOX_CONTEXT")

@@ -27,12 +27,12 @@ login and installs/starts the user service. `--no-service` uses another supervis
 Existing owner state and application policy are preserved; conflicting requested
 policy changes are rejected. Setup rebuilds and selects the box when the gateway
 version or owner layer changes. All setup runs preserve private authentication, journals and login homes.
-Setup asks the Docker daemon whether it is rootless. A new runtime on a rootful
+Setup asks the selected container engine whether it is rootless. A new runtime on a rootful
 Linux engine needs `--allow-rootful-engine` (on `setup` or `init`), which is recorded in the config as
 `allow_rootful_engine` (config only, no flag or environment variable); existing
 runtimes keep working, setup and serve warn, and doctor fails until it is
-recorded. Docker's userns-remap mode is refused. On a
-rootless engine, boxes that mount the shared harness home run as container root,
+recorded. Docker's userns-remap mode is refused. On
+rootless Docker, boxes that mount the shared harness home run as container root,
 which is the invoking user, with every capability dropped. On rootless Podman
 they run as the image's own user, mapped onto the invoking user with
 `--userns=keep-id`, so no box runs as root. Podman 4.9 is the oldest version
@@ -174,11 +174,11 @@ and approved application-tool effects remain possible. Boxed Codex rejects
 permission requests. `codex_mode` accepts only `read-only`, `workspace-write` or
 `agent-full-access`. Claude `app-tools-only` rejects native ACP permission
 requests and `deny-all` rejects every ACP permission request; these profiles do
-not guarantee denial of actions performed without permission requests. Docker
-remains the execution boundary. The gateway supplies cwd/mode/model policy, and
+not guarantee denial of actions performed without permission requests. The
+container remains the execution boundary. The gateway supplies cwd/mode/model policy, and
 a fixed approved tool snapshot cannot expand on reconnect.
 
-Codex read-only native operations require its nested sandbox to start. A Docker
+Codex read-only native operations require its nested sandbox to start. A container
 host that prohibits the required namespace can reject native commands with
 `bwrap: No permissions to create a new namespace`; those commands fail closed,
 while approved application tools remain available. Do not relax container
@@ -206,7 +206,7 @@ launcher's executable for local testing. Image selection is also available to
 init/login/egress as `AGENT_CONNECT_BOX_IMAGE`; egress name as
 `AGENT_CONNECT_EGRESS_CONTAINER`. No API-key environment is forwarded to boxes.
 
-Process exit codes: 0 successful completion/help; 1 runtime/I/O/Docker/login
+Process exit codes: 0 successful completion/help; 1 runtime/I/O/container engine/login
 failure; 2 invalid arguments/configuration/snapshot or unsupported npm platform.
 SIGINT/SIGTERM stop the server and its session hosts.
 
@@ -234,7 +234,7 @@ client message are cleaned up rather than retained for the reconnect grace.
 Shutdown joins hosts concurrently under one ten-second deadline, with a
 twenty-second overall session-task drain bound including allocation and cleanup.
 
-Before listening, boxed `serve` checks Docker, the selected image and the owned,
+Before listening, boxed `serve` checks the container engine, the selected image and the owned,
 running egress proxy. `egress start` safely reuses a matching proxy or restarts a
 stopped one. An owned proxy that is sound but built from another box, as after a
 rebuild, is replaced, provided that box is still installed to judge it by; any
@@ -381,11 +381,11 @@ Run `agent-connect setup` after editing the directory. The resulting tag is
 versions below and this directory; unchanged versions and directory contents
 reuse the existing box. Names, bytes, permissions and
 empty directories contribute to the hash, including ignored files. A failed
-Docker build prints Docker's output and keeps the previously configured box in
+box build prints the engine's output and keeps the previously configured box in
 use; first installation fails if no previous box exists. A changed owner layer
 is picked up by the next daily refresh, or at once by `agent-connect setup`. The owner
 layer stays local and is never published. Sessions receive no build context or
-Docker socket.
+engine socket.
 
 ## Harness versions
 
