@@ -28,7 +28,12 @@ arbitrary MCP features, device automation or a second session protocol.
 
 Remove superseded code instead of keeping compatibility layers: no deprecated
 re-exports, aliases or shims. Old versions remain available in npm and git
-history.
+history. Until 1.0 this covers everything an owner has installed too: commands,
+flags, config fields, service definitions and state files. Nobody runs the alpha
+in production, so a change does not migrate earlier installs, accept their
+config or keep a command they call; an owner reruns setup. Delete the tests of
+removed behavior with it. A second way into the same thing is debt, not
+caution.
 
 ## Security invariants
 
