@@ -500,9 +500,10 @@ test(
     ]) {
       const root = await tempRoot("acp-selector-");
       await mkdir(join(root, "bin"));
+      // Rootless, so the gateway prefers this Docker over a host's Podman.
       await writeFile(
         join(root, "bin/docker"),
-        '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":[],"operatingSystem":"Linux"}\'; exit 0; fi\nprintf "%s\\n" "$@" > "$LOGIN_ARGS"\n',
+        '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":["name=rootless"],"operatingSystem":"Linux"}\'; exit 0; fi\nprintf "%s\\n" "$@" > "$LOGIN_ARGS"\n',
       );
       await chmod(join(root, "bin/docker"), 0o755);
       const env = {

@@ -30,11 +30,11 @@ export const tmpfsOwner = (uid, gid) =>
 // What a child with an isolated HOME needs to reach the same engine. Docker
 // talks to a socket; rootless Podman keeps its image store and runtime state
 // under the user's XDG data and runtime directories, which an isolated HOME
-// would replace. Its configuration stays isolated: the defaults suffice.
+// would replace. Its configuration stays isolated: the defaults suffice. The
+// engine is always named: left to choose, the gateway prefers a rootless one,
+// which need not be the one this harness drives.
 export function engineEnv(env = process.env) {
-  const kept = {};
-  if (env.AGENT_CONNECT_CONTAINER_ENGINE)
-    kept.AGENT_CONNECT_CONTAINER_ENGINE = env.AGENT_CONNECT_CONTAINER_ENGINE;
+  const kept = { AGENT_CONNECT_CONTAINER_ENGINE: engine };
   if (engine === "docker") {
     for (const name of ["DOCKER_HOST", "DOCKER_CONTEXT"])
       if (env[name]) kept[name] = env[name];

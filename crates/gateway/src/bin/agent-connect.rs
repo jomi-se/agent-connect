@@ -64,7 +64,7 @@ const MAX_CLIENT_FRAME_BYTES: usize = 1024 * 1024;
     after_help = "Example:\n  agent-connect setup\n  agent-connect setup --origin https://gateway.example\n  agent-connect doctor\n  agent-connect service status\n\nExit codes: 0 success; 1 runtime or readiness failure; 2 invalid arguments or configuration. ACP and MCP-over-ACP are unstable."
 )]
 struct Cli {
-    /// Container engine for this command; overrides the configuration's.
+    /// Container engine for a new runtime; a runtime refuses one it did not record.
     #[arg(
         long,
         global = true,
@@ -287,9 +287,7 @@ async fn run() -> anyhow::Result<()> {
         Command::Login(cli) => {
             use std::io::IsTerminal;
             let configured = cli.config.as_deref().map(config::read_config).transpose()?;
-            if let Some(program) = configured.as_ref().and_then(|c| c.container_engine) {
-                engine::select(program);
-            }
+            engine::for_runtime(configured.as_ref().and_then(|c| c.container_engine))?;
             let harness = if let Some(harness) = cli.harness {
                 harness
             } else {
@@ -338,7 +336,7 @@ async fn run() -> anyhow::Result<()> {
             return Ok(());
         }
     };
-    engine::select(cli.container_engine);
+    engine::for_runtime(cli.container_engine)?;
     cli.codex_mode.get_or_insert_with(|| {
         if cli.boxed {
             CodexMode::AgentFullAccess
