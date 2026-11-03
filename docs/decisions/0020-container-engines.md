@@ -20,11 +20,10 @@ host ids.
    the client's platform is never evidence: a macOS client can drive a remote
    rootful Linux daemon.
 
-2. **Rootful is an owner's explicit choice.** A new runtime on a rootful engine
-   needs `setup --allow-rootful-engine`, recorded in the
-   configuration only.
-   Existing runtimes keep working, with a warning at setup and serve, and
-   doctor's `engine_rootless` fails until the acceptance is recorded. Engines
+2. **Rootful is an owner's explicit choice.** Setup refuses a rootful engine,
+   for a new runtime or a rerun, unless the owner passes
+   `--allow-rootful-engine`, which is recorded in the configuration only.
+   Serve warns and doctor's `engine_rootless` fails until it is recorded. Engines
    in a virtual machine (Docker Desktop, OrbStack, as the daemon reports
    itself) pass. Docker's userns-remap mode is refused.
 

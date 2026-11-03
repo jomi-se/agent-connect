@@ -230,18 +230,13 @@ fn parse_podman_info(output: &str) -> anyhow::Result<Engine> {
 pub const ROOTFUL_RISK: &str = "The container engine is rootful: whatever can start containers on it, this gateway included, can start host root";
 pub const ROOTFUL_FIX: &str = "Run rootless Podman or Docker in rootless mode for this user, or record that you accept the risk with agent-connect setup --allow-rootful-engine";
 
-/// Setup's gate. A new runtime on a rootful engine needs the owner's explicit
-/// acceptance. An existing one keeps working with a warning, so an upgrade
-/// never breaks a gateway that worked before it.
-pub fn admit(engine: Engine, accepted: bool, existing: bool) -> anyhow::Result<Option<String>> {
-    match (engine, accepted, existing) {
-        (Engine::Rootless | Engine::RootlessPodman | Engine::VirtualMachine, ..)
-        | (Engine::Rootful, true, _) => Ok(None),
-        (Engine::Rootful, false, true) => Ok(Some(format!("{ROOTFUL_RISK}.\n{ROOTFUL_FIX}."))),
-        (Engine::Rootful, false, false) => {
-            Err(crate::config::UsageError(format!("{ROOTFUL_RISK}. {ROOTFUL_FIX}.")).into())
-        }
+/// Setup's gate: a runtime on a rootful engine needs the owner's explicit
+/// acceptance, whether setup creates it or reruns on it.
+pub fn admit(engine: Engine, accepted: bool) -> anyhow::Result<()> {
+    if engine == Engine::Rootful && !accepted {
+        return Err(crate::config::UsageError(format!("{ROOTFUL_RISK}. {ROOTFUL_FIX}.")).into());
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -249,19 +244,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_new_runtime_needs_the_owner_to_accept_a_rootful_engine() {
-        assert!(admit(Engine::Rootful, false, false).is_err());
-        assert_eq!(admit(Engine::Rootful, true, false).unwrap(), None);
-        assert_eq!(admit(Engine::Rootless, false, false).unwrap(), None);
-        assert_eq!(admit(Engine::VirtualMachine, false, false).unwrap(), None);
-    }
-
-    #[test]
-    fn an_existing_runtime_keeps_working_with_a_warning() {
-        let warning = admit(Engine::Rootful, false, true).unwrap().unwrap();
-        assert!(warning.contains("host root"));
-        assert!(warning.contains("--allow-rootful-engine"));
-        assert_eq!(admit(Engine::Rootful, true, true).unwrap(), None);
+    fn a_rootful_engine_needs_the_owners_acceptance() {
+        assert!(admit(Engine::Rootful, false).is_err());
+        assert!(admit(Engine::Rootful, true).is_ok());
+        assert!(admit(Engine::Rootless, false).is_ok());
+        assert!(admit(Engine::RootlessPodman, false).is_ok());
+        assert!(admit(Engine::VirtualMachine, false).is_ok());
     }
 
     fn info(options: &str, os: &str) -> String {

@@ -28,11 +28,10 @@ login and installs/starts the user service. `--no-service` uses another supervis
 Existing owner state and application policy are preserved; conflicting requested
 policy changes are rejected. Setup rebuilds and selects the box when the gateway
 version or owner layer changes. All setup runs preserve private authentication, journals and login homes.
-Setup asks the selected container engine whether it is rootless. A new runtime on a rootful
-Linux engine needs `--allow-rootful-engine`, which is recorded in the config as
-`allow_rootful_engine` (config only, no flag or environment variable); existing
-runtimes keep working, setup and serve warn, and doctor fails until it is
-recorded. Docker's userns-remap mode is refused. On
+Setup asks the selected container engine whether it is rootless. On a rootful
+Linux engine it needs `--allow-rootful-engine`, which is recorded in the config as
+`allow_rootful_engine` (config only, no flag or environment variable); until it
+is recorded, serve warns and doctor fails. Docker's userns-remap mode is refused. On
 rootless Docker, boxes that mount the shared harness home run as container root,
 which is the invoking user, with every capability dropped. On rootless Podman
 they run as the image's own user, mapped onto the invoking user with
@@ -113,9 +112,7 @@ The Gateway owner page lists all configured entry points. Changes to the selecte
 permissions, a box image the owner named and other fingerprinted operator policy
 invalidate grants. A locally built box counts as one policy whatever its tag, so
 rebuilding it for a new harness release, owner layer or gateway version keeps
-grants: none of those changes what a grant allows. Gateways before this rule
-fingerprinted the exact tag, so with a locally built box the first start after
-upgrading invalidates existing grants once, and applications pair again.
+grants: none of those changes what a grant allows.
 Applications choose their exact origin and fixed tool snapshot at owner consent;
 they cannot change native harness policy.
 
