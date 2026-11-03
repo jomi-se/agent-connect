@@ -53,7 +53,15 @@ host ids.
    if ever needed. `scripts/egress-impostors.sh` keeps the evidence that each
    weakening is refused on each engine.
 
-6. **The service starts its own egress.** An engine without a daemon restarts
+6. **Podman keeps a keepalive beside the egress.** Podman 4.9 tears down its
+   shared rootless network when a container leaves a network and no other
+   running container uses it, so the egress leaving the last session's
+   network cut the egress off. `egress start` keeps an owned, locked-down
+   `sleep` container on that network, readiness requires it, and it follows
+   the egress's image. The workaround goes once Podman 5, which counts the
+   network's users, is the minimum.
+
+7. **The service starts its own egress.** An engine without a daemon restarts
    nothing at boot, so the systemd unit runs `egress start --config` before
    serving; a failure goes through the unit's restart policy.
 

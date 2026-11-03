@@ -238,7 +238,11 @@ Before listening, boxed `serve` checks Docker, the selected image and the owned,
 running egress proxy. `egress start` safely reuses a matching proxy or restarts a
 stopped one. An owned proxy that is sound but built from another box, as after a
 rebuild, is replaced, provided that box is still installed to judge it by; any
-other incompatible proxy requires explicit stop/recreate. The proxy uses
+other incompatible proxy requires explicit stop/recreate. On Podman, `egress
+start` also keeps a `<egress>-keepalive` container running beside the proxy:
+Podman 4 tears down its rootless network when a container leaves a network and
+no other running container uses it, which would cut the proxy off when the last
+session ends. Readiness requires it; `egress stop` removes it. The proxy uses
 `unless-stopped` restart policy and rotated JSON logs (10 MiB × 3). Defaults are
 64 sockets per session source and 512 total, 60-second idle, five-minute request
 and one-hour absolute connection limits. Invalid limit overrides fail startup;
