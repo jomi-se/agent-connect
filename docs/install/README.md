@@ -15,7 +15,7 @@ its buildx plugin is the tested baseline. On Linux, use rootless Podman
 (`agent-connect --container-engine podman setup`) or run Docker Engine in
 [rootless mode](https://docs.docker.com/engine/security/rootless/): on a
 rootful engine, anything that can start containers, this gateway included, can
-start host root, so setup and `init` refuse one unless you pass `--allow-rootful-engine`.
+start host root, so setup refuses one unless you pass `--allow-rootful-engine`.
 Docker Desktop and OrbStack run their engine in a virtual machine and need no
 flag; other virtual machines, such as Colima, report as rootful. Setup
 builds the box locally, so first setup downloads and stores roughly 1.5 GB.
@@ -290,9 +290,9 @@ mounted into sessions. Box cleanup failures retain capacity until owned cleanup
 and gateway restart; doctor and service logs identify failures without broad
 Docker deletion.
 
-The explicit `init --headless-static-bearer` path remains available for headless
-integrations. It requires an exact app origin, fixed tools and private bearer
-handoff, and has no hosted owner/OAuth flow. It is off by default. See
-[configuration](configuration.md) for this path and full policy reference, or
+A headless integration, with no hosted owner/OAuth flow, is a configuration the
+operator writes: an exact app origin, fixed tools and a private bearer. It is
+off by default. See [configuration](configuration.md) for it and the full policy
+reference, or
 [release operations](release.md) for artifact production and owner-controlled
 publication.

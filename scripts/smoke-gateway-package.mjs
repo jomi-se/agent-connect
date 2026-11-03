@@ -33,8 +33,7 @@ try {
   ]);
   assert.match(help, /serve/i);
   assert.match(help, /login/i);
-  assert.match(help, /init/i);
-  assert.match(help, /egress/i);
+  assert.match(help, /setup/i);
   const manifest = JSON.parse(
     await readFile(
       join(dir, "node_modules/@open-agent-connect/gateway/package.json"),

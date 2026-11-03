@@ -63,6 +63,10 @@ pub struct SetupCli {
     /// containers that are host root. Recorded in the configuration.
     #[arg(long)]
     pub allow_rootful_engine: bool,
+    /// Take this installed box as it is, without resolving harness releases or
+    /// building one. For test fixtures, which bring their own box.
+    #[arg(long, hide = true)]
+    pub box_image: Option<String>,
 }
 
 #[derive(Args)]
@@ -265,9 +269,10 @@ pub fn setup_plan(
         || previous
             .as_ref()
             .is_some_and(|c| c.allow_rootful_engine == Some(true));
-    let box_image = match harness_versions {
-        Some(versions) => box_build::desired_image(versions)?,
-        None => previous_box_image.clone().context(
+    let box_image = match (&cli.box_image, harness_versions) {
+        (Some(image), _) => image.clone(),
+        (None, Some(versions)) => box_build::desired_image(versions)?,
+        (None, None) => previous_box_image.clone().context(
             "npm is unreachable, so setup cannot choose harness versions for a first box",
         )?,
     };
@@ -282,7 +287,13 @@ pub fn setup_plan(
     } else {
         home
     };
-    if directory.starts_with(&home) {
+    // Through its existing parent too, which may be a link into the home.
+    let resolved = directory
+        .parent()
+        .and_then(|parent| parent.canonicalize().ok())
+        .zip(directory.file_name())
+        .map(|(parent, name)| parent.join(name));
+    if directory.starts_with(&home) || resolved.is_some_and(|path| path.starts_with(&home)) {
         return Err(usage(
             "runtime and owner state must be outside the mounted harness home",
         ));
@@ -426,14 +437,17 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         crate::engine::select(crate::engine::Program::Podman);
     }
     // Resolve once per run so every plan below selects the same box.
-    let harness_versions = match box_build::resolve_harness().await {
-        Ok(versions) => Some(versions),
-        Err(error) => {
-            eprintln!(
-                "{error:#}\nCannot check npm for harness releases; keeping the configured box."
-            );
-            None
-        }
+    let harness_versions = match &cli.box_image {
+        Some(_) => None,
+        None => match box_build::resolve_harness().await {
+            Ok(versions) => Some(versions),
+            Err(error) => {
+                eprintln!(
+                    "{error:#}\nCannot check npm for harness releases; keeping the configured box."
+                );
+                None
+            }
+        },
     };
     let harness_versions = harness_versions.as_ref();
     if guided {
@@ -501,13 +515,15 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         ));
     }
     // Fail prerequisites before creating private authentication state.
-    plan.box_image = box_build::ensure_box(
-        &plan.box_image,
-        plan.previous_box_image.as_deref(),
-        harness_versions,
-    )
-    .await?;
-    if engine == crate::engine::Engine::RootlessPodman {
+    if cli.box_image.is_none() {
+        plan.box_image = box_build::ensure_box(
+            &plan.box_image,
+            plan.previous_box_image.as_deref(),
+            harness_versions,
+        )
+        .await?;
+    }
+    if engine == crate::engine::Engine::RootlessPodman && cli.box_image.is_none() {
         box_build::warm_owner_mapping(&plan.box_image).await?;
     }
     let box_changed = plan.existing && plan.previous_box_image.as_deref() != Some(&plan.box_image);
@@ -539,27 +555,9 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
     }
     if !plan.existing {
         create_private_directory(plan.directory.parent().unwrap())?;
-        let init = config::InitCli {
-            directory: plan.directory.clone(),
-            harness: plan.harness,
-            harness_home: Some(plan.harness_home.clone()),
-            allow_origin: None,
-            tools: None,
-            public_url: Some(plan.origin.clone()),
-            headless_static_bearer: false,
-            listen: plan.listen,
-            box_image: plan.box_image.clone(),
-            allow_rootful_engine: plan.allow_rootful_engine,
-        };
-        tokio::task::spawn_blocking(move || config::init_quiet(init)).await??;
-        persist_setup_policy(&plan.config, &plan)?;
-        record_config_value(
-            &plan.config,
-            "container_engine",
-            serde_json::to_value(plan.container_engine)?,
-        )?;
-    }
-    if record_rootful {
+        let runtime = new_runtime(&plan, record_rootful);
+        tokio::task::spawn_blocking(move || config::create_runtime(runtime, None)).await??;
+    } else if record_rootful {
         record_rootful_acceptance(&plan.config)?;
     }
     if plan.login {
@@ -615,55 +613,22 @@ fn upgrade_image(path: &Path, image: &str) -> anyhow::Result<()> {
     replace_private_config(path, &serde_json::to_vec_pretty(&value)?)
 }
 
-fn persist_setup_policy(path: &Path, plan: &SetupPlan) -> anyhow::Result<()> {
-    let mut configured = config::read_config(path)?;
-    configured.entry_points = Some(plan.entry_points.clone());
-    configured.profiles = Some(plan.profiles.clone());
-    configured.permissions = Some(plan.permissions);
-    let configured = configured.resolve()?;
-    anyhow::ensure!(
-        configured.client_address_policies == plan.client_address_policies,
-        "client address policy changed during setup preparation"
-    );
-    let mut value: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
-    let object = value
-        .as_object_mut()
-        .ok_or_else(|| usage("configuration must be an object"))?;
-    object.insert(
-        "entry_points".into(),
-        serde_json::to_value(&plan.entry_points)?,
-    );
-    object.insert("profiles".into(), serde_json::to_value(&plan.profiles)?);
-    object.insert(
-        "permissions".into(),
-        serde_json::to_value(plan.permissions)?,
-    );
-    replace_private_config(path, &serde_json::to_vec_pretty(&value)?)
-}
-
-/// `agent-connect init`, the low-level way to create a runtime. It passes the
-/// engine gate setup passes, and records the engine and any acceptance the same
-/// way, so neither path creates a runtime the other would refuse.
-pub async fn init(cli: config::InitCli) -> anyhow::Result<()> {
-    let program = crate::engine::selected();
-    let allow = cli.allow_rootful_engine;
-    let path = cli.directory.join("config.json");
-    let accepted = tokio::task::spawn_blocking(move || {
-        let mut accepted = false;
-        config::init(cli, || {
-            let engine = crate::engine::detect()?;
-            crate::engine::admit(engine, allow, false)?;
-            accepted = engine == crate::engine::Engine::Rootful && allow;
-            Ok(())
-        })?;
-        Ok::<_, anyhow::Error>(accepted)
-    })
-    .await??;
-    record_config_value(&path, "container_engine", serde_json::to_value(program)?)?;
-    if accepted {
-        record_rootful_acceptance(&path)?;
+/// The runtime setup creates from its plan.
+fn new_runtime(plan: &SetupPlan, allow_rootful_engine: bool) -> config::NewRuntime {
+    config::NewRuntime {
+        directory: plan.directory.clone(),
+        harness: plan.harness,
+        harness_home: plan.harness_home.clone(),
+        public_url: plan.origin.clone(),
+        listen: plan.listen,
+        box_image: plan.box_image.clone(),
+        egress_container: plan.egress_container.clone(),
+        entry_points: plan.entry_points.clone(),
+        profiles: plan.profiles.clone(),
+        permissions: plan.permissions,
+        container_engine: plan.container_engine,
+        allow_rootful_engine,
     }
-    Ok(())
 }
 
 fn record_rootful_acceptance(path: &Path) -> anyhow::Result<()> {
@@ -855,6 +820,7 @@ mod tests {
             no_service: true,
             upgrade: false,
             allow_rootful_engine: false,
+            box_image: None,
         }
     }
     #[test]
@@ -889,27 +855,13 @@ mod tests {
         cli.profiles = Some(vec![PermissionProfile::ReadOnly]);
         cli.permissions = Some(PermissionProfile::ReadOnly);
         let plan = setup_plan(&cli, Some(&test_harness())).unwrap();
-        config::init_with_output(
-            config::InitCli {
-                directory: plan.directory.clone(),
-                harness: plan.harness,
-                harness_home: Some(plan.harness_home.clone()),
-                allow_origin: None,
-                tools: None,
-                public_url: Some(plan.origin.clone()),
-                headless_static_bearer: false,
-                listen: plan.listen,
-                box_image: plan.box_image.clone(),
-                allow_rootful_engine: false,
-            },
+        config::create_runtime(
+            new_runtime(&plan, false),
             Some("fixture-only-owner-passphrase".into()),
-            false,
-            || Ok(()),
         )
         .unwrap();
         let owner_path = plan.directory.join("state/auth/authorization.json");
         let owner_state = std::fs::read(&owner_path).unwrap();
-        persist_setup_policy(&plan.config, &plan).unwrap();
         let config = config::ServeOptions {
             config: Some(plan.config.clone()),
             ..Default::default()
@@ -1000,14 +952,9 @@ mod tests {
                 .unwrap()
                 .contains("192.0.2.10")
         );
-        persist_setup_policy(&trusted.config, &trusted).unwrap();
-        let preserved: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(&plan.config).unwrap()).unwrap();
-        assert_eq!(preserved["client_address_policies"], policy);
         raw["client_address_policies"]["https://alternate.example"]["trusted_peers"] =
             serde_json::json!(["192.0.2.11"]);
         replace_private_config(&plan.config, &serde_json::to_vec_pretty(&raw).unwrap()).unwrap();
-        assert!(persist_setup_policy(&trusted.config, &trusted).is_err());
         let changed = setup_plan(&cli, Some(&test_harness())).unwrap();
         assert_ne!(
             changed.client_address_policies,

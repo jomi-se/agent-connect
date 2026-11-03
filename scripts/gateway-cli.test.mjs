@@ -40,6 +40,10 @@ async function tempRoot(prefix) {
 
 const cliHome = await tempRoot("acp-cli-isolated-home-");
 const cliState = join(cliHome, "state");
+// setup refuses a rootful engine, so the CLI sees a rootless one. Awaited
+// before the first test is registered: a top-level await after one lets the
+// suite's after hook run before later tests allocate their roots.
+const enginePath = await rootlessEnginePath(cliHome);
 test("login invokes only the provider CLI with a private shared home and host UID", async () => {
   const root = await tempRoot("acp-login-command-");
   const home = join(root, "dedicated");
@@ -105,9 +109,6 @@ test("help, version and invalid argument exit codes are stable", () => {
   assert.match(usage.stderr, /unexpected argument/);
 });
 
-// init refuses a rootful engine, so the CLI sees a rootless one.
-const enginePath = await rootlessEnginePath(cliHome);
-
 function cliEnv(env = {}) {
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -131,107 +132,43 @@ function command(args, env = {}) {
   });
 }
 
-async function setup() {
-  const root = await tempRoot("acp-init-");
-  const tools = join(root, "input-tools.json");
+// A headless runtime is a configuration the operator writes; there is no
+// command that creates one.
+async function headlessRuntime() {
+  const root = await tempRoot("acp-headless-");
+  const directory = join(root, "runtime");
+  await mkdir(join(directory, "state"), { recursive: true, mode: 0o700 });
+  await chmod(directory, 0o700);
+  const tools = join(directory, "tools.json");
   await writeFile(
     tools,
     JSON.stringify([{ name: "read", inputSchema: { type: "object" } }]),
+    { mode: 0o600 },
   );
-  const directory = join(root, "runtime");
-  const args = [
-    "init",
-    "--headless-static-bearer",
-    "--directory",
-    directory,
-    "--harness",
-    "codex",
-    "--allow-origin",
-    "https://app.example",
-    "--tools",
-    tools,
-  ];
-  return { root, tools, directory, args };
+  const harnessHome = join(cliState, "agent-connect/harnesses/codex");
+  await mkdir(harnessHome, { recursive: true, mode: 0o700 });
+  await writeFile(
+    join(directory, "config.json"),
+    JSON.stringify({
+      harness: "codex",
+      listen: "127.0.0.1:18940",
+      headless_static_bearer: true,
+      allow_origin: "https://app.example",
+      token: "a".repeat(64),
+      tools: "tools.json",
+      harness_home: harnessHome,
+      state_dir: "state",
+      boxed: true,
+      box_image: "session:test",
+      egress_container: "agent-connect-egress-fixture",
+    }),
+    { mode: 0o600 },
+  );
+  return { root, tools, directory };
 }
 
-test("init validates first, creates private scoped grant, and refuses overwrites", async () => {
-  const { stat } = await import("node:fs/promises");
-  const fixture = await setup();
-  const result = command(fixture.args);
-  assert.equal(result.status, 0, result.stderr);
-  const config = JSON.parse(
-    await readFile(join(fixture.directory, "config.json")),
-  );
-  const grant = JSON.parse(
-    await readFile(join(fixture.directory, "grant.json")),
-  );
-  assert.deepEqual(Object.keys(grant).sort(), ["gatewayUrl", "token"]);
-  assert.equal(grant.gatewayUrl, "ws://127.0.0.1:18940/acp");
-  assert.equal(grant.token, config.token);
-  assert.match(grant.token, /^[a-f0-9]{64}$/);
-  assert.equal(config.allow_origin, "https://app.example");
-  assert.equal(config.boxed, true);
-  assert.equal(
-    config.harness_home,
-    join(cliState, "agent-connect/harnesses/codex"),
-  );
-  assert.equal(config.tools, "tools.json");
-  assert.ok(!result.stdout.includes(grant.token));
-  assert.match(result.stdout, /Next: agent-connect login \(choose Codex\)/);
-  assert.match(result.stdout, /serve --config/);
-  assert.equal((await stat(config.harness_home)).mode & 0o777, 0o700);
-  for (const name of ["", "state"]) {
-    assert.equal(
-      (await stat(join(fixture.directory, name))).mode & 0o777,
-      0o700,
-    );
-  }
-  for (const name of ["config.json", "grant.json", "tools.json"]) {
-    assert.equal(
-      (await stat(join(fixture.directory, name))).mode & 0o777,
-      0o600,
-    );
-  }
-  const refused = command(fixture.args);
-  assert.equal(refused.status, 1);
-  assert.match(refused.stderr, /must not exist/);
-  assert.equal(
-    JSON.parse(await readFile(join(fixture.directory, "grant.json"))).token,
-    grant.token,
-  );
-  const second = await setup();
-  assert.equal(command(second.args).status, 0);
-  assert.notEqual(
-    JSON.parse(await readFile(join(second.directory, "grant.json"))).token,
-    grant.token,
-  );
-});
-
-test("init rejects invalid snapshot and origin before creating runtime files", async () => {
-  const { stat } = await import("node:fs/promises");
-  const fixture = await setup();
-  for (const tools of [
-    [{ name: "missing-schema" }],
-    [
-      { name: "duplicate", inputSchema: {} },
-      { name: "duplicate", inputSchema: {} },
-    ],
-  ]) {
-    await writeFile(fixture.tools, JSON.stringify(tools));
-    const refused = command(fixture.args);
-    assert.equal(refused.status, 2);
-    await assert.rejects(stat(fixture.directory), { code: "ENOENT" });
-  }
-  await writeFile(fixture.tools, "[]");
-  const args = [...fixture.args];
-  args[args.indexOf("--allow-origin") + 1] = "https://app.example/path";
-  assert.equal(command(args).status, 2);
-  await assert.rejects(stat(fixture.directory), { code: "ENOENT" });
-});
-
 test("serve refuses unknown JSON fields and insecure config modes without printing token", async () => {
-  const fixture = await setup();
-  assert.equal(command(fixture.args).status, 0);
+  const fixture = await headlessRuntime();
   const path = join(fixture.directory, "config.json");
   const configuration = JSON.parse(await readFile(path));
   await chmod(path, 0o644);
@@ -376,8 +313,7 @@ async function serveUntilReady(args, env = {}, cwd) {
 }
 
 test("CLI overrides environment, environment overrides JSON, and paths follow config directory", async () => {
-  const fixture = await setup();
-  assert.equal(command(fixture.args).status, 0);
+  const fixture = await headlessRuntime();
   const path = join(fixture.directory, "config.json");
   const configuration = JSON.parse(await readFile(path));
   Object.assign(configuration, {
@@ -414,7 +350,7 @@ test("CLI overrides environment, environment overrides JSON, and paths follow co
 });
 
 test("production isolation requirements and runtime failures have distinct exits", async () => {
-  const fixture = await setup();
+  const fixture = await headlessRuntime();
   const base = [
     "serve",
     "--harness",
@@ -452,8 +388,7 @@ test("production isolation requirements and runtime failures have distinct exits
 });
 
 test("relative config argument resolves a dedicated production home to an absolute path", async () => {
-  const fixture = await setup();
-  assert.equal(command(fixture.args).status, 0);
+  const fixture = await headlessRuntime();
   const result = await serveUntilReady(
     ["serve", "--config", "runtime/config.json", "--listen", "127.0.0.1:0"],
     await preflightDocker(),
@@ -471,7 +406,7 @@ test("flagless login refuses nonterminal input without allocating a home", async
   await assert.rejects(access(state), { code: "ENOENT" });
 });
 
-test("login defaults match init, explicit homes and old configs remain usable", async () => {
+test("login defaults to the platform harness home; a config's home and box apply", async () => {
   const root = await tempRoot("acp-login-defaults-");
   await mkdir(join(root, "bin"));
   await writeFile(
@@ -481,15 +416,14 @@ test("login defaults match init, explicit homes and old configs remain usable", 
   await chmod(join(root, "bin/docker"), 0o755);
   const env = { PATH: join(root, "bin"), LOGIN_ARGS: join(root, "args") };
   assert.equal(command(["login", "--harness", "codex"], env).status, 0);
-  const fixture = await setup();
-  assert.equal(command(fixture.args).status, 0);
+  const fixture = await headlessRuntime();
   const path = join(fixture.directory, "config.json");
   const config = JSON.parse(await readFile(path, "utf8"));
   const args = (await readFile(env.LOGIN_ARGS, "utf8")).split("\n");
   assert.ok(
     args.includes(`type=bind,src=${config.harness_home},dst=/home/node`),
   );
-  // An existing runtime may still use its relative, per-runtime home/image.
+  // A config may name a relative, per-runtime home and its own box.
   config.harness_home = "legacy-home";
   config.box_image = "session:legacy-test";
   await writeFile(path, JSON.stringify(config));
@@ -553,14 +487,6 @@ test("login defaults match init, explicit homes and old configs remain usable", 
     ),
   );
   assert.ok(!loginArgs.includes("fixture-supplied-at-serve-time"));
-  const custom = await setup();
-  const home = join(custom.root, "explicit-home");
-  assert.equal(command([...custom.args, "--harness-home", home]).status, 0);
-  assert.equal(
-    JSON.parse(await readFile(join(custom.directory, "config.json")))
-      .harness_home,
-    home,
-  );
 });
 
 test(
@@ -633,21 +559,30 @@ test(
   },
 );
 
-test("normal init enrolls owner auth without issuing an app bearer", async () => {
+function ownerSetup(directory, ...extra) {
+  // The fixture box stands in for the one setup would build.
+  return [
+    "setup",
+    "--apply",
+    "--non-interactive",
+    "--no-service",
+    "--box-image",
+    "session:test",
+    "--directory",
+    directory,
+    "--harness",
+    "codex",
+    ...extra,
+  ];
+}
+
+test("owner setup enrolls owner auth without issuing an app bearer", async () => {
   const { stat } = await import("node:fs/promises");
   const root = await tempRoot("acp-owner-setup-");
   const directory = join(root, "runtime");
   const result = await ownerTerminal(
     binary,
-    [
-      "init",
-      "--directory",
-      directory,
-      "--harness",
-      "codex",
-      "--public-url",
-      "https://gateway.example",
-    ],
+    ownerSetup(directory, "--origin", "https://gateway.example"),
     "isolated-owner-test-passphrase",
     { env: cliEnv() },
   );
@@ -660,7 +595,9 @@ test("normal init enrolls owner auth without issuing an app bearer", async () =>
   assert.ok(!result.stdout.includes("isolated-owner-test-passphrase"));
   const config = JSON.parse(await readFile(join(directory, "config.json")));
   assert.equal(config.public_url, "https://gateway.example");
-  assert.equal(config.headless_static_bearer, false);
+  assert.equal(config.headless_static_bearer, undefined);
+  assert.equal(config.container_engine, "docker");
+  assert.match(config.egress_container, /^agent-connect-egress-[0-9a-f]{12}$/);
   assert.equal(config.token, undefined);
   assert.equal(config.tools, undefined);
   assert.equal(config.allow_origin, undefined);
@@ -694,17 +631,16 @@ test("owner setup rejects unattended prompts and invalid public origins before c
   const { stat } = await import("node:fs/promises");
   const root = await tempRoot("acp-owner-invalid-");
   const directory = join(root, "runtime");
-  const args = ["init", "--directory", directory, "--harness", "codex"];
-  const noTerminal = command(args);
-  assert.equal(noTerminal.status, 2);
-  assert.match(noTerminal.stderr, /owner setup needs a terminal/);
+  const noTerminal = command(ownerSetup(directory));
+  assert.equal(noTerminal.status, 2, noTerminal.stderr);
+  assert.match(noTerminal.stderr, /needs the owner at a terminal/);
   for (const url of [
     "http://gateway.example",
     "https://gateway.example/path",
     "https://owner@gateway.example",
     "https://gateway.example?secret=x",
   ]) {
-    assert.equal(command([...args, "--public-url", url]).status, 2);
+    assert.equal(command(ownerSetup(directory, "--origin", url)).status, 2);
   }
   await assert.rejects(stat(directory), { code: "ENOENT" });
 });
@@ -720,15 +656,7 @@ test("owner setup rejects runtime inside harness mount, including canonical alia
     const runtime = join(parent, "runtime");
     const result = await ownerTerminal(
       binary,
-      [
-        "init",
-        "--directory",
-        runtime,
-        "--harness",
-        "codex",
-        "--harness-home",
-        home,
-      ],
+      ownerSetup(runtime, "--harness-home", home),
       "isolated-owner-test-passphrase",
       { env: cliEnv() },
     );

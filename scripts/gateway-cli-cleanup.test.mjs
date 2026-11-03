@@ -25,19 +25,20 @@ for (const fail of [false, true]) {
     const events = join(root, "calls.jsonl");
     const binary = join(root, "fake-gateway");
     // This double exercises only the suite's cleanup lifecycle. The selected
-    // invalid-input test expects exit 2; exit 0 triggers a real assertion failure.
+    // refusal test expects exit 2; exit 0 triggers a real assertion failure.
     await writeFile(
       binary,
       `#!${process.execPath}
 import fs from 'node:fs';
 import path from 'node:path';
 const args = process.argv.slice(2);
-if (args[0] !== 'init') throw new Error('Unexpected fixture command');
+if (args[0] !== 'setup') throw new Error('Unexpected fixture command');
 const runtime = args[args.indexOf('--directory') + 1];
 const owned = path.dirname(runtime);
 fs.appendFileSync(${JSON.stringify(events)}, JSON.stringify({ home: process.env.HOME, root: owned }) + '\\n');
 const link = path.join(owned, 'foreign-link');
 if (!fs.existsSync(link)) fs.symlinkSync(${JSON.stringify(foreign)}, link);
+console.error('first-time setup needs the owner at a terminal');
 process.exit(${fail ? 0 : 2});
 `,
       { mode: 0o755 },
@@ -46,7 +47,7 @@ process.exit(${fail ? 0 : 2});
       process.execPath,
       [
         "--test",
-        "--test-name-pattern=^init rejects invalid snapshot and origin before creating runtime files$",
+        "--test-name-pattern=^owner setup rejects unattended prompts and invalid public origins before creation$",
         fileURLToPath(new URL("./gateway-cli.test.mjs", import.meta.url)),
       ],
       {
@@ -72,7 +73,7 @@ process.exit(${fail ? 0 : 2});
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.equal(calls.length, fail ? 1 : 3);
+    assert.equal(calls.length, fail ? 1 : 5);
     const owned = new Set(calls.flatMap((call) => [call.home, call.root]));
     assert.equal(
       owned.size,
@@ -146,12 +147,12 @@ import path from 'node:path';
 const mode = ${JSON.stringify(mode)};
 const args = process.argv.slice(2);
 const record = (value) => fs.appendFileSync(${JSON.stringify(events)}, JSON.stringify(value) + '\\n');
-if (args[0] === 'init') {
-  const runtime = args[args.indexOf('--directory') + 1];
-  fs.mkdirSync(runtime);
-  fs.writeFileSync(path.join(runtime, 'config.json'), '{}');
-  record({ root: path.dirname(runtime), home: process.env.HOME });
-} else if (args[0] === 'serve') {
+if (args[0] === 'serve') {
+  // The selected test writes its runtime at <root>/runtime/config.json.
+  const config = args.includes('--config')
+    ? args[args.indexOf('--config') + 1]
+    : process.env.AGENT_CONNECT_CONFIG;
+  record({ root: path.dirname(path.dirname(config)), home: process.env.HOME });
   record({ pid: process.pid });
   process.on('SIGTERM', () => {
     record({ signal: 'SIGTERM', homeExists: fs.existsSync(process.env.HOME) });
