@@ -27,6 +27,8 @@ import {
 import { requireBoxImage } from "./test-box-images.mjs";
 import { verifyClientAddressPolicy } from "./client-address-fixture.mjs";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
+import { rootlessEnginePath } from "./rootless-engine-stub.mjs";
+import { engineEnv } from "./container-engine.mjs";
 
 const boxImage = requireBoxImage();
 const repo = resolve(import.meta.dirname, "..");
@@ -71,7 +73,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 );
 await chmod(uiAdapter, 0o700);
 const fixtureEnv = {
-  PATH: process.env.PATH,
+  ...engineEnv(),
+  // init's rootful-engine gate sees a rootless engine on any host.
+  PATH: await rootlessEnginePath(root),
   HOME: join(root, "home"),
   XDG_STATE_HOME: join(root, "state"),
 };

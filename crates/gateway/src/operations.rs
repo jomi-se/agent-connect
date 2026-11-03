@@ -670,11 +670,19 @@ fn persist_setup_policy(path: &Path, plan: &SetupPlan) -> anyhow::Result<()> {
 /// way, so neither path creates a runtime the other would refuse.
 pub async fn init(cli: config::InitCli) -> anyhow::Result<()> {
     let program = crate::engine::selected();
-    let engine = tokio::task::spawn_blocking(crate::engine::detect).await??;
-    crate::engine::admit(engine, cli.allow_rootful_engine, false)?;
-    let accepted = engine == crate::engine::Engine::Rootful && cli.allow_rootful_engine;
+    let allow = cli.allow_rootful_engine;
     let path = cli.directory.join("config.json");
-    tokio::task::spawn_blocking(move || config::init(cli)).await??;
+    let accepted = tokio::task::spawn_blocking(move || {
+        let mut accepted = false;
+        config::init(cli, || {
+            let engine = crate::engine::detect()?;
+            crate::engine::admit(engine, allow, false)?;
+            accepted = engine == crate::engine::Engine::Rootful && allow;
+            Ok(())
+        })?;
+        Ok::<_, anyhow::Error>(accepted)
+    })
+    .await??;
     record_config_value(&path, "container_engine", serde_json::to_value(program)?)?;
     if accepted {
         record_rootful_acceptance(&path)?;
@@ -922,6 +930,7 @@ mod tests {
             },
             Some("fixture-only-owner-passphrase".into()),
             false,
+            || Ok(()),
         )
         .unwrap();
         let owner_path = plan.directory.join("state/auth/authorization.json");

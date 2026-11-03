@@ -627,13 +627,16 @@ pub struct InitCli {
     pub allow_rootful_engine: bool,
 }
 
-pub fn init(cli: InitCli) -> anyhow::Result<()> {
-    init_with_output(cli, None, true)
+/// `gate` runs once the arguments are valid and before anything is prompted
+/// for or created: `init` checks the container engine there.
+pub fn init(cli: InitCli, gate: impl FnOnce() -> anyhow::Result<()>) -> anyhow::Result<()> {
+    init_with_output(cli, None, true, gate)
 }
 
-/// Setup's structured output uses the same initialization without human progress text.
+/// Setup's structured output uses the same initialization without human progress
+/// text; setup has checked the engine before.
 pub fn init_quiet(cli: InitCli) -> anyhow::Result<()> {
-    init_with_output(cli, None, false)
+    init_with_output(cli, None, false, || Ok(()))
 }
 
 /// Reads a new owner passphrase twice from the terminal, never echoing it.
@@ -663,6 +666,7 @@ pub(crate) fn init_with_output(
     cli: InitCli,
     owner_passphrase: Option<String>,
     output: bool,
+    gate: impl FnOnce() -> anyhow::Result<()>,
 ) -> anyhow::Result<()> {
     validate_container_name(&cli.egress_container)?;
     if cli.listen.port() == 0 {
@@ -702,6 +706,7 @@ pub(crate) fn init_with_output(
     } else {
         None
     };
+    gate()?;
     let owner_passphrase = match (&public_url, owner_passphrase) {
         (None, _) => None,
         (Some(_), Some(passphrase)) => Some(passphrase),
