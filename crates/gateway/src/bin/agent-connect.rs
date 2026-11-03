@@ -516,6 +516,7 @@ async fn run() -> anyhow::Result<()> {
         .cli
         .boxed
         .then(|| gateway.cli.egress_container.clone().unwrap());
+    let refresh = gateway.clone();
     let mut app = Router::new()
         .route("/acp", get(upgrade))
         .route("/healthz", get(health))
@@ -528,7 +529,7 @@ async fn run() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(listen).await.context(
         "gateway listener unavailable; run agent-connect doctor and check listener_port",
     )?;
-    axum::serve(
+    let served = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
@@ -563,13 +564,22 @@ async fn run() -> anyhow::Result<()> {
             sessions.abort_all();
         }
     })
-    .await?;
-    if let Some(egress) = owned_egress
-        && let Err(error) = tokio::task::spawn_blocking(move || egress_stop(&egress)).await?
-    {
-        tracing::error!(%error, "could not remove the egress proxy at shutdown");
+    .await;
+    // Removed whatever serve returned. A box refresh swap is no session task,
+    // so the drain does not wait for it; one still moving the egress would
+    // recreate it after this stop.
+    if let Some(egress) = owned_egress {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+        while refresh.swapping.load(std::sync::atomic::Ordering::SeqCst)
+            && tokio::time::Instant::now() < deadline
+        {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        if let Err(error) = tokio::task::spawn_blocking(move || egress_stop(&egress)).await? {
+            tracing::error!(%error, "could not remove the egress proxy at shutdown");
+        }
     }
-    Ok(())
+    Ok(served?)
 }
 
 async fn health(State(gateway): State<Arc<Gateway>>) -> impl axum::response::IntoResponse {
