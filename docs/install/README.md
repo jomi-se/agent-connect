@@ -79,7 +79,7 @@ must include its default. Setup reruns preserve these choices and reject
 incompatible changes instead of silently expanding application authority.
 
 The default origin is `http://127.0.0.1:18940`. Setup creates private owner
-configuration, builds the local box and checks owned Docker egress, and installs and starts
+configuration, builds the local box and checks the owned egress, and installs and starts
 the user service. It prompts for a hidden owner passphrase of at least 12 characters and
 confirmation. This passphrase signs you in to Agent Connect; provider login is
 separate. Use `--harness codex` to select Codex explicitly.

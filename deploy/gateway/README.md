@@ -4,7 +4,7 @@
 OS tools, the harness install script and the session entrypoint. The release
 packer adds the egress proxy and mock-provider config; the matching platform
 package adds its static Linux session-runner. Setup builds the box on the
-owner's Docker architecture with the latest ACP adapters and harness CLIs,
+architecture of the owner's container engine with the latest ACP adapters and harness CLIs,
 unless the owner pins them. See [ADR 0017](../../docs/decisions/0017-local-box-build.md)
 and [ADR 0018](../../docs/decisions/0018-floating-harness-versions.md).
 
