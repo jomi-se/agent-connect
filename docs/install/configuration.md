@@ -236,7 +236,9 @@ twenty-second overall session-task drain bound including allocation and cleanup.
 
 Before listening, boxed `serve` checks Docker, the selected image and the owned,
 running egress proxy. `egress start` safely reuses a matching proxy or restarts a
-stopped one; incompatible proxies require explicit stop/recreate. The proxy uses
+stopped one. An owned proxy that is sound but built from another box, as after a
+rebuild, is replaced, provided that box is still installed to judge it by; any
+other incompatible proxy requires explicit stop/recreate. The proxy uses
 `unless-stopped` restart policy and rotated JSON logs (10 MiB × 3). Defaults are
 64 sockets per session source and 512 total, 60-second idle, five-minute request
 and one-hour absolute connection limits. Invalid limit overrides fail startup;

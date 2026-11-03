@@ -65,6 +65,18 @@ fn egress_start_with(
     let deadline = Instant::now() + STARTUP_TIMEOUT;
     let image = inspect_image(image, docker, deadline)?;
     match inspect_container(name, docker, deadline)? {
+        Some(container) if serves_another_box(&container, &image, docker, deadline) => {
+            // The box was rebuilt (or a refresh stopped halfway): this egress
+            // is ours and sound, only for the previous box. Replace it by its
+            // inspected ID.
+            let id = EgressFacts::read(&container, crate::engine::selected())?.id;
+            docker
+                .run(&force_remove(crate::engine::selected(), &id), deadline)
+                .context("could not replace the egress proxy of the previous box")?;
+            let args = egress_start_args(name, &image.id);
+            docker.run(&args.iter().map(String::as_str).collect::<Vec<_>>(), deadline)
+                .context("could not create egress proxy; check Docker and any conflicting container name")?;
+        }
         Some(container) => {
             let id = validate_egress(&container, &image, false)?;
             if container
@@ -89,6 +101,30 @@ fn egress_start_with(
         }
     }
     Ok(())
+}
+
+/// Whether `container` is an owned egress that differs from what `image`
+/// needs only in being built from another image: judged against its own
+/// image, it passes every other check.
+fn serves_another_box(
+    container: &serde_json::Value,
+    image: &BoxImage,
+    docker: &mut impl DockerCommand,
+    deadline: Instant,
+) -> bool {
+    let owned = container
+        .pointer("/Config/Labels")
+        .and_then(|v| v.get(EGRESS_LABEL))
+        .and_then(|v| v.as_str())
+        == Some(EGRESS_OWNER);
+    let Ok(facts) = EgressFacts::read(container, crate::engine::selected()) else {
+        return false;
+    };
+    if !owned || facts.image == image.id {
+        return false;
+    }
+    inspect_image(&facts.image, docker, deadline)
+        .is_ok_and(|own| judge_egress(&facts, &own, false).is_ok())
 }
 
 /// Read-only production prerequisite check. Call from a blocking lane before
@@ -488,7 +524,7 @@ pub fn egress_stop(name: &str) -> anyhow::Result<()> {
         .and_then(|v| v.as_str())
         .filter(|id| id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()))
         .ok_or_else(|| anyhow::anyhow!("invalid inspected container ID; nothing was removed"))?;
-    docker(&["rm", "--force", id])
+    docker(&force_remove(crate::engine::selected(), id))
 }
 
 pub fn box_args(
@@ -1291,6 +1327,66 @@ mod tests {
             ));
             let mut docker = Fixture(steps);
             egress_start_with("owned-egress", "session:test", &mut docker).unwrap();
+            assert!(docker.0.is_empty());
+        }
+    }
+
+    #[test]
+    fn egress_start_replaces_only_a_sound_egress_of_another_box() {
+        let id = "a".repeat(64);
+        let previous = format!("sha256:{}", "e".repeat(64));
+        let previous_image = serde_json::json!({ "Id": previous, "Config": { "Env": ["PATH=/usr/bin"], "User": "node" } }).to_string();
+        let inspect_egress = [
+            "inspect",
+            "--type",
+            "container",
+            "--format",
+            "{{json .}}",
+            "owned-egress",
+        ];
+        let current = ["image", "inspect", "--format", "{{json .}}", "session:test"];
+        let own = [
+            "image",
+            "inspect",
+            "--format",
+            "{{json .}}",
+            previous.as_str(),
+        ];
+        let mut sound = egress_fixture(&id, true);
+        sound["Image"] = serde_json::json!(previous);
+        let create = egress_start_args("owned-egress", &format!("sha256:{}", "d".repeat(64)));
+        let mut docker = Fixture(VecDeque::from([
+            step(&current, Ok(&image_fixture())),
+            step(&inspect_egress, Ok(&sound.to_string())),
+            step(&own, Ok(&previous_image)),
+            step(&force_remove(crate::engine::selected(), &id), Ok("")),
+            step(
+                &create.iter().map(String::as_str).collect::<Vec<_>>(),
+                Ok(&id),
+            ),
+        ]));
+        egress_start_with("owned-egress", "session:test", &mut docker).unwrap();
+        assert!(docker.0.is_empty());
+
+        // Weakened, unowned, or its own box gone: refused, nothing removed.
+        let mut weakened = sound.clone();
+        weakened["HostConfig"]["Privileged"] = serde_json::json!(true);
+        let mut unowned = sound.clone();
+        unowned["Config"]["Labels"] = serde_json::json!({});
+        for (container, own_image) in [
+            (weakened, Ok(previous_image.as_str())),
+            (unowned, Ok(previous_image.as_str())),
+            (sound, Err("no such image")),
+        ] {
+            let mut steps = VecDeque::from([
+                step(&current, Ok(&image_fixture())),
+                step(&inspect_egress, Ok(&container.to_string())),
+            ]);
+            if container["Config"]["Labels"] != serde_json::json!({}) {
+                steps.push_back(step(&own, own_image));
+            }
+            let mut docker = Fixture(steps);
+            assert!(egress_start_with("owned-egress", "session:test", &mut docker).is_err());
             assert!(docker.0.is_empty());
         }
     }
