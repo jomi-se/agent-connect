@@ -279,7 +279,8 @@ if (command === "check") {
     .filter((name) => /^open-agent-connect-gateway-.+\.tgz$/.test(name))
     .sort(
       (a, b) =>
-        (a.includes("gateway-0") ? 1 : 0) - (b.includes("gateway-0") ? 1 : 0),
+        (a === `open-agent-connect-gateway-${version}.tgz` ? 1 : 0) -
+        (b === `open-agent-connect-gateway-${version}.tgz` ? 1 : 0),
     );
   for (const filename of packages) {
     const path = join(output, basename(filename));

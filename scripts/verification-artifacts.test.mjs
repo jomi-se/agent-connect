@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { engine } from "./container-engine.mjs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
@@ -750,7 +751,7 @@ for (const failure of [
         selected = binary;
         return JSON.stringify({ version });
       }
-      if (binary === "docker") {
+      if (binary === engine) {
         work = dirname(options.env.DOCKER_CONFIG);
         if (args[0] === "info") return "arm64\n";
         if (args[0] === "build") {
@@ -765,6 +766,8 @@ for (const failure of [
           cleaned = true;
           return "";
         }
+        // Rootless Podman copies the box once per id mapping before the gates.
+        if (args[0] === "run") return "";
       }
       if (binary === "npm") {
         assert.equal(options.env.ACP_GATEWAY_MODE, "release-artifacts");
@@ -829,7 +832,7 @@ test("reuse cleans its owned extraction directory when the Docker payload is abs
   await receipt(f);
   let work;
   const run = async (binary, args, options) => {
-    assert.equal(binary, "docker");
+    assert.equal(binary, engine);
     assert.equal(args[0], "info");
     work = dirname(options.env.DOCKER_CONFIG);
     return "aarch64\n";

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { engine } from "./container-engine.mjs";
 import {
   mkdtemp,
   mkdir,
@@ -52,7 +53,7 @@ for (const failure of [undefined, "build", "test:ui:owner"]) {
             join(repository, "target/distrib/session-runner-linux-arm64"),
             "fresh checkout runner",
           );
-        } else if (binary === "docker") {
+        } else if (binary === engine) {
           work = dirname(options.env.DOCKER_CONFIG);
           if (args[0] === "info") return "aarch64\n";
           if (args[0] === "build") {
@@ -104,15 +105,14 @@ for (const failure of [undefined, "build", "test:ui:owner"]) {
       assert.deepEqual([...images], ["agent-connect-box:0.0.1"]);
       assert.equal(
         calls.filter(
-          (call) => call.binary === "docker" && call.args[0] === "build",
+          (call) => call.binary === engine && call.args[0] === "build",
         ).length,
         1,
       );
       assert.equal(new Set(calls.map((call) => call.image)).size, 1);
       assert.equal(
-        calls.filter(
-          (call) => call.binary === "docker" && call.args[1] === "rm",
-        ).length,
+        calls.filter((call) => call.binary === engine && call.args[1] === "rm")
+          .length,
         1,
       );
       await assert.rejects(stat(work), { code: "ENOENT" });
@@ -170,7 +170,7 @@ test("verify runs only the selected steps", async () => {
     const npm = [];
     const run = async (binary, args) => {
       if (binary === "npm") npm.push(args[1]);
-      if (binary === "docker" && args[0] === "info") return "x86_64\n";
+      if (binary === engine && args[0] === "info") return "x86_64\n";
       return "";
     };
     await verify({
