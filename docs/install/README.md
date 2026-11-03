@@ -15,7 +15,8 @@ its buildx plugin is the tested baseline. On Linux, use rootless Podman, which
 setup picks when Docker is rootful or absent, or run Docker Engine in
 [rootless mode](https://docs.docker.com/engine/security/rootless/): on a
 rootful engine, anything that can start containers, this gateway included, can
-start host root, so setup refuses one unless you pass `--allow-rootful-engine`.
+start host root, so setup and the gateway refuse one unless you pass
+`--allow-rootful-engine` to setup.
 Docker Desktop and OrbStack run their engine in a virtual machine and need no
 flag; other virtual machines, such as Colima, report as rootful. Setup
 builds the box locally, so first setup downloads and stores roughly 1.5 GB.

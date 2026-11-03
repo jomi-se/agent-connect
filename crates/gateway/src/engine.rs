@@ -230,8 +230,8 @@ fn parse_podman_info(output: &str) -> anyhow::Result<Engine> {
 pub const ROOTFUL_RISK: &str = "The container engine is rootful: whatever can start containers on it, this gateway included, can start host root";
 pub const ROOTFUL_FIX: &str = "Run rootless Podman or Docker in rootless mode for this user, or record that you accept the risk with agent-connect setup --allow-rootful-engine";
 
-/// Setup's gate: a runtime on a rootful engine needs the owner's explicit
-/// acceptance, whether setup creates it or reruns on it.
+/// The gate setup and serve share: a runtime on a rootful engine needs the
+/// owner's explicit acceptance, recorded in its configuration.
 pub fn admit(engine: Engine, accepted: bool) -> anyhow::Result<()> {
     if engine == Engine::Rootful && !accepted {
         return Err(crate::config::UsageError(format!("{ROOTFUL_RISK}. {ROOTFUL_FIX}.")).into());

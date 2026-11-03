@@ -37,6 +37,14 @@ const dockerContainers = [];
 const dockerNetworks = [];
 const boxed = process.env.ACP_BOXED === "1";
 let mockContainer, egressContainer;
+// CI's Docker is rootful, which a boxed serve refuses unless the
+// configuration accepts it; the rest of the gateway comes from flags.
+const serveConfig = join(run, "serve-config.json");
+await writeFile(
+  serveConfig,
+  JSON.stringify({ allow_rootful_engine: true, box_refresh: false }),
+  { mode: 0o600 },
+);
 const cleanEnv = {
   ...engineEnv(),
   PATH: process.env.PATH,
@@ -267,6 +275,8 @@ try {
           "serve",
           ...(boxed
             ? [
+                "--config",
+                serveConfig,
                 "--boxed",
                 "--harness-home",
                 harnessHome,

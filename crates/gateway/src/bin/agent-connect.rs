@@ -389,6 +389,14 @@ async fn run() -> anyhow::Result<()> {
             return Err(UsageError("owner configuration and authorization state must be outside the mounted harness home".into()).into());
         }
     }
+    // Setup's gate, before this gateway starts any container.
+    let engine = if cli.boxed {
+        let engine = tokio::task::spawn_blocking(engine::detect).await??;
+        engine::admit(engine, cli.allow_rootful_engine)?;
+        Some(engine)
+    } else {
+        None
+    };
     if cli.boxed {
         // The gateway owns its egress for as long as it serves: started or
         // reused here, removed at shutdown.
@@ -403,9 +411,7 @@ async fn run() -> anyhow::Result<()> {
         // The owner's mapped copy of the box can vanish without a rebuild (an
         // image prune, a reset, a reload by hand), and then the first session
         // would spend its whole start deadline remaking it. Warm costs ~0.3 s.
-        if home.is_some()
-            && tokio::task::spawn_blocking(engine::detect).await?? == Engine::RootlessPodman
-        {
+        if home.is_some() && engine == Some(Engine::RootlessPodman) {
             operations::warm_owner_mapping(&cli.box_image).await?;
         }
     }
@@ -449,18 +455,6 @@ async fn run() -> anyhow::Result<()> {
     } else {
         None
     };
-    let engine = if cli.boxed {
-        Some(tokio::task::spawn_blocking(engine::detect).await??)
-    } else {
-        None
-    };
-    if engine == Some(Engine::Rootful) && !cli.allow_rootful_engine {
-        eprintln!(
-            "Warning: {}.\n{}.",
-            engine::ROOTFUL_RISK,
-            engine::ROOTFUL_FIX
-        );
-    }
     let cli_box_image = cli.box_image.clone();
     let gateway = Arc::new(Gateway {
         hosts,
