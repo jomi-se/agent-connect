@@ -6,6 +6,7 @@ import {
   writeFile,
   readFile,
   chmod,
+  stat,
   rm,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -231,7 +232,7 @@ async function preflightDocker() {
   await writeFile(join(root, "container"), JSON.stringify(container));
   await writeFile(
     join(root, "docker"),
-    '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":[],"operatingSystem":"Linux"}\'; exit 0; fi\nif [ "$1" = image ]; then /bin/cat "$PREFLIGHT_IMAGE"; elif [ "$1" = inspect ]; then /bin/cat "$PREFLIGHT_CONTAINER"; else exit 1; fi\n',
+    '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":["name=rootless"],"operatingSystem":"Linux"}\'; exit 0; fi\nif [ "$1" = image ]; then /bin/cat "$PREFLIGHT_IMAGE"; elif [ "$1" = inspect ]; then /bin/cat "$PREFLIGHT_CONTAINER"; else exit 1; fi\n',
   );
   await chmod(join(root, "docker"), 0o755);
   return {
@@ -603,7 +604,6 @@ function ownerSetup(directory, ...extra) {
 }
 
 test("owner setup enrolls owner auth without issuing an app bearer", async () => {
-  const { stat } = await import("node:fs/promises");
   const root = await tempRoot("acp-owner-setup-");
   const directory = join(root, "runtime");
   const result = await ownerTerminal(
@@ -654,7 +654,6 @@ test("owner setup enrolls owner auth without issuing an app bearer", async () =>
 });
 
 test("owner setup rejects unattended prompts and invalid public origins before creation", async () => {
-  const { stat } = await import("node:fs/promises");
   const root = await tempRoot("acp-owner-invalid-");
   const directory = join(root, "runtime");
   const noTerminal = command(ownerSetup(directory));
@@ -672,7 +671,7 @@ test("owner setup rejects unattended prompts and invalid public origins before c
 });
 
 test("owner setup rejects runtime inside harness mount, including canonical aliases", async () => {
-  const { symlink, stat } = await import("node:fs/promises");
+  const { symlink } = await import("node:fs/promises");
   const root = await tempRoot("acp-owner-boundary-");
   const home = join(root, "harness");
   await mkdir(home, { mode: 0o700 });
@@ -716,6 +715,48 @@ test("serve rejects owner state or config inside harness mount before Docker sta
   result = command(["serve", "--config", inside]);
   assert.equal(result.status, 2, result.stderr);
   assert.match(result.stderr, /outside the mounted harness home/);
+});
+
+test("serve refuses a rootful engine the configuration has not accepted, before starting any container", async () => {
+  const root = await tempRoot("acp-serve-rootful-");
+  const bin = join(root, "bin");
+  const calls = join(root, "calls");
+  await mkdir(bin);
+  // Answers the rootless probe as rootful Linux and records anything else.
+  await writeFile(
+    join(bin, "docker"),
+    `#!/bin/sh\ncase "$*" in "info --format "*SecurityOptions*) echo '{"securityOptions":[],"operatingSystem":"Linux"}'; exit 0;; esac\necho "$*" >> '${calls}'\nexit 1\n`,
+  );
+  await chmod(join(bin, "docker"), 0o755);
+  const result = command(
+    [
+      "serve",
+      "--harness",
+      "codex",
+      "--boxed",
+      "--harness-home",
+      join(root, "harness"),
+      "--state-dir",
+      join(root, "state"),
+      "--headless-static-bearer",
+      "--token",
+      "fixture-token",
+      "--egress-container",
+      "owned-egress",
+      "--allow-origin",
+      "https://app.example",
+      "--tools",
+      resolve(import.meta.dirname, "../examples/acp-chat/tools.json"),
+    ],
+    {
+      PATH: `${bin}:${process.env.PATH}`,
+      AGENT_CONNECT_CONTAINER_ENGINE: "docker",
+    },
+  );
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /can start host root/);
+  assert.match(result.stderr, /--allow-rootful-engine/);
+  await assert.rejects(stat(calls), { code: "ENOENT" });
 });
 
 test("boxed Codex rejects ineffective permission profiles and arbitrary modes", () => {

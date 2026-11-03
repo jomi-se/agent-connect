@@ -160,10 +160,20 @@ exec "$ACP_REAL_DOCKER" "$@"
 `,
 );
 await chmod(join(root, "bin/docker"), 0o755);
+// CI's Docker is rootful, which serve refuses unless the configuration
+// accepts it; the rest of the gateway comes from flags.
+const serveConfig = join(root, "serve-config.json");
+await writeFile(
+  serveConfig,
+  JSON.stringify({ allow_rootful_engine: true, box_refresh: false }),
+  { mode: 0o600 },
+);
 
 function serveArgs(dir, egress, port) {
   return [
     "serve",
+    "--config",
+    serveConfig,
     "--boxed",
     "--harness",
     "codex",

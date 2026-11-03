@@ -285,8 +285,8 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
     report
 }
 
-/// A rootful engine makes the gateway root-equivalent. The gateway keeps
-/// serving either way; doctor reports the risk until the owner records it.
+/// A rootful engine makes the gateway root-equivalent. Setup and serve refuse
+/// it until the owner records the acceptance; doctor then keeps warning.
 fn report_engine(report: &mut DoctorReport, engine: Option<Engine>, accepted: bool) {
     match (engine, accepted) {
         (Some(Engine::Rootless | Engine::RootlessPodman), _) => report.add(

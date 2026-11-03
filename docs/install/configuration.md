@@ -30,8 +30,8 @@ policy changes are rejected. Setup rebuilds and selects the box when the gateway
 version or owner layer changes. All setup runs preserve private authentication, journals and login homes.
 Setup asks the selected container engine whether it is rootless. On a rootful
 Linux engine it needs `--allow-rootful-engine`, which is recorded in the config as
-`allow_rootful_engine` (config only, no flag or environment variable); until it
-is recorded, serve warns and doctor fails. Docker's userns-remap mode is refused. On
+`allow_rootful_engine` (config only, no flag or environment variable); serve
+refuses the engine until it is recorded, and doctor fails. Docker's userns-remap mode is refused. On
 rootless Docker, boxes that mount the shared harness home run as container root,
 which is the invoking user, with every capability dropped. On rootless Podman
 they run as the image's own user, mapped onto the invoking user with
