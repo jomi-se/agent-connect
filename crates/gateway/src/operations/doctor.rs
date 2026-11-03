@@ -225,10 +225,14 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
     }
     match tokio::net::TcpListener::bind(configured.listen).await {
         Ok(listener) => { drop(listener); report.add("listener_port", CheckStatus::Pass, "Configured listener port is available", None); },
-        // A running gateway holds its own port; only a listener that does not
-        // answer as a ready gateway is worth a warning.
-        Err(_) if listener_is_ready_gateway(configured.listen).await => report.add("listener_port", CheckStatus::Pass, "A ready gateway is listening on the configured port", None),
-        Err(_) => report.add("listener_port", CheckStatus::Warn, "Listener port is occupied or cannot be bound, and nothing there answers as a ready gateway", Some("Check service status and health; if another application owns the port, choose a different --listen address")),
+        // A running gateway holds its own port; only a listener that is not a
+        // ready gateway of this version is worth a warning.
+        Err(_) => match ready_gateway_version(configured.listen).await {
+            Some(version) if version == env!("CARGO_PKG_VERSION") => report.add("listener_port", CheckStatus::Pass, "A ready gateway of this version is listening on the configured port", None),
+            // Upgraded but not restarted: the old binary still serves.
+            Some(version) => report.add("listener_port", CheckStatus::Warn, format!("A ready gateway of version {version} is listening; this is {}", env!("CARGO_PKG_VERSION")), Some(concat!("Restart the gateway service to run ", env!("CARGO_PKG_VERSION")))),
+            None => report.add("listener_port", CheckStatus::Warn, "Listener port is occupied or cannot be bound, and nothing there answers as a ready gateway", Some("Check service status and health; if another application owns the port, choose a different --listen address")),
+        },
     }
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -302,7 +306,8 @@ fn report_engine(report: &mut DoctorReport, engine: Option<Engine>, accepted: bo
     }
 }
 
-async fn listener_is_ready_gateway(listen: std::net::SocketAddr) -> bool {
+/// The version a ready gateway on `listen` reports, empty if it reports none.
+async fn ready_gateway_version(listen: std::net::SocketAddr) -> Option<String> {
     let mut address = listen;
     if address.ip().is_unspecified() {
         address.set_ip(if address.is_ipv4() {
@@ -317,30 +322,47 @@ async fn listener_is_ready_gateway(listen: std::net::SocketAddr) -> bool {
         .timeout(Duration::from_secs(3))
         .build()
     else {
-        return false;
+        return None;
     };
-    match client.get(format!("http://{address}/healthz")).send().await {
-        Ok(response) if response.status().is_success() => health_ready(response).await,
-        _ => false,
+    let response = client
+        .get(format!("http://{address}/healthz"))
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
     }
+    let health = health_body(response).await?;
+    (health.get("ready").and_then(serde_json::Value::as_bool) == Some(true)).then(|| {
+        health
+            .get("version")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    })
 }
 
-async fn health_ready(mut response: reqwest::Response) -> bool {
+async fn health_ready(response: reqwest::Response) -> bool {
+    health_body(response)
+        .await
+        .is_some_and(|value| value.get("ready").and_then(serde_json::Value::as_bool) == Some(true))
+}
+
+async fn health_body(mut response: reqwest::Response) -> Option<serde_json::Value> {
     let mut body = Vec::new();
     loop {
         match response.chunk().await {
             Ok(Some(chunk)) => {
                 if body.len() + chunk.len() > 64 * 1024 {
-                    return false;
+                    return None;
                 }
                 body.extend_from_slice(&chunk);
             }
             Ok(None) => break,
-            Err(_) => return false,
+            Err(_) => return None,
         }
     }
-    serde_json::from_slice::<serde_json::Value>(&body)
-        .is_ok_and(|value| value.get("ready").and_then(serde_json::Value::as_bool) == Some(true))
+    serde_json::from_slice(&body).ok()
 }
 
 #[cfg(test)]
@@ -381,7 +403,7 @@ mod tests {
         assert_eq!(status(None, true), (CheckStatus::Fail, false));
     }
     #[tokio::test]
-    async fn only_a_ready_gateway_owns_its_occupied_port() {
+    async fn a_ready_gateway_on_its_port_reports_its_version() {
         async fn serve(body: &'static str) -> std::net::SocketAddr {
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let address = listener.local_addr().unwrap();
@@ -390,11 +412,24 @@ mod tests {
             tokio::spawn(async move { axum::serve(listener, app).await });
             address
         }
-        assert!(listener_is_ready_gateway(serve(r#"{"status":"ok","ready":true}"#).await).await);
-        assert!(!listener_is_ready_gateway(serve(r#"{"status":"ok","ready":false}"#).await).await);
-        assert!(!listener_is_ready_gateway(serve("hello").await).await);
-        let mut wildcard = serve(r#"{"ready":true}"#).await;
+        let version = |body| async move { ready_gateway_version(serve(body).await).await };
+        assert_eq!(
+            version(r#"{"status":"ok","ready":true,"version":"1.2.3"}"#)
+                .await
+                .as_deref(),
+            Some("1.2.3")
+        );
+        assert_eq!(version(r#"{"ready":true}"#).await.as_deref(), Some(""));
+        assert_eq!(
+            version(r#"{"status":"ok","ready":false,"version":"1.2.3"}"#).await,
+            None
+        );
+        assert_eq!(version("hello").await, None);
+        let mut wildcard = serve(r#"{"ready":true,"version":"1.2.3"}"#).await;
         wildcard.set_ip(std::net::Ipv4Addr::UNSPECIFIED.into());
-        assert!(listener_is_ready_gateway(wildcard).await);
+        assert_eq!(
+            ready_gateway_version(wildcard).await.as_deref(),
+            Some("1.2.3")
+        );
     }
 }
