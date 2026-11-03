@@ -221,12 +221,18 @@ export async function verifyOwnerCookies({
     const setup = await ownerTerminal(
       binary,
       [
-        "init",
+        "setup",
+        "--apply",
+        "--non-interactive",
+        "--no-service",
+        // A runtime that never serves boxed; no box is built or needed.
+        "--box-image",
+        "session:test",
         "--directory",
         runtime,
         "--harness",
         "codex",
-        "--public-url",
+        "--origin",
         origin,
       ],
       password,

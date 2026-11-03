@@ -70,7 +70,7 @@ grant records remain intact, and bounded recovery metadata records the reset.
 There is no app-grant or remote factor-reset authority.
 
 Normal setup now creates gateway-owned sign-in and authorization state, separate
-from the dedicated provider login. `agent-connect init` prompts for a hidden
+from the dedicated provider login. First-time `agent-connect setup` prompts for a hidden
 owner passphrase of at least 12 characters and confirmation, only at a terminal:
 no file, argument or environment input exists, so agents cannot create or read
 the owner credential. `reset-passphrase` replaces it offline. An Argon2 passphrase hash,
@@ -317,7 +317,7 @@ agent-connect login
 ```
 
 The terminal selector defaults to Codex and labels Claude Code as unconfirmed.
-Login, new init and production serve use a dedicated per-harness home under
+Login, setup and production serve use a dedicated per-harness home under
 `$HOME/.local/state/agent-connect/harnesses/` on Linux or
 `$HOME/Library/Application Support/agent-connect/harnesses/` on macOS.
 An absolute `XDG_STATE_HOME` overrides the platform root. Explicit home overrides

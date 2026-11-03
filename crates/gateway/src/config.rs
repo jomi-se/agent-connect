@@ -593,46 +593,23 @@ pub fn validate_public_url(value: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive(Args)]
-pub struct InitCli {
-    /// New private runtime directory; setup refuses any existing destination.
-    #[arg(long)]
+/// A new owner runtime as setup planned it. Its whole configuration is written
+/// at once, so every choice setup records lands together.
+pub struct NewRuntime {
+    /// Must not exist yet; its parent must.
     pub directory: PathBuf,
-    #[arg(long, value_enum)]
     pub harness: Harness,
-    /// Dedicated whole home; defaults to the same per-harness home used by login.
-    #[arg(long, env = "AGENT_CONNECT_HARNESS_HOME", hide_env_values = true)]
-    pub harness_home: Option<PathBuf>,
-    #[arg(long)]
-    pub allow_origin: Option<String>,
-    /// Approved snapshot to validate and copy before issuing the grant.
-    #[arg(long)]
-    pub tools: Option<PathBuf>,
-    /// Canonical external HTTPS gateway origin (HTTP loopback allowed locally).
-    #[arg(long)]
-    pub public_url: Option<String>,
-    /// Explicitly create a fixed static bearer instead of gateway-hosted consent.
-    #[arg(long)]
-    pub headless_static_bearer: bool,
-    #[arg(long, default_value = "127.0.0.1:18940")]
+    pub harness_home: PathBuf,
+    pub public_url: String,
     pub listen: SocketAddr,
-    #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE", default_value = DEFAULT_BOX_IMAGE)]
     pub box_image: String,
-    /// Accept a rootful container engine, where the gateway can start host root.
-    #[arg(long)]
+    pub egress_container: String,
+    pub entry_points: Vec<String>,
+    pub profiles: Vec<PermissionProfile>,
+    pub permissions: PermissionProfile,
+    pub container_engine: crate::engine::Program,
+    /// The owner accepted the rootful engine this runtime is created on.
     pub allow_rootful_engine: bool,
-}
-
-/// `gate` runs once the arguments are valid and before anything is prompted
-/// for or created: `init` checks the container engine there.
-pub fn init(cli: InitCli, gate: impl FnOnce() -> anyhow::Result<()>) -> anyhow::Result<()> {
-    init_with_output(cli, None, true, gate)
-}
-
-/// Setup's structured output uses the same initialization without human progress
-/// text; setup has checked the engine before.
-pub fn init_quiet(cli: InitCli) -> anyhow::Result<()> {
-    init_with_output(cli, None, false, || Ok(()))
 }
 
 /// Reads a new owner passphrase twice from the terminal, never echoing it.
@@ -656,58 +633,18 @@ pub(crate) fn prompt_owner_passphrase(prompt: &str) -> anyhow::Result<String> {
     Ok(passphrase)
 }
 
-/// The owner types the passphrase at a terminal; there is deliberately no file,
+/// Creates a runtime's private directory, configuration and owner sign-in. The
+/// owner types the passphrase at a terminal; there is deliberately no file,
 /// environment or argument input. Unit tests pass `owner_passphrase` directly.
-pub(crate) fn init_with_output(
-    cli: InitCli,
+pub(crate) fn create_runtime(
+    runtime: NewRuntime,
     owner_passphrase: Option<String>,
-    output: bool,
-    gate: impl FnOnce() -> anyhow::Result<()>,
 ) -> anyhow::Result<()> {
-    if cli.listen.port() == 0 {
-        return Err(usage("init requires a nonzero listener port"));
-    }
-    let public_url = if cli.headless_static_bearer {
-        if cli.public_url.is_some() {
-            return Err(usage("headless setup cannot configure owner pairing"));
-        }
-        None
-    } else {
-        if cli.allow_origin.is_some() || cli.tools.is_some() {
-            return Err(usage(
-                "--allow-origin/--tools require --headless-static-bearer; normal setup approves each app on the gateway consent page",
-            ));
-        }
-        let url = cli
-            .public_url
-            .clone()
-            .unwrap_or_else(|| format!("http://{}", cli.listen));
-        validate_public_url(&url)?;
-        Some(url)
-    };
-    let source = if cli.headless_static_bearer {
-        let origin = cli
-            .allow_origin
-            .as_deref()
-            .ok_or_else(|| usage("headless setup requires --allow-origin"))?;
-        validate_origin(origin)?;
-        let path = cli
-            .tools
-            .as_deref()
-            .ok_or_else(|| usage("headless setup requires --tools"))?;
-        let source = std::fs::read(path).context("read approved tool snapshot")?;
-        snapshot_from_bytes(&source)?;
-        Some(source)
-    } else {
-        None
-    };
-    gate()?;
-    let owner_passphrase = match (&public_url, owner_passphrase) {
-        (None, _) => None,
-        (Some(_), Some(passphrase)) => Some(passphrase),
-        (Some(_), None) => Some(prompt_owner_passphrase(
+    let owner_passphrase = match owner_passphrase {
+        Some(passphrase) => passphrase,
+        None => prompt_owner_passphrase(
             "Choose an owner sign-in passphrase (at least 12 characters): ",
-        )?),
+        )?,
     };
     let mut builder = std::fs::DirBuilder::new();
     #[cfg(unix)]
@@ -715,88 +652,52 @@ pub(crate) fn init_with_output(
         use std::os::unix::fs::DirBuilderExt;
         builder.mode(0o700);
     }
-    builder.create(&cli.directory).context("create new private runtime directory; destination must not exist and its parent must exist")?;
-    // Named before canonicalizing, as setup names it in its plan.
-    let egress = egress_name(&std::path::absolute(&cli.directory)?);
-    let directory = cli.directory.canonicalize()?;
+    builder.create(&runtime.directory).context("create new private runtime directory; destination must not exist and its parent must exist")?;
+    let directory = runtime.directory.canonicalize()?;
     let result = (|| -> anyhow::Result<()> {
-        let home_path = cli
-            .harness_home
-            .clone()
-            .map(Ok)
-            .unwrap_or_else(|| default_home(cli.harness))?;
-        let home = HarnessHome::prepare(&home_path)?;
-        if public_url.is_some() && directory.starts_with(&home.path) {
+        let home = HarnessHome::prepare(&runtime.harness_home)?;
+        if directory.starts_with(&home.path) {
             return Err(usage(
                 "owner runtime/configuration and authorization state must be outside the mounted harness home",
             ));
         }
         builder.create(directory.join("state"))?;
-        if let Some(source) = &source {
-            write_private(&directory.join("tools.json"), source)?;
-        }
-        let token = format!(
-            "{}{}",
-            uuid::Uuid::new_v4().simple(),
-            uuid::Uuid::new_v4().simple()
-        );
         let configuration = ServeOptions {
-            harness: Some(cli.harness),
-            listen: Some(cli.listen),
-            public_url: public_url.clone(),
-            headless_static_bearer: Some(cli.headless_static_bearer),
-            allow_origin: cli.allow_origin.clone(),
-            token: cli.headless_static_bearer.then_some(token.clone()),
-            tools: cli.headless_static_bearer.then_some("tools.json".into()),
+            harness: Some(runtime.harness),
+            listen: Some(runtime.listen),
+            public_url: Some(runtime.public_url.clone()),
+            entry_points: Some(runtime.entry_points.clone()),
+            profiles: Some(runtime.profiles.clone()),
+            permissions: Some(runtime.permissions),
             harness_home: Some(home.path),
             state_dir: Some("state".into()),
             boxed: Some(true),
-            box_image: Some(cli.box_image.clone()),
-            egress_container: Some(egress.clone()),
+            box_image: Some(runtime.box_image.clone()),
+            egress_container: Some(runtime.egress_container.clone()),
+            container_engine: Some(runtime.container_engine),
+            allow_rootful_engine: runtime.allow_rootful_engine.then_some(true),
             ..Default::default()
         };
-        write_private(
-            &directory.join("config.json"),
-            &serde_json::to_vec_pretty(&configuration)?,
-        )?;
-        if let Some(public_url) = &public_url {
-            // Initialize outside the shared harness home; the agent cannot approve apps.
-            crate::authorization::AuthService::open(crate::authorization::AuthConfig {
-                public_url: public_url.clone(),
-                state_dir: directory.join("state/auth"),
-                policy_fingerprint: "setup".into(),
-                owner_passphrase: owner_passphrase.clone(),
-                entry_points: Vec::new(),
-                client_address_policies: Default::default(),
-                profiles: match cli.harness {
-                    Harness::Codex => {
-                        vec![PermissionProfile::Sandboxed, PermissionProfile::ReadOnly]
-                    }
-                    Harness::Claude => vec![
-                        PermissionProfile::Sandboxed,
-                        PermissionProfile::DenyAll,
-                        PermissionProfile::AppToolsOnly,
-                    ],
-                },
-                default_profile: PermissionProfile::Sandboxed,
-                harness: cli.harness,
-            })?;
-        } else {
-            let mut address = cli.listen;
-            if address.ip().is_unspecified() {
-                address.set_ip(if address.is_ipv4() {
-                    "127.0.0.1".parse().unwrap()
-                } else {
-                    "::1".parse().unwrap()
-                });
-            }
-            let grant =
-                serde_json::json!({"gatewayUrl": format!("ws://{address}/acp"), "token": token});
-            write_private(
-                &directory.join("grant.json"),
-                &serde_json::to_vec_pretty(&grant)?,
-            )?;
+        let path = directory.join("config.json");
+        write_private(&path, &serde_json::to_vec_pretty(&configuration)?)?;
+        // Read back as the gateway will, before any owner state exists.
+        ServeOptions {
+            config: Some(path),
+            ..Default::default()
         }
+        .resolve()?;
+        // Initialize outside the shared harness home; the agent cannot approve apps.
+        crate::authorization::AuthService::open(crate::authorization::AuthConfig {
+            public_url: runtime.public_url.clone(),
+            state_dir: directory.join("state/auth"),
+            policy_fingerprint: "setup".into(),
+            owner_passphrase: Some(owner_passphrase),
+            entry_points: Vec::new(),
+            client_address_policies: Default::default(),
+            profiles: runtime.profiles.clone(),
+            default_profile: runtime.permissions,
+            harness: runtime.harness,
+        })?;
         Ok(())
     })();
     if let Err(error) = result {
@@ -804,41 +705,9 @@ pub(crate) fn init_with_output(
         let _ = std::fs::remove_dir_all(&directory);
         return Err(error);
     }
-    if output {
-        println!("Created private runtime directory: {}", directory.display());
-        println!("Configuration: {}", directory.join("config.json").display());
-        if let Some(public_url) = &public_url {
-            println!("Owner sign-in and grants: {public_url}/agent-connect/owner");
-            println!(
-                "Apps pair through gateway-hosted consent; no application token file is created."
-            );
-        } else {
-            println!(
-                "Headless application grant (keep private): {}",
-                directory.join("grant.json").display()
-            );
-        }
-        if cli.harness_home.is_none() && cli.box_image == DEFAULT_BOX_IMAGE {
-            println!(
-                "Next: agent-connect login (choose {})",
-                match cli.harness {
-                    Harness::Codex => "Codex",
-                    Harness::Claude => "Claude Code",
-                }
-            );
-        } else {
-            println!(
-                "Next: agent-connect login --config {}",
-                shell_quote(&directory.join("config.json").to_string_lossy())
-            );
-        }
-        println!(
-            "Next: agent-connect serve --config {}",
-            shell_quote(&directory.join("config.json").to_string_lossy())
-        );
-    }
     Ok(())
 }
+
 /// The egress proxy a runtime's gateway owns, named after the runtime's
 /// directory so that runtimes sharing an engine never share one.
 pub fn egress_name(directory: &Path) -> String {
@@ -848,9 +717,6 @@ pub fn egress_name(directory: &Path) -> String {
     format!("agent-connect-egress-{suffix}")
 }
 
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
-}
 fn write_private(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
@@ -1161,10 +1027,5 @@ mod tests {
             options.entry_points = Some(entries);
             assert!(options.resolve().is_err());
         }
-    }
-
-    #[test]
-    fn shell_commands_quote_paths_safely() {
-        assert_eq!(shell_quote("a'b"), "'a'\"'\"'b'");
     }
 }

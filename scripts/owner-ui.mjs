@@ -74,7 +74,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 await chmod(uiAdapter, 0o700);
 const fixtureEnv = {
   ...engineEnv(),
-  // init's rootful-engine gate sees a rootless engine on any host.
+  // setup's rootful-engine gate sees a rootless engine on any host.
   PATH: await rootlessEnginePath(root),
   HOME: join(root, "home"),
   XDG_STATE_HOME: join(root, "state"),
@@ -96,12 +96,17 @@ const appOrigin = `http://127.0.0.1:${application.address().port}`;
 const setup = await ownerTerminal(
   binary,
   [
-    "init",
+    "setup",
+    "--apply",
+    "--non-interactive",
+    "--no-service",
+    "--box-image",
+    boxImage,
     "--directory",
     join(root, "runtime"),
     "--harness",
     "codex",
-    "--public-url",
+    "--origin",
     origin,
   ],
   password,
@@ -909,12 +914,17 @@ try {
   const probeSetup = await ownerTerminal(
     binary,
     [
-      "init",
+      "setup",
+      "--apply",
+      "--non-interactive",
+      "--no-service",
+      "--box-image",
+      boxImage,
       "--directory",
       probeRuntime,
       "--harness",
       "codex",
-      "--public-url",
+      "--origin",
       probeOrigin,
       "--harness-home",
       join(root, "problem-harness-home"),
@@ -926,7 +936,6 @@ try {
   const probeConfigPath = join(probeRuntime, "config.json");
   const probeConfig = JSON.parse(await readFile(probeConfigPath, "utf8"));
   probeConfig.listen = `127.0.0.1:${probePort}`;
-  probeConfig.box_image = boxImage;
   problemProxy = probeConfig.egress_container;
   await writeFile(probeConfigPath, JSON.stringify(probeConfig), {
     mode: 0o600,

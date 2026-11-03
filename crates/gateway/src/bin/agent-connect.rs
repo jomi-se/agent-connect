@@ -28,7 +28,7 @@ use agent_connect_gateway::authorization::{
     OwnerSession,
 };
 use agent_connect_gateway::config::{
-    self, CodexMode, DEFAULT_BOX_IMAGE, InitCli, ServeCli, ServeOptions, UsageError,
+    self, CodexMode, DEFAULT_BOX_IMAGE, ServeCli, ServeOptions, UsageError,
 };
 use agent_connect_gateway::credentials::{HarnessHome, default_home, login_args, select_harness};
 use agent_connect_gateway::engine::{self, Engine};
@@ -40,7 +40,7 @@ use agent_connect_gateway::resume::{
     self, AttachError, Host, RESUME_SUBPROTOCOL, Registry, ResumeConfig, ToSocket, close,
 };
 use agent_connect_gateway::sandbox::{SessionNetwork, box_args, egress_start, egress_stop};
-use agent_connect_gateway::{Harness, FixturePaths, mock_harness};
+use agent_connect_gateway::{FixturePaths, Harness, mock_harness};
 use anyhow::Context;
 use axum::Router;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
@@ -90,8 +90,6 @@ enum Command {
     ResetPassphrase(ResetPassphraseCli),
     /// Serve owner sign-in, app consent, grant management and unstable ACP.
     Serve(ServeOptions),
-    /// Create a private runtime and owner sign-in for browser pairing.
-    Init(InitCli),
     /// Sign in using the provider CLI in the dedicated harness home.
     Login(LoginCli),
     /// Print machine-readable release version.
@@ -281,7 +279,6 @@ async fn run() -> anyhow::Result<()> {
             );
             return Ok(());
         }
-        Command::Init(cli) => return operations::init(cli).await,
         Command::Setup(cli) => return operations::setup(cli).await,
         Command::Doctor(cli) => return operations::doctor(cli).await,
         Command::Service(cli) => return operations::service(cli).await,

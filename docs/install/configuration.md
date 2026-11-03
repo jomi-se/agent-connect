@@ -3,7 +3,7 @@
 Start with `agent-connect setup`, then `agent-connect doctor` and the owner
 console. This reference covers explicit configuration and advanced operation.
 `agent-connect --help` lists setup, diagnosis, service lifecycle, owner recovery,
-`init`, `login`, `serve` and `release-info`.
+`login`, `serve` and `release-info`.
 `serve --help` lists all flags. `agent-connect login` prompts for a
 harness and uses a dedicated platform-default home; `--harness` skips selection,
 `--harness-home` overrides the home, and `--config` honors an existing runtime's
@@ -28,7 +28,7 @@ Existing owner state and application policy are preserved; conflicting requested
 policy changes are rejected. Setup rebuilds and selects the box when the gateway
 version or owner layer changes. All setup runs preserve private authentication, journals and login homes.
 Setup asks the selected container engine whether it is rootless. A new runtime on a rootful
-Linux engine needs `--allow-rootful-engine` (on `setup` or `init`), which is recorded in the config as
+Linux engine needs `--allow-rootful-engine`, which is recorded in the config as
 `allow_rootful_engine` (config only, no flag or environment variable); existing
 runtimes keep working, setup and serve warn, and doctor fails until it is
 recorded. Docker's userns-remap mode is refused. On
@@ -90,13 +90,13 @@ config, defaults**. Each key supports `AGENT_CONNECT_<UPPER_SNAKE_KEY>`;
 | `mock_url` / `--mock-url`                             | Fixture model URL, default `http://127.0.0.1:18931/v1`                                                                                                                                                                 |
 | `mock_container` / `--mock-container`                 | Fixture model container; requires `mock_root`                                                                                                                                                                          |
 | `container_engine`                                    | `docker` (default) or `podman`, recorded by setup. The global `--container-engine` option or `AGENT_CONNECT_CONTAINER_ENGINE` chooses it for a new runtime or one command; an existing runtime refuses a different one |
-| `allow_rootful_engine`                                | The owner accepted a rootful engine; written only by `setup` or `init --allow-rootful-engine`                                                                                                                          |
+| `allow_rootful_engine`                                | The owner accepted a rootful engine; written only by `setup --allow-rootful-engine`                                                                                                                                    |
 
 Normal config contains `public_url` and operator policy, without `token`,
-`allow_origin` or `tools`. `init` and first-time `setup` prompt at the terminal for a hidden owner
+`allow_origin` or `tools`. First-time `setup` prompts at the terminal for a hidden owner
 passphrase and confirmation; there is no file, argument or environment input.
 The gateway persists an Argon2 passphrase hash, never the plaintext passphrase.
-`init` defaults `public_url` to its loopback listener URL; remote listeners need
+Setup defaults `public_url` to its loopback listener URL; remote listeners need
 an explicit canonical HTTPS origin. Normal `serve` requires the initialized
 private authorization state under `state_dir/auth` (`authorization.json` plus
 a singleton lock).
@@ -116,8 +116,14 @@ grants: none of those changes what a grant allows. Gateways before this rule
 fingerprinted the exact tag, so with a locally built box the first start after
 upgrading invalidates existing grants once, and applications pair again.
 Applications choose their exact origin and fixed tool snapshot at owner consent;
-they cannot change native harness policy. Old bearer configs require explicit
-`headless_static_bearer: true` or reinitialization for hosted pairing.
+they cannot change native harness policy.
+
+A headless runtime has no owner pages or pairing: the operator writes its
+configuration, with `headless_static_bearer: true`, one exact `allow_origin`, a
+private `token` of letters, digits, `-`, `.`, `_` or `~`, and a fixed `tools`
+snapshot, beside the boxed fields (`harness_home`, `box_image`,
+`egress_container`). Setup creates owner runtimes only and refuses to touch a
+headless one.
 
 The hosted routes are:
 
@@ -201,7 +207,7 @@ session is exempt from the global unauthenticated-request rejection.
 
 `RUST_LOG` controls diagnostics. `AGENT_CONNECT_GATEWAY_BIN` overrides the npm
 launcher's executable for local testing. Image selection is also available to
-init and login as `AGENT_CONNECT_BOX_IMAGE`. No API-key environment is forwarded
+login as `AGENT_CONNECT_BOX_IMAGE`. No API-key environment is forwarded
 to boxes.
 
 Process exit codes: 0 successful completion/help; 1 runtime/I/O/container engine/login

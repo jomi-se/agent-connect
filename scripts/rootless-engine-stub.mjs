@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 
 /**
  * A PATH that shows the gateway a rootless Docker, so fixtures that create a
- * runtime with `init` pass its rootful-engine gate on any host. Only the
+ * runtime with `setup` pass its rootful-engine gate on any host. Only the
  * rootless probe is answered; every other command, other `info` queries
  * included, reaches the real `docker`, if there is one.
  */
