@@ -58,6 +58,10 @@ pub fn save(path: &Path, state: &RefreshState) -> anyhow::Result<()> {
     result
 }
 
+pub async fn installed(image: &str) -> bool {
+    box_build::installed(image).await.unwrap_or(false)
+}
+
 /// The box a refresh would swap in, built and ready, or `None` when `current`
 /// is already the box for the current releases. Never touches the running
 /// egress or the configuration.
