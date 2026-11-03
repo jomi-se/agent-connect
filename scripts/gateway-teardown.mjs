@@ -161,6 +161,88 @@ exec "$ACP_REAL_DOCKER" "$@"
 );
 await chmod(join(root, "bin/docker"), 0o755);
 
+function serveArgs(dir, egress, port) {
+  return [
+    "serve",
+    "--boxed",
+    "--harness",
+    "codex",
+    "--harness-home",
+    join(dir, "home"),
+    "--mock-root",
+    dir,
+    "--mock-container",
+    modelName,
+    "--egress-container",
+    egress,
+    "--box-image",
+    image,
+    "--tools",
+    join(repo, "examples/acp-chat/tools.json"),
+    "--state-dir",
+    join(dir, "state"),
+    "--listen",
+    `127.0.0.1:${port}`,
+    "--allow-origin",
+    origin,
+    "--headless-static-bearer",
+    "--token",
+    token,
+    "--resume-grace-secs",
+    "1",
+  ];
+}
+
+// A crashed gateway leaves its egress; the next one takes over the same
+// container: restarted by ID when stopped (a crash and then a reboot), with
+// its restart policy and log cap, and removed when that gateway stops.
+async function restartAfterCrash() {
+  const mode = "restart-after-crash";
+  const dir = join(root, mode);
+  sessionDirs.push(dir);
+  await mkdir(join(dir, "home"), { recursive: true, mode: 0o700 });
+  await seedCodexMock(join(dir, "home"), root);
+  async function serve() {
+    let log = "";
+    const child = spawn(binary, serveArgs(dir, egressName, await freePort()), {
+      stdio: ["ignore", "ignore", "pipe"],
+      env: { PATH: process.env.PATH, HOME: dir, LANG: "C.UTF-8" },
+    });
+    children.add(child);
+    child.stderr.on("data", (data) => {
+      log += data;
+    });
+    await waitFor(() => log.includes("listening"), `${mode} listening`, 60000);
+    return child;
+  }
+  const crashed = await serve();
+  const egress = await inspect("container", egressName);
+  crashed.kill("SIGKILL");
+  await waitFor(() => crashed.exitCode !== null || crashed.signalCode, mode);
+  children.delete(crashed);
+  assert.equal((await inspect("container", egress.Id))?.State.Running, true);
+  await docker(["stop", egress.Id]);
+  const next = await serve();
+  const taken = await inspect("container", egressName);
+  assert.equal(
+    taken.Id,
+    egress.Id,
+    "a stopped owned egress is restarted by ID",
+  );
+  assert.equal(taken.State.Running, true);
+  assert.equal(taken.HostConfig.RestartPolicy.Name, "unless-stopped");
+  assert.equal(taken.HostConfig.LogConfig.Config["max-size"], "10m");
+  await stop(next);
+  children.delete(next);
+  assert.equal(
+    await inspect("container", egressName),
+    null,
+    "the gateway removes its egress when it stops",
+  );
+  reports.push({ mode, restartedById: true, removedAtStop: true });
+  console.log(`OK gateway teardown ${mode}`);
+}
+
 async function runCase(mode) {
   const active = mode.endsWith("active") || mode === "cancel-then-bye";
   const startupFailure =
@@ -182,35 +264,7 @@ async function runCase(mode) {
   let log = "";
   const child = spawn(
     binary,
-    [
-      "serve",
-      "--boxed",
-      "--harness",
-      "codex",
-      "--harness-home",
-      join(dir, "home"),
-      "--mock-root",
-      dir,
-      "--mock-container",
-      modelName,
-      "--egress-container",
-      preflightFailure ? modelName : egressName,
-      "--box-image",
-      image,
-      "--tools",
-      join(repo, "examples/acp-chat/tools.json"),
-      "--state-dir",
-      join(dir, "state"),
-      "--listen",
-      `127.0.0.1:${port}`,
-      "--allow-origin",
-      origin,
-      "--headless-static-bearer",
-      "--token",
-      token,
-      "--resume-grace-secs",
-      "1",
-    ],
+    serveArgs(dir, preflightFailure ? modelName : egressName, port),
     {
       stdio: ["ignore", "ignore", "pipe"],
       env: {
@@ -456,6 +510,7 @@ try {
     "startup-shutdown",
   ])
     await runCase(mode);
+  await restartAfterCrash();
 } catch (error) {
   failure = error;
 } finally {

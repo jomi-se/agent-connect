@@ -623,8 +623,12 @@ pub fn egress_stop(name: &str) -> anyhow::Result<()> {
             )
         })?;
     if !output.status.success() {
+        let error = String::from_utf8_lossy(&output.stderr).to_lowercase();
         // Already gone, as after an outage; its keepalive still goes.
-        return remove_keepalive(name);
+        if error.contains("no such container") {
+            return remove_keepalive(name);
+        }
+        bail!("cannot inspect egress container; nothing was removed");
     }
     let containers: Vec<serde_json::Value> =
         serde_json::from_slice(&output.stdout).context("invalid container inspection")?;
