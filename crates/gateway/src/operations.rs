@@ -466,9 +466,7 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
     }
     crate::engine::select(plan.container_engine);
     let engine = tokio::task::spawn_blocking(crate::engine::detect).await??;
-    if let Some(warning) = crate::engine::admit(engine, plan.allow_rootful_engine, plan.existing)? {
-        eprintln!("Warning: {warning}");
-    }
+    crate::engine::admit(engine, plan.allow_rootful_engine)?;
     // Only a rootful engine has a risk to accept; record the owner's choice once.
     let record_rootful = engine == crate::engine::Engine::Rootful
         && cli.allow_rootful_engine
