@@ -200,6 +200,11 @@ pub struct ServeOptions {
     #[arg(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_rootful_engine: Option<bool>,
+    /// Whether a serving gateway rebuilds its locally built box when a newer
+    /// harness release is out (default true). Config only.
+    #[arg(skip)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub box_refresh: Option<bool>,
     /// Container engine recorded by setup; the global --container-engine
     /// option overrides it for one command.
     #[arg(skip)]
@@ -235,6 +240,7 @@ pub struct ServeCli {
     pub durable_home: bool,
     pub resume_max_bytes: usize,
     pub allow_rootful_engine: bool,
+    pub box_refresh: bool,
     /// The configuration's engine; the command's entry point selects it.
     pub container_engine: crate::engine::Program,
 }
@@ -293,6 +299,7 @@ impl ServeOptions {
             durable_home: merged!(durable_home).unwrap_or_else(|| false),
             resume_max_bytes: merged!(resume_max_bytes).unwrap_or_else(|| 8 * 1024 * 1024),
             allow_rootful_engine: merged!(allow_rootful_engine).unwrap_or_else(|| false),
+            box_refresh: merged!(box_refresh).unwrap_or_else(|| true),
             container_engine: merged!(container_engine).unwrap_or_default(),
         };
         if cli.headless_static_bearer {

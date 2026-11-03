@@ -1,5 +1,6 @@
 //! Owner-run installation and read-only diagnostics. No provider secrets are inspected.
 mod box_build;
+pub mod box_refresh;
 mod doctor;
 mod service;
 pub use box_build::warm_owner_mapping;

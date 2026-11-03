@@ -181,12 +181,16 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
             "Box matches this gateway version, the current harness releases and the owner layer",
             None,
         ),
-        Ok(_) => report.add(
-            "box_current",
-            CheckStatus::Warn,
-            "A newer harness release, gateway version or owner box change is waiting",
-            Some("Run agent-connect setup to rebuild"),
-        ),
+        Ok(_) => {
+            let refreshing =
+                configured.box_refresh && config::locally_built_box(&configured.box_image);
+            let state = super::box_refresh::load(&super::box_refresh::state_path(
+                &configured.state_dir,
+            ));
+            let (status, message, fix) =
+                judge_box_behind(refreshing, &state, super::box_refresh::now());
+            report.add("box_current", status, message, fix)
+        }
         Err(error) => report.add(
             "box_current",
             CheckStatus::Warn,
@@ -306,6 +310,71 @@ fn report_engine(report: &mut DoctorReport, engine: Option<Engine>, accepted: bo
     }
 }
 
+/// A box behind the current releases is fine while a serving gateway is
+/// refreshing it; doctor warns only when that refresh is failing or stuck.
+fn judge_box_behind(
+    refreshing: bool,
+    state: &super::box_refresh::RefreshState,
+    now: u64,
+) -> (CheckStatus, String, Option<&'static str>) {
+    const HOUR: u64 = 60 * 60;
+    let ago = |at: u64| format!("{} hours ago", now.saturating_sub(at) / HOUR);
+    if !refreshing {
+        return (
+            CheckStatus::Warn,
+            "A newer harness release, gateway version or owner box change is waiting".into(),
+            Some("Run agent-connect setup to rebuild"),
+        );
+    }
+    if let Some(error) = &state.error {
+        return (
+            CheckStatus::Warn,
+            format!("The last box refresh failed: {error}"),
+            Some("Check the gateway service log; agent-connect setup rebuilds by hand"),
+        );
+    }
+    match state.checked_at {
+        Some(at) if now.saturating_sub(at) <= super::box_refresh::CHECK_INTERVAL_SECS + HOUR => {}
+        Some(at) => {
+            return (
+                CheckStatus::Warn,
+                format!(
+                    "The serving gateway last checked for a newer box {}",
+                    ago(at)
+                ),
+                Some("Check that the gateway service is running"),
+            );
+        }
+        None => {
+            return (
+                CheckStatus::Warn,
+                "A newer box is waiting and no serving gateway has checked for one".into(),
+                Some("Start the gateway service, or run agent-connect setup to rebuild"),
+            );
+        }
+    }
+    match (&state.pending, state.waiting_since) {
+        (Some(_), Some(since)) if now.saturating_sub(since) > 48 * HOUR => (
+            CheckStatus::Warn,
+            format!(
+                "A new box was built {} and is still waiting for every session to end",
+                ago(since)
+            ),
+            Some("End sessions you no longer use, or restart the gateway service"),
+        ),
+        (Some(_), _) => (
+            CheckStatus::Pass,
+            "A newer box is built; the gateway swaps it in when no session runs".into(),
+            None,
+        ),
+        _ => (
+            CheckStatus::Pass,
+            "A newer release is out; the gateway's daily refresh picks it up".into(),
+            None,
+        ),
+    }
+}
+
 /// The version a ready gateway on `listen` reports, or "unknown". The
 /// listener is untrusted and its answer reaches the terminal, so only a short
 /// plain version string is kept.
@@ -411,6 +480,38 @@ mod tests {
         );
         assert_eq!(status(None, true), (CheckStatus::Fail, false));
     }
+    #[test]
+    fn a_behind_box_warns_only_when_its_refresh_fails_or_stalls() {
+        use super::super::box_refresh::RefreshState;
+        const HOUR: u64 = 60 * 60;
+        let now = 1_000 * HOUR;
+        let status = |refreshing, state: RefreshState| judge_box_behind(refreshing, &state, now).0;
+        let checked = RefreshState {
+            checked_at: Some(now - HOUR),
+            ..Default::default()
+        };
+        assert_eq!(status(true, checked.clone()), CheckStatus::Pass);
+        let waiting = |hours| RefreshState {
+            pending: Some("agent-connect-box:0.0.4-0123456789abcdef".into()),
+            waiting_since: Some(now - hours * HOUR),
+            ..checked.clone()
+        };
+        assert_eq!(status(true, waiting(47)), CheckStatus::Pass);
+        assert_eq!(status(true, waiting(49)), CheckStatus::Warn);
+        let failed = RefreshState {
+            error: Some("npm unreachable".into()),
+            ..checked.clone()
+        };
+        assert_eq!(status(true, failed), CheckStatus::Warn);
+        let stale = RefreshState {
+            checked_at: Some(now - 26 * HOUR),
+            ..waiting(1)
+        };
+        assert_eq!(status(true, stale), CheckStatus::Warn);
+        assert_eq!(status(true, RefreshState::default()), CheckStatus::Warn);
+        assert_eq!(status(false, checked), CheckStatus::Warn);
+    }
+
     #[tokio::test]
     async fn a_ready_gateway_on_its_port_reports_its_version() {
         async fn serve(body: &'static str) -> std::net::SocketAddr {
