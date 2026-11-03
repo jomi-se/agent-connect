@@ -10,6 +10,6 @@ and [ADR 0018](../../docs/decisions/0018-floating-harness-versions.md).
 
 Produce local release artifacts with `node scripts/build-release-local.mjs`, then
 run `npm run verify:full`. The packed clean-room setup builds the box from those
-artifacts. `box/build-local.sh --runners-only` produces both Linux runner inputs;
+artifacts. `box/build-local.sh` produces both Linux runner inputs;
 it never builds or publishes a multiarch image. Fixtures use isolated homes and
 deterministic inference behind real adapters, never owner logins.

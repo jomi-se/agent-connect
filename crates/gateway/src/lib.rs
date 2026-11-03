@@ -21,13 +21,13 @@ use agent_client_protocol_rmcp::McpServerExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// Directory layout used by every spike binary. `.run/` is gitignored and
+/// Directory layout of the deterministic host fixtures. `.run/` is gitignored and
 /// holds isolated harness configuration, never personal configuration.
-pub struct SpikePaths {
+pub struct FixturePaths {
     pub root: PathBuf,
 }
 
-impl SpikePaths {
+impl FixturePaths {
     pub fn from_manifest() -> Self {
         Self {
             root: std::env::var_os("AGENT_CONNECT_TEST_ROOT")
@@ -57,7 +57,7 @@ pub enum Harness {
 /// `codex_mode` is a codex-acp agent mode (`read-only`, `workspace-write`,
 /// `agent`, `agent-full-access`); the operator chooses it, never the app.
 pub fn mock_harness(
-    paths: &SpikePaths,
+    paths: &FixturePaths,
     harness: Harness,
     mock_url: &str,
     codex_mode: &str,

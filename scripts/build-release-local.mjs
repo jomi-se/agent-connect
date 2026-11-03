@@ -76,7 +76,7 @@ try {
     // Rust's bundled LLD understands its musl CRT and architecture errata flags.
     env[`CARGO_TARGET_${key.toUpperCase()}_LINKER`] ??= "rust-lld";
   }
-  run("./deploy/gateway/box/build-local.sh", ["--runners-only"]);
+  run("./deploy/gateway/box/build-local.sh", []);
   run(dist, [
     "build",
     "--artifacts=local",
