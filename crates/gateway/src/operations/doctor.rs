@@ -225,7 +225,10 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
     }
     match tokio::net::TcpListener::bind(configured.listen).await {
         Ok(listener) => { drop(listener); report.add("listener_port", CheckStatus::Pass, "Configured listener port is available", None); },
-        Err(_) => report.add("listener_port", CheckStatus::Warn, "Listener port is occupied or cannot be bound; a running gateway may own it", Some("Check service status and health; if another application owns the port, choose a different --listen address")),
+        // A running gateway holds its own port; only a listener that does not
+        // answer as a ready gateway is worth a warning.
+        Err(_) if listener_is_ready_gateway(configured.listen).await => report.add("listener_port", CheckStatus::Pass, "A ready gateway is listening on the configured port", None),
+        Err(_) => report.add("listener_port", CheckStatus::Warn, "Listener port is occupied or cannot be bound, and nothing there answers as a ready gateway", Some("Check service status and health; if another application owns the port, choose a different --listen address")),
     }
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -299,6 +302,29 @@ fn report_engine(report: &mut DoctorReport, engine: Option<Engine>, accepted: bo
     }
 }
 
+async fn listener_is_ready_gateway(listen: std::net::SocketAddr) -> bool {
+    let mut address = listen;
+    if address.ip().is_unspecified() {
+        address.set_ip(if address.is_ipv4() {
+            std::net::Ipv4Addr::LOCALHOST.into()
+        } else {
+            std::net::Ipv6Addr::LOCALHOST.into()
+        });
+    }
+    let Ok(client) = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .timeout(Duration::from_secs(3))
+        .build()
+    else {
+        return false;
+    };
+    match client.get(format!("http://{address}/healthz")).send().await {
+        Ok(response) if response.status().is_success() => health_ready(response).await,
+        _ => false,
+    }
+}
+
 async fn health_ready(mut response: reqwest::Response) -> bool {
     let mut body = Vec::new();
     loop {
@@ -353,5 +379,22 @@ mod tests {
             (CheckStatus::Fail, false)
         );
         assert_eq!(status(None, true), (CheckStatus::Fail, false));
+    }
+    #[tokio::test]
+    async fn only_a_ready_gateway_owns_its_occupied_port() {
+        async fn serve(body: &'static str) -> std::net::SocketAddr {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let app = axum::Router::new()
+                .route("/healthz", axum::routing::get(move || async move { body }));
+            tokio::spawn(async move { axum::serve(listener, app).await });
+            address
+        }
+        assert!(listener_is_ready_gateway(serve(r#"{"status":"ok","ready":true}"#).await).await);
+        assert!(!listener_is_ready_gateway(serve(r#"{"status":"ok","ready":false}"#).await).await);
+        assert!(!listener_is_ready_gateway(serve("hello").await).await);
+        let mut wildcard = serve(r#"{"ready":true}"#).await;
+        wildcard.set_ip(std::net::Ipv4Addr::UNSPECIFIED.into());
+        assert!(listener_is_ready_gateway(wildcard).await);
     }
 }

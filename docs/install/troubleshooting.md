@@ -27,7 +27,7 @@ credential contents or owner authentication secrets.
 | `harness_home`        | The dedicated home is missing or unsafe. Keep it private and separate from owner state; do not substitute a personal harness home.                                                                       |
 | `login_file_present`  | Credential-file metadata is present. This does not verify the credential, subscription or provider response.                                                                                             |
 | `login_required`      | Run `agent-connect login --config <config>` yourself. No live login check was attempted. A provider credential store may need owner verification.                                                        |
-| `listener_port`       | A running gateway can occupy its own port. Check status and health; avoid starting a foreground gateway beside the service.                                                                              |
+| `listener_port`       | The port is busy and nothing there answers as a ready gateway. Check status and health; if another application owns the port, choose a different `--listen` address.                                     |
 | `clock`               | TLS, OAuth and TOTP require accurate time. Enable operating-system network time synchronization. This check only verifies a plausible date.                                                              |
 | `public_reachable`    | Check service, DNS, TLS trust and the HTTPS reverse proxy. Forward `/healthz`, owner/OAuth, metadata and WebSocket routes; do not disable TLS verification.                                              |
 
