@@ -4,7 +4,7 @@ set -eu
 cd "$(dirname "$0")/../../.."
 CARGO_ENCODED_RUSTFLAGS=$(node scripts/release-build-env.mjs)
 export CARGO_ENCODED_RUSTFLAGS
-case "${1:---runners-only}" in --runners-only) ;; *) echo 'Usage: build-local.sh [--runners-only]' >&2; exit 2;; esac
+[ "$#" -eq 0 ] || { echo 'Usage: build-local.sh' >&2; exit 2; }
 mkdir -p target/distrib
 for pair in aarch64-unknown-linux-musl:arm64 x86_64-unknown-linux-musl:amd64; do
   target=${pair%:*}

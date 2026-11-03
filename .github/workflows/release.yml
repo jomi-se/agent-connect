@@ -147,7 +147,7 @@ jobs:
           node-version: 24.15.0
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
       - run: ./scripts/ci-build-env.sh
-      - run: ./deploy/gateway/box/build-local.sh --runners-only
+      - run: ./deploy/gateway/box/build-local.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: gateway-runners

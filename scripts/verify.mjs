@@ -112,7 +112,7 @@ export async function verify({
       });
     else
       await timed("session-runners", () =>
-        run("./deploy/gateway/box/build-local.sh", ["--runners-only"], options),
+        run("./deploy/gateway/box/build-local.sh", [], options),
       );
     const architecture = (
       await docker(["info", "--format", architectureFormat], true)

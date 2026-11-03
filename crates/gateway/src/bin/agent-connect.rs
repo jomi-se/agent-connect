@@ -40,7 +40,7 @@ use agent_connect_gateway::resume::{
     self, AttachError, Host, RESUME_SUBPROTOCOL, Registry, ResumeConfig, ToSocket, close,
 };
 use agent_connect_gateway::sandbox::{SessionNetwork, box_args, egress_start, egress_stop};
-use agent_connect_gateway::{Harness, SpikePaths, mock_harness};
+use agent_connect_gateway::{Harness, FixturePaths, mock_harness};
 use anyhow::Context;
 use axum::Router;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
@@ -124,7 +124,7 @@ struct Gateway {
     grant_sessions: Mutex<BTreeMap<String, GrantSessions>>,
     authorization: Option<Arc<AuthService>>,
     snapshot: BTreeMap<String, Value>,
-    paths: SpikePaths,
+    paths: FixturePaths,
     hosts: Arc<Registry>,
     readiness: Mutex<Readiness>,
     /// The box sessions start from. Starts as the configured box; a refresh
@@ -398,7 +398,7 @@ async fn run() -> anyhow::Result<()> {
             operations::warm_owner_mapping(&cli.box_image).await?;
         }
     }
-    let paths = SpikePaths {
+    let paths = FixturePaths {
         root: cli
             .mock_root
             .clone()
