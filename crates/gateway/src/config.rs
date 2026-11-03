@@ -14,6 +14,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Where a gateway listens unless its configuration says otherwise.
+pub const DEFAULT_LISTEN: SocketAddr = SocketAddr::V4(std::net::SocketAddrV4::new(
+    std::net::Ipv4Addr::LOCALHOST,
+    18940,
+));
 pub const DEFAULT_BOX_IMAGE: &str = concat!("agent-connect-box:", env!("CARGO_PKG_VERSION"));
 
 /// Whether `image` is a box setup builds locally: the default repository,
@@ -271,7 +276,7 @@ impl ServeOptions {
                 .map(std::fs::canonicalize)
                 .transpose()?,
             harness: required!(harness),
-            listen: merged!(listen).unwrap_or_else(|| "127.0.0.1:18940".parse().unwrap()),
+            listen: merged!(listen).unwrap_or(DEFAULT_LISTEN),
             public_url: merged!(public_url),
             entry_points: merged!(entry_points).unwrap_or_default(),
             client_address_policies: merged!(client_address_policies).unwrap_or_default(),

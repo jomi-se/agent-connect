@@ -241,7 +241,7 @@ pub fn setup_plan(
         .or_else(|| previous.as_ref().and_then(|c| c.harness_home.clone()))
         .map(Ok)
         .unwrap_or_else(|| credentials::default_home(harness))?;
-    let listen = select!(listen, "127.0.0.1:18940".parse().unwrap());
+    let listen = select!(listen, config::DEFAULT_LISTEN);
     if listen.port() == 0 {
         return Err(usage("setup requires a nonzero listener port"));
     }
