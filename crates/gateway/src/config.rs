@@ -622,6 +622,9 @@ pub struct InitCli {
     pub box_image: String,
     #[arg(long, alias = "egress-name", default_value = "agent-connect-egress")]
     pub egress_container: String,
+    /// Accept a rootful container engine, where the gateway can start host root.
+    #[arg(long)]
+    pub allow_rootful_engine: bool,
 }
 
 pub fn init(cli: InitCli) -> anyhow::Result<()> {

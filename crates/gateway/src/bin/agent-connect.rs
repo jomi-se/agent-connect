@@ -94,7 +94,7 @@ enum Command {
     Init(InitCli),
     /// Sign in using the provider CLI in the dedicated harness home.
     Login(LoginCli),
-    /// Manage the gateway-owned egress proxy (Docker required).
+    /// Manage the gateway-owned egress proxy (a container engine is required).
     Egress(EgressCli),
     /// Print machine-readable release version.
     ReleaseInfo,
@@ -134,13 +134,24 @@ enum EgressCommand {
     },
     /// Remove a proxy only after verifying the gateway ownership label.
     Stop {
-        #[arg(
-            long,
-            env = "AGENT_CONNECT_EGRESS_CONTAINER",
-            default_value = "agent-connect-egress"
-        )]
-        name: String,
+        /// Take the name and container engine from a runtime configuration.
+        #[arg(long, conflicts_with = "name")]
+        config: Option<std::path::PathBuf>,
+        #[arg(long, env = "AGENT_CONNECT_EGRESS_CONTAINER")]
+        name: Option<String>,
     },
+}
+
+/// A runtime's configuration for an egress command, with its container engine
+/// selected, as the gateway service runs it.
+fn egress_runtime(path: std::path::PathBuf) -> anyhow::Result<ServeCli> {
+    let configured = ServeOptions {
+        config: Some(path),
+        ..Default::default()
+    }
+    .resolve()?;
+    engine::select(configured.container_engine);
+    Ok(configured)
 }
 
 struct Gateway {
@@ -312,7 +323,7 @@ async fn run() -> anyhow::Result<()> {
             );
             return Ok(());
         }
-        Command::Init(cli) => return config::init(cli),
+        Command::Init(cli) => return operations::init(cli).await,
         Command::Setup(cli) => return operations::setup(cli).await,
         Command::Doctor(cli) => return operations::doctor(cli).await,
         Command::Service(cli) => return operations::service(cli).await,
@@ -328,12 +339,7 @@ async fn run() -> anyhow::Result<()> {
                     let mut shared_home = false;
                     let (name, box_image) = match config {
                         Some(path) => {
-                            let configured = ServeOptions {
-                                config: Some(path),
-                                ..Default::default()
-                            }
-                            .resolve()?;
-                            engine::select(configured.container_engine);
+                            let configured = egress_runtime(path)?;
                             shared_home = configured.boxed && configured.harness_home.is_some();
                             let name = configured.egress_container.ok_or_else(|| {
                                 UsageError("configuration names no egress container".into())
@@ -358,7 +364,13 @@ async fn run() -> anyhow::Result<()> {
                         operations::warm_owner_mapping(&box_image).await?;
                     }
                 }
-                EgressCommand::Stop { name } => {
+                EgressCommand::Stop { config, name } => {
+                    let name = match config {
+                        Some(path) => egress_runtime(path)?.egress_container.ok_or_else(|| {
+                            UsageError("configuration names no egress container".into())
+                        })?,
+                        None => name.unwrap_or_else(|| "agent-connect-egress".into()),
+                    };
                     egress_stop(&name)?;
                     println!("Egress proxy stopped: {name}");
                 }

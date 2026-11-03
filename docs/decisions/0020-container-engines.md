@@ -21,7 +21,8 @@ host ids.
    rootful Linux daemon.
 
 2. **Rootful is an owner's explicit choice.** A new runtime on a rootful engine
-   needs `setup --allow-rootful-engine`, recorded in the configuration only.
+   needs `--allow-rootful-engine` on `setup` or `init`, recorded in the
+   configuration only.
    Existing runtimes keep working, with a warning at setup and serve, and
    doctor's `engine_rootless` fails until the acceptance is recorded. Engines
    in a virtual machine (Docker Desktop, OrbStack, as the daemon reports
