@@ -11,7 +11,7 @@ on 2026-10-04, establishes ACP as the product vision and chosen open standard.
 
 ## Run your gateway
 
-Install from npm. You need Node 24 LTS, Docker, a browser and a Codex
+Install from npm. You need Node 24 LTS, a container engine (Docker or Podman), a browser and a Codex
 or Claude Code subscription; see the [install guide](docs/install/README.md).
 
 ```sh

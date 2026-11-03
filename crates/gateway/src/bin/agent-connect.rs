@@ -196,7 +196,7 @@ impl OwnerRuntime for ConsoleRuntime {
         {
             problems.push(OwnerProblem {
                 message: "Sessions cannot start: the box runtime is not responding.".into(),
-                repair: "On the gateway host, run agent-connect doctor to check Docker, the box and the network proxy.".into(),
+                repair: "On the gateway host, run agent-connect doctor to check the container engine, the box and the network proxy.".into(),
             });
         }
         if gateway.capacity.is_closed() {
@@ -1265,7 +1265,7 @@ async fn run_host(
         match network.cleanup().await {
             Ok(()) => true,
             Err(error) => {
-                tracing::error!(%error, "session Docker cleanup failed");
+                tracing::error!(%error, "session container cleanup failed");
                 false
             }
         }
