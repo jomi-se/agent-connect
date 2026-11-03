@@ -1,6 +1,6 @@
 # ADR 0020: Container engines
 
-Status: Proposed (2026-11-01)
+Status: Accepted (2026-11-03)
 
 ## Context
 
