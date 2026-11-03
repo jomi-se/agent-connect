@@ -690,7 +690,6 @@ pub fn box_args(
     harness: Harness,
     session: &str,
     mode: &str,
-    volume: Option<&str>,
     home: Option<&HarnessHome>,
     program: crate::engine::Program,
     engine: Engine,
@@ -740,8 +739,6 @@ pub fn box_args(
     .collect();
     if let Some(home) = home {
         args.extend(home.docker_args(engine));
-    } else if let Some(volume) = volume {
-        args.extend(["-v".into(), format!("{volume}:/home/node")]);
     } else {
         args.extend([
             "--tmpfs".into(),
@@ -1937,7 +1934,6 @@ mod tests {
             "test",
             "agent-full-access",
             None,
-            None,
             crate::engine::Program::Docker,
             Engine::Rootful,
             "session:test",
@@ -1967,7 +1963,6 @@ mod tests {
             Harness::Codex,
             "test",
             "agent-full-access",
-            None,
             None,
             crate::engine::Program::Docker,
             Engine::Rootful,
@@ -2192,7 +2187,6 @@ mod tests {
                 "test",
                 "workspace-write",
                 None,
-                None,
                 crate::engine::Program::Docker,
                 Engine::Rootful,
                 "session:test",
@@ -2217,26 +2211,23 @@ mod tests {
     }
     #[test]
     fn podman_boxes_without_a_home_keep_the_default_mapping() {
-        for volume in [None, Some("acp-home-test")] {
-            let args = box_args(
-                Harness::Codex,
-                "test",
-                "workspace-write",
-                volume,
-                None,
-                crate::engine::Program::Podman,
-                Engine::RootlessPodman,
-                "session:test",
-                "network-test",
-                false,
-            );
-            // keep-id would make box files the owner's; without a home they stay
-            // on a subordinate id.
-            assert!(!args.iter().any(|arg| arg.starts_with("--userns")));
-            assert!(!args.contains(&"--user".into()));
-            assert!(!args.iter().any(|arg| arg.contains("uid=")));
-            assert!(args.contains(&"/work:rw,exec,size=512m,U".into()));
-        }
+        let args = box_args(
+            Harness::Codex,
+            "test",
+            "workspace-write",
+            None,
+            crate::engine::Program::Podman,
+            Engine::RootlessPodman,
+            "session:test",
+            "network-test",
+            false,
+        );
+        // keep-id would make box files the owner's; without a home they stay
+        // on a subordinate id.
+        assert!(!args.iter().any(|arg| arg.starts_with("--userns")));
+        assert!(!args.contains(&"--user".into()));
+        assert!(!args.iter().any(|arg| arg.contains("uid=")));
+        assert!(args.contains(&"/work:rw,exec,size=512m,U".into()));
     }
     #[test]
     fn forced_removal_kills_at_once_on_both_engines() {
@@ -2271,7 +2262,6 @@ mod tests {
                 Harness::Claude,
                 "test",
                 "workspace-write",
-                None,
                 Some(&home),
                 program,
                 engine,

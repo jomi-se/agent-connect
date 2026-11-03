@@ -195,30 +195,3 @@ where
         .build()
 }
 
-/// Launch recipe for a per-session container (Phase 6). The box holds the
-/// polyfill and the adapter; its only network exit is the egress proxy.
-/// `codex_mode` defaults to full access inside the box: the box, not the
-/// harness, is the boundary.
-/// `home_volume`: a named Docker volume for the harness home (its config and
-/// conversation transcripts) instead of tmpfs, so `session/load` works after
-/// the box is gone. The workspace stays on tmpfs.
-pub fn boxed_harness(
-    harness: Harness,
-    session: &str,
-    codex_mode: &str,
-    home_volume: Option<&str>,
-) -> AcpAgent {
-    let args = sandbox::box_args(
-        harness,
-        session,
-        codex_mode,
-        home_volume,
-        None,
-        engine::Program::Docker,
-        engine::Engine::Rootful,
-        "acp-spike-session:dev",
-        "acp-internal",
-        true,
-    );
-    AcpAgent::from_args(args).expect("valid docker command")
-}

@@ -1085,7 +1085,6 @@ async fn run_host(
         let engine = gateway
             .engine
             .expect("boxed gateways detect their engine at startup");
-        let volume = gateway.cli.durable_home.then(|| home_volume(&grant.id));
         let mocked = gateway.cli.mock_root.is_some();
         // Startup rollback and Docker CLI calls belong off the async executor.
         let (network, args) = tokio::task::spawn_blocking(move || {
@@ -1095,7 +1094,6 @@ async fn run_host(
                 harness,
                 &session,
                 mode.as_str(),
-                volume.as_deref(),
                 home.as_ref(),
                 engine::selected(),
                 engine,
@@ -1217,12 +1215,6 @@ async fn run_host(
     Ok(())
 }
 
-/// A volume name derived from the grant, never containing the token itself.
-fn home_volume(grant: &str) -> String {
-    use sha2::{Digest, Sha256};
-    format!("acp-home-{:x}", Sha256::digest(grant.as_bytes()))
-}
-
 async fn start_or_close(
     socket: &mut WebSocket,
     gateway: &Arc<Gateway>,
@@ -1296,14 +1288,5 @@ mod tests {
         assert!(errors.contains("ordinary-error"));
         assert!(!errors.contains("audit-visible"));
         assert!(!errors.contains("unrelated-warning"));
-    }
-
-    #[test]
-    fn grant_volume_name_is_release_stable_sha256() {
-        assert_eq!(
-            super::home_volume("abc"),
-            "acp-home-ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        );
-        assert_ne!(super::home_volume("abc"), super::home_volume("abd"));
     }
 }
