@@ -22,7 +22,7 @@ agent-connect doctor
 agent-connect service start
 ```
 
-Setup creates private owner state, owned egress and a user service, which it
+Setup creates private owner state, the local box and a user service, which it
 starts automatically. Run provider login yourself in the dedicated harness home;
 read the [shared-home risks](docs/plan/credentials.md) first. The explicit start
 command also starts a previously stopped service. For remote access, follow the

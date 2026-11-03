@@ -224,25 +224,6 @@ try {
       "node",
       "/app/server.mjs",
     ]);
-    await command(
-      gatewayBinary,
-      ["egress", "start", "--name", egressContainer, "--box-image", boxImage],
-      { env: cleanEnv },
-    );
-    // The helper verified this owner-labelled proxy and its selected image.
-    // Retain its immutable ID so cleanup cannot remove a name replacement.
-    dockerContainers.push(
-      (
-        await command(engine, [
-          "inspect",
-          "--type",
-          "container",
-          "--format",
-          "{{.ID}}",
-          egressContainer,
-        ])
-      ).trim(),
-    );
   }
   for (const harness of ["codex", "claude"]) {
     const harnessHome = join(run, `boxed-home-${harness}`);
@@ -445,6 +426,14 @@ try {
   await attemptAll(
     dockerContainers.map((name) => () => command(engine, ["rm", "-f", name])),
   );
+  // Each gateway removes its egress when it stops; one that crashed does not.
+  if (egressContainer)
+    await command(engine, [
+      "rm",
+      "-f",
+      egressContainer,
+      `${egressContainer}-keepalive`,
+    ]).catch(() => {});
   // Container removal must settle before attempting the owned networks.
   await attemptAll(
     dockerNetworks.map(

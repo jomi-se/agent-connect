@@ -65,6 +65,10 @@ function cleanup() {
     const ownership = await readFile(join(run, "work/resources.json"), "utf8")
       .then(JSON.parse)
       .catch(() => ({}));
+    // Setup names the gateway's proxy after the run's runtime directory.
+    const egress = (ownership.containers ?? []).find((container) =>
+      container.startsWith("agent-connect-egress-"),
+    );
     // Recover hosts from this run's private state even if their peers detached.
     const ids = (
       await readdir(join(run, "work/operator/state/sessions")).catch(() => [])
@@ -72,14 +76,11 @@ function cleanup() {
     await cleanupSessionResources({
       sessionIds: ids,
       model: `acp-clean-model-${suffix}`,
-      egress: `acp-clean-egress-${suffix}`,
+      egress,
       docker: (args) => command("docker", args),
     }).catch((error) => failures.push(error));
     for (const container of ownership.containers ?? []) {
-      if (
-        container === `acp-clean-model-${suffix}` ||
-        container === `acp-clean-egress-${suffix}`
-      )
+      if (container === `acp-clean-model-${suffix}` || container === egress)
         await command("docker", ["rm", "-f", container]).catch(() => {});
     }
     for (const network of ownership.networks ?? []) {

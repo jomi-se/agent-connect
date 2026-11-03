@@ -158,8 +158,10 @@ pub struct ServeOptions {
     #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE", hide_env_values = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub box_image: Option<String>,
-    /// Egress proxy container attached to internal session networks.
-    #[arg(long, env = "AGENT_CONNECT_EGRESS_CONTAINER", hide_env_values = true)]
+    /// The network proxy container this gateway owns and attaches to internal
+    /// session networks. Setup names it in the configuration; only fixtures
+    /// without one pass it.
+    #[arg(long, hide = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub egress_container: Option<String>,
     /// Isolated deterministic fixture root; enables host fixtures only.
@@ -620,8 +622,6 @@ pub struct InitCli {
     pub listen: SocketAddr,
     #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE", default_value = DEFAULT_BOX_IMAGE)]
     pub box_image: String,
-    #[arg(long, alias = "egress-name", default_value = "agent-connect-egress")]
-    pub egress_container: String,
     /// Accept a rootful container engine, where the gateway can start host root.
     #[arg(long)]
     pub allow_rootful_engine: bool,
@@ -668,7 +668,6 @@ pub(crate) fn init_with_output(
     output: bool,
     gate: impl FnOnce() -> anyhow::Result<()>,
 ) -> anyhow::Result<()> {
-    validate_container_name(&cli.egress_container)?;
     if cli.listen.port() == 0 {
         return Err(usage("init requires a nonzero listener port"));
     }
@@ -721,6 +720,8 @@ pub(crate) fn init_with_output(
         builder.mode(0o700);
     }
     builder.create(&cli.directory).context("create new private runtime directory; destination must not exist and its parent must exist")?;
+    // Named before canonicalizing, as setup names it in its plan.
+    let egress = egress_name(&std::path::absolute(&cli.directory)?);
     let directory = cli.directory.canonicalize()?;
     let result = (|| -> anyhow::Result<()> {
         let home_path = cli
@@ -755,7 +756,7 @@ pub(crate) fn init_with_output(
             state_dir: Some("state".into()),
             boxed: Some(true),
             box_image: Some(cli.box_image.clone()),
-            egress_container: Some(cli.egress_container.clone()),
+            egress_container: Some(egress.clone()),
             ..Default::default()
         };
         write_private(
@@ -821,11 +822,6 @@ pub(crate) fn init_with_output(
                 directory.join("grant.json").display()
             );
         }
-        println!(
-            "Next: agent-connect egress start --name {} --box-image {}",
-            shell_quote(&cli.egress_container),
-            shell_quote(&cli.box_image)
-        );
         if cli.harness_home.is_none() && cli.box_image == DEFAULT_BOX_IMAGE {
             println!(
                 "Next: agent-connect login (choose {})",
@@ -847,6 +843,15 @@ pub(crate) fn init_with_output(
     }
     Ok(())
 }
+/// The egress proxy a runtime's gateway owns, named after the runtime's
+/// directory so that runtimes sharing an engine never share one.
+pub fn egress_name(directory: &Path) -> String {
+    use sha2::Digest;
+    let digest = sha2::Sha256::digest(directory.as_os_str().as_encoded_bytes());
+    let suffix: String = digest[..6].iter().map(|b| format!("{b:02x}")).collect();
+    format!("agent-connect-egress-{suffix}")
+}
+
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
@@ -866,6 +871,14 @@ fn write_private(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_runtime_directory_names_its_own_valid_egress() {
+        let first = egress_name(Path::new("/srv/agent-connect/one"));
+        assert_eq!(first, egress_name(Path::new("/srv/agent-connect/one")));
+        assert_ne!(first, egress_name(Path::new("/srv/agent-connect/two")));
+        validate_container_name(&first).unwrap();
+    }
 
     #[test]
     fn only_the_default_repository_with_a_version_tag_is_a_local_box() {

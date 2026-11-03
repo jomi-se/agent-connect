@@ -3,7 +3,7 @@
 Start with `agent-connect setup`, then `agent-connect doctor` and the owner
 console. This reference covers explicit configuration and advanced operation.
 `agent-connect --help` lists setup, diagnosis, service lifecycle, owner recovery,
-`init`, `login`, `egress`, `serve` and `release-info`.
+`init`, `login`, `serve` and `release-info`.
 `serve --help` lists all flags. `agent-connect login` prompts for a
 harness and uses a dedicated platform-default home; `--harness` skips selection,
 `--harness-home` overrides the home, and `--config` honors an existing runtime's
@@ -41,7 +41,7 @@ mappings, so the first box with the owner's mapping waits while Podman copies
 the box with shifted ownership: setup and every service start do this ahead of
 sessions. The copy is about the size of the box and is freed with it.
 Explicit `setup --upgrade` updates the owned service executable even when the image is
-unchanged. Owned egress is recreated when needed. Changed image or harness
+unchanged. Changed image or harness
 policy invalidates existing grants; apps must pair again. Service operations accept `--config` and optional
 `--manager systemd|launchd` before `install|uninstall|start|stop|status|logs`.
 `install --offline` generates a definition without contacting/enabling the
@@ -78,7 +78,6 @@ config, defaults**. Each key supports `AGENT_CONNECT_<UPPER_SNAKE_KEY>`;
 | `tools` / `--tools`                                   | Headless mode only: required fixed snapshot JSON array of tool names and schemas                                                                                                                                       |
 | `harness_home` / `--harness-home`                     | Dedicated whole-home read-write bind mount; defaults to the per-harness Agent Connect home                                                                                                                             |
 | `box_image` / `--box-image`                           | Local tag selected by setup from gateway version and owner context hash                                                                                                                                                |
-| `egress_container` / `--egress-container`             | Required operator-selected proxy; setup uses `agent-connect-egress`                                                                                                                                                    |
 | `boxed` / `--boxed`                                   | Required true in production; set true by setup                                                                                                                                                                         |
 | `permissions` / `--permissions`                       | Default profile; `sandboxed`, `read-only`, `app-tools-only` or `deny-all`, subject to harness limits                                                                                                                   |
 | `profiles` / `--profile`                              | Owner-consent choices; must include the default `permissions`; repeat the flag for each profile                                                                                                                        |
@@ -203,8 +202,8 @@ session is exempt from the global unauthenticated-request rejection.
 
 `RUST_LOG` controls diagnostics. `AGENT_CONNECT_GATEWAY_BIN` overrides the npm
 launcher's executable for local testing. Image selection is also available to
-init/login/egress as `AGENT_CONNECT_BOX_IMAGE`; egress name as
-`AGENT_CONNECT_EGRESS_CONTAINER`. No API-key environment is forwarded to boxes.
+init and login as `AGENT_CONNECT_BOX_IMAGE`. No API-key environment is forwarded
+to boxes.
 
 Process exit codes: 0 successful completion/help; 1 runtime/I/O/container engine/login
 failure; 2 invalid arguments/configuration/snapshot or unsupported npm platform.
@@ -234,21 +233,18 @@ client message are cleaned up rather than retained for the reconnect grace.
 Shutdown joins hosts concurrently under one ten-second deadline, with a
 twenty-second overall session-task drain bound including allocation and cleanup.
 
-Before listening, boxed `serve` checks the container engine, the selected image and the owned,
-running egress proxy. `egress start` safely reuses a matching proxy or restarts a
-stopped one. An owned proxy that is sound but built from another box, as after a
-rebuild, is replaced, provided that box is still installed to judge it by; any
-other incompatible proxy requires explicit stop/recreate. On Podman, `egress
-start` also keeps a `<egress>-keepalive` container running beside the proxy:
+Sessions reach the internet only through the gateway's network proxy, a
+container the gateway starts, or reuses, before it listens and removes when it
+stops. Boxed `serve` checks the container engine, the selected image and that
+proxy before listening, and readiness keeps checking the proxy. A proxy the
+gateway owns that was built from another box, as after a rebuild, is replaced;
+a container of that name it does not own is never touched, and the gateway
+refuses to start. On Podman a small keepalive container runs beside the proxy:
 Podman 4 tears down its rootless network when a container leaves a network and
 no other running container uses it, which would cut the proxy off when the last
-session ends. Readiness requires it; `egress stop` removes it. The proxy uses
-`unless-stopped` restart policy and rotated JSON logs (10 MiB × 3). Defaults are
-64 sockets per session source and 512 total, 60-second idle, five-minute request
-and one-hour absolute connection limits. Invalid limit overrides fail startup;
-see `EGRESS_MAX_CONNECTIONS_PER_CLIENT`, `EGRESS_MAX_CONNECTIONS`,
-`EGRESS_IDLE_TIMEOUT_MS`, `EGRESS_REQUEST_TIMEOUT_MS` and
-`EGRESS_ABSOLUTE_TIMEOUT_MS` in the image proxy implementation.
+session ends. The proxy allows 64 sockets per session source and 512 in total,
+with 60-second idle, five-minute request and one-hour absolute connection
+limits.
 
 Action records contain delivery/completion metadata, never tool arguments or
 results. Completed records expire after 24 hours with a 1024-record cap;
@@ -339,8 +335,8 @@ server {
 Preserve the browser's `Origin` and `Sec-WebSocket-Protocol` headers; do not
 rewrite them to the gateway origin. WebSocket subprotocols carry app-specific
 authorization, and the proxy must forward them unchanged. Never inject a bearer
-credential or owner cookie in proxy configuration. Do not publish Docker's API
-or egress ports. The gateway uses the actual socket peer for owner login budgets;
+credential or owner cookie in proxy configuration. Do not publish the container
+engine's API or the network proxy's port. The gateway uses the actual socket peer for owner login budgets;
 apply suitable public ingress rate limiting without blocking long-lived sockets.
 
 For additional entry points, terminate HTTPS for each configured origin and
@@ -371,7 +367,7 @@ RUN curl -fsSL https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
 ```
 
 Build time has normal network access. Running sessions only reach the network
-through the owned egress proxy, so install tools and language runtimes during
+through the gateway's network proxy, so install tools and language runtimes during
 the build. Pin owner tool versions when reproducibility matters. Tools installed
 under root's home are not available to the session user; use shared paths such
 as `/usr/local/bin`.
@@ -401,11 +397,10 @@ after start and then once a day it resolves the versions again; when the box
 tag changes it builds the new box beside the running one, then waits until no
 session is live and no permit is held. The swap holds every session permit,
 so a session that arrives during those seconds is refused as at capacity. It
-moves the egress proxy to the new box, records `box_image` in the
+moves the network proxy to the new box, records `box_image` in the
 configuration, and starts new sessions from the new box. If any step fails,
-the egress is put back on the previous box and the configuration is left
-alone. A crash between the two steps is repaired by the next
-`egress start --config`, which the service runs before serving. The box in use
+the proxy is put back on the previous box and the configuration is left
+alone. A crash between the two steps is repaired when the gateway next starts. The box in use
 before the last refresh is kept for rollback; the one before it is removed.
 `box-refresh.json` in the state directory records the last check, swap and
 error. Doctor's `box_current` passes while a refresh is pending, and warns

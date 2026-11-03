@@ -165,13 +165,8 @@ async function runCase(mode) {
   const active = mode.endsWith("active") || mode === "cancel-then-bye";
   const startupFailure =
     mode.startsWith("startup-") && mode !== "startup-shutdown";
-  const preflightFailure = [
-    "startup-peer-failure",
-    "startup-unowned-egress",
-    "startup-stopped-egress",
-  ].includes(mode);
-  if (mode === "startup-stopped-egress")
-    await docker(["stop", sharedContainers[0]]);
+  // The gateway refuses to take over a container it does not own.
+  const preflightFailure = mode === "startup-unowned-egress";
   const dir = join(root, mode);
   sessionDirs.push(dir); // Register before any allocation/readiness failure.
   await mkdir(join(dir, "home"), { recursive: true, mode: 0o700 });
@@ -199,11 +194,7 @@ async function runCase(mode) {
       "--mock-container",
       modelName,
       "--egress-container",
-      mode === "startup-peer-failure"
-        ? `acp-test-absent-${suffix}`
-        : mode === "startup-unowned-egress"
-          ? modelName
-          : egressName,
+      preflightFailure ? modelName : egressName,
       "--box-image",
       image,
       "--tools",
@@ -257,16 +248,6 @@ async function runCase(mode) {
         0,
         "preflight allocates no session resources",
       );
-      if (mode === "startup-stopped-egress") {
-        await command(binary, [
-          "egress",
-          "start",
-          "--name",
-          egressName,
-          "--box-image",
-          image,
-        ]);
-      }
       for (const id of sharedContainers)
         assert.equal((await inspect("container", id))?.State.Running, true);
       reports.push({
@@ -406,6 +387,11 @@ async function runCase(mode) {
         `${mode} clean gateway exit`,
       );
       assert.equal(child.exitCode, 0);
+      assert.equal(
+        await inspect("container", egressName),
+        null,
+        "the gateway removes its egress when it stops",
+      );
     }
     for (const id of sharedContainers)
       assert.equal(
@@ -418,70 +404,12 @@ async function runCase(mode) {
   } finally {
     socket?.terminate();
     await stop(child);
-    if (mode === "startup-stopped-egress") {
-      await command(binary, [
-        "egress",
-        "start",
-        "--name",
-        egressName,
-        "--box-image",
-        image,
-      ]);
-    }
     await writeFile(join(dir, "gateway.log"), log);
   }
 }
 
 let failure;
 try {
-  await command(binary, [
-    "egress",
-    "start",
-    "--name",
-    egressName,
-    "--box-image",
-    image,
-  ]);
-  const egress = await inspect("container", egressName);
-  assert.equal(egress.Config.Labels[componentLabel], "acp-egress");
-  sharedContainers.push(immutableId(egress.Id));
-  await command(binary, [
-    "egress",
-    "start",
-    "--name",
-    egressName,
-    "--box-image",
-    image,
-  ]);
-  assert.equal(
-    (await inspect("container", egressName)).Id,
-    egress.Id,
-    "running owned proxy is reused",
-  );
-  await docker(["stop", egress.Id]);
-  await command(binary, [
-    "egress",
-    "start",
-    "--name",
-    egressName,
-    "--box-image",
-    image,
-  ]);
-  assert.equal(
-    (await inspect("container", egressName)).Id,
-    egress.Id,
-    "stopped owned proxy is restarted by ID",
-  );
-  assert.equal(
-    (await inspect("container", egressName)).HostConfig.RestartPolicy.Name,
-    "unless-stopped",
-  );
-  assert.equal(
-    (await inspect("container", egressName)).HostConfig.LogConfig.Config[
-      "max-size"
-    ],
-    "10m",
-  );
   sharedNetworks.push(
     immutableId(await docker(["network", "create", "--internal", baseName])),
   );
@@ -521,9 +449,7 @@ try {
     "expiry-active",
     "shutdown-active",
     "cancel-then-bye",
-    "startup-peer-failure",
     "startup-unowned-egress",
-    "startup-stopped-egress",
     "startup-box-failure",
     "startup-lost-box-response",
     "startup-lost-network-response",
@@ -557,7 +483,7 @@ try {
         failure ??= error;
       });
     for (const resource of owned.filter(({ kind }) => kind === "network")) {
-      for (const peer of sharedContainers)
+      for (const peer of [...sharedContainers, egressName])
         await docker([
           "network",
           "disconnect",
@@ -570,6 +496,8 @@ try {
       });
     }
   }
+  // A gateway that did not exit cleanly leaves its egress behind.
+  await docker(["rm", "--force", egressName]).catch(() => {});
   for (const id of sharedContainers.reverse())
     await docker(["rm", "--force", id]).catch((error) => {
       failure ??= error;

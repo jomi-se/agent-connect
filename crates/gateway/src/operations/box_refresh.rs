@@ -84,7 +84,7 @@ pub async fn prepare(current: &str, warm: bool) -> anyhow::Result<Option<String>
 /// Moves the egress and then the configuration from `current` to `new`, and
 /// puts the egress back on `current` if either step fails. Blocking; the
 /// caller holds every session permit. A crash between the steps is undone by
-/// the next `egress start --config`, which replaces an egress of another box.
+/// the next serve start, which replaces an owned egress of another box.
 pub fn swap(config: &Path, egress: &str, current: &str, new: &str) -> anyhow::Result<()> {
     let result = crate::sandbox::egress_start(egress, new)
         .and_then(|()| super::record_config_value(config, "box_image", new.into()));
