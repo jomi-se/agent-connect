@@ -28,7 +28,7 @@ Existing owner state and application policy are preserved; conflicting requested
 policy changes are rejected. Setup rebuilds and selects the box when the gateway
 version or owner layer changes. All setup runs preserve private authentication, journals and login homes.
 Setup asks the Docker daemon whether it is rootless. A new runtime on a rootful
-Linux engine needs `--allow-rootful-engine`, which is recorded in the config as
+Linux engine needs `--allow-rootful-engine` (on `setup` or `init`), which is recorded in the config as
 `allow_rootful_engine` (config only, no flag or environment variable); existing
 runtimes keep working, setup and serve warn, and doctor fails until it is
 recorded. Docker's userns-remap mode is refused. On a
@@ -92,7 +92,7 @@ config, defaults**. Each key supports `AGENT_CONNECT_<UPPER_SNAKE_KEY>`;
 | `mock_container` / `--mock-container`                 | Fixture model container; requires `mock_root`                                                                                                                                                                          |
 | `durable_home` / `--durable-home`                     | Legacy deterministic-fixture named-volume option; use dedicated home for production                                                                                                                                    |
 | `container_engine`                                    | `docker` (default) or `podman`, recorded by setup. The global `--container-engine` option or `AGENT_CONNECT_CONTAINER_ENGINE` chooses it for a new runtime or one command; an existing runtime refuses a different one |
-| `allow_rootful_engine`                                | The owner accepted a rootful engine; written only by `setup --allow-rootful-engine`                                                                                                                                    |
+| `allow_rootful_engine`                                | The owner accepted a rootful engine; written only by `setup` or `init --allow-rootful-engine`                                                                                                                          |
 
 Normal config contains `public_url` and operator policy, without `token`,
 `allow_origin` or `tools`. `init` and first-time `setup` prompt at the terminal for a hidden owner

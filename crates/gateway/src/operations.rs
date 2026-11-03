@@ -570,6 +570,7 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             listen: plan.listen,
             box_image: plan.box_image.clone(),
             egress_container: plan.egress_container.clone(),
+            allow_rootful_engine: plan.allow_rootful_engine,
         };
         tokio::task::spawn_blocking(move || config::init_quiet(init)).await??;
         persist_setup_policy(&plan.config, &plan)?;
@@ -662,6 +663,23 @@ fn persist_setup_policy(path: &Path, plan: &SetupPlan) -> anyhow::Result<()> {
         serde_json::to_value(plan.permissions)?,
     );
     replace_private_config(path, &serde_json::to_vec_pretty(&value)?)
+}
+
+/// `agent-connect init`, the low-level way to create a runtime. It passes the
+/// engine gate setup passes, and records the engine and any acceptance the same
+/// way, so neither path creates a runtime the other would refuse.
+pub async fn init(cli: config::InitCli) -> anyhow::Result<()> {
+    let program = crate::engine::selected();
+    let engine = tokio::task::spawn_blocking(crate::engine::detect).await??;
+    crate::engine::admit(engine, cli.allow_rootful_engine, false)?;
+    let accepted = engine == crate::engine::Engine::Rootful && cli.allow_rootful_engine;
+    let path = cli.directory.join("config.json");
+    tokio::task::spawn_blocking(move || config::init(cli)).await??;
+    record_config_value(&path, "container_engine", serde_json::to_value(program)?)?;
+    if accepted {
+        record_rootful_acceptance(&path)?;
+    }
+    Ok(())
 }
 
 fn record_rootful_acceptance(path: &Path) -> anyhow::Result<()> {
@@ -900,6 +918,7 @@ mod tests {
                 listen: plan.listen,
                 box_image: plan.box_image.clone(),
                 egress_container: plan.egress_container.clone(),
+                allow_rootful_engine: false,
             },
             Some("fixture-only-owner-passphrase".into()),
             false,

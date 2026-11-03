@@ -614,12 +614,17 @@ pub fn egress_stop(name: &str) -> anyhow::Result<()> {
     let output = std::process::Command::new(crate::engine::program())
         .args(["inspect", "--type", "container", name])
         .output()
-        .context("Docker is required to stop the egress proxy")?;
+        .with_context(|| {
+            format!(
+                "{} is required to stop the egress proxy",
+                crate::engine::program()
+            )
+        })?;
     if !output.status.success() {
         bail!("cannot inspect egress container; nothing was removed");
     }
     let containers: Vec<serde_json::Value> =
-        serde_json::from_slice(&output.stdout).context("invalid Docker container inspection")?;
+        serde_json::from_slice(&output.stdout).context("invalid container inspection")?;
     let container = containers
         .first()
         .filter(|_| containers.len() == 1)

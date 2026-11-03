@@ -14,7 +14,7 @@ its buildx plugin is the tested baseline. On Linux, use rootless Podman
 (`agent-connect --container-engine podman setup`) or run Docker Engine in
 [rootless mode](https://docs.docker.com/engine/security/rootless/): on a
 rootful engine, anything that can start containers, this gateway included, can
-start host root, so setup refuses one unless you pass `--allow-rootful-engine`.
+start host root, so setup and `init` refuse one unless you pass `--allow-rootful-engine`.
 Docker Desktop and OrbStack run their engine in a virtual machine and need no
 flag; other virtual machines, such as Colima, report as rootful. Setup
 builds the box locally, so first setup downloads and stores roughly 1.5 GB.
@@ -235,7 +235,7 @@ Retaining a grant record does not keep it valid under a changed policy. Never
 replay interrupted turns or initialize over existing state.
 
 To uninstall, stop and uninstall the service, stop its owned egress with
-`agent-connect egress stop`, then uninstall the npm package or remove the
+`agent-connect egress stop --config <config>`, then uninstall the npm package or remove the
 archive-installed executable. These operations preserve private data. Revoke
 the dedicated provider login in the provider's account controls before choosing
 to delete it; leave personal logins alone. Never prune unrelated Docker resources.
