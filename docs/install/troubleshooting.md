@@ -128,5 +128,22 @@ retain shared egress and model peers. Never use a broad Docker prune or remove
 another application's resources. Retrying the interrupted prompt can duplicate
 an application effect and is not cleanup.
 
+## Podman 4: the egress lost its network
+
+Before the egress keepalive, Podman 4 tore down its rootless network whenever
+the last session ended: the egress log shows `upstream_error` for every
+connection and the harness reports it cannot reach its provider. Upgrading the
+gateway and running `agent-connect egress start --config <config>` adds the
+keepalive and restarts the egress onto a working network.
+
+A host that hit the teardown can also keep stale state in
+`$XDG_RUNTIME_DIR/containers/networks/aardvark-dns/`: an `aardvark.pid` for a
+process that no longer exists and files for networks that are gone. Podman then
+fails network changes with `aardvark pid not found`, and a container caught
+mid-change reports `network inspection mismatch`. Stop the gateway service and
+its containers, delete the stale `aardvark.pid` and the files named after
+networks `podman network ls` no longer lists, then start the egress and the
+service again. The directory is in tmpfs, so a reboot also clears it.
+
 For unsupported or disputed provider authentication, consult the
 [credential and terms analysis](../plan/credentials.md). ACP setup creates fresh grants and never imports personal provider login state.
