@@ -177,7 +177,6 @@ test("init validates first, creates private scoped grant, and refuses overwrites
   );
   assert.equal(config.tools, "tools.json");
   assert.ok(!result.stdout.includes(grant.token));
-  assert.match(result.stdout, /egress start/);
   assert.match(result.stdout, /Next: agent-connect login \(choose Codex\)/);
   assert.match(result.stdout, /serve --config/);
   assert.equal((await stat(config.harness_home)).mode & 0o777, 0o700);
@@ -450,91 +449,6 @@ test("production isolation requirements and runtime failures have distinct exits
   ]);
   // A missing operator input file is an I/O failure rather than a schema failure.
   assert.equal(runtime.status, 1);
-});
-
-test("egress uses read-only same-image proxy and verifies ownership before deleting immutable ID", async () => {
-  const root = await tempRoot("acp-egress-command-");
-  await mkdir(join(root, "bin"));
-  const docker = join(root, "bin/docker");
-  await writeFile(
-    docker,
-    '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":[],"operatingSystem":"Linux"}\'; exit 0; fi\nprintf "%s\\n" "$@" > "$DOCKER_ARGS"\nif [ "$1" = image ]; then /bin/cat "$DOCKER_IMAGE"; elif [ "$1" = inspect ]; then if [ -f "$DOCKER_INSPECT" ]; then /bin/cat "$DOCKER_INSPECT"; else echo "Error: No such container: fixture" >&2; exit 1; fi; fi\n',
-  );
-  await chmod(docker, 0o755);
-  const env = {
-    PATH: join(root, "bin"),
-    DOCKER_ARGS: join(root, "args"),
-    DOCKER_INSPECT: join(root, "inspect.json"),
-    DOCKER_IMAGE: join(root, "image.json"),
-    OPENAI_API_KEY: "never-forward",
-    ANTHROPIC_API_KEY: "never-forward",
-  };
-  await writeFile(
-    env.DOCKER_IMAGE,
-    JSON.stringify({ Id: `sha256:${"d".repeat(64)}`, Config: { Env: [] } }),
-  );
-  const start = command(
-    [
-      "egress",
-      "start",
-      "--name",
-      "owned-egress",
-      "--box-image",
-      "session:test",
-    ],
-    env,
-  );
-  assert.equal(start.status, 0, start.stderr);
-  let args = (await readFile(env.DOCKER_ARGS, "utf8")).trim().split("\n");
-  assert.ok(args.includes("--read-only"));
-  assert.ok(args.includes("org.agent-connect.component=acp-egress"));
-  assert.ok(
-    !args.some(
-      (arg) =>
-        arg === "-p" ||
-        arg.includes("publish") ||
-        arg.includes("API_KEY") ||
-        arg.includes("never-forward"),
-    ),
-  );
-  assert.deepEqual(args.slice(-4), [
-    "--entrypoint",
-    "node",
-    `sha256:${"d".repeat(64)}`,
-    "/opt/agent-connect/egress-proxy.mjs",
-  ]);
-  const id = "a".repeat(64);
-  await writeFile(
-    env.DOCKER_INSPECT,
-    JSON.stringify([
-      {
-        Id: id,
-        Config: { Labels: { "org.agent-connect.component": "unowned" } },
-      },
-    ]),
-  );
-  const refused = command(["egress", "stop", "--name", "owned-egress"], env);
-  assert.equal(refused.status, 1);
-  assert.match(refused.stderr, /not labelled/);
-  assert.equal(
-    (await readFile(env.DOCKER_ARGS, "utf8")).split("\n")[0],
-    "inspect",
-  );
-  await writeFile(
-    env.DOCKER_INSPECT,
-    JSON.stringify([
-      {
-        Id: id,
-        Config: { Labels: { "org.agent-connect.component": "acp-egress" } },
-      },
-    ]),
-  );
-  assert.equal(
-    command(["egress", "stop", "--name", "owned-egress"], env).status,
-    0,
-  );
-  args = (await readFile(env.DOCKER_ARGS, "utf8")).trim().split("\n");
-  assert.deepEqual(args, ["rm", "--force", id]);
 });
 
 test("relative config argument resolves a dedicated production home to an absolute path", async () => {

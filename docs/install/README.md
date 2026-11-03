@@ -79,7 +79,7 @@ must include its default. Setup reruns preserve these choices and reject
 incompatible changes instead of silently expanding application authority.
 
 The default origin is `http://127.0.0.1:18940`. Setup creates private owner
-configuration, builds the local box and checks the owned egress, and installs and starts
+configuration, builds the local box, and installs and starts
 the user service. It prompts for a hidden owner passphrase of at least 12 characters and
 confirmation. This passphrase signs you in to Agent Connect; provider login is
 separate. Use `--harness codex` to select Codex explicitly.
@@ -228,15 +228,16 @@ agent-connect doctor
 Use `--directory <private-runtime>` when upgrading a non-default runtime, and its
 config for service/doctor commands. Upgrade uses the new installed release's
 box, updates the owned service executable even when its image is
-unchanged, recreates owned egress when needed, names the box images it
+unchanged, names the box images it
 replaced without removing them, and preserves owner
 passphrase, TOTP, grant records, journals and login homes. Image or harness-policy
 changes invalidate existing application authority: pair affected apps again.
 Retaining a grant record does not keep it valid under a changed policy. Never
 replay interrupted turns or initialize over existing state.
 
-To uninstall, stop and uninstall the service, stop its owned egress with
-`agent-connect egress stop --config <config>`, then uninstall the npm package or remove the
+To uninstall, uninstall the service (`agent-connect service uninstall`), which
+stops the gateway and with it every container it runs, then uninstall the npm
+package or remove the
 archive-installed executable. These operations preserve private data. Revoke
 the dedicated provider login in the provider's account controls before choosing
 to delete it; leave personal logins alone. Never prune unrelated Docker resources.
@@ -255,7 +256,7 @@ variables into boxes. Never put API keys into a browser application.
 
 ## Security boundaries and advanced configuration
 
-The container engine isolates execution and the owned egress proxy constrains
+The container engine isolates execution and the gateway's network proxy constrains
 destinations. The gateway itself is a network service that starts containers,
 so what the engine lets a container be is what a compromised gateway can
 become:

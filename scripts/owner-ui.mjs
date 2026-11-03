@@ -28,7 +28,7 @@ import { requireBoxImage } from "./test-box-images.mjs";
 import { verifyClientAddressPolicy } from "./client-address-fixture.mjs";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 import { rootlessEnginePath } from "./rootless-engine-stub.mjs";
-import { engineEnv } from "./container-engine.mjs";
+import { engine, engineEnv } from "./container-engine.mjs";
 
 const boxImage = requireBoxImage();
 const repo = resolve(import.meta.dirname, "..");
@@ -144,8 +144,7 @@ const views = [
 let browser;
 let problemGateway;
 let problemGatewayExit;
-const problemEgress = `acp-owner-ui-egress-${root.split("-").at(-1).toLowerCase()}`;
-let problemEgressAllocated = false;
+let problemProxy;
 let preserveRoot = false;
 function run(binary, args) {
   const result = spawnSync(binary, args, {
@@ -900,7 +899,7 @@ try {
   assert.ok(signedOutCookies[0].value.startsWith("anonymous_"));
   await capture("factor-sign-in", { compact: true });
   // A real, isolated boxed runtime with no agent sessions exercises health UI.
-  // Stop only this test's owned egress; no provider credentials or login are used.
+  // Remove only this runtime's network proxy; no provider credentials or login are used.
   const probeListener = net.createServer();
   await new Promise((ok) => probeListener.listen(0, "127.0.0.1", ok));
   const probePort = probeListener.address().port;
@@ -928,19 +927,10 @@ try {
   const probeConfig = JSON.parse(await readFile(probeConfigPath, "utf8"));
   probeConfig.listen = `127.0.0.1:${probePort}`;
   probeConfig.box_image = boxImage;
-  probeConfig.egress_container = problemEgress;
+  problemProxy = probeConfig.egress_container;
   await writeFile(probeConfigPath, JSON.stringify(probeConfig), {
     mode: 0o600,
   });
-  problemEgressAllocated = true;
-  run(binary, [
-    "egress",
-    "start",
-    "--name",
-    problemEgress,
-    "--box-image",
-    boxImage,
-  ]);
   problemGateway = spawn(binary, ["serve", "--config", probeConfigPath], {
     env: fixtureEnv,
     stdio: ["ignore", "ignore", "pipe"],
@@ -950,7 +940,8 @@ try {
     problemDiagnostics = (problemDiagnostics + chunk).slice(-4000);
   });
   problemGatewayExit = new Promise((ok) => problemGateway.once("exit", ok));
-  for (let attempt = 0; attempt < 100; attempt++) {
+  // The gateway starts its network proxy before it listens.
+  for (let attempt = 0; attempt < 600; attempt++) {
     if (problemDiagnostics.includes("listening on")) break;
     assert.equal(problemGateway.exitCode, null, problemDiagnostics);
     await new Promise((ok) => setTimeout(ok, 100));
@@ -965,8 +956,7 @@ try {
     .getByRole("button", { name: "Sign in", exact: true })
     .click();
   assert.equal(await problemPage.locator(".runtime-problem").count(), 0);
-  run(binary, ["egress", "stop", "--name", problemEgress]);
-  problemEgressAllocated = false;
+  run(engine, ["rm", "--force", problemProxy]);
   const outageDeadline = Date.now() + 25000;
   while (Date.now() < outageDeadline) {
     await problemPage.reload();
@@ -1110,7 +1100,7 @@ try {
   throw error;
 } finally {
   const stopGateway = (child, exited) => stopFixtureChild(child, { exited });
-  // Every owned process gets a cleanup attempt even if egress startup/stop fails.
+  // Every owned process gets a cleanup attempt even if one of them fails.
   await runCleanupTasks([
     () => browser?.close(),
     () =>
@@ -1119,9 +1109,15 @@ try {
       ),
     () => stopGateway(gateway, gatewayExit),
     () => stopGateway(problemGateway, problemGatewayExit),
+    // A gateway removes its proxy when it stops; one that did not stop cleanly
+    // leaves it, and on Podman its keepalive.
     () => {
-      if (problemEgressAllocated)
-        run(binary, ["egress", "stop", "--name", problemEgress]);
+      if (problemProxy)
+        spawnSync(
+          engine,
+          ["rm", "--force", problemProxy, `${problemProxy}-keepalive`],
+          { env: fixtureEnv },
+        );
     },
   ]);
   // Stop all users of the private root before deleting their files. If cleanup

@@ -33,7 +33,6 @@ const env = {
   npm_config_cache: join(root, "npm-cache"),
   AGENT_CONNECT_TEST_BOX_IMAGE: base,
 };
-const egress = `box-acceptance-${root.split("-").at(-1).toLowerCase()}`;
 const gateway = join(root, "node_modules/.bin/agent-connect");
 function run(bin, args, { allowFailure = false, extraEnv = {} } = {}) {
   const result = spawnSync(bin, args, {
@@ -66,8 +65,6 @@ const setupArgs = [
   "--non-interactive",
   "--json",
   "--no-service",
-  "--egress-container",
-  egress,
 ];
 const passphrase = "synthetic-box-test-passphrase";
 // First-time setup prompts for the owner passphrase, so setup runs on a terminal.
@@ -225,7 +222,6 @@ try {
   );
 } finally {
   try {
-    run(gateway, ["egress", "stop", "--name", egress], { allowFailure: true });
     await removeTestImages(base, async (args) => run(engine, args).stdout);
   } finally {
     await rm(root, { recursive: true, force: true });

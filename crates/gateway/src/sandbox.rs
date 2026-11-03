@@ -182,7 +182,9 @@ fn egress_start_with(
             }
             // Inspect the captured ID, never the possibly reused name.
             let running = inspect_container(&id, docker, deadline)?.ok_or_else(|| {
-                anyhow::anyhow!("owned egress proxy disappeared while starting; rerun egress start")
+                anyhow::anyhow!(
+                    "owned egress proxy disappeared while starting; restart the gateway"
+                )
             })?;
             validate_egress(&running, &image, true)?;
         }
@@ -253,7 +255,7 @@ fn checked_keepalive(
     });
     if !owned_and_running {
         bail!(
-            "the egress keepalive is absent or stopped, so a session ending could cut the egress off; run agent-connect egress start"
+            "the egress keepalive is absent or stopped, so a session ending could cut the egress off; restart the gateway"
         );
     }
     Ok(())
@@ -270,7 +272,7 @@ fn inspect_image(
     deadline: Instant,
 ) -> anyhow::Result<BoxImage> {
     let output = docker.run(&["image", "inspect", "--format", "{{json .}}", image], deadline)
-        .context("selected box is unavailable; the container engine must be running and the selected image installed before egress start or serve")?;
+        .context("selected box is unavailable; the container engine must be running and the selected image installed before serve")?;
     let value: serde_json::Value =
         serde_json::from_str(&output).context("invalid image inspection")?;
     let id = value
@@ -321,7 +323,7 @@ fn checked_egress(
     deadline: Instant,
 ) -> anyhow::Result<String> {
     let container = inspect_container(name, docker, deadline)?
-        .ok_or_else(|| anyhow::anyhow!("egress proxy is absent; run agent-connect egress start with the configured name and box"))?;
+        .ok_or_else(|| anyhow::anyhow!("egress proxy is absent; restart the gateway"))?;
     validate_egress(&container, image, true)
 }
 fn validate_egress(
@@ -598,12 +600,12 @@ fn judge_egress(facts: &EgressFacts, image: &BoxImage, running: bool) -> anyhow:
     }
     if !trusted {
         bail!(
-            "owned egress proxy does not match the selected image and restricted proxy configuration; explicitly stop it and recreate it with agent-connect egress start"
+            "owned egress proxy does not match the selected image and restricted proxy configuration; restart the gateway to recreate it"
         );
     }
     if running && (!facts.running || facts.restarting || facts.unhealthy) {
         bail!(
-            "owned egress proxy is stopped, restarting or unhealthy; run agent-connect egress start and inspect its bounded container logs"
+            "owned egress proxy is stopped, restarting or unhealthy; restart the gateway and inspect its bounded container logs"
         );
     }
     Ok(())
@@ -621,7 +623,8 @@ pub fn egress_stop(name: &str) -> anyhow::Result<()> {
             )
         })?;
     if !output.status.success() {
-        bail!("cannot inspect egress container; nothing was removed");
+        // Already gone, as after an outage; its keepalive still goes.
+        return remove_keepalive(name);
     }
     let containers: Vec<serde_json::Value> =
         serde_json::from_slice(&output.stdout).context("invalid container inspection")?;

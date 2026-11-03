@@ -94,8 +94,6 @@ enum Command {
     Init(InitCli),
     /// Sign in using the provider CLI in the dedicated harness home.
     Login(LoginCli),
-    /// Manage the gateway-owned egress proxy (a container engine is required).
-    Egress(EgressCli),
     /// Print machine-readable release version.
     ReleaseInfo,
 }
@@ -112,46 +110,6 @@ struct LoginCli {
     config: Option<std::path::PathBuf>,
     #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE")]
     box_image: Option<String>,
-}
-
-#[derive(Args)]
-struct EgressCli {
-    #[command(subcommand)]
-    command: EgressCommand,
-}
-#[derive(Subcommand)]
-enum EgressCommand {
-    /// Start an isolated proxy, or validate a running one; no host port is published.
-    Start {
-        /// Take the name, box and container engine from a runtime configuration,
-        /// as the gateway service does before it serves.
-        #[arg(long, conflicts_with_all = ["name", "box_image"])]
-        config: Option<std::path::PathBuf>,
-        #[arg(long, env = "AGENT_CONNECT_EGRESS_CONTAINER")]
-        name: Option<String>,
-        #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE")]
-        box_image: Option<String>,
-    },
-    /// Remove a proxy only after verifying the gateway ownership label.
-    Stop {
-        /// Take the name and container engine from a runtime configuration.
-        #[arg(long, conflicts_with = "name")]
-        config: Option<std::path::PathBuf>,
-        #[arg(long, env = "AGENT_CONNECT_EGRESS_CONTAINER")]
-        name: Option<String>,
-    },
-}
-
-/// A runtime's configuration for an egress command, with its container engine
-/// selected, as the gateway service runs it.
-fn egress_runtime(path: std::path::PathBuf) -> anyhow::Result<ServeCli> {
-    let configured = ServeOptions {
-        config: Some(path),
-        ..Default::default()
-    }
-    .resolve()?;
-    engine::select(configured.container_engine);
-    Ok(configured)
 }
 
 struct Gateway {
@@ -329,54 +287,6 @@ async fn run() -> anyhow::Result<()> {
         Command::Service(cli) => return operations::service(cli).await,
         Command::ResetTotp(cli) => return operations::reset_totp(cli).await,
         Command::ResetPassphrase(cli) => return operations::reset_passphrase(cli).await,
-        Command::Egress(cli) => {
-            match cli.command {
-                EgressCommand::Start {
-                    config,
-                    name,
-                    box_image,
-                } => {
-                    let mut shared_home = false;
-                    let (name, box_image) = match config {
-                        Some(path) => {
-                            let configured = egress_runtime(path)?;
-                            shared_home = configured.boxed && configured.harness_home.is_some();
-                            let name = configured.egress_container.ok_or_else(|| {
-                                UsageError("configuration names no egress container".into())
-                            })?;
-                            (name, configured.box_image)
-                        }
-                        None => (
-                            name.unwrap_or_else(|| "agent-connect-egress".into()),
-                            box_image.unwrap_or_else(|| DEFAULT_BOX_IMAGE.into()),
-                        ),
-                    };
-                    egress_start(&name, &box_image)?;
-                    println!("Egress proxy started: {name}");
-                    // The service runs this before every serve. The owner's mapped
-                    // copy of the box can vanish without a rebuild (an image prune,
-                    // a reset, a reload by hand), and then the first session would
-                    // spend its whole start deadline remaking it. Warm costs ~0.3 s.
-                    if shared_home
-                        && tokio::task::spawn_blocking(engine::detect).await??
-                            == Engine::RootlessPodman
-                    {
-                        operations::warm_owner_mapping(&box_image).await?;
-                    }
-                }
-                EgressCommand::Stop { config, name } => {
-                    let name = match config {
-                        Some(path) => egress_runtime(path)?.egress_container.ok_or_else(|| {
-                            UsageError("configuration names no egress container".into())
-                        })?,
-                        None => name.unwrap_or_else(|| "agent-connect-egress".into()),
-                    };
-                    egress_stop(&name)?;
-                    println!("Egress proxy stopped: {name}");
-                }
-            }
-            return Ok(());
-        }
         Command::Login(cli) => {
             use std::io::IsTerminal;
             let configured = cli.config.as_deref().map(config::read_config).transpose()?;
@@ -469,13 +379,24 @@ async fn run() -> anyhow::Result<()> {
         }
     }
     if cli.boxed {
+        // The gateway owns its egress for as long as it serves: started or
+        // reused here, removed at shutdown.
         let image = cli.box_image.clone();
         let egress = cli.egress_container.clone().unwrap();
         tokio::task::spawn_blocking(move || {
+            egress_start(&egress, &image)?;
             agent_connect_gateway::sandbox::preflight(&image, &egress)
         })
         .await?
         .context("serve preflight failed; run agent-connect doctor for actionable checks and repair commands")?;
+        // The owner's mapped copy of the box can vanish without a rebuild (an
+        // image prune, a reset, a reload by hand), and then the first session
+        // would spend its whole start deadline remaking it. Warm costs ~0.3 s.
+        if home.is_some()
+            && tokio::task::spawn_blocking(engine::detect).await?? == Engine::RootlessPodman
+        {
+            operations::warm_owner_mapping(&cli.box_image).await?;
+        }
     }
     let paths = SpikePaths {
         root: cli
@@ -591,6 +512,10 @@ async fn run() -> anyhow::Result<()> {
         tokio::spawn(refresh_box(Arc::downgrade(&gateway)));
     }
     let shutdown_gateway = gateway.clone();
+    let owned_egress = gateway
+        .cli
+        .boxed
+        .then(|| gateway.cli.egress_container.clone().unwrap());
     let mut app = Router::new()
         .route("/acp", get(upgrade))
         .route("/healthz", get(health))
@@ -639,6 +564,11 @@ async fn run() -> anyhow::Result<()> {
         }
     })
     .await?;
+    if let Some(egress) = owned_egress
+        && let Err(error) = tokio::task::spawn_blocking(move || egress_stop(&egress)).await?
+    {
+        tracing::error!(%error, "could not remove the egress proxy at shutdown");
+    }
     Ok(())
 }
 

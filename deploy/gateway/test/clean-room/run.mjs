@@ -28,7 +28,8 @@ const sample = join(work, "sample");
 const runtime = join(work, "operator");
 const install = join(work, "install");
 const modelName = `acp-clean-model-${suffix}`;
-const egressName = `acp-clean-egress-${suffix}`;
+// Setup names the gateway's network proxy after its runtime directory.
+let egressName;
 // Setup layers the resolved harness versions on this test base.
 const boxBase = process.env.ACP_BOX_IMAGE;
 let boxImage;
@@ -205,7 +206,7 @@ async function cleanSessionResources() {
       if (container.Name.startsWith("acp-sess-"))
         await command("docker", ["rm", "-f", container.Name]).catch(() => {});
     }
-    for (const name of [modelName, egressName])
+    for (const name of [modelName, egressName].filter(Boolean))
       await command("docker", [
         "network",
         "disconnect",
@@ -404,8 +405,6 @@ try {
     publicGateway,
     "--listen",
     `127.0.0.1:${gatewayPort}`,
-    "--egress-container",
-    egressName,
     "--no-service",
   ];
   const setupPlanResult = await commandResult(gateway, [
@@ -427,12 +426,13 @@ try {
     "Packed gateway must support isolated test box builds; rebuild the artifacts",
   );
   boxImage = setupPlan.boxImage;
+  egressName = setupPlan.egressContainer;
   assert.ok(Array.isArray(setupPlan.steps) && setupPlan.steps.length > 0);
   await assert.rejects(stat(runtime), { code: "ENOENT" });
   report.checks.push(
     "artifact-installed setup JSON plans without creating runtime or provider login state",
   );
-  // Keep cleanup ownership before application in case setup fails after egress creation.
+  // The gateway removes its proxy when it stops; keep it for cleanup if it does not.
   resources.containers.push(egressName);
   await recordResources();
   // First-time setup takes the owner passphrase only at a terminal prompt.
@@ -617,26 +617,6 @@ try {
     boxImage,
     "/fixture.mjs",
   ]);
-  await command(gateway, [
-    "egress",
-    "start",
-    "--name",
-    egressName,
-    "--box-image",
-    boxImage,
-  ]);
-  // Repeat the installed CLI operation to prove it recognizes its own hardened peer.
-  await command(gateway, [
-    "egress",
-    "start",
-    "--name",
-    egressName,
-    "--box-image",
-    boxImage,
-  ]);
-  report.checks.push(
-    "installed egress start creates and reuses its hardened owned runtime peer",
-  );
   const gatewayService = service(
     gateway,
     [
@@ -1653,7 +1633,7 @@ try {
     "real browser keyboard revoke-all invalidates two application grants, clears active and deliberately reconnected tabs, and leaves owner verification active",
   );
 
-  await command(gateway, ["egress", "stop", "--name", egressName]);
+  await command("docker", ["stop", egressName]);
   const outageDeadline = Date.now() + 25000;
   while (Date.now() < outageDeadline) {
     await allGrantsOwner.reload();
@@ -1687,7 +1667,7 @@ try {
   );
   await ownerCapture(allGrantsOwner, "runtime-problem");
   report.checks.push(
-    "a real owned egress outage produces responsive owner runtime repair guidance and failing artifact-installed doctor JSON",
+    "a real network proxy outage produces responsive owner runtime repair guidance and failing artifact-installed doctor JSON",
   );
   report.parityCoverage = [
     "setup-plan",

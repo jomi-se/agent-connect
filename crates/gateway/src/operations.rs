@@ -43,8 +43,6 @@ pub struct SetupCli {
     pub permissions: Option<PermissionProfile>,
     #[arg(long)]
     pub listen: Option<SocketAddr>,
-    #[arg(long)]
-    pub egress_container: Option<String>,
     /// Apply the plan. Without this, a terminal guides setup and asks for confirmation.
     #[arg(long)]
     pub apply: bool,
@@ -249,7 +247,10 @@ pub fn setup_plan(
         .or_else(|| previous.as_ref().and_then(|c| c.public_url.clone()))
         .unwrap_or_else(|| format!("http://{listen}"));
     config::validate_public_url(&origin)?;
-    let egress_container = select!(egress_container, "agent-connect-egress".into());
+    let egress_container = match previous.as_ref().and_then(|c| c.egress_container.clone()) {
+        Some(name) => name,
+        None => config::egress_name(&directory),
+    };
     config::validate_container_name(&egress_container)?;
     let previous_box_image = previous.as_ref().and_then(|c| c.box_image.clone());
     // A recorded engine is this runtime's, and one recorded before engines were
@@ -322,7 +323,6 @@ pub fn setup_plan(
             || previous.listen != Some(listen)
             || previous.public_url.as_deref() != Some(&origin)
             || previous.harness_home.as_ref() != Some(&home)
-            || previous.egress_container.as_deref() != Some(&egress_container)
         {
             return Err(usage(
                 "requested setup differs from the existing configuration; edit the private configuration explicitly or choose a fresh runtime",
@@ -526,35 +526,16 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             "configuration changed during upgrade preparation; rerun from the new private state"
         );
         // Binary-only upgrades must replace the running process even when the
-        // selected image and existing egress already match this release.
+        // selected image already matches this release.
         if plan.service {
             service::stop_service_for_upgrade(&plan.config).await?;
         }
-        let same_image = plan.previous_box_image.as_deref() == Some(&plan.box_image);
-        let image = plan.box_image.clone();
-        let egress = plan.egress_container.clone();
-        let already_ready = same_image
-            && tokio::task::spawn_blocking(move || crate::sandbox::preflight(&image, &egress))
-                .await?
-                .is_ok();
-        if !already_ready {
+        if plan.previous_box_image.as_deref() != Some(&plan.box_image) {
             let listener = tokio::net::TcpListener::bind(plan.listen).await.context(
                 "stop the running gateway before an image upgrade; its listener is still occupied",
             )?;
             drop(listener);
             upgrade_image(&plan.config, &plan.box_image)?;
-            // Inspect before a stop so an absent container remains resumable. Ownership
-            // is rechecked by egress_stop; unrelated resources are never removed.
-            let existing_egress = NativeRunner
-                .run(CommandSpec::new(
-                    crate::engine::program(),
-                    ["container", "inspect", &plan.egress_container],
-                ))
-                .await?;
-            if existing_egress.code == 0 {
-                let name = plan.egress_container.clone();
-                tokio::task::spawn_blocking(move || crate::sandbox::egress_stop(&name)).await??;
-            }
         }
     }
     if !plan.existing {
@@ -569,7 +550,6 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             headless_static_bearer: false,
             listen: plan.listen,
             box_image: plan.box_image.clone(),
-            egress_container: plan.egress_container.clone(),
             allow_rootful_engine: plan.allow_rootful_engine,
         };
         tokio::task::spawn_blocking(move || config::init_quiet(init)).await??;
@@ -599,9 +579,6 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             "provider login was not completed; rerun setup or login explicitly"
         );
     }
-    let name = plan.egress_container.clone();
-    let image = plan.box_image.clone();
-    tokio::task::spawn_blocking(move || crate::sandbox::egress_start(&name, &image)).await??;
     if plan.service {
         service::service_run(ServiceCli {
             config: Some(plan.config.clone()),
@@ -872,7 +849,6 @@ mod tests {
             profiles: None,
             permissions: None,
             listen: None,
-            egress_container: None,
             apply: false,
             json: true,
             non_interactive: true,
@@ -925,7 +901,6 @@ mod tests {
                 headless_static_bearer: false,
                 listen: plan.listen,
                 box_image: plan.box_image.clone(),
-                egress_container: plan.egress_container.clone(),
                 allow_rootful_engine: false,
             },
             Some("fixture-only-owner-passphrase".into()),

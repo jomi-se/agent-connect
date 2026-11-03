@@ -198,13 +198,6 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
             Some("Check the network and the owner box directory, then run agent-connect doctor again"),
         ),
     }
-    if let Some(egress) = configured.egress_container.clone() {
-        let image = configured.box_image.clone();
-        match tokio::task::spawn_blocking(move || crate::sandbox::preflight(&image, &egress)).await {
-            Ok(Ok(())) => report.add("egress_owned_ready", CheckStatus::Pass, "Owned egress proxy matches the box and restricted configuration", None),
-            _ => report.add("egress_owned_ready", CheckStatus::Fail, "Owned egress proxy is absent, stopped, unhealthy or does not match the configured image", Some("Run agent-connect setup --apply --non-interactive to resume owned egress, or use agent-connect egress start with the configured name and image; foreign containers are never changed")),
-        }
-    }
     if let Some(home) = &configured.harness_home {
         if private_metadata(home, true).is_ok() {
             report.add(
@@ -227,7 +220,18 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
             report.add("harness_home", CheckStatus::Fail, "Dedicated harness home is missing or unsafe", Some("Create the dedicated configured home as your user with mode 0700; keep it separate from private owner state"));
         }
     }
-    match tokio::net::TcpListener::bind(configured.listen).await {
+    let port = tokio::net::TcpListener::bind(configured.listen).await;
+    // The gateway runs its network proxy only while it serves.
+    if port.is_err()
+        && let Some(egress) = configured.egress_container.clone()
+    {
+        let image = configured.box_image.clone();
+        match tokio::task::spawn_blocking(move || crate::sandbox::preflight(&image, &egress)).await {
+            Ok(Ok(())) => report.add("network_proxy", CheckStatus::Pass, "The gateway's network proxy matches the box and restricted configuration", None),
+            _ => report.add("network_proxy", CheckStatus::Fail, "The gateway's network proxy is absent, stopped, unhealthy or does not match the configured box", Some("Restart the gateway service; a container it does not own is never changed")),
+        }
+    }
+    match port {
         Ok(listener) => { drop(listener); report.add("listener_port", CheckStatus::Pass, "Configured listener port is available", None); },
         // A running gateway holds its own port; only a listener that is not a
         // ready gateway of this version is worth a warning.

@@ -51,20 +51,22 @@ host ids.
    attestation written by the creating client, not tamper-proof; it catches
    what inspection omits and stale or hand-made containers. The runtime
    configuration at Podman's `OCIConfigPath` would be ground truth for devices
-   if ever needed. `scripts/egress-impostors.sh` keeps the evidence that each
+   if ever needed. The `egress_impostors` test keeps the evidence that each
    weakening is refused on each engine.
 
 6. **Podman keeps a keepalive beside the egress.** Podman 4.9 tears down its
    shared rootless network when a container leaves a network and no other
    running container uses it, so the egress leaving the last session's
-   network cut the egress off. `egress start` keeps an owned, locked-down
+   network cut the egress off. The gateway keeps an owned, locked-down
    `sleep` container on that network, readiness requires it, and it follows
    the egress's image. The workaround goes once Podman 5, which counts the
    network's users, is the minimum.
 
-7. **The service starts its own egress.** An engine without a daemon restarts
-   nothing at boot, so the systemd unit runs `egress start --config` before
-   serving; a failure goes through the unit's restart policy.
+7. **The gateway owns its egress for as long as it serves.** `serve` starts or
+   reuses it before listening and removes it, keepalive included, when it
+   stops. An engine without a daemon restarts nothing at boot, and a stopped
+   gateway leaves nothing running. There is no egress command: owners never
+   handle it, and uninstalling the service removes it.
 
 ## Consequences
 

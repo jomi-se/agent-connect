@@ -42,12 +42,12 @@ When the egress check or an engine changes, run the impostor matrix against
 each engine you support. It starts containers that carry the egress owner label
 and the proxy's arguments with one weakening each (privileged, unconfined
 seccomp or AppArmor, host namespaces, mounts, a device, a published port, a
-larger limit, an extra variable, a capability) and requires `egress start` to
-refuse every one, after the gateway's own egress passes:
+larger limit, an extra variable, a capability) and requires the gateway to
+refuse every one as its egress, after its own egress passes:
 
 ```sh
-scripts/egress-impostors.sh podman <box image> target/debug/agent-connect
-scripts/egress-impostors.sh docker <box image> target/debug/agent-connect
+ACP_BOX_IMAGE=<box image> AGENT_CONNECT_CONTAINER_ENGINE=podman \
+  cargo test -p agent-connect-gateway --test egress_impostors -- --ignored
 ```
 
 Keep all harness homes isolated. Never forward API-key environment variables,
