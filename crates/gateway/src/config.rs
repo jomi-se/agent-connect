@@ -429,7 +429,9 @@ impl ServeOptions {
             ));
         }
         if cli.boxed && cli.egress_container.is_none() {
-            return Err(usage("--boxed requires --egress-container"));
+            return Err(usage(
+                "a boxed gateway needs its network proxy named in the configuration; rerun setup",
+            ));
         }
         if cli.harness_home.is_some() && !cli.boxed {
             return Err(usage("--harness-home requires --boxed"));
