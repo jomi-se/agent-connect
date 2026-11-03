@@ -5,7 +5,10 @@
 #
 #   scripts/egress-impostors.sh docker|podman BOX_IMAGE [AGENT_CONNECT_BINARY]
 #
-# Creates only containers named acp-impostor-*, and removes them on exit.
+# Creates only the containers acp-impostor and, on Podman, the gateway's
+# acp-impostor-keepalive, refuses to start if either already exists, and
+# removes both on exit. A weakening the engine refuses to create cannot be
+# impersonated and is reported as skipped; a run that skips them all fails.
 set -euo pipefail
 
 engine="${1:?engine: docker or podman}"
@@ -21,8 +24,14 @@ baseline=(
 )
 [[ "$engine" == docker ]] && baseline+=(--log-opt max-file=3)
 
+for existing in "$name" "$name-keepalive"; do
+  if "$engine" inspect --type container "$existing" >/dev/null 2>&1; then
+    echo "refusing: a container named $existing already exists and is not this run's" >&2
+    exit 2
+  fi
+done
 cleanup() { "$engine" rm -f "$name" >/dev/null 2>&1 || true; }
-trap cleanup EXIT
+trap 'cleanup; "$engine" rm -f "$name-keepalive" >/dev/null 2>&1 || true' EXIT
 
 # Each case is one weakening, given as extra run arguments.
 cases=(
@@ -52,6 +61,7 @@ start() {
 }
 
 failures=0
+tried=0
 egress() { "$gateway" --container-engine "$engine" egress start --name "$name" --box-image "$image"; }
 # The gateway's own egress must be created and then pass revalidation, or
 # every refusal below proves nothing.
@@ -79,6 +89,7 @@ for weakening in "${cases[@]}"; do
     echo "skipped   $weakening (the engine refused to create it)"
     continue
   fi
+  tried=$((tried + 1))
   if egress >/dev/null 2>&1; then
     echo "ACCEPTED  $weakening"
     failures=$((failures + 1))
@@ -86,4 +97,8 @@ for weakening in "${cases[@]}"; do
     echo "refused   $weakening"
   fi
 done
+if ((tried == 0)); then
+  echo "every weakening was skipped: the matrix proves nothing"
+  exit 1
+fi
 exit "$failures"
