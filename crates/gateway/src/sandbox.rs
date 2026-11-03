@@ -10,6 +10,97 @@ const CLEANUP_TIMEOUT: Duration = Duration::from_secs(8);
 
 const EGRESS_LABEL: &str = "org.agent-connect.component";
 const EGRESS_OWNER: &str = "acp-egress";
+const KEEPALIVE_OWNER: &str = "acp-egress-keepalive";
+
+/// The container that keeps rootless Podman's shared network up for the
+/// egress. Podman 4 tears that network down when a container leaves a network
+/// and no *other* running container uses it, so disconnecting the egress from
+/// the last session's network would cut the egress itself off the internet.
+/// A workaround for Podman < 5 only (Podman 5 counts the network's users); it
+/// can go once Podman 5 is the minimum.
+pub fn keepalive_name(egress: &str) -> String {
+    format!("{egress}-keepalive")
+}
+fn keepalive_args(name: &str, image: &str) -> Vec<String> {
+    [
+        "run",
+        "--pull=never",
+        "--detach",
+        "--name",
+        name,
+        "--label",
+        &format!("{EGRESS_LABEL}={KEEPALIVE_OWNER}"),
+        "--network",
+        "podman",
+        "--restart=always",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--memory=16m",
+        "--pids-limit=4",
+        "--entrypoint",
+        "sleep",
+        image,
+        "infinity",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+
+/// Starts the egress's keepalive on Podman, creating it from `image` or
+/// replacing an owned one built from another image. A container of that
+/// name without the keepalive label is never touched.
+fn ensure_keepalive(
+    program: crate::engine::Program,
+    egress: &str,
+    image: &BoxImage,
+    docker: &mut impl DockerCommand,
+    deadline: Instant,
+) -> anyhow::Result<()> {
+    if program != crate::engine::Program::Podman {
+        return Ok(());
+    }
+    let name = keepalive_name(egress);
+    if let Some(container) = inspect_container(&name, docker, deadline)? {
+        if container
+            .pointer("/Config/Labels")
+            .and_then(|v| v.get(EGRESS_LABEL))
+            .and_then(|v| v.as_str())
+            != Some(KEEPALIVE_OWNER)
+        {
+            bail!("container {name} is not an Agent Connect egress keepalive; nothing was changed");
+        }
+        let id = container
+            .get("Id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("missing inspected keepalive ID"))?;
+        if container.get("Image").and_then(|v| v.as_str()) == Some(image.id.as_str()) {
+            if container
+                .pointer("/State/Running")
+                .and_then(|v| v.as_bool())
+                != Some(true)
+            {
+                docker
+                    .run(&["start", id], deadline)
+                    .context("could not start the egress keepalive")?;
+            }
+            return Ok(());
+        }
+        // Removing it is safe while the egress runs: the egress still counts.
+        docker
+            .run(&force_remove(program, id), deadline)
+            .context("could not replace the egress keepalive")?;
+    }
+    let args = keepalive_args(&name, &image.id);
+    docker
+        .run(
+            &args.iter().map(String::as_str).collect::<Vec<_>>(),
+            deadline,
+        )
+        .context("could not create the egress keepalive")?;
+    Ok(())
+}
 
 pub fn egress_start_args(name: &str, image: &str) -> Vec<String> {
     egress_args(crate::engine::selected(), name, image)
@@ -64,6 +155,7 @@ fn egress_start_with(
 ) -> anyhow::Result<()> {
     let deadline = Instant::now() + STARTUP_TIMEOUT;
     let image = inspect_image(image, docker, deadline)?;
+    ensure_keepalive(crate::engine::selected(), name, &image, docker, deadline)?;
     match inspect_container(name, docker, deadline)? {
         Some(container) if serves_another_box(&container, &image, docker, deadline) => {
             // The box was rebuilt (or a refresh stopped halfway): this egress
@@ -141,6 +233,29 @@ fn preflight_with(
     let deadline = Instant::now() + STARTUP_TIMEOUT;
     let image = inspect_image(image, docker, deadline)?;
     checked_egress(egress, &image, docker, deadline)?;
+    if crate::engine::selected() == crate::engine::Program::Podman {
+        checked_keepalive(egress, docker, deadline)?;
+    }
+    Ok(())
+}
+fn checked_keepalive(
+    egress: &str,
+    docker: &mut impl DockerCommand,
+    deadline: Instant,
+) -> anyhow::Result<()> {
+    let keepalive = inspect_container(&keepalive_name(egress), docker, deadline)?;
+    let owned_and_running = keepalive.as_ref().is_some_and(|c| {
+        c.pointer("/Config/Labels")
+            .and_then(|v| v.get(EGRESS_LABEL))
+            .and_then(|v| v.as_str())
+            == Some(KEEPALIVE_OWNER)
+            && c.pointer("/State/Running").and_then(|v| v.as_bool()) == Some(true)
+    });
+    if !owned_and_running {
+        bail!(
+            "the egress keepalive is absent or stopped, so a session ending could cut the egress off; run agent-connect egress start"
+        );
+    }
     Ok(())
 }
 
@@ -524,7 +639,39 @@ pub fn egress_stop(name: &str) -> anyhow::Result<()> {
         .and_then(|v| v.as_str())
         .filter(|id| id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()))
         .ok_or_else(|| anyhow::anyhow!("invalid inspected container ID; nothing was removed"))?;
-    docker(&force_remove(crate::engine::selected(), id))
+    docker(&force_remove(crate::engine::selected(), id))?;
+    remove_keepalive(name)
+}
+
+/// Removes the egress's keepalive if there is one and it is ours.
+fn remove_keepalive(egress: &str) -> anyhow::Result<()> {
+    let program = crate::engine::selected();
+    if program != crate::engine::Program::Podman {
+        return Ok(());
+    }
+    let output = std::process::Command::new(crate::engine::program())
+        .args(["inspect", "--type", "container", &keepalive_name(egress)])
+        .output()
+        .context("Podman is required to remove the egress keepalive")?;
+    if !output.status.success() {
+        return Ok(());
+    }
+    let containers: Vec<serde_json::Value> =
+        serde_json::from_slice(&output.stdout).context("invalid container inspection")?;
+    let Some(container) = containers.first().filter(|c| {
+        c.pointer("/Config/Labels")
+            .and_then(|v| v.get(EGRESS_LABEL))
+            .and_then(|v| v.as_str())
+            == Some(KEEPALIVE_OWNER)
+    }) else {
+        return Ok(());
+    };
+    let id = container
+        .get("Id")
+        .and_then(|v| v.as_str())
+        .filter(|id| id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()))
+        .ok_or_else(|| anyhow::anyhow!("invalid inspected keepalive ID; nothing was removed"))?;
+    docker(&force_remove(program, id))
 }
 
 pub fn box_args(
@@ -1329,6 +1476,76 @@ mod tests {
             egress_start_with("owned-egress", "session:test", &mut docker).unwrap();
             assert!(docker.0.is_empty());
         }
+    }
+
+    #[test]
+    fn the_podman_keepalive_is_created_started_or_replaced_only_when_ours() {
+        use crate::engine::Program;
+        let image = BoxImage {
+            id: "d".repeat(64),
+            env: serde_json::json!([]),
+            user: serde_json::json!("node"),
+        };
+        let id = "a".repeat(64);
+        let inspect = [
+            "inspect",
+            "--type",
+            "container",
+            "--format",
+            "{{json .}}",
+            "egress-keepalive",
+        ];
+        let create = keepalive_args("egress-keepalive", &image.id);
+        let create: Vec<&str> = create.iter().map(String::as_str).collect();
+        let keepalive = |owner: &str, image: &str, running: bool| {
+            serde_json::json!({ "Id": id, "Image": image,
+                "Config": { "Labels": { EGRESS_LABEL: owner } }, "State": { "Running": running } })
+            .to_string()
+        };
+        let run = |steps: Vec<(Vec<String>, Result<String, &'static str>)>| {
+            let mut docker = Fixture(VecDeque::from(steps));
+            let result = ensure_keepalive(
+                Program::Podman,
+                "egress",
+                &image,
+                &mut docker,
+                Instant::now() + STARTUP_TIMEOUT,
+            );
+            assert!(docker.0.is_empty());
+            result
+        };
+        run(vec![
+            step(&inspect, Err("no such container")),
+            step(&create, Ok(&id)),
+        ])
+        .unwrap();
+        let current = keepalive(KEEPALIVE_OWNER, &image.id, true);
+        run(vec![step(&inspect, Ok(&current))]).unwrap();
+        let stopped = keepalive(KEEPALIVE_OWNER, &image.id, false);
+        run(vec![
+            step(&inspect, Ok(&stopped)),
+            step(&["start", &id], Ok(&id)),
+        ])
+        .unwrap();
+        let older = keepalive(KEEPALIVE_OWNER, &"e".repeat(64), true);
+        run(vec![
+            step(&inspect, Ok(&older)),
+            step(&force_remove(Program::Podman, &id), Ok("")),
+            step(&create, Ok(&id)),
+        ])
+        .unwrap();
+        let foreign = keepalive("someone-else", &image.id, true);
+        assert!(run(vec![step(&inspect, Ok(&foreign))]).is_err());
+        // Docker's daemon keeps its networks; there is nothing to keep alive.
+        let mut docker = Fixture(VecDeque::new());
+        ensure_keepalive(
+            Program::Docker,
+            "egress",
+            &image,
+            &mut docker,
+            Instant::now(),
+        )
+        .unwrap();
     }
 
     #[test]
