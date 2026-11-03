@@ -188,10 +188,6 @@ pub struct ServeOptions {
     #[arg(long, env = "AGENT_CONNECT_RESUME_GRACE_SECS", hide_env_values = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resume_grace_secs: Option<u64>,
-    /// Fixture-compatible named Docker home volumes.
-    #[arg(long, env = "AGENT_CONNECT_DURABLE_HOME", hide_env_values = true, num_args = 0..=1, default_missing_value = "true", require_equals = true)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub durable_home: Option<bool>,
     /// Maximum retained unacknowledged output per resumable host.
     #[arg(long, env = "AGENT_CONNECT_RESUME_MAX_BYTES", hide_env_values = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -239,7 +235,6 @@ pub struct ServeCli {
     pub max_sessions: usize,
     pub boxed: bool,
     pub resume_grace_secs: u64,
-    pub durable_home: bool,
     pub resume_max_bytes: usize,
     pub allow_rootful_engine: bool,
     pub box_refresh: bool,
@@ -298,7 +293,6 @@ impl ServeOptions {
             max_sessions: merged!(max_sessions).unwrap_or_else(|| 32),
             boxed: merged!(boxed).unwrap_or_else(|| false),
             resume_grace_secs: merged!(resume_grace_secs).unwrap_or_else(|| 600),
-            durable_home: merged!(durable_home).unwrap_or_else(|| false),
             resume_max_bytes: merged!(resume_max_bytes).unwrap_or_else(|| 8 * 1024 * 1024),
             allow_rootful_engine: merged!(allow_rootful_engine).unwrap_or_else(|| false),
             box_refresh: merged!(box_refresh).unwrap_or_else(|| true),
