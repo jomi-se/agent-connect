@@ -16,6 +16,7 @@ import net from "node:net";
 import { join } from "node:path";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 import { runCleanupTasks, stopFixtureChild } from "./test-fixture-cleanup.mjs";
+import { rootlessEnginePath } from "./rootless-engine-stub.mjs";
 
 export const ownerCookieResolverRules =
   "MAP owner.example.test 127.0.0.1, MAP sibling.example.test 127.0.0.1";
@@ -86,6 +87,7 @@ export async function verifyOwnerCookies({
       HOME: join(directory, "home"),
       XDG_STATE_HOME: join(directory, "state"),
     };
+    env.PATH = await rootlessEnginePath(directory, env.PATH);
     const keyPath = join(directory, "fixture-key.pem");
     const certificatePath = join(directory, "fixture-cert.pem");
     const certificate = spawnSync(

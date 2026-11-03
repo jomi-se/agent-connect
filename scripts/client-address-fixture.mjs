@@ -6,6 +6,7 @@ import { request as httpRequest } from "node:http";
 import net from "node:net";
 import { join } from "node:path";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
+import { rootlessEnginePath } from "./rootless-engine-stub.mjs";
 
 const ownerPath = "/agent-connect/owner";
 const loginPath = `${ownerPath}/login`;
@@ -90,6 +91,7 @@ export async function verifyClientAddressPolicy({
       XDG_STATE_HOME: join(directory, "state"),
     };
     delete env.RUST_LOG;
+    env.PATH = await rootlessEnginePath(directory, env.PATH);
     const port = await availablePort();
     const authority = `127.0.0.1:${port}`;
     const origin = `http://${authority}`;

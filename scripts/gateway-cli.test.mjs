@@ -14,6 +14,7 @@ import { spawnSync } from "node:child_process";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 import { gatewayTestBinary } from "./gateway-test-binary.mjs";
 import { runCleanupTasks } from "./test-fixture-cleanup.mjs";
+import { rootlessEnginePath } from "./rootless-engine-stub.mjs";
 
 const binary = await gatewayTestBinary({
   repository: resolve(import.meta.dirname, ".."),
@@ -104,13 +105,22 @@ test("help, version and invalid argument exit codes are stable", () => {
   assert.match(usage.stderr, /unexpected argument/);
 });
 
+// init refuses a rootful engine, so the CLI sees a rootless one.
+const enginePath = await rootlessEnginePath(cliHome);
+
 function cliEnv(env = {}) {
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(
       ([name]) => !name.startsWith("AGENT_CONNECT_"),
     ),
   );
-  return { ...inherited, HOME: cliHome, XDG_STATE_HOME: cliState, ...env };
+  return {
+    ...inherited,
+    PATH: enginePath,
+    HOME: cliHome,
+    XDG_STATE_HOME: cliState,
+    ...env,
+  };
 }
 
 function command(args, env = {}) {
