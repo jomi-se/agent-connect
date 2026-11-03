@@ -306,7 +306,9 @@ fn report_engine(report: &mut DoctorReport, engine: Option<Engine>, accepted: bo
     }
 }
 
-/// The version a ready gateway on `listen` reports, empty if it reports none.
+/// The version a ready gateway on `listen` reports, or "unknown". The
+/// listener is untrusted and its answer reaches the terminal, so only a short
+/// plain version string is kept.
 async fn ready_gateway_version(listen: std::net::SocketAddr) -> Option<String> {
     let mut address = listen;
     if address.ip().is_unspecified() {
@@ -337,7 +339,14 @@ async fn ready_gateway_version(listen: std::net::SocketAddr) -> Option<String> {
         health
             .get("version")
             .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
+            .filter(|version| {
+                !version.is_empty()
+                    && version.len() <= 64
+                    && version
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-'))
+            })
+            .unwrap_or("unknown")
             .to_owned()
     })
 }
@@ -419,7 +428,16 @@ mod tests {
                 .as_deref(),
             Some("1.2.3")
         );
-        assert_eq!(version(r#"{"ready":true}"#).await.as_deref(), Some(""));
+        assert_eq!(
+            version(r#"{"ready":true}"#).await.as_deref(),
+            Some("unknown")
+        );
+        assert_eq!(
+            version(r#"{"ready":true,"version":"1.2.3\u001b[2J"}"#)
+                .await
+                .as_deref(),
+            Some("unknown")
+        );
         assert_eq!(
             version(r#"{"status":"ok","ready":false,"version":"1.2.3"}"#).await,
             None
