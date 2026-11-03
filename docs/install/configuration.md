@@ -111,7 +111,11 @@ host-and-port combinations. Each origin must route to this same gateway and
 preserve its public Host header. Applications pair with the exact entry point
 they will use; sign-in, consent, issuer and grant remain bound to that origin.
 The Gateway owner page lists all configured entry points. Changes to the selected harness,
-image, permissions and other fingerprinted operator policy invalidate grants.
+permissions, a box image the owner named and other fingerprinted operator policy
+invalidate grants. A locally built box counts as one policy whatever its tag, so
+rebuilding it for a new harness release or owner layer keeps grants. Gateways
+before this rule fingerprinted the exact tag: the first start after upgrading
+invalidates existing grants once, and applications pair again.
 Applications choose their exact origin and fixed tool snapshot at owner consent;
 they cannot change native harness policy. Old bearer configs require explicit
 `headless_static_bearer: true` or reinitialization for hosted pairing.
