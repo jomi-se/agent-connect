@@ -103,7 +103,8 @@ struct LoginCli {
     /// Dedicated whole home; defaults to the platform's Agent Connect state directory.
     #[arg(long, env = "AGENT_CONNECT_HARNESS_HOME", hide_env_values = true)]
     harness_home: Option<std::path::PathBuf>,
-    /// Use the harness home and image from an existing private runtime config.
+    /// Use the harness, home, box and engine of this runtime's configuration;
+    /// defaults to the default runtime's, when there is one.
     #[arg(long, env = "AGENT_CONNECT_CONFIG", hide_env_values = true)]
     config: Option<std::path::PathBuf>,
     #[arg(long, env = "AGENT_CONNECT_BOX_IMAGE")]
@@ -286,7 +287,18 @@ async fn run() -> anyhow::Result<()> {
         Command::ResetPassphrase(cli) => return operations::reset_passphrase(cli).await,
         Command::Login(cli) => {
             use std::io::IsTerminal;
-            let configured = cli.config.as_deref().map(config::read_config).transpose()?;
+            // Signing in is for a runtime's box: the default runtime's when
+            // none is named, so its box and engine are used, not the base box.
+            let config_path = cli.config.clone().or_else(|| {
+                operations::default_runtime_directory()
+                    .ok()
+                    .map(|directory| directory.join("config.json"))
+                    .filter(|path| path.exists())
+            });
+            let configured = config_path
+                .as_deref()
+                .map(config::read_config)
+                .transpose()?;
             engine::for_runtime(configured.as_ref().and_then(|c| c.container_engine))?;
             let harness = if let Some(harness) = cli.harness {
                 harness
@@ -309,7 +321,11 @@ async fn run() -> anyhow::Result<()> {
             };
             if let Some(configured_harness) = configured.as_ref().and_then(|c| c.harness) {
                 if configured_harness != harness {
-                    return Err(UsageError("selected harness does not match --config; use its configured harness or omit --config".into()).into());
+                    return Err(UsageError(format!(
+                        "selected harness does not match the runtime's configuration ({}); use its configured harness or name another runtime with --config",
+                        config_path.as_deref().unwrap_or(std::path::Path::new("")).display()
+                    ))
+                    .into());
                 }
             }
             let path = cli
