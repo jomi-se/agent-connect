@@ -16,6 +16,34 @@ use std::{
 
 pub const DEFAULT_BOX_IMAGE: &str = concat!("agent-connect-box:", env!("CARGO_PKG_VERSION"));
 
+/// Whether `image` is a box setup builds locally: the default repository,
+/// Podman's `localhost/` form included, tagged `X.Y.Z` or `X.Y.Z-<16 hex>`.
+/// Such a tag changes with every harness release and owner layer, which are
+/// the owner's own choices, not a change of policy. Anything else, a
+/// prerelease included, counts as an image the owner named.
+pub fn locally_built_box(image: &str) -> bool {
+    let (repository, _) = DEFAULT_BOX_IMAGE.split_once(':').unwrap();
+    let image = image.strip_prefix("localhost/").unwrap_or(image);
+    let Some(tag) = image
+        .strip_prefix(repository)
+        .and_then(|rest| rest.strip_prefix(':'))
+    else {
+        return false;
+    };
+    let (version, hash) = match tag.split_once('-') {
+        Some((version, hash)) => (version, Some(hash)),
+        None => (tag, None),
+    };
+    let numbers: Vec<&str> = version.split('.').collect();
+    numbers.len() == 3
+        && numbers
+            .iter()
+            .all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        && hash.is_none_or(|hash| {
+            hash.len() == 16 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        })
+}
+
 #[derive(Debug)]
 pub struct UsageError(pub String);
 impl std::fmt::Display for UsageError {
@@ -823,6 +851,35 @@ fn write_private(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_default_repository_with_a_version_tag_is_a_local_box() {
+        for image in [
+            "agent-connect-box:0.0.4",
+            "agent-connect-box:0.0.4-d18f783af9be95c9",
+            "localhost/agent-connect-box:0.0.4-d18f783af9be95c9",
+            DEFAULT_BOX_IMAGE,
+        ] {
+            assert!(locally_built_box(image), "{image}");
+        }
+        for image in [
+            "agent-connect-box-mine:0.0.4",
+            "agent-connect-box:latest",
+            "agent-connect-box:0.0",
+            "agent-connect-box:0.0.4-",
+            "agent-connect-box",
+            "registry.example/agent-connect-box:0.0.4",
+            "localhost/localhost/agent-connect-box:0.0.4",
+            "other/agent-connect-box:0.0.4",
+            "agent-connect-box@sha256:0123",
+            "agent-connect-box:0.0.4-D18F783AF9BE95C9",
+            "agent-connect-box:0.0.4-d18f783af9be95c",
+            "agent-connect-box:0.0.4-d18f783af9be95c9-x",
+            "agent-connect-box:1.2.3-rc.1",
+        ] {
+            assert!(!locally_built_box(image), "{image}");
+        }
+    }
 
     #[test]
     fn snapshot_validation_rejects_duplicates_and_invalid_schemas() {

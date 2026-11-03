@@ -472,9 +472,16 @@ async fn run() -> anyhow::Result<()> {
     });
     let authorization = if let Some(public_url) = &cli.public_url {
         use sha2::{Digest, Sha256};
+        // A locally built box is retagged by every harness release; only an
+        // image the owner named changes the policy grants were given under.
+        let image = if config::locally_built_box(&cli.box_image) {
+            "local-box"
+        } else {
+            cli.box_image.as_str()
+        };
         let profile = serde_json::json!({
             "harness": cli.harness, "mode": cli.codex_mode, "permissions": cli.permissions,
-            "boxed": cli.boxed, "image": cli.box_image, "home": cli.harness_home,
+            "boxed": cli.boxed, "image": image, "home": cli.harness_home,
             "egress": cli.egress_container, "public_url": public_url,
         });
         let fingerprint = format!("{:x}", Sha256::digest(serde_json::to_vec(&profile)?));
