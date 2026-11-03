@@ -78,7 +78,7 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
-    /// Guided private setup, harness login, egress and user service.
+    /// Guided private setup, harness login and user service.
     Setup(SetupCli),
     /// Diagnose configuration, boxed runtime, login presence and public reachability.
     Doctor(DoctorCli),

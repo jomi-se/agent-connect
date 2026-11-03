@@ -395,7 +395,6 @@ pub fn setup_plan(
             },
             "build-local-box",
             "owner-login-if-requested",
-            "start-owned-egress",
             if cli.no_service {
                 "foreground-serve"
             } else {
