@@ -967,6 +967,17 @@ impl SessionNetwork {
             network.cleanup_on_drop = false;
             return Err(error);
         }
+        // How the box will reach its peers, so a box that cannot reach the
+        // egress can be told apart from an egress that failed on its behalf.
+        eprintln!(
+            "[gateway] session {session} network {}: {}",
+            network.name,
+            if network.hosts.is_empty() {
+                "peers by DNS alias".to_string()
+            } else {
+                format!("peers by --add-host {}", network.hosts.join(", "))
+            }
+        );
         Ok(network)
     }
 
