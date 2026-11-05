@@ -98,6 +98,14 @@ the clean-room sample) on every PR and push to `main`, and a release publishes
 only after it passes. Run the full set locally only to reproduce a CI failure;
 see `docs/install/release.md`. CI is read-only.
 
+Those gates use a mock model that the box reaches without the egress, so none
+of them sees the path out to a real provider. After anything that can change
+it (container engine or OS upgrade, box image, egress, harness bump), also run
+`npm run test:live` against a signed-in codex harness home
+(`ACP_LIVE_HARNESS_HOME`, plus `ACP_BOX_IMAGE`): a few short real turns
+through a scratch boxed gateway and its egress. It spends tokens and needs
+credentials, so CI never runs it.
+
 Run routine checks through `quiet-run` (on PATH; `scripts/quiet-run.sh` is the
 fallback), which prints one line on success and a bounded tail on failure. Use
 `--detach` for slow runs, then collect with `--status`.

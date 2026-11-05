@@ -36,6 +36,7 @@
     "release:prepare-local": "node scripts/build-release-local.mjs",
     "release:dry-run": "node scripts/release.mjs publish-dry-run",
     "build:box-runners": "./deploy/gateway/box/build-local.sh",
+    "test:live": "node scripts/gateway-live-canary.mjs",
     "test:integration:gateway:clean-room": "node scripts/clean-room.mjs",
     "test:integration:gateway:teardown": "node scripts/gateway-teardown.mjs",
     "test:ui:owner": "node scripts/owner-ui.mjs",
