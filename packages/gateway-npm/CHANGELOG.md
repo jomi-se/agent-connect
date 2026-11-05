@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.0.5
+
+Nothing an owner installed is kept compatible before 1.0: after upgrading,
+rerun `agent-connect setup`.
+
+- The gateway drives Podman as well as Docker. Setup picks the engine once
+  per runtime, prefers a rootless one when there is a choice, and records it
+  as `container_engine` in the configuration. A rootful engine is refused for
+  a new runtime, and on reruns, unless the owner accepts it. On a rootless
+  engine, boxes run as the home's owner. See ADR 0020.
+- `init` is removed: setup is the one way to create a runtime.
+- The `egress` command is removed. The gateway owns its egress: it starts it
+  before serving, stops it after any serve result, and replaces an owned
+  egress built from another box. On Podman it keeps the rootless network up
+  beside the egress.
+- The durable-home volume option (`--durable-home`,
+  `AGENT_CONNECT_DURABLE_HOME`, `durable_home`) is removed; a box gets the
+  dedicated harness home or a tmpfs.
+- `serve` keeps the locally built box on the latest harness releases: it
+  rebuilds in the background, swaps the new box in once no session uses the
+  old one, and discards boxes nothing uses. A rebuilt local box keeps grants.
+- `doctor` warns when the gateway listening on the port is another version,
+  and passes `listener_port` when it is this one.
+- Owner sign-in: hardened HTTPS owner cookies and HSTS on hosted origins,
+  pending app consent survives a failed sign-in, and safe sign-in failures
+  and active pauses are shown.
+- Messages and install docs name the container engine instead of Docker.
+
 ## 0.0.4
 
 - The box takes the latest Claude Code, Codex and ACP adapters from npm when

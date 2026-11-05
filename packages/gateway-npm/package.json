@@ -1,6 +1,6 @@
 {
   "name": "@open-agent-connect/gateway",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "User-owned ACP gateway with container-isolated agent sessions",
   "license": "MIT",
   "repository": {
