@@ -45,6 +45,26 @@ test("box starts both CLIs with an unnamed UID and private homes", () => {
     2,
   );
 });
+test("box keeps Claude Code out of auto mode, which would answer permission requests itself", () => {
+  const settings = JSON.parse(
+    execFileSync(
+      engine,
+      [
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "--entrypoint",
+        "cat",
+        boxImage,
+        "/etc/claude-code/managed-settings.json",
+      ],
+      { encoding: "utf8", timeout: 30000 },
+    ),
+  );
+  assert.equal(settings.permissions.defaultMode, "default");
+  assert.equal(settings.permissions.disableAutoMode, "disable");
+});
 
 for (const seeded of [false, true]) {
   test(`production entrypoint ${seeded ? "preserves seeded" : "creates file-backed default"} Codex configuration`, async (t) => {

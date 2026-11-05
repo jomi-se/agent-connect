@@ -176,7 +176,10 @@ and approved application-tool effects remain possible. Boxed Codex rejects
 permission requests. `codex_mode` accepts only `read-only`, `workspace-write` or
 `agent-full-access`. Claude `app-tools-only` rejects native ACP permission
 requests and `deny-all` rejects every ACP permission request; these profiles do
-not guarantee denial of actions performed without permission requests. The
+not guarantee denial of actions performed without permission requests. Claude
+profiles depend on Claude Code asking, so the box image's managed settings
+start every Claude session in `default` mode and disable auto mode, whose
+classifier would answer permission requests itself. The
 container remains the execution boundary. The gateway supplies cwd/mode/model policy, and
 a fixed approved tool snapshot cannot expand on reconnect.
 

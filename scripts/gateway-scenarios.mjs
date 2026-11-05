@@ -396,7 +396,10 @@ try {
         if (boxed) assert.match(report.answer, /work/);
       }
       if (["tools", "discard"].includes(scenario))
-        assert.ok(report.marked.length > 0);
+        assert.ok(
+          report.marked.length > 0,
+          `${label} marked nothing: ${JSON.stringify(report)}\n${gateway.tail()}`,
+        );
       if (["slow-cut", "halfopen-stream"].includes(scenario))
         assert.equal(report.answerExact, true);
       if (["ask-cut", "lateask-cut", "answer-halfopen"].includes(scenario))
@@ -411,6 +414,8 @@ try {
     console.error(
       (await command(engine, ["logs", name]).catch(String)).slice(-3000),
     );
+  // A cleanup failure below replaces this error; print it first.
+  console.error(error);
   throw error;
 } finally {
   const failures = [];

@@ -8,6 +8,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 less procps unzip \
     && ln -s /usr/bin/fdfind /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/*
+# The gateway's permission profiles work by answering Claude Code's permission
+# requests. Auto mode answers them itself with a model-side classifier, so the
+# box pins Claude Code to its asking mode; managed settings outrank anything in
+# the harness home. (claude-agent-acp 0.101.0 started sessions in auto.)
+RUN mkdir -p /etc/claude-code \
+    && echo '{"permissions":{"defaultMode":"default","disableAutoMode":"disable"}}' \
+    > /etc/claude-code/managed-settings.json
 ENV PATH=/opt/adapters/node_modules/.bin:$PATH
 ENV CLAUDE_CODE_EXECUTABLE=/opt/adapters/node_modules/@anthropic-ai/claude-code/bin/claude.exe
 COPY install-harnesses.sh /usr/local/lib/agent-connect/install-harnesses.sh
