@@ -86,6 +86,8 @@ test("egress rejects reserved destinations and survives reset CONNECT clients", 
 // subprocess test above separately preserves the production address boundary.
 const { createEgressProxy, proxyLimits, connectTarget } =
   await import("../egress-proxy.mjs");
+const reasonOf = (line) =>
+  JSON.parse(line).attributes["agent_connect.egress.reason"];
 
 async function localProxy(t, overrides = {}) {
   const logs = [];
@@ -216,9 +218,7 @@ test("egress caps partial clients by source and globally and recovers freed capa
     false,
     "released capacity accepts another source connection",
   );
-  assert.ok(
-    logs.some((line) => JSON.parse(line).reason === "connection_limit"),
-  );
+  assert.ok(logs.some((line) => reasonOf(line) === "connection_limit"));
 });
 
 test("egress idle timeout closes partial headers", async (t) => {
@@ -293,9 +293,7 @@ test("HTTP requests have a deadline and logs never contain paths, tokens or erro
   );
   await closes(client.closed, "HTTP request escaped deadline");
   await closes(closed, "timed out HTTP request left upstream open");
-  assert.ok(
-    proxy.logs.some((line) => JSON.parse(line).reason === "request_timeout"),
-  );
+  assert.ok(proxy.logs.some((line) => reasonOf(line) === "request_timeout"));
   assert.ok(!proxy.logs.join("\n").includes("never-log-me"));
   assert.ok(!proxy.logs.join("\n").includes("fixture.example"));
 });
@@ -372,7 +370,7 @@ test("a failed lookup is a 502 with its own reason, never a malformed request", 
       socket.on("close", () => resolve(data));
     });
     assert.match(reply, /^HTTP\/1\.1 502 /, `CONNECT ${reason}`);
-    const reasons = logs.map((line) => JSON.parse(line).reason);
+    const reasons = logs.map((line) => reasonOf(line));
     assert.equal(reasons.filter((r) => r === reason).length, 2, reasons.join());
     assert.ok(
       !reasons.includes("invalid_connect") &&
@@ -382,7 +380,7 @@ test("a failed lookup is a 502 with its own reason, never a malformed request", 
   }
 });
 
-test("each box's first open connection is logged once, without its address", async (t) => {
+test("each box's first open connection is logged once, without the box's address", async (t) => {
   const { client, logs } = await localProxy(t);
   const first = await client();
   const second = await client();
@@ -391,10 +389,17 @@ test("each box's first open connection is logged once, without its address", asy
   const opened = () =>
     logs
       .map((line) => JSON.parse(line))
-      .filter((l) => l.reason === "client_connected");
+      .filter(
+        (l) =>
+          l.attributes["agent_connect.egress.reason"] === "client_connected",
+      );
   assert.equal(opened().length, 2, "one line per box, not per socket");
-  assert.ok(opened().every((l) => l.verdict === "open"));
-  assert.ok(!logs.join("\n").includes("127.0.0."));
+  for (const line of opened()) {
+    assert.equal(line.attributes["agent_connect.egress.verdict"], "open");
+    // The proxy's own address on the network the box came in through.
+    assert.equal(line.attributes["network.local.address"], "127.0.0.1");
+  }
+  assert.ok(!logs.join("\n").includes("127.0.0.2"), "the box's own address");
   first.socket.destroy();
   second.socket.destroy();
   await Promise.all([first.closed, second.closed]);
@@ -406,4 +411,44 @@ test("each box's first open connection is logged once, without its address", asy
     3,
     "a box that reconnects after closing everything is logged again",
   );
+});
+
+test("log lines follow OpenTelemetry's log data model", async (t) => {
+  const { client, logs } = await localProxy(t);
+  const { socket } = await client();
+  socket.write(
+    "CONNECT user:never-log-me@fixture.example:443 HTTP/1.1\r\nHost: x\r\n\r\n",
+  );
+  await delay(50);
+  assert.ok(logs.length >= 2);
+  for (const raw of logs) {
+    const line = JSON.parse(raw);
+    assert.deepEqual(Object.keys(line).sort(), [
+      "attributes",
+      "body",
+      "resource",
+      "severity_number",
+      "severity_text",
+      "timestamp",
+    ]);
+    assert.ok(!Number.isNaN(Date.parse(line.timestamp)));
+    assert.equal(line.resource["service.name"], "agent-connect-egress");
+    assert.match(
+      line.attributes["event.name"],
+      /^agent_connect\.egress\.(allow|open|deny)$/,
+    );
+    assert.equal(
+      typeof line.attributes["agent_connect.log.suppressed"],
+      "number",
+    );
+  }
+  const deny = logs
+    .map((l) => JSON.parse(l))
+    .find((l) => l.attributes["agent_connect.egress.verdict"] === "deny");
+  assert.deepEqual([deny.severity_text, deny.severity_number], ["WARN", 13]);
+  assert.equal(
+    deny.attributes["agent_connect.egress.reason"],
+    "invalid_connect",
+  );
+  assert.ok(!logs.join("\n").includes("never-log-me"));
 });

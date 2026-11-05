@@ -121,11 +121,15 @@ export function proxyLimits(env = process.env) {
   return limits;
 }
 
+// One JSON object per line in OpenTelemetry's log data model, so the journal
+// can be filtered with jq and an OTLP exporter can take the lines as they are.
+const SEVERITY = { allow: ["INFO", 9], open: ["INFO", 9], deny: ["WARN", 13] };
+
 function boundedLogger(write) {
   let window = Date.now(),
     emitted = 0,
     suppressed = 0;
-  return (verdict, reason) => {
+  return (verdict, reason, socket) => {
     if (Date.now() - window >= 1000) {
       window = Date.now();
       emitted = 0;
@@ -135,13 +139,26 @@ function boundedLogger(write) {
       return;
     }
     // Destinations, paths, headers, errors and client addresses can contain
-    // credentials or private information. Record only bounded reason codes.
+    // credentials or private information. Record only bounded reason codes,
+    // plus the proxy's own address on the network the box came in through,
+    // which names that session's network and nothing about the box.
+    const [severityText, severityNumber] = SEVERITY[verdict];
+    const attributes = {
+      "event.name": `agent_connect.egress.${verdict}`,
+      "agent_connect.egress.verdict": verdict,
+      "agent_connect.egress.reason": reason,
+      "agent_connect.log.suppressed": suppressed,
+    };
+    const local = socket?.localAddress;
+    if (local) attributes["network.local.address"] = local;
     write(
       JSON.stringify({
-        at: new Date().toISOString(),
-        verdict,
-        reason,
-        suppressed,
+        timestamp: new Date().toISOString(),
+        severity_text: severityText,
+        severity_number: severityNumber,
+        body: `egress ${verdict} ${reason}`,
+        attributes,
+        resource: { "service.name": "agent-connect-egress" },
       }),
     );
     suppressed = 0;
@@ -191,7 +208,7 @@ export function createEgressProxy({
       upstream?.destroy();
     };
     const timer = setTimeout(() => {
-      log("deny", "request_timeout");
+      log("deny", "request_timeout", req.socket);
       upstream?.destroy();
       req.socket.destroy();
     }, limits.requestMs);
@@ -202,7 +219,7 @@ export function createEgressProxy({
     try {
       const url = new URL(req.url);
       if (url.protocol !== "http:" || url.username || url.password) {
-        log("deny", "invalid_http_target");
+        log("deny", "invalid_http_target", req.socket);
         res.writeHead(400).end("bad request\n");
         return;
       }
@@ -212,16 +229,16 @@ export function createEgressProxy({
       );
       if (req.socket.destroyed || res.destroyed) return;
       if (reason) {
-        log("deny", reason);
+        log("deny", reason, req.socket);
         res.writeHead(502).end("egress could not resolve the destination\n");
         return;
       }
       if (!address) {
-        log("deny", "private_destination");
+        log("deny", "private_destination", req.socket);
         res.writeHead(403).end("egress denied\n");
         return;
       }
-      log("allow", "http");
+      log("allow", "http", req.socket);
       upstream = httpRequest(
         {
           host: address,
@@ -237,19 +254,19 @@ export function createEgressProxy({
         },
       );
       upstream.setTimeout(limits.idleMs, () => {
-        log("deny", "upstream_idle_timeout");
+        log("deny", "upstream_idle_timeout", req.socket);
         upstream.destroy();
         req.socket.destroy();
       });
       upstream.on("error", () => {
-        log("deny", "upstream_error");
+        log("deny", "upstream_error", req.socket);
         if (!res.headersSent && !res.destroyed)
           res.writeHead(502).end("upstream error\n");
         else res.destroy();
       });
       req.pipe(upstream);
     } catch {
-      log("deny", "invalid_request");
+      log("deny", "invalid_request", req.socket);
       if (!res.headersSent && !res.destroyed)
         res.writeHead(400).end("bad request\n");
     }
@@ -261,7 +278,7 @@ export function createEgressProxy({
     const source = socket.remoteAddress;
     const count = clients.get(source) ?? 0;
     if (count >= limits.perClient || active >= limits.global) {
-      log("deny", "connection_limit");
+      log("deny", "connection_limit", socket);
       socket.destroy();
       return;
     }
@@ -271,16 +288,16 @@ export function createEgressProxy({
     // session whose box never reached the proxy shows up as a missing line
     // rather than as silence that could mean anything. Per box, not per
     // socket, so it costs the bounded log almost nothing.
-    if (count === 0) log("open", "client_connected");
+    if (count === 0) log("open", "client_connected", socket);
     const state = { busy: false };
     states.set(socket, state);
     const absolute = setTimeout(() => {
-      log("deny", "absolute_timeout");
+      log("deny", "absolute_timeout", socket);
       socket.destroy();
     }, limits.absoluteMs);
     absolute.unref();
     socket.setTimeout(limits.idleMs, () => {
-      log("deny", "client_idle_timeout");
+      log("deny", "client_idle_timeout", socket);
       socket.destroy();
     });
     socket.once("close", () => {
@@ -310,16 +327,16 @@ export function createEgressProxy({
       );
       if (clientSocket.destroyed) return;
       if (reason) {
-        log("deny", reason);
+        log("deny", reason, clientSocket);
         clientSocket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
         return;
       }
       if (!address) {
-        log("deny", "private_destination");
+        log("deny", "private_destination", clientSocket);
         clientSocket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
         return;
       }
-      log("allow", "connect");
+      log("allow", "connect", clientSocket);
       upstream = connect(target.port, address, () => {
         if (clientSocket.destroyed) {
           upstream.destroy();
@@ -331,18 +348,18 @@ export function createEgressProxy({
         clientSocket.pipe(upstream);
       });
       upstream.setTimeout(limits.idleMs, () => {
-        log("deny", "upstream_idle_timeout");
+        log("deny", "upstream_idle_timeout", clientSocket);
         upstream.destroy();
         clientSocket.destroy();
       });
       upstream.on("close", () => clientSocket.destroy());
       upstream.on("error", () => {
-        log("deny", "upstream_error");
+        log("deny", "upstream_error", clientSocket);
         if (!clientSocket.destroyed)
           clientSocket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
       });
     } catch {
-      log("deny", "invalid_connect");
+      log("deny", "invalid_connect", clientSocket);
       if (!clientSocket.destroyed)
         clientSocket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
     }
@@ -360,6 +377,15 @@ if (
 ) {
   const limits = proxyLimits();
   createEgressProxy({ limits }).listen(limits.port, "0.0.0.0", () =>
-    console.log("egress proxy ready"),
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        severity_text: "INFO",
+        severity_number: 9,
+        body: "egress proxy ready",
+        attributes: { "event.name": "agent_connect.egress.ready" },
+        resource: { "service.name": "agent-connect-egress" },
+      }),
+    ),
   );
 }

@@ -178,11 +178,13 @@ try {
   const verdicts = (await exec(engine, ["logs", egress])).stdout
     .split("\n")
     .filter((line) => line.startsWith("{"))
-    .map((line) => JSON.parse(line));
-  const allowed = verdicts.filter((v) => v.verdict === "allow").length;
+    .map((line) => JSON.parse(line).attributes ?? {});
+  const allowed = verdicts.filter(
+    (v) => v["agent_connect.egress.verdict"] === "allow",
+  ).length;
   const denied = verdicts
-    .filter((v) => v.verdict === "deny")
-    .map((v) => v.reason);
+    .filter((v) => v["agent_connect.egress.verdict"] === "deny")
+    .map((v) => v["agent_connect.egress.reason"]);
   assert.ok(
     allowed > 0,
     `the egress allowed nothing; denials: ${denied.join(", ")}`,
