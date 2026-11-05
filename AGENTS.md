@@ -93,9 +93,11 @@ it after every change. Then run only the box-backed gates your change touches;
 | WebMCP                       | `npm run test:webmcp`                                                 |
 | Packaging or setup           | `test:integration:gateway:clean-room`                                 |
 
-CI runs everything (release build, `npm run verify:full` with real adapters and
-the clean-room sample) on every PR and push to `main`, and a release publishes
-only after it passes. Run the full set locally only to reproduce a CI failure;
+CI runs everything (release build, every `verify:full` gate with real adapters
+and the clean-room sample) on every PR and push to `main`, as parallel jobs that
+are reused when a green run already verified their exact inputs
+(`scripts/ci-inputs.mjs`; see `docs/guides/repository-maintenance.md`). A
+release publishes only after it passes. Run the full set locally only to reproduce a CI failure;
 see `docs/install/release.md`. CI is read-only.
 
 Those gates use a mock model that the box reaches without the egress, so none

@@ -34,7 +34,7 @@ tool dependency, not a gateway runtime requirement.
 ```sh
 npm run check                           # fast gates, after every change
 npm run verify -- test:ui:owner         # only the box-backed steps you touched
-npm run verify:full                     # everything; CI runs this
+npm run verify:full                     # everything; CI runs the same gates, split into jobs
 cargo test --locked --workspace
 ```
 

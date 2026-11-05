@@ -142,8 +142,9 @@ platform package. The sequence above is not a macOS verification command:
 Apple Silicon native installation and public-artifact composition remain part
 of the first real release check, although macOS is in the release build matrix.
 
-CI prepares the release directory before `npm run verify:full`,
-then runs Rust tests and lint/dependency-boundary checks. A passing synthetic
+CI's gateway job prepares the release directory and runs the box-backed
+`verify` gates against it; the static, Rust and web jobs run the rest of
+`verify:full` in parallel (see `docs/guides/repository-maintenance.md`). A passing synthetic
 acceptance run does not establish live subscription quality or authorize a
 release.
 

@@ -1,12 +1,25 @@
 name: CI
 
 # Required for PRs. On a push to main, Release runs only after this succeeds.
+#
+# The static checks always run. The rust, web and gateway jobs each hash what
+# they depend on (scripts/ci-inputs.mjs); when a green run already verified
+# those exact inputs, the job is reused instead of run. A run that verified
+# them records it as an empty cache entry keyed by the hash. A manual run with
+# `full`, and the weekly scheduled run, reuse nothing.
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    - cron: "23 4 * * 1"
   workflow_dispatch:
+    inputs:
+      full:
+        description: Run every job, reusing nothing
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -15,16 +28,80 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
-  checks:
-    name: Required checks
+  plan:
+    name: Plan (what can be reused)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 10
+    outputs:
+      rust_hash: ${{ steps.hash.outputs.rust }}
+      web_hash: ${{ steps.hash.outputs.web }}
+      gateway_hash: ${{ steps.hash.outputs.gateway }}
+      rust_reuse: ${{ steps.rust.outputs.cache-hit == 'true' }}
+      web_reuse: ${{ steps.web.outputs.cache-hit == 'true' }}
+      gateway_reuse: ${{ steps.gateway.outputs.cache-hit == 'true' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.15.0
+          package-manager-cache: false
+      - name: Hash each job's inputs
+        id: hash
+        run: |
+          for job in rust web gateway; do
+            echo "$job=$(node scripts/ci-inputs.mjs "$job")" >> "$GITHUB_OUTPUT"
+          done
+      - id: rust
+        if: github.event_name != 'schedule' && github.event.inputs.full != 'true'
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/ci-green
+          key: ci-green-v1-rust-${{ steps.hash.outputs.rust }}
+          lookup-only: true
+      - id: web
+        if: github.event_name != 'schedule' && github.event.inputs.full != 'true'
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/ci-green
+          key: ci-green-v1-web-${{ steps.hash.outputs.web }}
+          lookup-only: true
+      - id: gateway
+        if: github.event_name != 'schedule' && github.event.inputs.full != 'true'
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/ci-green
+          key: ci-green-v1-gateway-${{ steps.hash.outputs.gateway }}
+          lookup-only: true
+      - name: Summarize
+        env:
+          RUST: ${{ steps.rust.outputs.cache-hit == 'true' }}
+          WEB: ${{ steps.web.outputs.cache-hit == 'true' }}
+          GATEWAY: ${{ steps.gateway.outputs.cache-hit == 'true' }}
+        run: |
+          {
+            echo "| job | inputs already verified green |"
+            echo "|---|---|"
+            echo "| rust | $RUST |"
+            echo "| web | $WEB |"
+            echo "| gateway | $GATEWAY |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  static:
+    name: Static checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Check out the actual head revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ env.HEAD_SHA }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -44,7 +121,107 @@ jobs:
       - name: Test the PR ancestry policy
         run: ./scripts/test-pr-rebase.sh
 
-      - name: Install pinned provider and native browser test tools
+      - name: Check ACP versions and adapter pins
+        run: node scripts/release.mjs check
+
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm run test:docs
+      - run: npm test
+
+      - name: Check lint and dependency boundaries
+        run: |
+          npm run lint
+          npm run analyze:dependencies
+
+  rust:
+    name: Rust
+    needs: plan
+    if: needs.plan.outputs.rust_reuse != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          persist-credentials: false
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-test-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: cargo-test-${{ runner.os }}-
+
+      - name: Check Rust formatting and workspace tests
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked --workspace
+
+      - name: Record this green result for identical inputs
+        run: mkdir -p "$RUNNER_TEMP/ci-green" && echo "$HEAD_SHA" > "$RUNNER_TEMP/ci-green/verified-by"
+      - uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/ci-green
+          key: ci-green-v1-rust-${{ needs.plan.outputs.rust_hash }}
+
+  web:
+    name: Web SDK and WebMCP
+    needs: plan
+    if: needs.plan.outputs.web_reuse != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install pinned native browser test tools
+        run: ./scripts/install-ci-test-tools.sh
+
+      - run: npm run build
+      - run: npm run test:package:web
+      - run: npm run test:webmcp
+
+      - name: Record this green result for identical inputs
+        run: mkdir -p "$RUNNER_TEMP/ci-green" && echo "$HEAD_SHA" > "$RUNNER_TEMP/ci-green/verified-by"
+      - uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/ci-green
+          key: ci-green-v1-web-${{ needs.plan.outputs.web_hash }}
+
+  gateway:
+    name: Gateway release build and scenarios
+    needs: plan
+    if: needs.plan.outputs.gateway_reuse != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install pinned native browser test tools
         run: ./scripts/install-ci-test-tools.sh
 
       - name: Install the build tools in mise.toml
@@ -53,25 +230,63 @@ jobs:
       - name: Export the release build environment
         run: ./scripts/ci-build-env.sh
 
-      - name: Check ACP versions and adapter pins
-        run: node scripts/release.mjs check
-
       - name: Build the clean-room release artifacts
         run: |
           docker info
           node scripts/build-release-local.mjs --verification-receipt
 
-      - name: Run all credential-free verification gates
+      - name: Run the box-backed gateway gates against those artifacts
         env:
           AGENT_CONNECT_VERIFY_RELEASE_ARTIFACTS: ${{ github.workspace }}/dist/release
-        run: npm run verify:full
+        run: >-
+          npm run verify --
+          build
+          test:ui:owner
+          test:integration:gateway
+          test:integration:gateway:boxed
+          test:integration:gateway:teardown
+          test:integration:gateway:clean-room
 
-      - name: Check lint and dependency boundaries
-        run: |
-          npm run lint
-          npm run analyze:dependencies
+      - name: Record this green result for identical inputs
+        run: mkdir -p "$RUNNER_TEMP/ci-green" && echo "$HEAD_SHA" > "$RUNNER_TEMP/ci-green/verified-by"
+      - uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/ci-green
+          key: ci-green-v1-gateway-${{ needs.plan.outputs.gateway_hash }}
 
-      - name: Check Rust formatting and workspace tests
+  required:
+    # Branch protection and Release key on this name.
+    name: Required checks
+    if: always()
+    needs: [plan, static, rust, web, gateway]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed or was reused
+        env:
+          PLAN: ${{ needs.plan.result }}
+          STATIC: ${{ needs.static.result }}
+          RUST: ${{ needs.rust.result }}
+          RUST_REUSE: ${{ needs.plan.outputs.rust_reuse }}
+          WEB: ${{ needs.web.result }}
+          WEB_REUSE: ${{ needs.plan.outputs.web_reuse }}
+          GATEWAY: ${{ needs.gateway.result }}
+          GATEWAY_REUSE: ${{ needs.plan.outputs.gateway_reuse }}
         run: |
-          cargo fmt --all -- --check
-          cargo test --locked --workspace
+          failed=0
+          check() {
+            if [[ "$2" == success ]]; then
+              echo "$1: passed"
+            elif [[ "$2" == skipped && "$3" == true ]]; then
+              echo "$1: reused, its inputs were already verified green"
+            else
+              echo "::error::$1: $2"
+              failed=1
+            fi
+          }
+          check plan "$PLAN"
+          check static "$STATIC"
+          check rust "$RUST" "$RUST_REUSE"
+          check web "$WEB" "$WEB_REUSE"
+          check gateway "$GATEWAY" "$GATEWAY_REUSE"
+          exit "$failed"

@@ -91,7 +91,7 @@ Cargo rebuild or debug-binary fallback. The [release guide](../install/release.m
 describes the opt-in mode and its trusted-workflow evidence boundary; publication
 still builds separately.
 
-CI runs `npm run verify:full` and `cargo test --locked --workspace` on every push to main, and the release workflow publishes only that verified commit. The artifact-only
+CI runs every `verify:full` gate and `cargo test --locked --workspace` on every push to main, as parallel jobs reused when their inputs were already verified green, and the release workflow publishes only that verified commit. The artifact-only
 clean-room passes 26 checks, including real browser pairing, setup/doctor,
 offline service lifecycle, sessions/end-session, revoke-all, app tools,
 reconnect/cancel and browser back/forward cache restoration. All six owned hosts
@@ -171,9 +171,12 @@ Backlog:
   and gigabytes of temporary folders behind for days. Make teardown survive
   interruption.
 - Continue reducing CI time without dropping gates. Release-artifact reuse
-  removes the acceptance runner/gateway rebuilds; remaining possibilities are:
-  1. Cache Rust dependencies and Docker box layers between runs.
-  2. Split one serial job into a build job plus parallel jobs for owner UI,
+  removes the acceptance runner/gateway rebuilds, and CI runs static, Rust,
+  web and gateway jobs in parallel, reusing any whose inputs were already
+  verified green; remaining possibilities are:
+  1. Cache Docker box layers between runs (the Rust job caches its
+     dependencies).
+  2. Split the gateway job into a build job plus parallel jobs for owner UI,
      gateway scenarios, boxed scenarios with teardown, and clean-room.
   3. Maybe shorten the test-only waits in `*-cut`, `expire` and `overflow`
      (8 to 17 seconds each), keeping the timeout behaviour they prove.
