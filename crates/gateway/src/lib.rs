@@ -11,6 +11,7 @@ pub mod operations;
 pub mod policy;
 pub mod resume;
 pub mod sandbox;
+pub mod telemetry;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

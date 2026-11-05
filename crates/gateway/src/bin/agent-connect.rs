@@ -256,15 +256,20 @@ fn diagnostic_filter(directives: Option<&str>) -> tracing_subscriber::EnvFilter 
     tracing_subscriber::EnvFilter::new(
         directives
             .filter(|value| !value.trim().is_empty())
-            .unwrap_or("error,agent_connect_gateway::owner_sign_in=warn"),
+            .unwrap_or("error,agent_connect=info,agent_connect_gateway::owner_sign_in=warn"),
     )
 }
 
 async fn run() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(diagnostic_filter(std::env::var("RUST_LOG").ok().as_deref()))
-        .with_writer(std::io::stderr)
-        .init();
+    {
+        use tracing_subscriber::prelude::*;
+        tracing_subscriber::registry()
+            .with(
+                agent_connect_gateway::telemetry::OtelJson::new(std::io::stderr)
+                    .with_filter(diagnostic_filter(std::env::var("RUST_LOG").ok().as_deref())),
+            )
+            .init();
+    }
     let parsed = Cli::parse();
     if let Some(program) = parsed.container_engine {
         engine::select(program);
@@ -530,7 +535,7 @@ async fn run() -> anyhow::Result<()> {
         app = app.merge(authorization.clone().router());
         app = agent_connect_gateway::http_security::with_hsts(app, authorization);
     }
-    eprintln!("[gateway] listening on ws://{listen}/acp");
+    tracing::info!(server.address = %listen, "listening on ws://{listen}/acp");
     let listener = tokio::net::TcpListener::bind(listen).await.context(
         "gateway listener unavailable; run agent-connect doctor and check listener_port",
     )?;
@@ -636,7 +641,7 @@ async fn upgrade(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
     if gateway.authorization.is_none() && origin != gateway.cli.allow_origin {
-        eprintln!("[gateway] reject {peer}: origin {origin:?}");
+        tracing::warn!(network.peer.address = %peer, origin = ?origin, "connection rejected: origin not allowed");
         return ws
             .protocols([RESUME_SUBPROTOCOL, ACP_SUBPROTOCOL])
             .on_upgrade(|mut socket| async move {
@@ -655,7 +660,7 @@ async fn upgrade(
             .and_then(|token| gateway.authenticate(token, origin, &headers))
     });
     let Some(grant) = grant else {
-        eprintln!("[gateway] reject {peer}: invalid or expired app grant");
+        tracing::warn!(network.peer.address = %peer, "connection rejected: invalid or expired app grant");
         return ws
             .protocols([RESUME_SUBPROTOCOL, ACP_SUBPROTOCOL])
             .on_upgrade(|mut socket| async move {
@@ -664,7 +669,7 @@ async fn upgrade(
     };
     let resumable = offered.contains(&RESUME_SUBPROTOCOL);
     if !resumable && !offered.contains(&ACP_SUBPROTOCOL) {
-        eprintln!("[gateway] reject {peer}: no supported subprotocol");
+        tracing::warn!(network.peer.address = %peer, "connection rejected: no supported subprotocol");
         return ws
             .protocols([RESUME_SUBPROTOCOL, ACP_SUBPROTOCOL])
             .on_upgrade(|mut socket| async move {
@@ -679,7 +684,7 @@ async fn upgrade(
     ws.protocols([selected])
         .on_upgrade(move |socket| async move {
             if let Err(e) = serve_socket(socket, gateway, peer, grant, resumable).await {
-                eprintln!("[gateway] {peer} ended with error: {e}");
+                tracing::warn!(network.peer.address = %peer, error = %e, "connection ended with an error");
             }
         })
 }
@@ -727,7 +732,7 @@ async fn serve_socket(
             Some(token) => match gateway.hosts.find(token, &grant.id) {
                 Some(host) => (host, ack),
                 None => {
-                    eprintln!("[gateway] {peer} reattach refused: unknown or ended host");
+                    tracing::info!(network.peer.address = %peer, "reattach refused: unknown or ended host");
                     let _ = socket
                         .send(Message::Text(r#"{"t":"expired"}"#.into()))
                         .await;
@@ -833,9 +838,13 @@ async fn serve_socket(
             }
         }
     };
-    eprintln!(
-        "[gateway] {peer} attachment {generation} of host {} ended: {why}",
-        host.label
+    tracing::info!(
+
+        session.id = %host.label,
+        network.peer.address = %peer,
+        attachment = generation,
+        reason = %why,
+        "attachment ended"
     );
     host.detach(generation);
     Ok(())
@@ -877,7 +886,7 @@ async fn refresh_box(gateway: std::sync::Weak<Gateway>) {
     // A box built but never swapped in would otherwise stay on disk for good.
     let discard = async |image: &str, keep: &[&str]| {
         if let Err(error) = box_refresh::remove_retired(image, &config, keep).await {
-            eprintln!("[gateway] {error:#}");
+            tracing::error!("{error:#}");
         }
     };
     // Give a starting service a minute before the first check.
@@ -920,8 +929,8 @@ async fn refresh_box(gateway: std::sync::Weak<Gateway>) {
                         if let Some(old) = state.pending.take().filter(|old| *old != new) {
                             discard(&old, &[&current, &new]).await;
                         }
-                        eprintln!(
-                            "[gateway] box {new} is built; it replaces {current} once no session runs"
+                        tracing::info!(
+                            "box {new} is built; it replaces {current} once no session runs"
                         );
                         state.pending = Some(new.clone());
                         state.waiting_since = Some(box_refresh::now());
@@ -940,7 +949,7 @@ async fn refresh_box(gateway: std::sync::Weak<Gateway>) {
                         continue;
                     }
                     Err(error) => {
-                        eprintln!("[gateway] box refresh failed: {error:#}");
+                        tracing::warn!("box refresh failed: {error:#}");
                         state.error = Some(format!("{error:#}"));
                         record(&state);
                         continue;
@@ -985,7 +994,7 @@ async fn refresh_box(gateway: std::sync::Weak<Gateway>) {
         match swap {
             Ok(()) => {
                 *gateway.box_image.write().unwrap() = new.clone();
-                eprintln!("[gateway] box refreshed to {new}");
+                tracing::info!("box refreshed to {new}");
                 if let Some(retired) = state.previous.take() {
                     discard(&retired, &[&current, &new]).await;
                 }
@@ -994,7 +1003,7 @@ async fn refresh_box(gateway: std::sync::Weak<Gateway>) {
                 state.error = None;
             }
             Err(error) => {
-                eprintln!("[gateway] box swap failed, {current} stays in use: {error:#}");
+                tracing::warn!("box swap failed, {current} stays in use: {error:#}");
                 state.error = Some(format!("{error:#}"));
                 discard(&new, &[&current]).await;
             }
@@ -1071,10 +1080,13 @@ async fn run_host(
     let label = uuid::Uuid::new_v4().to_string();
     let session_dir = gateway.cli.state_dir.join("sessions").join(&label);
     std::fs::create_dir_all(&session_dir)?;
-    eprintln!(
-        "[gateway] {peer} new {} host {label}; live hosts {}",
-        if resumable { "resumable" } else { "plain" },
-        gateway.hosts.live_hosts() + 1
+    tracing::info!(
+
+        session.id = %label,
+        network.peer.address = %peer,
+        resumable,
+        live_hosts = gateway.hosts.live_hosts() + 1,
+        "session started"
     );
     let boxed = gateway.cli.boxed;
     let (mut network, agent, permit) = if boxed {
@@ -1153,6 +1165,7 @@ async fn run_host(
         permissions: grant.permissions,
         grant_sessions: grant.sessions.clone(),
         actions_dir: Some(gateway.cli.state_dir.join("actions")),
+        log_session: label.clone(),
     });
     let mut components = ProxiesAndAgent::new(agent).proxy(policy);
     if !boxed {
@@ -1199,10 +1212,12 @@ async fn run_host(
             }
         } => None,
     };
-    eprintln!(
-        "[gateway] chain {label} ended after {:?}: {:?}",
-        started.elapsed(),
-        result.as_ref().and_then(|result| result.as_ref().err())
+    tracing::info!(
+
+        session.id = %label,
+        duration_ms = started.elapsed().as_millis() as u64,
+        error = ?result.as_ref().and_then(|result| result.as_ref().err()),
+        "session ended"
     );
     let cleanup_ok = if let Some(network) = network.take() {
         match network.cleanup().await {
@@ -1230,7 +1245,7 @@ async fn start_or_close(
     match start_host(gateway, grant, resumable, peer).await {
         Ok(host) => Some(host),
         Err(error) => {
-            eprintln!("[gateway] session launch failed: {error}");
+            tracing::error!(error = %error, "session launch failed");
             let code = if gateway.capacity.available_permits() == 0 {
                 4418
             } else {
@@ -1270,6 +1285,7 @@ mod tests {
         tracing::subscriber::with_default(subscriber, || {
             tracing::warn!(target: "agent_connect_gateway::owner_sign_in", "audit-visible");
             tracing::warn!(target: "other_component", "unrelated-warning");
+            tracing::info!("gateway-event");
             tracing::error!(target: "other_component", "ordinary-error");
         });
         let bytes = capture.0.lock().unwrap().clone();
@@ -1282,6 +1298,7 @@ mod tests {
             let output = captured_diagnostics(directives);
             assert!(output.contains("audit-visible"));
             assert!(output.contains("ordinary-error"));
+            assert!(output.contains("gateway-event"));
             assert!(!output.contains("unrelated-warning"));
         }
     }
@@ -1292,6 +1309,7 @@ mod tests {
         let errors = captured_diagnostics(Some("error"));
         assert!(errors.contains("ordinary-error"));
         assert!(!errors.contains("audit-visible"));
+        assert!(!errors.contains("gateway-event"));
         assert!(!errors.contains("unrelated-warning"));
     }
 }

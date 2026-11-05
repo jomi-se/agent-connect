@@ -16,6 +16,7 @@ use agent_client_protocol::{
     Proxy, Responder, UntypedMessage,
 };
 use serde_json::{Value, json};
+use tracing::Instrument;
 
 /// How the gateway answers harness permission prompts. Prompts are never shown
 /// to the application: the application is not the approver for host authority.
@@ -78,6 +79,9 @@ pub struct PolicyConfig {
     pub grant_sessions: GrantSessions,
     /// Gateway-owned journal, written before an application action is delivered.
     pub actions_dir: Option<PathBuf>,
+    /// The gateway's id for this session (its box and network carry it), on
+    /// every log record the handler writes.
+    pub log_session: String,
 }
 
 pub type GrantSessions = Arc<Mutex<RecentSessions>>;
@@ -129,6 +133,9 @@ struct PolicyState {
     /// toolCallId -> latest title seen in `session/update`, for attributing
     /// permission prompts whose own title is empty (codex-acp MCP prompts).
     tool_titles: BTreeMap<String, String>,
+    /// The agent message whose first chunk was last logged: a reply streams
+    /// as many chunks, and only its first is worth a line.
+    logged_message: Option<String>,
 }
 
 pub struct PolicyProxy {
@@ -172,12 +179,23 @@ impl HandleDispatchFrom<Conductor> for PolicyHandler {
         message: Dispatch,
         cx: ConnectionTo<Conductor>,
     ) -> Result<Handled<Dispatch>, agent_client_protocol::Error> {
-        MatchDispatchFrom::new(message, &cx)
-            .if_dispatch_from(Client, async |m: Dispatch| self.handle_app(m, &cx))
-            .await
-            .if_dispatch_from(Agent, async |m: Dispatch| self.handle_agent(m, &cx).await)
-            .await
-            .done()
+        let span = tracing::info_span!("acp", session.id = %self.config.log_session);
+        async {
+            MatchDispatchFrom::new(message, &cx)
+                .if_dispatch_from(Client, async |m: Dispatch| {
+                    self.log_message("application", &m);
+                    self.handle_app(m, &cx)
+                })
+                .await
+                .if_dispatch_from(Agent, async |m: Dispatch| {
+                    self.log_message("agent", &m);
+                    self.handle_agent(m, &cx).await
+                })
+                .await
+                .done()
+        }
+        .instrument(span)
+        .await
     }
 
     fn describe_chain(&self) -> impl std::fmt::Debug {
@@ -187,6 +205,73 @@ impl HandleDispatchFrom<Conductor> for PolicyHandler {
 
 type Outcome = Result<Handled<Dispatch>, agent_client_protocol::Error>;
 
+impl PolicyHandler {
+    /// One record per message: who sent it, its method and a short preview.
+    /// Streamed reply chunks get a line only for the first chunk of each
+    /// message (so an error the agent reports as text is still visible), and
+    /// thought chunks none; content never appears beyond the preview.
+    fn log_message(&self, from: &'static str, message: &Dispatch) {
+        let method = message.method();
+        let (kind, payload) = match message {
+            Dispatch::Request(request, _) => ("request", request.params()),
+            Dispatch::Notification(notification) => ("notification", notification.params()),
+            Dispatch::Response(Ok(result), _) => ("response", result),
+            Dispatch::Response(Err(error), _) => {
+                tracing::warn!(
+                    acp.from = from,
+                    rpc.method = method,
+                    error = %error,
+                    "acp error response"
+                );
+                return;
+            }
+        };
+        let mut update_kind = None;
+        if method == "session/update" {
+            let update = &payload["update"];
+            let kind = update["sessionUpdate"].as_str().unwrap_or("");
+            match kind {
+                "agent_thought_chunk" | "user_message_chunk" => return,
+                "agent_message_chunk" => {
+                    let id = update["messageId"].as_str();
+                    let mut state = self.state.lock().unwrap();
+                    if id.is_some() && state.logged_message.as_deref() == id {
+                        return;
+                    }
+                    state.logged_message = id.map(str::to_owned);
+                }
+                _ => {}
+            }
+            update_kind = Some(kind);
+        }
+        tracing::info!(
+            acp.from = from,
+            acp.kind = kind,
+            rpc.method = method,
+            rpc.jsonrpc.request_id = message.id().map(|id| format!("{id:?}")),
+            acp.update = update_kind,
+            acp.preview = %crate::telemetry::preview(&message_hint(payload)),
+            "acp message"
+        );
+    }
+}
+
+/// What a preview should show: the first text in the message (a prompt, a
+/// reply, an error the agent reports), or else its JSON.
+fn message_hint(value: &Value) -> String {
+    fn first_text(value: &Value) -> Option<&str> {
+        match value {
+            Value::Object(map) => map
+                .get("text")
+                .and_then(Value::as_str)
+                .or_else(|| map.values().find_map(first_text)),
+            Value::Array(items) => items.iter().find_map(first_text),
+            _ => None,
+        }
+    }
+    first_text(value).map_or_else(|| value.to_string(), str::to_owned)
+}
+
 fn pass(message: Dispatch) -> Outcome {
     Ok(Handled::No {
         message,
@@ -195,7 +280,7 @@ fn pass(message: Dispatch) -> Outcome {
 }
 
 fn deny(responder: Responder, error: agent_client_protocol::Error, why: &str) -> Outcome {
-    eprintln!("[policy] deny: {why}");
+    tracing::warn!(reason = why, "policy denied a message");
     responder.respond_with_error(error)?;
     Ok(Handled::Yes)
 }
@@ -333,9 +418,10 @@ impl PolicyHandler {
                     pass(Dispatch::Notification(notification))
                 }
                 method => {
-                    eprintln!(
-                        "[policy] drop application notification {method} {}",
-                        inner_method(&notification.params).unwrap_or("")
+                    tracing::warn!(
+                        rpc.method = %method,
+                        inner_method = inner_method(&notification.params).unwrap_or(""),
+                        "policy dropped an application notification"
                     );
                     Ok(Handled::Yes)
                 }
@@ -370,7 +456,11 @@ impl PolicyHandler {
                 }
                 admitted.push(server);
             } else {
-                eprintln!("[policy] {method}: dropped MCP server declaration {server}");
+                tracing::warn!(
+                    rpc.method = %method,
+                    server = %server,
+                    "policy dropped an MCP server declaration"
+                );
             }
         }
         obj.insert("mcpServers".into(), Value::Array(admitted));
@@ -442,9 +532,10 @@ impl PolicyHandler {
                     pass(Dispatch::Notification(notification))
                 }
                 method => {
-                    eprintln!(
-                        "[policy] drop agent notification {method} {}",
-                        inner_method(&notification.params).unwrap_or("")
+                    tracing::warn!(
+                        rpc.method = %method,
+                        inner_method = inner_method(&notification.params).unwrap_or(""),
+                        "policy dropped an agent notification"
                     );
                     Ok(Handled::Yes)
                 }
@@ -483,7 +574,7 @@ impl PolicyHandler {
                     .as_ref()
                     .is_none_or(|s| s.contains_key(&name));
                 if admitted {
-                    eprintln!("[policy] tools/call {name}");
+                    tracing::info!(tool = %name, "tools/call");
                     let action_id = uuid::Uuid::new_v4().to_string();
                     let Some(object) = request.params.as_object_mut() else {
                         return deny(
@@ -530,7 +621,7 @@ impl PolicyHandler {
                                     // The application may already have changed state. Preserve
                                     // its known outcome instead of fabricating a retryable error.
                                     // Initial pending evidence remains if completion could not persist.
-                                    eprintln!("[policy] action lifecycle write failed; durable action evidence remains");
+                                    tracing::error!("action lifecycle write failed; durable action evidence remains");
                                 }
                             }
                             responder.respond_with_result(result)
@@ -591,8 +682,11 @@ impl PolicyHandler {
             PermissionProfile::AppToolsOnly if is_app_tool => ALLOW,
             PermissionProfile::AppToolsOnly => REJECT,
         };
-        eprintln!(
-            "[policy] permission prompt title={own_title:?} seen={seen_title:?} app_tool={is_app_tool}"
+        tracing::info!(
+            title = %crate::telemetry::preview(&format!("{own_title:?}")),
+            seen_title = %crate::telemetry::preview(&format!("{seen_title:?}")),
+            app_tool = is_app_tool,
+            "permission prompt"
         );
         let options = params
             .get("options")
@@ -612,9 +706,11 @@ impl PolicyHandler {
             Some(id) => json!({ "outcome": { "outcome": "selected", "optionId": id } }),
             None => json!({ "outcome": { "outcome": "cancelled" } }),
         };
-        eprintln!(
-            "[policy] permission {:?} {title:?} -> {outcome}",
-            self.config.permissions
+        tracing::info!(
+            profile = ?self.config.permissions,
+            title = %crate::telemetry::preview(&format!("{title:?}")),
+            outcome = %outcome,
+            "permission answered"
         );
         responder.respond(outcome)?;
         Ok(Handled::Yes)
@@ -655,9 +751,9 @@ fn filter_tool_list(mut listed: Value, config: &PolicyConfig) -> Value {
                     ))
                 })
                 .collect();
-            eprintln!(
-                "[policy] record-mode snapshot: {}",
-                serde_json::to_string(&recorded).unwrap_or_default()
+            tracing::info!(
+                snapshot = %serde_json::to_string(&recorded).unwrap_or_default(),
+                "record-mode tool snapshot"
             );
         }
         Some(snapshot) => tools.retain_mut(|tool| {
@@ -666,7 +762,10 @@ fn filter_tool_list(mut listed: Value, config: &PolicyConfig) -> Value {
                 .get(name)
                 .is_some_and(|schema| Some(schema) == tool.get("inputSchema"));
             if !ok {
-                eprintln!("[policy] tools/list dropped {name} (not in snapshot or schema drift)");
+                tracing::warn!(
+                    tool = %name,
+                    "tools/list dropped a tool (not in snapshot or schema drift)"
+                );
             }
             if ok {
                 if let Some(definitions) = &config.tool_definitions {
@@ -895,6 +994,7 @@ mod unit_tests {
                 permissions: PermissionProfile::DenyAll,
                 grant_sessions: Default::default(),
                 actions_dir: None,
+                log_session: "test".into(),
             }),
             state: Default::default(),
         };

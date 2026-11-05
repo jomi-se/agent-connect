@@ -319,9 +319,10 @@ impl Registry {
             .cloned()
             .collect();
         for host in &holders {
-            eprintln!(
-                "[gateway] evicting host {} that still holds session {session_id}",
-                host.label
+            tracing::info!(
+                session.id = %host.label,
+                acp.session_id = %session_id,
+                "evicting the host that still holds this ACP session"
             );
             host.kill("evicted");
         }
@@ -335,8 +336,8 @@ impl Registry {
         match tokio::time::timeout(wait, futures::future::join_all(ended)).await {
             Ok(results) if results.iter().all(Result::is_ok) => Ok(()),
             _ => {
-                eprintln!(
-                    "[gateway] session eviction could not confirm every previous host ended; refusing load"
+                tracing::warn!(
+                    "session eviction could not confirm every previous host ended; refusing load"
                 );
                 Err(close::EVICTED)
             }
@@ -457,9 +458,10 @@ impl Host {
             self.config.max_retained_bytes
         };
         if st.out_bytes > bound && st.to_chain.is_some() {
-            eprintln!(
-                "[gateway] host {} retained {} unacknowledged bytes; ending it",
-                self.label, st.out_bytes
+            tracing::warn!(
+                session.id = %self.label,
+                retained_bytes = st.out_bytes as u64,
+                "host retained too many unacknowledged bytes; ending it"
             );
             Self::kill_locked(&mut st, "overflow");
         }
@@ -492,9 +494,13 @@ impl Host {
                 replayed += 1;
             }
             if generation > 1 {
-                eprintln!(
-                    "[gateway] host {} reattached (generation {generation}); client ack {ack}, replaying {replayed} frames, gateway ack {}",
-                    self.label, st.in_last
+                tracing::info!(
+                    session.id = %self.label,
+                    attachment = generation,
+                    client_ack = ack,
+                    replayed_frames = replayed as u64,
+                    gateway_ack = st.in_last,
+                    "host reattached"
                 );
             }
         }
@@ -521,9 +527,10 @@ impl Host {
         if st.to_chain.is_none() {
             return;
         }
-        eprintln!(
-            "[gateway] host {} detached; grace {:?}",
-            self.label, self.config.grace
+        tracing::info!(
+            session.id = %self.label,
+            grace_ms = self.config.grace.as_millis() as u64,
+            "host detached"
         );
         let host = self.clone();
         let grace = self.config.grace;
@@ -531,7 +538,7 @@ impl Host {
             tokio::time::sleep(grace).await;
             let mut st = host.state.lock().unwrap();
             if st.attachment.is_none() && st.generation == generation {
-                eprintln!("[gateway] host {} grace expired; ending it", host.label);
+                tracing::info!(session.id = %host.label, "host grace expired; ending it");
                 Self::kill_locked(&mut st, "expired");
             }
         });
@@ -570,9 +577,11 @@ impl Host {
                         true
                     } else {
                         if seq > st.in_last + 1 {
-                            eprintln!(
-                                "[gateway] host {} client frame {seq} after {}: gap, dropped",
-                                self.label, st.in_last
+                            tracing::warn!(
+                                session.id = %self.label,
+                                frame = seq,
+                                after = st.in_last,
+                                "client frame after a gap; dropped"
                             );
                         }
                         false
@@ -728,11 +737,12 @@ impl Host {
         if let Some((_, tx)) = st.attachment.take() {
             let _ = tx.send(ToSocket::Close(code, reason));
         }
-        eprintln!(
-            "[gateway] host {} finished ({reason}); {} frames sent, {} retained",
-            self.label,
-            st.out_next - 1,
-            st.out_log.len()
+        tracing::info!(
+            session.id = %self.label,
+            reason = %reason,
+            frames_sent = st.out_next - 1,
+            frames_retained = st.out_log.len() as u64,
+            "host finished"
         );
         Some(if failed {
             Completion::Failed

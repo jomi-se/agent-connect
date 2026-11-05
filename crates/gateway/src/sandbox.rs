@@ -115,11 +115,6 @@ fn egress_args(program: crate::engine::Program, name: &str, image: &str) -> Vec<
         "--label",
         &format!("{EGRESS_LABEL}={EGRESS_OWNER}"),
         "--restart=unless-stopped",
-        "--log-driver=json-file",
-        "--log-opt",
-        "max-size=10m",
-        "--log-opt",
-        "max-file=3",
         "--read-only",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
@@ -134,6 +129,22 @@ fn egress_args(program: crate::engine::Program, name: &str, image: &str) -> Vec<
     .into_iter()
     .map(str::to_string)
     .collect();
+    // Bounded logs: the journal on Podman, where each line outlives the
+    // container and journald enforces its own size limits; a rotated
+    // json-file on Docker, which has no journald on every host (Docker
+    // Desktop).
+    let logs: &[&str] = match program {
+        crate::engine::Program::Podman => &["--log-driver=journald"],
+        crate::engine::Program::Docker => &[
+            "--log-driver=json-file",
+            "--log-opt",
+            "max-size=10m",
+            "--log-opt",
+            "max-file=3",
+        ],
+    };
+    let at = args.iter().position(|arg| arg == "--read-only").unwrap();
+    args.splice(at..at, logs.iter().map(|arg| arg.to_string()));
     if program == crate::engine::Program::Podman {
         // A rootless container started without a network gets user-mode
         // networking (slirp4netns, pasta in Podman 5), which cannot join the
@@ -482,8 +493,7 @@ impl EgressFacts {
                         entrypoint,
                         all_caps_dropped,
                         home,
-                        string("/HostConfig/LogConfig/Type")? == "json-file"
-                            && string("/HostConfig/LogConfig/Size")? == "10MB",
+                        string("/HostConfig/LogConfig/Type")? == "journald",
                         // Podman has no device requests; GPUs arrive as devices. Podman 4
                         // leaves Devices empty even with one attached, which is why the
                         // creation record below is required.
@@ -710,6 +720,11 @@ pub fn box_args(
         "--pull=never",
         "-i",
         "--rm",
+        // The box's stdout is the session itself: prompts, replies, tool
+        // payloads. The engine must not copy it into a log (Podman's default
+        // driver is the journal); the gateway logs a bounded preview instead.
+        "--log-driver",
+        "none",
         "--name",
         &format!("acp-sess-{session}"),
         "--label",
@@ -969,14 +984,15 @@ impl SessionNetwork {
         }
         // How the box will reach its peers, so a box that cannot reach the
         // egress can be told apart from an egress that failed on its behalf.
-        eprintln!(
-            "[gateway] session {session} network {}: {}",
-            network.name,
-            if network.hosts.is_empty() {
-                "peers by DNS alias".to_string()
+        tracing::info!(
+            session.id = %session,
+            network.name = %network.name,
+            peers = %if network.hosts.is_empty() {
+                "by DNS alias".to_string()
             } else {
-                format!("peers by --add-host {}", network.hosts.join(", "))
-            }
+                network.hosts.join(",")
+            },
+            "session network wired"
         );
         Ok(network)
     }
@@ -1377,7 +1393,7 @@ mod tests {
                 "Devices": [], "PidMode": "private", "IpcMode": "shareable",
                 "Binds": [], "PortBindings": {}, "Tmpfs": {},
                 "RestartPolicy": { "Name": "unless-stopped" },
-                "LogConfig": { "Type": "json-file", "Config": null, "Size": "10MB" } },
+                "LogConfig": { "Type": "journald", "Config": null, "Size": "-1B" } },
             "State": { "Running": true, "Restarting": false,
                 "Health": { "Status": "", "FailingStreak": 0, "Log": null } },
             "Mounts": []
@@ -1452,7 +1468,11 @@ mod tests {
             .is_err()
         );
         assert!(
-            podman_verdict(set("/HostConfig/LogConfig/Size", serde_json::json!("0B"))).is_err()
+            podman_verdict(set(
+                "/HostConfig/LogConfig/Type",
+                serde_json::json!("json-file")
+            ))
+            .is_err()
         );
         assert!(
             podman_verdict(set("/HostConfig/Devices", serde_json::json!(["/dev/fuse"]))).is_err()
@@ -2524,7 +2544,26 @@ mod tests {
         let network = podman.iter().position(|arg| arg == "--network").unwrap();
         assert_eq!(podman[network + 1], "podman");
         assert_eq!(podman[0], "run");
-        assert_eq!(&podman[3..], &docker[1..]);
+        // Bounded logs either way: the journal on Podman, a rotated
+        // json-file on Docker. Everything else is the same.
+        assert!(podman.contains(&"--log-driver=journald".into()));
+        assert!(docker.contains(&"--log-driver=json-file".into()));
+        assert!(docker.contains(&"max-size=10m".into()));
+        let without_logs = |args: &[String]| -> Vec<String> {
+            let mut kept = Vec::new();
+            let mut skip = false;
+            for arg in args {
+                if skip {
+                    skip = false;
+                } else if arg == "--log-opt" {
+                    skip = true;
+                } else if !arg.starts_with("--log-driver") {
+                    kept.push(arg.clone());
+                }
+            }
+            kept
+        };
+        assert_eq!(without_logs(&podman[3..]), without_logs(&docker[1..]));
     }
     #[test]
     fn shared_home_box_user_follows_the_engine() {

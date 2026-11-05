@@ -71,9 +71,6 @@ fn impostor(image: &str, weakening: &str) -> bool {
         "--label",
         "org.agent-connect.component=acp-egress",
         "--restart=unless-stopped",
-        "--log-driver=json-file",
-        "--log-opt",
-        "max-size=10m",
         "--read-only",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
@@ -81,8 +78,17 @@ fn impostor(image: &str, weakening: &str) -> bool {
         "--cpus=1",
         "--pids-limit=64",
     ]);
-    if !podman {
-        command.args(["--log-opt", "max-file=3"]);
+    // The gateway's bounded logs: the journal on Podman, json-file on Docker.
+    if podman {
+        command.arg("--log-driver=journald");
+    } else {
+        command.args([
+            "--log-driver=json-file",
+            "--log-opt",
+            "max-size=10m",
+            "--log-opt",
+            "max-file=3",
+        ]);
     }
     // A later flag overrides the baseline's (--memory).
     command.args(weakening.split_whitespace());

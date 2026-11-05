@@ -203,6 +203,14 @@ counts and their latest reset time, or the global pause for unauthenticated
 requests. Client addresses can be shared behind a proxy, and an existing owner
 session is exempt from the global unauthenticated-request rejection.
 
+Logs are JSON lines in OpenTelemetry's log data model on stderr, which
+systemd keeps in the journal; on Podman the egress's lines go to the journal
+too. Every record a session causes carries its `session.id`, so one filter
+shows a session end to end, for example
+`journalctl --user -u <unit> -o cat | jq 'select(.attributes["session.id"] == "<id>")'`.
+Records hold no session content beyond a 50-character preview per message
+([ADR 0021](../decisions/0021-structured-logs.md)).
+
 `RUST_LOG` controls diagnostics. `AGENT_CONNECT_GATEWAY_BIN` overrides the npm
 launcher's executable for local testing. Image selection is also available to
 login as `AGENT_CONNECT_BOX_IMAGE`. No API-key environment is forwarded

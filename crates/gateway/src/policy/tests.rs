@@ -140,6 +140,7 @@ fn config(profile: PermissionProfile) -> PolicyConfig {
         permissions: profile,
         grant_sessions: Default::default(),
         actions_dir: None,
+        log_session: "test".into(),
     }
 }
 async fn run(
