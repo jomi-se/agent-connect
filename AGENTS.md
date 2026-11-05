@@ -101,9 +101,9 @@ see `docs/install/release.md`. CI is read-only.
 Those gates use a mock model that the box reaches without the egress, so none
 of them sees the path out to a real provider. After anything that can change
 it (container engine or OS upgrade, box image, egress, harness bump), also run
-`npm run test:live` against a signed-in codex harness home
-(`ACP_LIVE_HARNESS_HOME`, plus `ACP_BOX_IMAGE`): a few short real turns
-through a scratch boxed gateway and its egress. It spends tokens and needs
+`npm run verify -- test:live` with `ACP_LIVE_HARNESS_HOME` naming a signed-in
+codex harness home: a few short real turns through a scratch boxed gateway and
+its egress, on this checkout's test box. It spends tokens and needs
 credentials, so CI never runs it.
 
 Run routine checks through `quiet-run` (on PATH; `scripts/quiet-run.sh` is the

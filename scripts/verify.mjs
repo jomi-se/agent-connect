@@ -52,6 +52,9 @@ export const steps = [
   "test:integration:gateway:teardown",
   "test:integration:gateway:clean-room",
 ];
+// Run only when named: the live canary spends tokens and needs a signed-in
+// harness home (ACP_LIVE_HARNESS_HOME), so neither CI nor a bare verify runs it.
+export const namedOnlySteps = ["test:live"];
 
 async function timed(label, action) {
   const start = Date.now();
@@ -78,10 +81,11 @@ export async function verify({
     (typeof releaseArtifacts !== "string" || !releaseArtifacts.trim())
   )
     throw new Error("--release-artifacts requires an artifact directory");
-  const unknown = only.filter((step) => !steps.includes(step));
+  const known = [...steps, ...namedOnlySteps];
+  const unknown = only.filter((step) => !known.includes(step));
   if (unknown.length)
     throw new Error(
-      `Unknown verify step: ${unknown.join(", ")}; choose from ${steps.join(", ")}`,
+      `Unknown verify step: ${unknown.join(", ")}; choose from ${known.join(", ")}`,
     );
   const box = join(repository, "deploy/gateway/box");
   const { version } = JSON.parse(

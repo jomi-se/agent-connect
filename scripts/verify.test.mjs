@@ -179,6 +179,11 @@ test("verify runs only the selected steps", async () => {
       only: ["test:integration:gateway:boxed"],
     });
     assert.deepEqual(npm, ["test:integration:gateway:boxed"]);
+    // The live canary runs when named, and is never among the defaults.
+    npm.length = 0;
+    await verify({ repository, run, only: ["test:live"] });
+    assert.deepEqual(npm, ["test:live"]);
+    assert.ok(!steps.includes("test:live"));
     await assert.rejects(
       verify({ repository, run, only: ["boxed"] }),
       /Unknown verify step: boxed/,

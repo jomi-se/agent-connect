@@ -1,12 +1,15 @@
-// Live canary: one real Codex turn through a real boxed gateway, its egress
-// and the model provider. The deterministic scenarios use a mock model that
-// the box reaches without the egress, so they cannot see the path out to the
-// internet; this does. It spends real tokens on the cheapest model and needs
-// a signed-in harness home, so it is opt-in and never part of CI:
+// Live canary: real Codex turns through a real boxed gateway, its egress and
+// the model provider. The deterministic scenarios use a mock model that the
+// box reaches without the egress, so they cannot see the path out to the
+// internet; this does. It spends real tokens (three short turns on the
+// harness home's default model; clients cannot pick one) and needs a
+// signed-in harness home, so it is opt-in and never part of CI:
 //
 //   ACP_LIVE_HARNESS_HOME=<a gateway's codex harness home> \
-//   ACP_BOX_IMAGE=<box image> AGENT_CONNECT_CONTAINER_ENGINE=podman \
-//   npm run test:live
+//   AGENT_CONNECT_CONTAINER_ENGINE=podman \
+//   npm run verify -- test:live   # on this checkout's test box
+//
+// or `npm run test:live` with ACP_BOX_IMAGE naming an image that exists.
 //
 // Run it after anything that can change the path out: a container engine or
 // OS upgrade, a new box image, a harness bump. The harness home is used in
