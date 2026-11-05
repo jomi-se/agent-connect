@@ -31,7 +31,7 @@ The explicit native matrix is:
 
 | Runner             | Gateway target               |
 | ------------------ | ---------------------------- |
-| `macos-14`         | `aarch64-apple-darwin`       |
+| `macos-26`         | `aarch64-apple-darwin`       |
 | `ubuntu-24.04`     | `x86_64-unknown-linux-musl`  |
 | `ubuntu-24.04-arm` | `aarch64-unknown-linux-musl` |
 
