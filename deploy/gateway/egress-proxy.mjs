@@ -71,6 +71,20 @@ async function resolveAllowed(host) {
   return verdicts.some((v) => v.denied) ? null : (allowed?.address ?? null);
 }
 
+// A lookup that fails is the resolver's fault, not the box's request: it gets
+// its own reason and a 502, so "the egress cannot resolve" never looks like a
+// malformed request. NXDOMAIN is told apart from everything else (timeouts,
+// refused or unreachable servers), since the two have different causes.
+async function resolveOrReason(resolveAddress, host) {
+  try {
+    return { address: await resolveAddress(host) };
+  } catch (error) {
+    return {
+      reason: error?.code === "ENOTFOUND" ? "dns_not_found" : "dns_failed",
+    };
+  }
+}
+
 function integer(env, name, fallback, max, min = 1) {
   const raw = String(env[name] ?? fallback);
   if (
@@ -192,10 +206,16 @@ export function createEgressProxy({
         res.writeHead(400).end("bad request\n");
         return;
       }
-      const address = await resolveAddress(
+      const { address, reason } = await resolveOrReason(
+        resolveAddress,
         url.hostname.replace(/^\[|\]$/g, ""),
       );
       if (req.socket.destroyed || res.destroyed) return;
+      if (reason) {
+        log("deny", reason);
+        res.writeHead(502).end("egress could not resolve the destination\n");
+        return;
+      }
       if (!address) {
         log("deny", "private_destination");
         res.writeHead(403).end("egress denied\n");
@@ -247,6 +267,11 @@ export function createEgressProxy({
     }
     active++;
     clients.set(source, count + 1);
+    // One line each time a box goes from no open connection to one, so a
+    // session whose box never reached the proxy shows up as a missing line
+    // rather than as silence that could mean anything. Per box, not per
+    // socket, so it costs the bounded log almost nothing.
+    if (count === 0) log("open", "client_connected");
     const state = { busy: false };
     states.set(socket, state);
     const absolute = setTimeout(() => {
@@ -279,8 +304,16 @@ export function createEgressProxy({
     clientSocket.on("close", () => upstream?.destroy());
     try {
       const target = connectTarget(req.url);
-      const address = await resolveAddress(target.host);
+      const { address, reason } = await resolveOrReason(
+        resolveAddress,
+        target.host,
+      );
       if (clientSocket.destroyed) return;
+      if (reason) {
+        log("deny", reason);
+        clientSocket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
+        return;
+      }
       if (!address) {
         log("deny", "private_destination");
         clientSocket.end("HTTP/1.1 403 Forbidden\r\n\r\n");

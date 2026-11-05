@@ -322,3 +322,88 @@ test("denial logging has a fixed emission bound", async (t) => {
   assert.ok(logs.length <= 20, `unexpected log volume: ${logs.length}`);
   assert.ok(!logs.join("\n").includes("never-log-me"));
 });
+
+test("a failed lookup is a 502 with its own reason, never a malformed request", async (t) => {
+  for (const [code, reason] of [
+    ["ENOTFOUND", "dns_not_found"],
+    ["EAI_AGAIN", "dns_failed"],
+    [undefined, "dns_failed"],
+  ]) {
+    const logs = [];
+    const server = createEgressProxy({
+      limits: proxyLimits({}),
+      resolveAddress: async () => {
+        throw Object.assign(new Error("lookup never-log-me.example"), { code });
+      },
+      writeLog: (line) => logs.push(line),
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    t.after(async () => {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    });
+    const { port } = server.address();
+    const status = await new Promise((resolve, reject) => {
+      const req = request(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "http://never-log-me.example/",
+          agent: false,
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode);
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+    assert.equal(status, 502, `HTTP ${reason}`);
+    const reply = await new Promise((resolve) => {
+      const socket = connect(port, "127.0.0.1", () =>
+        socket.write(
+          "CONNECT never-log-me.example:443 HTTP/1.1\r\nHost: never-log-me.example\r\n\r\n",
+        ),
+      );
+      let data = "";
+      socket.on("data", (chunk) => (data += chunk));
+      socket.on("error", () => {});
+      socket.on("close", () => resolve(data));
+    });
+    assert.match(reply, /^HTTP\/1\.1 502 /, `CONNECT ${reason}`);
+    const reasons = logs.map((line) => JSON.parse(line).reason);
+    assert.equal(reasons.filter((r) => r === reason).length, 2, reasons.join());
+    assert.ok(
+      !reasons.includes("invalid_connect") &&
+        !reasons.includes("invalid_request"),
+    );
+    assert.ok(!logs.join("\n").includes("never-log-me"));
+  }
+});
+
+test("each box's first open connection is logged once, without its address", async (t) => {
+  const { client, logs } = await localProxy(t);
+  const first = await client();
+  const second = await client();
+  await client("127.0.0.2");
+  await delay(20);
+  const opened = () =>
+    logs
+      .map((line) => JSON.parse(line))
+      .filter((l) => l.reason === "client_connected");
+  assert.equal(opened().length, 2, "one line per box, not per socket");
+  assert.ok(opened().every((l) => l.verdict === "open"));
+  assert.ok(!logs.join("\n").includes("127.0.0."));
+  first.socket.destroy();
+  second.socket.destroy();
+  await Promise.all([first.closed, second.closed]);
+  await delay(20);
+  await client();
+  await delay(20);
+  assert.equal(
+    opened().length,
+    3,
+    "a box that reconnects after closing everything is logged again",
+  );
+});
