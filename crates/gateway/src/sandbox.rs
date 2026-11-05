@@ -805,7 +805,34 @@ pub struct SessionNetwork {
     capacity: Option<tokio::sync::OwnedSemaphorePermit>,
     startup_deadline: Instant,
     image_id: Option<String>,
+    /// `--add-host` entries naming the peers for the box, on engines whose
+    /// session networks carry no DNS (see `network_create_args`).
+    hosts: Vec<String>,
 }
+
+/// The session network's creation arguments. On Podman it carries no DNS
+/// server: attaching a network with one puts its aardvark-dns first in the
+/// egress's resolv.conf, and aardvark (1.11 and later) answers NXDOMAIN for
+/// outside names on an internal network, so the egress could resolve nothing
+/// while any session was open. The box then reaches its peers through
+/// `--add-host` entries, and has no resolver of its own on this network.
+/// Docker's embedded DNS resolves outside names for the egress through its
+/// other network, so Docker keeps the aliases.
+fn network_create_args(program: crate::engine::Program, session: &str, name: &str) -> Vec<String> {
+    let mut args: Vec<String> = ["network", "create", "--internal"].map(String::from).into();
+    if program == crate::engine::Program::Podman {
+        args.push("--disable-dns".into());
+    }
+    args.extend([
+        "--label".into(),
+        format!("{EGRESS_LABEL}={SESSION_OWNER}"),
+        "--label".into(),
+        format!("{SESSION_LABEL}={session}"),
+        name.into(),
+    ]);
+    args
+}
+
 impl SessionNetwork {
     pub fn create(
         session: &str,
@@ -814,7 +841,15 @@ impl SessionNetwork {
         image: &str,
         capacity: tokio::sync::OwnedSemaphorePermit,
     ) -> anyhow::Result<Self> {
-        Self::create_with(session, egress, mock, image, Some(capacity), &mut Docker)
+        Self::create_with(
+            session,
+            egress,
+            mock,
+            image,
+            Some(capacity),
+            crate::engine::selected(),
+            &mut Docker,
+        )
     }
 
     fn create_with(
@@ -823,6 +858,7 @@ impl SessionNetwork {
         mock: Option<&str>,
         image: &str,
         capacity: Option<tokio::sync::OwnedSemaphorePermit>,
+        program: crate::engine::Program,
         docker: &mut impl DockerCommand,
     ) -> anyhow::Result<Self> {
         let name = format!("acp-sess-net-{session}");
@@ -837,23 +873,16 @@ impl SessionNetwork {
             capacity,
             startup_deadline: deadline,
             image_id: None,
+            hosts: Vec::new(),
         };
         let result = (|| {
+            let create = network_create_args(program, session, &network.name);
             match docker
                 .run(
-                    &[
-                        "network",
-                        "create",
-                        "--internal",
-                        "--label",
-                        &format!("{EGRESS_LABEL}={SESSION_OWNER}"),
-                        "--label",
-                        &format!("{SESSION_LABEL}={session}"),
-                        &network.name,
-                    ],
+                    &create.iter().map(String::as_str).collect::<Vec<_>>(),
                     deadline,
                 )
-                .and_then(|output| match crate::engine::selected() {
+                .and_then(|output| match program {
                     crate::engine::Program::Docker => docker_id(&output),
                     // Podman prints the name; read the ID back by name and owner labels.
                     crate::engine::Program::Podman => {
@@ -908,6 +937,26 @@ impl SessionNetwork {
                 if let Some(image) = selected_image {
                     checked_egress(&id, &image, docker, deadline)?;
                 }
+                if program == crate::engine::Program::Podman {
+                    let address = docker.run(
+                        &[
+                            "inspect",
+                            "--type",
+                            "container",
+                            "--format",
+                            &format!(
+                                "{{{{(index .NetworkSettings.Networks {:?}).IPAddress}}}}",
+                                network.name
+                            ),
+                            &id,
+                        ],
+                        deadline,
+                    )?;
+                    let address: std::net::IpAddr = address.trim().parse().with_context(|| {
+                        format!("{alias} has no address on the session network")
+                    })?;
+                    network.hosts.push(format!("{alias}:{address}"));
+                }
             }
             Ok(())
         })();
@@ -940,6 +989,13 @@ impl SessionNetwork {
             let image_arg = args.len() - 3; // box_args ends with image, --harness, name.
             args[image_arg] = image.clone();
         }
+        let image_arg = args.len() - 3;
+        args.splice(
+            image_arg..image_arg,
+            self.hosts
+                .iter()
+                .flat_map(|host| ["--add-host".to_string(), host.clone()]),
+        );
         match docker
             .run(
                 &args[1..].iter().map(String::as_str).collect::<Vec<_>>(),
@@ -1074,6 +1130,7 @@ impl Drop for SessionNetwork {
             capacity: self.capacity.take(),
             startup_deadline: self.startup_deadline,
             image_id: self.image_id.clone(),
+            hosts: std::mem::take(&mut self.hosts),
         };
         if let Err(error) = std::thread::Builder::new()
             .name("acp-session-cleanup".into())
@@ -1262,6 +1319,7 @@ mod tests {
             capacity: None,
             startup_deadline: Instant::now() + STARTUP_TIMEOUT,
             image_id: None,
+            hosts: Vec::new(),
         }
     }
 
@@ -1757,6 +1815,7 @@ mod tests {
             None,
             "session:test",
             None,
+            crate::engine::Program::Docker,
             &mut docker,
         )
         .err()
@@ -1807,6 +1866,7 @@ mod tests {
             None,
             "session:test",
             None,
+            crate::engine::Program::Docker,
             &mut docker,
         )
         .err()
@@ -1875,6 +1935,7 @@ mod tests {
             None,
             "session:test",
             None,
+            crate::engine::Program::Docker,
             &mut docker,
         )
         .err()
@@ -1922,6 +1983,209 @@ mod tests {
                 .contains("stopped")
         );
         assert!(stopped.0.is_empty());
+    }
+
+    #[test]
+    fn podman_session_network_has_no_dns_and_names_peers_by_address() {
+        let network = "a".repeat(64);
+        let peer = "b".repeat(64);
+        let image = format!("sha256:{}", "d".repeat(64));
+        let labels = serde_json::json!({"id": network, "labels": {
+            EGRESS_LABEL: SESSION_OWNER, SESSION_LABEL: "test"
+        }})
+        .to_string();
+        let egress = egress_fixture(&peer, true).to_string();
+        let egress_inspect = ["inspect", "--type", "container", "--format", "{{json .}}"];
+        let mut docker = Fixture(VecDeque::from([
+            step(
+                &[
+                    "network",
+                    "create",
+                    "--internal",
+                    "--disable-dns",
+                    "--label",
+                    "org.agent-connect.component=acp-session",
+                    "--label",
+                    "org.agent-connect.session=test",
+                    "acp-sess-net-test",
+                ],
+                Ok("acp-sess-net-test"),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "network",
+                    "--format",
+                    r#"{"id":{{json .ID}},"labels":{{json .Labels}}}"#,
+                    "acp-sess-net-test",
+                ],
+                Ok(&labels),
+            ),
+            step(
+                &["image", "inspect", "--format", "{{json .}}", "session:test"],
+                Ok(&image_fixture()),
+            ),
+            step(
+                &[&egress_inspect[..], &["egress-name"]].concat(),
+                Ok(&egress),
+            ),
+            step(
+                &["network", "connect", "--alias", "egress", &network, &peer],
+                Ok(""),
+            ),
+            step(
+                &[&egress_inspect[..], &[peer.as_str()]].concat(),
+                Ok(&egress),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "container",
+                    "--format",
+                    r#"{{(index .NetworkSettings.Networks "acp-sess-net-test").IPAddress}}"#,
+                    &peer,
+                ],
+                Ok("10.89.0.2\n"),
+            ),
+        ]));
+        let mut session = SessionNetwork::create_with(
+            "test",
+            "egress-name",
+            None,
+            "session:test",
+            None,
+            crate::engine::Program::Podman,
+            &mut docker,
+        )
+        .unwrap();
+        session.cleanup_on_drop = false;
+        assert!(docker.0.is_empty());
+        assert_eq!(session.hosts, ["egress:10.89.0.2"]);
+
+        let args = box_args(
+            Harness::Codex,
+            "test",
+            "agent-full-access",
+            None,
+            crate::engine::Program::Podman,
+            Engine::Rootless,
+            "session:test",
+            "acp-sess-net-test",
+            false,
+        );
+        let mut expected = args[1..].to_vec();
+        expected[0] = "create".into();
+        let pos = expected.iter().position(|arg| arg == "--network").unwrap();
+        expected[pos + 1] = network.clone();
+        let image_arg = expected.len() - 3;
+        expected[image_arg] = image;
+        expected.splice(
+            image_arg..image_arg,
+            ["--add-host".to_string(), "egress:10.89.0.2".into()],
+        );
+        let mut docker = Fixture(VecDeque::from([(expected, Ok("c".repeat(64)))]));
+        session.create_box_with(args, &mut docker).unwrap();
+        assert!(docker.0.is_empty());
+    }
+
+    #[test]
+    fn podman_session_network_refuses_a_peer_without_an_address() {
+        let error = network_peer_address_error();
+        assert!(
+            error.contains("egress has no address on the session network"),
+            "{error}"
+        );
+    }
+
+    fn network_peer_address_error() -> String {
+        let network = "a".repeat(64);
+        let peer = "b".repeat(64);
+        let labels = serde_json::json!({"id": network, "labels": {
+            EGRESS_LABEL: SESSION_OWNER, SESSION_LABEL: "test"
+        }})
+        .to_string();
+        let egress = egress_fixture(&peer, true).to_string();
+        let mut docker = Fixture(VecDeque::from([
+            step(
+                &network_create_args(crate::engine::Program::Podman, "test", "acp-sess-net-test")
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+                Ok("acp-sess-net-test"),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "network",
+                    "--format",
+                    r#"{"id":{{json .ID}},"labels":{{json .Labels}}}"#,
+                    "acp-sess-net-test",
+                ],
+                Ok(&labels),
+            ),
+            step(
+                &["image", "inspect", "--format", "{{json .}}", "session:test"],
+                Ok(&image_fixture()),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "container",
+                    "--format",
+                    "{{json .}}",
+                    "egress-name",
+                ],
+                Ok(&egress),
+            ),
+            step(
+                &["network", "connect", "--alias", "egress", &network, &peer],
+                Ok(""),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "container",
+                    "--format",
+                    "{{json .}}",
+                    &peer,
+                ],
+                Ok(&egress),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "container",
+                    "--format",
+                    r#"{{(index .NetworkSettings.Networks "acp-sess-net-test").IPAddress}}"#,
+                    &peer,
+                ],
+                Ok("<no value>"),
+            ),
+            step(
+                &["network", "disconnect", "--force", &network, &peer],
+                Ok(""),
+            ),
+            step(&["network", "rm", &network], Ok("")),
+        ]));
+        let error = SessionNetwork::create_with(
+            "test",
+            "egress-name",
+            None,
+            "session:test",
+            None,
+            crate::engine::Program::Podman,
+            &mut docker,
+        )
+        .err()
+        .unwrap();
+        assert!(docker.0.is_empty());
+        format!("{error:#}")
     }
 
     #[test]
@@ -2116,6 +2380,7 @@ mod tests {
                 None,
                 "session:test",
                 Some(permit),
+                crate::engine::Program::Docker,
                 &mut docker
             )
             .is_err()
@@ -2152,6 +2417,7 @@ mod tests {
             None,
             "session:test",
             Some(permit),
+            crate::engine::Program::Docker,
             &mut FailedRollback,
         )
         .err()
