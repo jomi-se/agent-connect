@@ -15,9 +15,11 @@ export async function publishPackage(
     log = console.log,
     sleep = delay,
     now = () => performance.now(),
-    confirmationMs = 30000,
+    // npm now answers a publish with "being processed, may take a few
+    // minutes": 0.0.5's first package was still a 404 after 30 seconds.
+    confirmationMs = 900000,
     lookupMs = 10000,
-    pollMs = 2000,
+    pollMs = 10000,
     publishMs = 120000,
   } = {},
 ) {
