@@ -192,6 +192,24 @@ try {
   );
 } catch (error) {
   console.error(gatewayLog.slice(-6000));
+  // The egress goes away with the gateway; keep what it saw.
+  for (const args of [
+    ["logs", egress],
+    ["exec", egress, "cat", "/etc/resolv.conf"],
+    [
+      "inspect",
+      "--format",
+      "{{range $k, $v := .NetworkSettings.Networks}}{{$k}}={{$v.IPAddress}} {{end}}",
+      egress,
+    ],
+  ])
+    console.error(
+      `--- ${engine} ${args.join(" ")}\n` +
+        (await exec(engine, args).then(
+          (r) => r.stdout + r.stderr,
+          (e) => String(e),
+        )),
+    );
   throw error;
 } finally {
   if (gateway && gateway.exitCode === null) {
