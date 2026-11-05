@@ -140,6 +140,13 @@ Backlog:
   each address is first-come, so operators enroll right after exposing an
   address. Recovery is a host-side `reset-passkey`, matching `reset-totp`. The
   owner pages' CSP needs a nonce for the WebAuthn script.
+- Require Podman 5 and remove the egress keepalive container
+  (`keepalive_name` in `crates/gateway/src/sandbox.rs`). It exists only
+  because Podman 4 tears down the shared rootless network when the last
+  session disconnects the egress from it. First confirm on Podman 5 that the
+  network survives that disconnect without it. Setup and `doctor` then refuse
+  Podman 4, and the Podman 4 notes in the install docs go too (the 4.9 test
+  floor, the layer copy across id mappings).
 - Interrupted or hung test runs can leave a test gateway, `quiet-run` sessions
   and gigabytes of temporary folders behind for days. Make teardown survive
   interruption.
