@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-28
+Updated: 2026-11-06
 
 Gateway **0.0.1** and root browser SDK **0.0.10** were published to npm on
 2026-10-04: Rust launcher/platform binaries, hosted owner sign-in/consent/grant management, dedicated login
@@ -147,6 +147,26 @@ Backlog:
   network survives that disconnect without it. Setup and `doctor` then refuse
   Podman 4, and the Podman 4 notes in the install docs go too (the 4.9 test
   floor, the layer copy across id mappings).
+- Pin the box's harness versions, once updating them is quick and painless.
+  Until then they float, as [ADR 0018](../decisions/0018-floating-harness-versions.md)
+  decided, and CI is the early warning. That warning depends on timing:
+  claude-agent-acp 0.101.0 started Claude Code sessions in auto mode, whose
+  classifier answered permission requests itself, so the Claude profiles
+  stopped applying. CI caught it only because a push happened to build a
+  box twenty minutes after the release. Pinning needs, first:
+  1. One step (a command or a scheduled bot PR) that finds new releases of
+     the four harnesses, bumps the pins and says what changed upstream.
+  2. A battery of tests that the bump runs by itself, which shows whether
+     each harness still behaves the way the gateway relies on: permission
+     requests reach the profiles, app tools, cancellation, resume, boxed
+     and clean-room gates, plus an opt-in real-model canary, since the
+     deterministic model cannot exercise a harness's own model calls.
+  3. A pass that is cheap to merge and a failure that names the harness and
+     the behaviour that changed.
+
+  Then a new ADR supersedes 0018. Owners keep `versions.json` to move ahead
+  of, or back from, the pins.
+
 - Interrupted or hung test runs can leave a test gateway, `quiet-run` sessions
   and gigabytes of temporary folders behind for days. Make teardown survive
   interruption.
