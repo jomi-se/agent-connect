@@ -18,6 +18,8 @@ workaround should go rather than carry Podman 4 along.
 4. Remove the Podman 4 notes from the install docs (the 4.9 test floor, the
    layer copy across id mappings) and amend ADR 0020's decision 6.
 
-Check the two Podman defects after this lands:
-[stale session network](../issues/podman-stale-session-network.md) and
-[box never reaches the egress](../issues/podman-box-never-reaches-egress.md).
+Requiring Podman 5 does not fix the
+[stale session network](../issues/podman-stale-session-network.md), which
+happens on Podman 5.7 too. Check whether the
+[box never reaches the egress](../issues/podman-box-never-reaches-egress.md)
+recurs after it lands.

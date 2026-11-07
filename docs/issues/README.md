@@ -7,7 +7,7 @@ reproducing it on purpose and checking the fix against that reproduction.
 
 - [Interrupted test runs leave their resources behind](interrupted-test-runs-leave-resources.md)
   (needs-triage)
-- [Podman: a cancelled session can leave its network half removed](podman-stale-session-network.md)
-  (needs-info)
+- [Podman: stale network state breaks joining a session network](podman-stale-session-network.md)
+  (needs-triage)
 - [Podman: a box sometimes never reaches the egress](podman-box-never-reaches-egress.md)
   (needs-info)
