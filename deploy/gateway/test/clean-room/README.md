@@ -12,7 +12,7 @@ match `release.version` for gateway/platform packages and `release.sdkVersion`
 for the independently versioned browser SDK. All manifest artifact sizes and SHA256
 checksums are checked before installation.
 
-The runner builds a fresh Node 24 image with pinned Playwright and Chromium,
+The runner builds a fresh Node 26 image with pinned Playwright and Chromium,
 and copies only the CLI binary from a digest-pinned Docker 29 image.
 It copies only the test driver, a socket-interruption relay and the scripted
 model fixture into its build context. Its runtime mounts contain only copied

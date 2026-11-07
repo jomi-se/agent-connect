@@ -25,7 +25,7 @@ cargo-zigbuild `0.23` and cargo-dist `0.33.0`. `mise.lock` records their exact
 versions and SHA-256 checksums. In a checkout, run `mise trust && mise install`,
 or install the same versions another way. CI installs them with `mise-action`;
 `scripts/ci-build-env.sh` then exports the musl compiler wrappers and path
-remapping. CI uses Node `24.15.0` and the publishing job uses npm `11.19.1`.
+remapping. CI uses Node `26.13.0` and the publishing job uses npm `11.19.1`.
 
 The explicit native matrix is:
 
@@ -72,7 +72,7 @@ references.
 
 CI runs this credential-free acceptance sequence on every PR and push to `main`.
 Run it locally only to reproduce a CI failure, on a supported **Linux** host
-with the `mise.toml` build tools, Node 24 and Docker:
+with the `mise.toml` build tools, Node 26 and Docker:
 
 ```sh
 npm ci

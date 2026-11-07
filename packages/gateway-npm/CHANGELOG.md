@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The box is built on Node 26.13.0, the current LTS, instead of Node 24.
+  The launcher still runs on Node 24.15 or newer.
+
 ## 0.0.6
 
 - On Podman, a session's network no longer breaks the egress's name

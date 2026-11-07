@@ -50,7 +50,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24.15.0
+          node-version: 26.13.0
           package-manager-cache: false
       - name: Hash each job's inputs
         id: hash
@@ -113,7 +113,7 @@ jobs:
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24.15.0
+          node-version: 26.13.0
           cache: npm
 
       - run: npm ci
@@ -182,7 +182,7 @@ jobs:
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24.15.0
+          node-version: 26.13.0
           cache: npm
 
       - run: npm ci
@@ -216,7 +216,7 @@ jobs:
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24.15.0
+          node-version: 26.13.0
           cache: npm
 
       - run: npm ci
@@ -281,7 +281,7 @@ jobs:
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24.15.0
+          node-version: 26.13.0
           cache: npm
 
       - run: npm ci

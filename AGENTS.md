@@ -69,7 +69,7 @@ caution.
 
 ## Commands
 
-Use npm workspaces from the repository root with Node 24 LTS (>=24.15, <25):
+Use npm workspaces from the repository root with Node 26 LTS (>=26.13, <27):
 
 ```sh
 npm install

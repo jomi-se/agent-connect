@@ -8,7 +8,7 @@ release.**
 
 ## 1. Install
 
-You need Node 24 LTS, a container engine (Docker or Podman) that your user can
+You need Node 24.15 or newer, a container engine (Docker or Podman) that your user can
 run without `sudo`, a browser
 and a Codex or Claude Code subscription. Docker Desktop or Docker Engine with
 its buildx plugin is the tested baseline. On Linux, use rootless Podman, which

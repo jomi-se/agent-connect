@@ -228,7 +228,7 @@ try {
       "MOCK_PORT=18931",
       "-e",
       "MOCK_LOG=/log/model.jsonl",
-      "node:24-bookworm",
+      "node:26-bookworm",
       "node",
       "/app/server.mjs",
     ]);
