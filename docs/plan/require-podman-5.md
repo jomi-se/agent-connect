@@ -21,4 +21,3 @@ workaround should go rather than carry Podman 4 along.
 Check the two Podman defects after this lands:
 [stale session network](../issues/podman-stale-session-network.md) and
 [box never reaches the egress](../issues/podman-box-never-reaches-egress.md).
-Both were seen only on Podman 4.9.

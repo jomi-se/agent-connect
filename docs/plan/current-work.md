@@ -4,7 +4,9 @@ Updated: 2026-11-07
 
 Where the project stands. What comes next is in [plans](README.md), what is
 broken in [issues](../issues/), and what nobody has accepted yet in
-[ideas](../ideas/). Git history is the changelog.
+[ideas](../ideas/). What each release changed is in the
+[gateway](../../packages/gateway-npm/CHANGELOG.md) and
+[browser SDK](../../packages/web-sdk/CHANGELOG.md) changelogs.
 
 ## Releases
 
