@@ -8,7 +8,7 @@ application integration.
 - [Install the ACP gateway](install/README.md)
 - [Configuration](install/configuration.md) and [troubleshooting](install/troubleshooting.md)
 - [Owner release checklist](install/release.md)
-- [Current work and owner gates](plan/current-work.md)
+- [Current work](plan/current-work.md), [plans](plan/README.md), [open defects](issues/README.md) and [ideas](ideas/README.md); [how work is tracked](agents/issue-tracker.md)
 - [Architecture](architecture/target-architecture.md)
 - [Browser SDK](../packages/web-sdk/README.md)
 - [Testing strategy](architecture/testing-strategy.md)

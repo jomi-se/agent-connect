@@ -43,7 +43,7 @@ effects. Capacity is released only after owned resource cleanup succeeds.
 Routine gates exercise real pinned ACP adapters with deterministic inference,
 isolated state and packaged artifact installation. Real-model app acceptance is
 separate evidence. See [testing strategy](architecture/testing-strategy.md) and
-[current owner gates](plan/current-work.md).
+[release qualification](plan/release-qualification/spec.md).
 
 No generalized agent orchestration, arbitrary MCP features, Android automation,
 second proprietary session protocol, production multi-tenancy or credential

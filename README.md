@@ -90,7 +90,7 @@ application acceptance is separate evidence.
 
 - [Documentation](docs/README.md), [mission](docs/mission.md) and [architecture](docs/architecture/target-architecture.md)
 - [Configuration](docs/install/configuration.md) and [troubleshooting](docs/install/troubleshooting.md)
-- [Current work and owner gates](docs/plan/current-work.md)
+- [Current work](docs/plan/current-work.md): releases, [plans](docs/plan/README.md), [open defects](docs/issues/README.md) and [ideas](docs/ideas/README.md)
 - [Testing strategy](docs/architecture/testing-strategy.md)
 
 ## License

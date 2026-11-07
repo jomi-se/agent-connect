@@ -1,7 +1,9 @@
 # Repository guidance
 
-This file holds durable rules only. Release status, open gates and deferred work
-live in `docs/plan/current-work.md`; decisions live in `docs/decisions/`.
+This file holds durable rules only. Release status lives in
+`docs/plan/current-work.md`, accepted work in `docs/plan/`, defects in
+`docs/issues/`, unaccepted proposals in `docs/ideas/` and decisions in
+`docs/decisions/`. `docs/agents/issue-tracker.md` says how they work.
 
 ## Product boundary
 
@@ -135,7 +137,8 @@ Run the formatter once, just before final verification and commit.
 - Architecture: `docs/architecture/`
 - Decisions: `docs/decisions/`
 - Install, configuration and release: `docs/install/`
-- Current work and owner gates: `docs/plan/current-work.md`
+- Current work: `docs/plan/current-work.md`; plans `docs/plan/`, defects
+  `docs/issues/`, ideas `docs/ideas/` (`docs/agents/issue-tracker.md`)
 - Dated research: `docs/research/`; superseded material: `docs/archive/`
 
 Update the earliest source of truth that changed; do not leave contradictory
