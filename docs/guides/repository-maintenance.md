@@ -50,8 +50,11 @@ remain advisory; dependency-boundary violations are hard failures.
 
 These run as parallel jobs: static checks (format, typecheck, docs, unit tests,
 lint, dependency boundaries, version and pin checks), Rust, the web SDK with
-WebMCP, and the gateway (release build, box-backed scenarios, clean room).
-`Required checks` passes when every job passed or was reused.
+WebMCP, and the gateway. The gateway builds the release artifacts once, with
+Rust dependencies cached, then runs its box-backed gates against them in four
+parallel jobs: scenarios, boxed scenarios, the clean room, and the owner UI
+with teardown. Each gate job checks the artifacts' receipt against its own
+checkout first. `Required checks` passes when every job passed or was reused.
 
 The static checks always run. Rust, web and gateway each hash what they depend
 on with `scripts/ci-inputs.mjs`: every tracked file except those a job lists as

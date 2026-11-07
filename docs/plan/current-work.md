@@ -173,10 +173,10 @@ Backlog:
 - Continue reducing CI time without dropping gates. Release-artifact reuse
   removes the acceptance runner/gateway rebuilds, and CI runs static, Rust,
   web and gateway jobs in parallel, reusing any whose inputs were already
-  verified green; remaining possibilities are:
-  1. Cache Docker box layers between runs (the Rust job caches its
-     dependencies).
-  2. Split the gateway job into a build job plus parallel jobs for owner UI,
-     gateway scenarios, boxed scenarios with teardown, and clean-room.
+  verified green. The gateway builds once with cached Rust dependencies and
+  runs its gates in four parallel jobs. Remaining possibilities are:
+  1. Cache Docker box layers between runs.
+  2. Run the gateway scenarios concurrently; today the longest gate job runs
+     them one after another.
   3. Maybe shorten the test-only waits in `*-cut`, `expire` and `overflow`
      (8 to 17 seconds each), keeping the timeout behaviour they prove.
