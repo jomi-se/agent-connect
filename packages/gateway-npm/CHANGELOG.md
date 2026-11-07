@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.0.6
+
+- On Podman, a session's network no longer breaks the egress's name
+  resolution. Session networks are created without DNS, and the box reaches
+  the egress through host entries instead. Before, any open session made every
+  outside lookup fail on Podman 5, so no prompt reached its provider.
+- The box keeps Claude Code out of auto mode. claude-agent-acp 0.101.0 started
+  sessions in auto mode, whose classifier answers permission requests itself,
+  so the gateway's Claude profiles stopped applying. The box now ships managed
+  settings that keep Claude Code's asking mode; they outrank the harness
+  home's own settings.
+- The gateway and the egress log one JSON object per line in OpenTelemetry's
+  log data model, with `session.id` on everything a session causes and no
+  session content: each ACP message gets one record with a 50-character
+  preview. The box runs with no log driver, and on Podman the egress logs to
+  the journal. See ADR 0021.
+- The gateway logs how each session's box reaches its peers, and the egress
+  logs a failed lookup as its own reason and each box's first connection.
+- The macOS build runs on GitHub's macos-26 image; macos-14 was retired.
+
 ## 0.0.5
 
 Nothing an owner installed is kept compatible before 1.0: after upgrading,
