@@ -7,3 +7,5 @@ accept it first, then move it into [plans](../plan/), with an
 
 - [Build the gateway faster for the gates on ordinary pushes](faster-gate-build.md)
   (needs-triage)
+- [Continue a conversation after the page reloads](continue-after-reload.md)
+  (needs-triage)
