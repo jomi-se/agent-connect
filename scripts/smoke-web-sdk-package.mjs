@@ -86,10 +86,17 @@ try {
     "tool-schema",
     "draft7-meta-schema",
     "zod-jitless",
+    "version",
   ];
   assert.deepEqual(
     readdirSync(dist).sort(),
     expected.flatMap((name) => [`${name}.js`, `${name}.d.ts`]).sort(),
+  );
+  // The tool server reports the version this package ships as.
+  assert.ok(
+    readFileSync(join(dist, "version.js"), "utf8").includes(
+      `"${sourceManifest.version}"`,
+    ),
   );
   const builtins = new Set(
     builtinModules.map((name) => name.replace(/^node:/, "")),
