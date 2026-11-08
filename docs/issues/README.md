@@ -11,3 +11,5 @@ reproducing it on purpose and checking the fix against that reproduction.
   (needs-triage)
 - [Podman: a box sometimes never reaches the egress](podman-box-never-reaches-egress.md)
   (needs-info)
+- [The lateask-cut scenario races Codex's tool listing](lateask-cut-races-tool-listing.md)
+  (ready-for-agent)
