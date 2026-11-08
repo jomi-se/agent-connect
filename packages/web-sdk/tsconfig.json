@@ -3,7 +3,8 @@
   "compilerOptions": {
     "rootDir": ".",
     "types": ["vitest/globals"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "resolveJsonModule": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "examples/**/*.tsx", "e2e/**/*.ts"]
 }

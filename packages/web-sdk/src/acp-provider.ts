@@ -11,6 +11,7 @@ import {
   type AcpPairing,
 } from "./acp-pairing.js";
 import { AgentConnectError } from "./errors.js";
+import { SDK_VERSION } from "./version.js";
 import { SingleMcpServer, McpOverAcpError } from "./single-mcp-server.js";
 import {
   createResumableAcpStream,
@@ -246,7 +247,7 @@ export class AcpProvider implements AcpTaskSource {
     this.server = new SingleMcpServer({
       serverId: "application-tools",
       name: "app",
-      version: "0.0.10",
+      version: SDK_VERSION,
       tools: this.definitions.map((t) => ({
         ...t,
         execute: (args, ctx) => {

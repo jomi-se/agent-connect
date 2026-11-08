@@ -121,7 +121,7 @@ jobs:
       - name: Test the PR ancestry policy
         run: ./scripts/test-pr-rebase.sh
 
-      - name: Check ACP versions and adapter pins
+      - name: Check that the release versions agree
         run: node scripts/release.mjs check
 
       - run: npm run format:check

@@ -53,6 +53,11 @@ if (!/^0\.0\.\d+$/.test(sdk.version) || !/^0\.0\.\d+$/.test(version))
   throw new Error(
     "SDK and gateway must remain on independently versioned 0.0.x releases",
   );
+// The published sample installs the SDK from npm, so it names the SDK's version.
+if (sample.dependencies?.["@open-agent-connect/web"] !== sdk.version)
+  throw new Error(
+    `The chat sample must depend on @open-agent-connect/web ${sdk.version}`,
+  );
 // Platform packages are unpublished until release, so the workspace launcher does
 // not declare them (older npm ci rejects lockfiles missing optional packages).
 // The packed launcher declares every platform at the gateway version.
@@ -129,7 +134,7 @@ async function pack(path) {
   return packed[0].filename;
 }
 if (command === "check") {
-  console.log(`ACP release versions and adapter pins agree: ${version}`);
+  console.log(`ACP release versions agree: ${version}`);
 } else if (command === "pack") {
   const artifacts = resolve(repo, values.artifacts);
   const available = await readdir(artifacts);

@@ -188,7 +188,12 @@ test("release checks accept independent SDK versions and reject gateway/box drif
   await manifest("packages/web-sdk/package.json", { version: "0.0.10" });
   await manifest("packages/gateway-npm/package.json", { version: "0.0.1" });
   await manifest("deploy/gateway/box/package.json", { version: "0.0.1" });
-  await manifest("examples/acp-chat/package.json", { version: "0.0.1" });
+  const sample = (version, sdk = "0.0.10") =>
+    manifest("examples/acp-chat/package.json", {
+      version,
+      dependencies: { "@open-agent-connect/web": sdk },
+    });
+  await sample("0.0.1");
   await writeFile(
     join(directory, "crates/gateway/Cargo.toml"),
     '[package]\nversion = "0.0.1"\n',
@@ -210,10 +215,14 @@ test("release checks accept independent SDK versions and reject gateway/box drif
   assert.notEqual(boxDrift.status, 0);
   assert.match(boxDrift.stderr, /must share one version/);
   await manifest("deploy/gateway/box/package.json", { version: "0.0.1" });
-  await manifest("examples/acp-chat/package.json", { version: "0.0.2" });
+  await sample("0.0.2");
   const sampleDrift = check();
   assert.notEqual(sampleDrift.status, 0);
   assert.match(sampleDrift.stderr, /must share one version/);
+  await sample("0.0.1", "0.0.9");
+  const sampleSdkDrift = check();
+  assert.notEqual(sampleSdkDrift.status, 0);
+  assert.match(sampleSdkDrift.stderr, /chat sample must depend/);
 });
 
 for (const prefix of ["/home/example/", "/Users/example/"]) {
@@ -539,7 +548,12 @@ async function publicationRepository(t) {
   ])
     await writeFile(
       join(directory, path, "package.json"),
-      JSON.stringify({ version }),
+      JSON.stringify({
+        version,
+        ...(path === "examples/acp-chat" && {
+          dependencies: { "@open-agent-connect/web": version },
+        }),
+      }),
     );
   await writeFile(
     join(directory, "crates/gateway/Cargo.toml"),

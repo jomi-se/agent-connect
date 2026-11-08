@@ -20,13 +20,12 @@ test("missing local binary fails without downloading anything", () => {
   assert.match(result.stderr, /does not exist/);
 });
 
-test("published launcher accepts later Node majors without a runtime installation", async () => {
+// A floor and no ceiling, so later Node majors keep working. Whether CI's own
+// Node clears the floor is scripts/node-pins.mjs's check.
+test("published launcher sets a Node floor and no ceiling", async () => {
   const { readFile } = await import("node:fs/promises");
-  const { satisfies } = await import("semver");
   const manifest = JSON.parse(
     await readFile(resolve(import.meta.dirname, "../package.json"), "utf8"),
   );
-  assert.equal(satisfies("24.14.0", manifest.engines.node), false);
-  assert.equal(satisfies("24.15.0", manifest.engines.node), true);
-  assert.equal(satisfies("26.0.0", manifest.engines.node), true);
+  assert.match(manifest.engines.node, /^>=\d+\.\d+(?:\.\d+)?$/);
 });

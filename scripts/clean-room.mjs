@@ -142,9 +142,28 @@ try {
     );
   for (const file of ["release.json", ...files])
     await copyFile(join(artifactDirectory, file), join(run, "artifacts", file));
+  // The driver runs the Playwright the repository locks, so a Playwright bump
+  // at the root moves the clean room with it.
+  const lock = JSON.parse(
+    await readFile(join(repo, "package-lock.json"), "utf8"),
+  );
+  const playwright = lock.packages?.["node_modules/playwright"]?.version;
+  if (!playwright) throw new Error("package-lock.json locks no playwright");
+  await writeFile(
+    join(run, "context", "package.json"),
+    `${JSON.stringify(
+      {
+        name: "agent-connect-clean-room-driver",
+        private: true,
+        type: "module",
+        dependencies: { playwright },
+      },
+      null,
+      2,
+    )}\n`,
+  );
   for (const file of [
     "Dockerfile",
-    "package.json",
     "run.mjs",
     "relay.mjs",
     "owner-terminal.mjs",
