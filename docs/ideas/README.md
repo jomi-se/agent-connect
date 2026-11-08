@@ -5,4 +5,5 @@ accept it first, then move it into [plans](../plan/), with an
 [ADR](../decisions/) if it decides architecture. See
 [how work is tracked](../agents/issue-tracker.md).
 
-None are open right now.
+- [Build the gateway faster for the gates on ordinary pushes](faster-gate-build.md)
+  (needs-triage)
