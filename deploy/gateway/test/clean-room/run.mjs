@@ -242,8 +242,6 @@ async function cleanSessionResources() {
   };
 }
 try {
-  assert.equal(process.versions.node.split(".")[0], "24");
-  assert.ok(Number(process.versions.node.split(".")[1]) >= 15);
   const release = JSON.parse(
     await readFile(join(artifacts, "release.json"), "utf8"),
   );
@@ -325,6 +323,8 @@ try {
     "npm",
     [
       "install",
+      // Fails unless this container's Node satisfies each package's engines.
+      "--engine-strict",
       "--ignore-scripts",
       "--omit=optional",
       "--no-audit",
@@ -360,7 +360,13 @@ try {
   await writeFile(join(sample, "package.json"), JSON.stringify(manifest));
   await command(
     "npm",
-    ["install", "--ignore-scripts", "--no-audit", "--no-fund"],
+    [
+      "install",
+      "--engine-strict",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+    ],
     { cwd: sample },
   );
   // Resolve the installed public root export; no SDK source or aliases enter this build.

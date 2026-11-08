@@ -69,7 +69,10 @@ caution.
 
 ## Commands
 
-Use npm workspaces from the repository root with Node 26 LTS (>=26.13, <27):
+Use npm workspaces from the repository root with the Node in `.node-version`
+(26 LTS today). That file is the one place the version lives: CI reads it, and
+`npm run lint` fails until every `engines` field, container image and workflow
+agrees with it. To move Node, change `.node-version`, then fix what lint lists.
 
 ```sh
 npm install

@@ -25,7 +25,7 @@ cargo-zigbuild `0.23` and cargo-dist `0.33.0`. `mise.lock` records their exact
 versions and SHA-256 checksums. In a checkout, run `mise trust && mise install`,
 or install the same versions another way. CI installs them with `mise-action`;
 `scripts/ci-build-env.sh` then exports the musl compiler wrappers and path
-remapping. CI uses Node `26.13.0` and the publishing job uses npm `11.19.1`.
+remapping. CI uses the Node in `.node-version` and the publishing job uses npm `11.19.1`.
 
 The explicit native matrix is:
 

@@ -22,6 +22,7 @@ import {
 } from "./test-fixture-cleanup.mjs";
 import { requireBoxImage } from "./test-box-images.mjs";
 import { gatewayTestBinary } from "./gateway-test-binary.mjs";
+import { readNodeVersion } from "./node-pins.mjs";
 
 const boxImage = requireBoxImage();
 const repo = resolve(import.meta.dirname, "..");
@@ -228,7 +229,7 @@ try {
       "MOCK_PORT=18931",
       "-e",
       "MOCK_LOG=/log/model.jsonl",
-      "node:26-bookworm",
+      `node:${readNodeVersion().major}-bookworm`,
       "node",
       "/app/server.mjs",
     ]);

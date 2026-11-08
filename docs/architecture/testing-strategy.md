@@ -23,7 +23,7 @@ an imitation of its events.
 
 ## Commands
 
-Use Node 26 LTS >=26.13 and <27, Docker and the pinned ACP build tools. Boxed
+Use the Node in `.node-version` (26 LTS today), Docker and the pinned ACP build tools. Boxed
 gates build the box with the latest harnesses from npm, as owners get them; the
 unboxed compatibility fixtures keep their own adapter pins. Native browser gates use
 `config/webmcp-test-compat.json`.
