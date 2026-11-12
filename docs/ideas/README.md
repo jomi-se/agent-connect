@@ -9,3 +9,5 @@ accept it first, then move it into [plans](../plan/), with an
   (needs-triage)
 - [Continue a conversation after the page reloads](continue-after-reload.md)
   (needs-triage)
+- [Persistent workspaces an application can request](persistent-app-workspaces.md)
+  (needs-triage)
