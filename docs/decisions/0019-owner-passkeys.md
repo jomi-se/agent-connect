@@ -50,7 +50,11 @@ both.** What an address accepts follows from which one it has:
 6. **Factors are per address.** Credentials are indexed by the full configured
    origin, port included. A passkey's RP ID is the exact hostname, with its
    own random user handle per address; no sharing across entry points, no
-   parent-domain, wildcard or Related Origins policy.
+   parent-domain, wildcard or Related Origins policy. Enrolling a new address
+   takes only the passphrase, never another address's passkey: a passkey
+   protects its own address, not other names that reach the same gateway.
+   Entry points are not otherwise told apart; a tailnet name and a public
+   tunnel get the same treatment.
 7. **Recovery is on the host.** One reset command replaces `reset-totp`. It
    takes an exact address or an explicit "all", keeps the passphrase and the
    grants, and returns the affected addresses to setup.
@@ -61,7 +65,10 @@ both.** What an address accepts follows from which one it has:
 9. **JavaScript is required for passkeys.** Inspecting, denying, revoking and
    navigating stay server-rendered forms. Passkey enrollment and use need
    WebAuthn; a browser without it gets a plain explanation, never a
-   passphrase-only way past an enrolled passkey.
+   passphrase-only way past an enrolled passkey. Applications see no change:
+   the script lives only in the gateway's own owner pages, and the OAuth flow
+   and browser SDK are untouched. `PRODUCT.md`'s no-JavaScript rule changes
+   to match when this ships.
 
 ## Protocol, state and CSP
 
@@ -80,7 +87,7 @@ session, exact origin, purpose and current credential; an approval challenge
 also binds the pending request and the selected duration and profile. A failed
 check consumes the challenge. A restart invalidates unfinished ceremonies.
 Enrollment re-checks at commit that the address is still unenrolled, and
-invalidates other sessions on that address.
+replaces the setup session with a full owner session.
 
 A small static script calls `navigator.credentials.create/get` and posts the
 result as a same-origin form. Credentials and passphrases stay out of URLs,
