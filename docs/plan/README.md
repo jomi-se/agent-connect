@@ -16,7 +16,7 @@ defects are in [issues](../issues/) and unaccepted proposals in
 - [Bind grants to the browser that paired](browser-bound-grants.md)
   (needs-triage): DPoP instead of origin-checked bearer tokens; transport,
   recovery and migration still open.
-- [Owner passkeys](owner-passkeys.md) (ready-for-human): a passkey or TOTP per address;
-  ADR 0019 accepted; the plan is next.
+- [Owner passkeys](owner-passkeys.md) (in-progress): a passkey or TOTP per address;
+  library spike done, mapping today's owner auth next.
 - [Harness credentials for boxed sessions](credentials.md): implemented; the
   credential model the gateway follows, kept current.
