@@ -10,6 +10,6 @@ host-side reset per address. No migration: the gateway-wide TOTP enrollment is
 dropped on upgrade.
 
 [ADR 0019](../decisions/0019-owner-passkeys.md) holds the table and the
-decisions, and waits for the owner to accept it. First step after that:
-check that `webauthn-rs` and its OpenSSL 3 dependency build and link on every
-release target.
+decisions, and was accepted on 2026-11-19. Next: a step plan that names what
+is still unknown, starting with which WebAuthn library ships on every release
+target.

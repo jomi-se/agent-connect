@@ -17,6 +17,6 @@ defects are in [issues](../issues/) and unaccepted proposals in
   (needs-triage): DPoP instead of origin-checked bearer tokens; transport,
   recovery and migration still open.
 - [Owner passkeys](owner-passkeys.md) (ready-for-human): a passkey or TOTP per address;
-  waits on accepting ADR 0019.
+  ADR 0019 accepted; the plan is next.
 - [Harness credentials for boxed sessions](credentials.md): implemented; the
   credential model the gateway follows, kept current.

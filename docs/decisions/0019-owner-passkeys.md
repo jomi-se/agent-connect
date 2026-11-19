@@ -1,6 +1,6 @@
 # ADR 0019: Owner passkeys
 
-Status: Proposed (rewritten 2026-11-19)
+Status: Accepted (2026-11-19) 🙌
 
 ## Context
 
