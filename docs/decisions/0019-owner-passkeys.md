@@ -45,8 +45,8 @@ both.** What an address accepts follows from which one it has:
    machine, the tailnet's DNS name, or a domain or tunnel the operator
    controls. The exact wording and links are settled with the page.
 5. **No downgrade.** Once an address has a passkey, TOTP is not accepted there.
-   The factor is removed only by the owner signed in with it, or by the
-   host-side reset, after which the address is back to setup.
+   Removing a factor puts its address back to setup. A session signed in with
+   TOTP can manage TOTP addresses only, never remove a passkey.
 6. **Factors are per address.** Credentials are indexed by the full configured
    origin, port included. A passkey's RP ID is the exact hostname, with its
    own random user handle per address; no sharing across entry points, no
@@ -55,9 +55,18 @@ both.** What an address accepts follows from which one it has:
    protects its own address, not other names that reach the same gateway.
    Entry points are not otherwise told apart; a tailnet name and a public
    tunnel get the same treatment.
-7. **Recovery is on the host.** One reset command replaces `reset-totp`. It
-   takes an exact address or an explicit "all", keeps the passphrase and the
-   grants, and returns the affected addresses to setup.
+7. **Everyday changes in the console, lockout recovery on the host.**
+
+   | Action | Owner console | Host CLI |
+   |---|---|---|
+   | Remove an address's factor | yes, with a fresh assertion of the signed-in factor | yes, an exact address or explicit "all" |
+   | Change the passphrase | yes, the old passphrase plus a fresh assertion | yes |
+   | Full reset: new passphrase, every address back to setup | no | yes |
+
+   Changing the passphrase keeps enrolled factors, since the passphrase only
+   gates enrollment. Grants survive all of these. Host access is owner
+   authority, so the CLI needs no factor; one reset command replaces
+   `reset-totp`.
 8. **No migration.** The project is pre-1.0 and keeps nothing compatible. The
    gateway-wide TOTP enrollment is dropped on upgrade; every address starts
    unenrolled, which by decision 3 means setup only, so nothing gains
