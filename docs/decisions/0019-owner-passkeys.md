@@ -106,11 +106,13 @@ browser storage and logs. A script-bearing page gets a fresh nonce of at least
 
 ## Library
 
-`webauthn-rs` 0.5.5 is the candidate. Its passkey API keeps registration and
-authentication state on the server, requires user verification and allows
-synced passkeys. Its core needs OpenSSL 3, so before any feature work, every
-release target must build and link it within its existing install contract.
-If that fails, pick another library before writing the feature.
+`webauthn-rs` 0.6.2. Its passkey API keeps registration and authentication
+state on the server, requires user verification and allows synced passkeys.
+It uses pure-Rust crypto, with no OpenSSL; it builds static for the Linux musl
+release targets, and its builder refuses IP literal origins. It does not tie a
+credential to its address on the server side, so the gateway's per-address
+storage is the guard. The spike is recorded in the
+[plan](../plan/owner-passkeys.md).
 
 ## Qualification
 
@@ -125,4 +127,4 @@ separately; a virtual authenticator proves the protocol, not the devices.
 References: [WebAuthn Level 3](https://www.w3.org/TR/webauthn-3/),
 [Chromium WebAuthn origins](https://chromium.googlesource.com/chromium/src/+/HEAD/content/browser/webauth/origins.md),
 [CSP nonces](https://www.w3.org/TR/CSP3/#security-nonces),
-[webauthn-rs 0.5.5](https://docs.rs/webauthn-rs/0.5.5/webauthn_rs/struct.Webauthn.html).
+[webauthn-rs 0.6.2](https://docs.rs/webauthn-rs/0.6.2/webauthn_rs/struct.Webauthn.html).
