@@ -7,6 +7,7 @@ use std::fmt::Write as _;
 pub(super) const SECURITY: &str = "/agent-connect/owner/security";
 pub(super) const GATEWAY: &str = "/agent-connect/owner/gateway";
 pub(super) const TOTP: &str = "/agent-connect/owner/totp";
+pub(super) const SETUP: &str = "/agent-connect/owner/setup";
 
 pub(super) struct Page {
     pub title: String,
@@ -99,7 +100,17 @@ fn plain(title: &str, width: Width, body: String) -> Page {
 
 const CODE_INPUT: &str = "class='code-input' inputmode=numeric pattern='[0-9]{6}' maxlength=6 autocomplete=one-time-code";
 
-pub(super) fn sign_in(fields: &str, factor: bool, waiting: Option<&str>) -> Page {
+/// How this address signs in: its passkey alone, the passphrase with a TOTP
+/// code, or the passphrase alone to set up a factor.
+pub(super) enum SignIn {
+    Passkey(String),
+    Totp,
+    Setup,
+}
+
+const PASSPHRASE_INPUT: &str = "<div class='field'><label for='owner-passphrase'>Owner passphrase</label><input id='owner-passphrase' type=password name=passphrase autocomplete=current-password required maxlength=1024></div>";
+
+pub(super) fn sign_in(fields: &str, method: SignIn, waiting: Option<&str>) -> Page {
     let lede = match waiting {
         Some(name) => format!(
             "Sign in to review the request from <strong>{}</strong>.",
@@ -107,27 +118,85 @@ pub(super) fn sign_in(fields: &str, factor: bool, waiting: Option<&str>) -> Page
         ),
         None => "Manage the apps that use your agent.".into(),
     };
-    let factor = if factor {
-        format!(
-            "<div class='field'><label for='login-totp'>Authenticator code</label><input id='login-totp' name=totp {CODE_INPUT} required></div>"
-        )
-    } else {
-        String::new()
+    let (form, script) = match method {
+        SignIn::Passkey(options) => (
+            format!(
+                "<form method=post action='{LOGIN}' data-passkey='{}' data-ceremony=get>{fields}<input type=hidden name=credential value=''><p class='passkey-status hint' role='status' aria-live='polite'></p><div class='actions'><button class='wide'>Sign in with your passkey</button></div></form>",
+                escape(&options)
+            ),
+            PASSKEY_SCRIPT,
+        ),
+        SignIn::Totp => (
+            format!(
+                "<form method=post action='{LOGIN}'>{fields}{PASSPHRASE_INPUT}<div class='field'><label for='login-totp'>Authenticator code</label><input id='login-totp' name=totp {CODE_INPUT} required></div><div class='actions'><button class='wide'>Sign in</button></div></form>"
+            ),
+            "",
+        ),
+        SignIn::Setup => (
+            format!(
+                "<p class='hint'>This address has no passkey yet. Your passphrase lets you set one up, and nothing else.</p><form method=post action='{LOGIN}'>{fields}{PASSPHRASE_INPUT}<div class='actions'><button class='wide'>Continue</button></div></form>"
+            ),
+            "",
+        ),
     };
-    plain(
+    let mut page = plain(
         "Sign in",
         Width::Compact,
-        format!(
-            "<div class='panel'><h1>Sign in</h1><p class='lede'>{lede}</p><form method=post action='{LOGIN}'>{fields}<div class='field'><label for='owner-passphrase'>Owner passphrase</label><input id='owner-passphrase' type=password name=passphrase autocomplete=current-password required maxlength=1024></div>{factor}<div class='actions'><button class='wide'>Sign in</button></div></form></div>"
-        ),
-    )
+        format!("<div class='panel'><h1>Sign in</h1><p class='lede'>{lede}</p>{form}</div>"),
+    );
+    page.script = script;
+    page
 }
+
+/// Enroll this address's factor. `options` is None where a passkey cannot work.
+pub(super) fn setup(fields: &str, options: Option<&str>) -> Page {
+    let body = match options {
+        Some(options) => format!(
+            "<div class='panel'><h1>Set up a passkey</h1><p class='lede'>From now on, your passkey alone signs in and approves apps on this address.</p><form method=post action='/agent-connect/owner/passkey/enroll' data-passkey='{}' data-ceremony=create>{fields}<input type=hidden name=credential value=''><p class='passkey-status hint' role='status' aria-live='polite'></p><div class='actions'><button class='wide'>Create a passkey</button></div></form><p class='hint below'>Can’t use a passkey here? <a href='{TOTP}'>Use an authenticator app instead</a>.</p></div>",
+            escape(options)
+        ),
+        None => format!(
+            "<div class='panel'><h1>Set up an authenticator</h1><p class='lede'>Passkeys need a name, and you opened the gateway by a bare IP address, where browsers don’t allow them.</p><p>For a passkey, open the gateway by a name instead: <code>localhost</code> on the same machine, your tailnet’s name for it, or a domain or tunnel you control.</p><p>Or set up an authenticator app for this address: sign-in will take your passphrase and a code.</p><div class='actions'><a class='button wide' href='{TOTP}'>Use an authenticator app</a></div></div>"
+        ),
+    };
+    let mut page = plain("Set up sign-in", Width::Compact, body);
+    if options.is_some() {
+        page.script = PASSKEY_SCRIPT;
+    }
+    page
+}
+
+/// Runs the passkey ceremony for a form with `data-passkey` options, then posts
+/// the credential with the form. Without JavaScript or WebAuthn the form says so.
+const PASSKEY_SCRIPT: &str = r#"(() => {
+  for (const form of document.querySelectorAll('form[data-passkey]')) {
+    const status = form.querySelector('.passkey-status');
+    const field = form.querySelector('input[name=credential]');
+    if (!window.PublicKeyCredential || !PublicKeyCredential.parseRequestOptionsFromJSON) {
+      status.textContent = 'This browser can’t use passkeys. Try a current browser.';
+    }
+    form.addEventListener('submit', async (event) => {
+      if (field.value || (event.submitter && event.submitter.value === 'deny')) return;
+      event.preventDefault();
+      status.textContent = '';
+      try {
+        const options = JSON.parse(form.dataset.passkey);
+        const credential = form.dataset.ceremony === 'create'
+          ? await navigator.credentials.create({ publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(options.publicKey) })
+          : await navigator.credentials.get({ publicKey: PublicKeyCredential.parseRequestOptionsFromJSON(options.publicKey) });
+        field.value = JSON.stringify(credential.toJSON());
+        form.requestSubmit(event.submitter);
+      } catch {
+        status.textContent = 'The passkey didn’t go through. Try again.';
+      }
+    });
+  }
+})();"#;
 
 pub(super) struct Console {
     pub now: u64,
     pub logout_token: String,
     pub problems: Vec<(String, String)>,
-    pub authenticator: bool,
     pub requests: Vec<Request>,
     /// None when the session runtime cannot report.
     pub live: Option<Vec<Live>>,
@@ -203,13 +272,6 @@ pub(super) fn console(view: Console) -> Page {
             "<div class='alert runtime-problem' role='status'><strong>{}</strong><p>{}</p></div>",
             escape(message),
             commands(repair)
-        );
-    }
-    if !view.authenticator {
-        let _ = write!(
-            body,
-            "<p class='setup'>{}<span>Your passphrase alone can approve apps.</span><a href='{TOTP}'>Add an authenticator</a></p>",
-            shield(false)
         );
     }
     for (index, request) in view.requests.iter().enumerate() {
@@ -498,21 +560,21 @@ fn owner_page(title: &str, tab: Tab, logout_token: String, body: String, css: St
 
 pub(super) struct Security {
     pub logout_token: String,
-    pub authenticator: bool,
+    pub passkey: bool,
     pub active_grants: usize,
     pub revoke_all_token: String,
 }
 
 pub(super) fn security(view: Security) -> Page {
-    let authenticator = if view.authenticator {
+    let authenticator = if view.passkey {
         format!(
-            "<div class='row'>{}<div class='row-main'><p class='row-title'>Authenticator is on</p><p class='meta'>Sign-in and every approval need a fresh code.</p><p class='hint'>Lost it? On the gateway host, stop the gateway and run <code>agent-connect reset-totp</code>, then set it up again here. App access is not affected.</p></div></div>",
+            "<div class='row'>{}<div class='row-main'><p class='row-title'>Passkey is on</p><p class='meta'>Your passkey signs in and approves every app on this address.</p><p class='hint'>Lost it? On the gateway host, stop the gateway and run <code>agent-connect reset-totp</code>, then set up a new one here. App access is not affected.</p></div></div>",
             shield(true)
         )
     } else {
         format!(
-            "<div class='row'>{}<div class='row-main'><p class='row-title'>Authenticator is off</p><p class='meta'>Your passphrase alone can sign in and approve apps.</p></div><a class='button' href='{TOTP}'>Set up</a></div>",
-            shield(false)
+            "<div class='row'>{}<div class='row-main'><p class='row-title'>Authenticator is on</p><p class='meta'>Sign-in and every approval need a fresh code.</p><p class='hint'>Lost it? On the gateway host, stop the gateway and run <code>agent-connect reset-totp</code>, then set it up again here. App access is not affected.</p></div></div>",
+            shield(true)
         )
     };
     let apps = view.active_grants;
@@ -597,16 +659,6 @@ fn addresses(list: &[String]) -> String {
     format!("<ul class='addresses'>{rows}</ul>")
 }
 
-pub(super) fn totp_start(fields: &str) -> Page {
-    plain(
-        "Set up an authenticator",
-        Width::Compact,
-        format!(
-            "<div class='panel'><h1>Set up an authenticator</h1><p class='lede'>Sign-in and every approval will also need a six-digit code from an authenticator app. First, confirm it’s you.</p><form method=post action='/agent-connect/owner/totp/enroll'>{fields}<div class='field'><label for='enroll-passphrase'>Owner passphrase</label><input id='enroll-passphrase' type=password name=passphrase autocomplete=current-password required maxlength=1024></div><div class='actions actions--end'><button>Continue</button><a class='button secondary' href='{SECURITY}'>Cancel</a></div></form></div>"
-        ),
-    )
-}
-
 pub(super) fn totp_scan(secret: &str, uri: &str, fields: &str) -> Page {
     let key = secret
         .as_bytes()
@@ -617,7 +669,7 @@ pub(super) fn totp_scan(secret: &str, uri: &str, fields: &str) -> Page {
         "Add to your authenticator",
         Width::Medium,
         format!(
-            "<div class='panel'><h1>Add Agent Connect to your authenticator</h1><p class='lede'><span class='on-wide'>Scan this code with your phone’s authenticator app.</span><span class='on-narrow'>Open it in your authenticator app on this phone, or scan the code from another device.</span> This setup expires in 10 minutes.</p><div class='enroll'><figure class='qr'>{}<figcaption>Scan with your authenticator</figcaption></figure><div class='enroll-other'><a class='open-app' href='{}'>Open in authenticator app</a><details class='manual'><summary>Enter the key by hand<span class='copy-status' role='status' aria-live='polite'></span></summary><p class='key' aria-label='Setup key'>{key}</p><p class='hint'>Time-based · 6 digits · 30 seconds</p></details></div></div><form method=post action='/agent-connect/owner/totp/verify'>{fields}<div class='field'><label for='enrollment-totp'>Code shown in your authenticator</label><input id='enrollment-totp' name=totp {CODE_INPUT} required></div><div class='actions actions--end'><button>Turn on</button><a class='button secondary' href='{SECURITY}'>Cancel</a></div></form><p class='hint below'>If you lose the authenticator, recovery needs a command on the gateway host.</p></div>",
+            "<div class='panel'><h1>Add Agent Connect to your authenticator</h1><p class='lede'><span class='on-wide'>Scan this code with your phone’s authenticator app.</span><span class='on-narrow'>Open it in your authenticator app on this phone, or scan the code from another device.</span> This setup expires in 10 minutes.</p><div class='enroll'><figure class='qr'>{}<figcaption>Scan with your authenticator</figcaption></figure><div class='enroll-other'><a class='open-app' href='{}'>Open in authenticator app</a><details class='manual'><summary>Enter the key by hand<span class='copy-status' role='status' aria-live='polite'></span></summary><p class='key' aria-label='Setup key'>{key}</p><p class='hint'>Time-based · 6 digits · 30 seconds</p></details></div></div><form method=post action='/agent-connect/owner/totp/verify'>{fields}<div class='field'><label for='enrollment-totp'>Code shown in your authenticator</label><input id='enrollment-totp' name=totp {CODE_INPUT} required></div><div class='actions actions--end'><button>Turn on</button><a class='button secondary' href='{SETUP}'>Back</a></div></form><p class='hint below'>If you lose the authenticator, recovery needs a command on the gateway host.</p></div>",
             qr(uri),
             escape(uri)
         ),
@@ -659,7 +711,13 @@ pub(super) struct Consent {
     pub tools: Vec<Tool>,
     pub fields: String,
     pub profiles: Vec<ProfileChoice>,
-    pub factor: bool,
+    pub factor: ApprovalFactor,
+}
+
+/// What approving takes on this address: a fresh passkey assertion or code.
+pub(super) enum ApprovalFactor {
+    Passkey(String),
+    Totp,
 }
 
 pub(super) struct ProfileChoice {
@@ -712,19 +770,24 @@ pub(super) fn consent(view: Consent) -> Page {
             )
         })
         .collect::<String>();
-    let factor = if view.factor {
-        format!(
-            "<div class='field'><label for='approval-totp'>Authenticator code</label><input id='approval-totp' name=totp {CODE_INPUT} aria-describedby='approval-help'><p id='approval-help' class='hint'>Needed to approve, not to deny.</p></div>"
-        )
-    } else {
-        String::new()
+    let (factor, passkey) = match &view.factor {
+        ApprovalFactor::Totp => (
+            format!(
+                "<div class='field'><label for='approval-totp'>Authenticator code</label><input id='approval-totp' name=totp {CODE_INPUT} aria-describedby='approval-help'><p id='approval-help' class='hint'>Needed to approve, not to deny.</p></div>"
+            ),
+            String::new(),
+        ),
+        ApprovalFactor::Passkey(options) => (
+            "<input type=hidden name=credential value=''><p class='passkey-status hint' role='status' aria-live='polite'>Approving asks for your passkey.</p>".to_string(),
+            format!(" data-passkey='{}' data-ceremony=get", escape(options)),
+        ),
     };
     let count = view.tools.len();
     let mut page = plain(
         &format!("Allow {}?", view.name),
         Width::Full,
         format!(
-            "<header class='consent-head'><h1>Allow <span class='app' title='{}'>{}</span> to use your agent?</h1><p class='from'>from <span class='origin-chip'>{}</span></p></header><section class='block' aria-labelledby='tools-title'><h2 id='tools-title'>It can call only these {} tool{}</h2>{}</section><form class='decision' method=post action='{AUTHORIZE}'>{}<fieldset class='segmented'><legend>Access lasts</legend><div class='opts'>{durations}</div></fieldset><fieldset class='options'><legend>Your agent’s own tools</legend>{profiles}</fieldset><div class='fineprint'><p>An app you approve could obtain your agent’s login and read other apps’ conversations with it. Revoking stops future use; it can’t undo what’s already done.</p><details><summary>What this means</summary><p>Each session runs in a disposable box with restricted network access. The option you pick limits the agent’s own tools there; this app’s tools follow this approval.</p><p>All approved apps share one dedicated login for your agent.</p>{details}<p>Agent Connect uses ACP and MCP-over-ACP, which are still unstable protocols.</p></details></div><div class='decide'>{factor}<div class='decide-actions'><button name=decision value=approve>Approve</button><button class='secondary' name=decision value=deny>Deny</button></div></div></form>",
+            "<header class='consent-head'><h1>Allow <span class='app' title='{}'>{}</span> to use your agent?</h1><p class='from'>from <span class='origin-chip'>{}</span></p></header><section class='block' aria-labelledby='tools-title'><h2 id='tools-title'>It can call only these {} tool{}</h2>{}</section><form class='decision' method=post action='{AUTHORIZE}'{passkey}>{}<fieldset class='segmented'><legend>Access lasts</legend><div class='opts'>{durations}</div></fieldset><fieldset class='options'><legend>Your agent’s own tools</legend>{profiles}</fieldset><div class='fineprint'><p>An app you approve could obtain your agent’s login and read other apps’ conversations with it. Revoking stops future use; it can’t undo what’s already done.</p><details><summary>What this means</summary><p>Each session runs in a disposable box with restricted network access. The option you pick limits the agent’s own tools there; this app’s tools follow this approval.</p><p>All approved apps share one dedicated login for your agent.</p>{details}<p>Agent Connect uses ACP and MCP-over-ACP, which are still unstable protocols.</p></details></div><div class='decide'>{factor}<div class='decide-actions'><button name=decision value=approve>Approve</button><button class='secondary' name=decision value=deny>Deny</button></div></div></form>",
             escape(&view.name),
             escape(&shorten(&view.name, 48)),
             escape(&view.origin),
@@ -735,6 +798,9 @@ pub(super) fn consent(view: Consent) -> Page {
         ),
     );
     page.width = Width::Full;
+    if matches!(view.factor, ApprovalFactor::Passkey(_)) {
+        page.script = PASSKEY_SCRIPT;
+    }
     page
 }
 
@@ -1085,7 +1151,6 @@ mod tests {
             now: 1_700_000_000,
             logout_token: "fixture".into(),
             problems: vec![],
-            authenticator: true,
             requests: vec![],
             live: Some(vec![]),
             events: vec![],

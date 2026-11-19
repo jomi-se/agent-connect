@@ -1,5 +1,7 @@
 use super::*;
 use tower::ServiceExt;
+use webauthn_authenticator_rs::{WebauthnAuthenticator, softpasskey::SoftPasskey};
+use webauthn_rs::prelude::{CreationChallengeResponse, RequestChallengeResponse};
 
 const APP: &str = "https://app.example";
 const ISSUER: &str = "https://gateway.example";
@@ -135,6 +137,10 @@ fn assert_style_hashes(page: &Reply, count: usize) {
         .collect();
     assert_eq!(styles.len(), count);
     let policy = page.headers["content-security-policy"].to_str().unwrap();
+    let policy = policy
+        .split(';')
+        .find(|directive| directive.trim_start().starts_with("style-src"))
+        .unwrap();
     for style in styles {
         let digest =
             base64::engine::general_purpose::STANDARD.encode(Sha256::digest(style.as_bytes()));
@@ -153,27 +159,166 @@ fn cookie(reply: &Reply) -> String {
         .unwrap()
         .to_string()
 }
+fn totp_step(stored: &Stored, origin: &str) -> Option<u64> {
+    match stored.factors.get(origin) {
+        Some(Factor::Totp { last_step, .. }) => *last_step,
+        _ => None,
+    }
+}
 fn advance(auth: &Arc<AuthService>, seconds: u64) {
     auth.clock
         .fetch_add(seconds, std::sync::atomic::Ordering::Relaxed);
 }
-async fn login(auth: &Arc<AuthService>, factor: &str) -> String {
-    let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
-    let response = request(
+/// One software passkey per test gateway, holding a credential per address.
+/// Real registration and assertion: real keys, real signatures, no mocks.
+fn authenticators() -> &'static Mutex<HashMap<PathBuf, SoftPasskey>> {
+    static AUTHENTICATORS: std::sync::OnceLock<Mutex<HashMap<PathBuf, SoftPasskey>>> =
+        std::sync::OnceLock::new();
+    AUTHENTICATORS.get_or_init(Default::default)
+}
+fn passkey_options(text: &str) -> String {
+    let value = text
+        .split("data-passkey='")
+        .nth(1)
+        .expect("page carries passkey options")
+        .split('\'')
+        .next()
+        .unwrap();
+    value
+        .replace("&#39;", "'")
+        .replace("&quot;", "\"")
+        .replace("&gt;", ">")
+        .replace("&lt;", "<")
+        .replace("&amp;", "&")
+}
+/// The browser's part of a passkey sign-in or approval, for the page's options.
+fn assert_passkey(auth: &Arc<AuthService>, origin: &str, page: &str) -> String {
+    let options: RequestChallengeResponse = serde_json::from_str(&passkey_options(page)).unwrap();
+    let mut keys = authenticators().lock().unwrap();
+    let key = keys
+        .entry(auth.config.state_dir.clone())
+        .or_insert_with(|| SoftPasskey::new(true));
+    serde_json::to_string(
+        &key.do_authentication(Url::parse(origin).unwrap(), options)
+            .unwrap(),
+    )
+    .unwrap()
+}
+fn create_passkey(auth: &Arc<AuthService>, origin: &str, page: &str) -> String {
+    let options: CreationChallengeResponse = serde_json::from_str(&passkey_options(page)).unwrap();
+    let mut keys = authenticators().lock().unwrap();
+    let key = keys
+        .entry(auth.config.state_dir.clone())
+        .or_insert_with(|| SoftPasskey::new(true));
+    serde_json::to_string(
+        &key.do_registration(Url::parse(origin).unwrap(), options)
+            .unwrap(),
+    )
+    .unwrap()
+}
+/// Set up a passkey on an unenrolled address through the real pages, starting
+/// from a setup session cookie. Returns the full owner cookie.
+async fn enroll_passkey_at(
+    auth: &Arc<AuthService>,
+    origin: &str,
+    host: Option<&str>,
+    setup: &str,
+) -> (String, String) {
+    let page = request_at(
+        auth,
+        Method::GET,
+        pages::SETUP,
+        None,
+        Some(setup),
+        host,
+        &[],
+    )
+    .await;
+    assert_eq!(page.status, StatusCode::OK, "{}", page.text);
+    let credential = create_passkey(auth, origin, &page.text);
+    let enrolled = request_at(
+        auth,
+        Method::POST,
+        ENROLL_PASSKEY,
+        Some(origin),
+        Some(setup),
+        host,
+        &[
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("credential", &credential),
+        ],
+    )
+    .await;
+    assert_eq!(enrolled.status, StatusCode::FOUND, "{}", enrolled.text);
+    (
+        cookie(&enrolled),
+        enrolled.headers[header::LOCATION]
+            .to_str()
+            .unwrap()
+            .to_string(),
+    )
+}
+/// The passphrase on an unenrolled address: a setup session cookie.
+async fn setup_session(auth: &Arc<AuthService>, origin: &str, host: Option<&str>) -> String {
+    let page = request_at(auth, Method::GET, LOGIN, None, None, host, &[]).await;
+    let response = request_at(
         auth,
         Method::POST,
         LOGIN,
-        Some(ISSUER),
+        Some(origin),
         Some(&cookie(&page)),
+        host,
+        &[
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("continue", ""),
+            ("passphrase", PASSWORD),
+        ],
+    )
+    .await;
+    assert_eq!(response.status, StatusCode::FOUND, "{}", response.text);
+    assert_eq!(response.headers[header::LOCATION], pages::SETUP);
+    cookie(&response)
+}
+/// Sign in at the canonical address the way the page asks: with the passkey,
+/// with the passphrase and `factor` on a TOTP address, or by setting up a
+/// passkey first on an unenrolled one.
+async fn login(auth: &Arc<AuthService>, factor: &str) -> String {
+    login_at(auth, ISSUER, None, factor).await
+}
+async fn login_at(
+    auth: &Arc<AuthService>,
+    origin: &str,
+    host: Option<&str>,
+    factor: &str,
+) -> String {
+    let page = request_at(auth, Method::GET, LOGIN, None, None, host, &[]).await;
+    let credential = if page.text.contains("data-passkey=") {
+        assert_passkey(auth, origin, &page.text)
+    } else {
+        String::new()
+    };
+    let response = request_at(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(origin),
+        Some(&cookie(&page)),
+        host,
         &[
             ("csrf_token", &input(&page.text, "csrf_token")),
             ("continue", ""),
             ("passphrase", PASSWORD),
             ("totp", factor),
+            ("credential", &credential),
         ],
     )
     .await;
     assert_eq!(response.status, StatusCode::FOUND, "{}", response.text);
+    if response.headers[header::LOCATION] == pages::SETUP {
+        return enroll_passkey_at(auth, origin, host, &cookie(&response))
+            .await
+            .0;
+    }
     cookie(&response)
 }
 async fn pushed(auth: &Arc<AuthService>) -> String {
@@ -223,6 +368,11 @@ async fn consent(
     )
     .await;
     assert_eq!(page.status, StatusCode::OK, "{}", page.text);
+    let credential = if decision == "approve" && page.text.contains("data-passkey=") {
+        assert_passkey(auth, ISSUER, &page.text)
+    } else {
+        String::new()
+    };
     request(
         auth,
         Method::POST,
@@ -235,6 +385,7 @@ async fn consent(
             ("decision", decision),
             ("duration", duration),
             ("totp", factor),
+            ("credential", &credential),
             ("profile", "sandboxed"),
         ],
     )
@@ -480,7 +631,8 @@ async fn owner_csrf_clickjacking_escaped_consent_and_bearer_separation() {
         &[],
     )
     .await;
-    assert!(!page.text.contains("<script>"));
+    // The only script is the gateway's own passkey script, pinned by hash.
+    assert_eq!(page.text.matches("<script>").count(), 1);
     assert!(page.text.contains("&lt;script&gt;"));
     assert!(page.text.contains("Books &lt;app&gt;"));
     assert_eq!(page.headers["x-frame-options"], "DENY");
@@ -499,11 +651,13 @@ async fn owner_csrf_clickjacking_escaped_consent_and_bearer_separation() {
             .contains("form-action 'self' https://app.example")
     );
     let token = input(&page.text, "csrf_token");
+    let credential = assert_passkey(auth, ISSUER, &page.text);
     let fields = [
         ("request_uri", uri.as_str()),
         ("csrf_token", token.as_str()),
         ("decision", "approve"),
         ("duration", "3600"),
+        ("credential", credential.as_str()),
     ];
     let denied = request(auth, Method::POST, AUTHORIZE, Some(ISSUER), None, &fields).await;
     assert_eq!(denied.status, StatusCode::FORBIDDEN);
@@ -770,18 +924,8 @@ async fn persistence_failure_disables_every_existing_grant() {
 async fn authenticator_enrollment_login_approval_and_replay() {
     let fixture = Fixture::new();
     let auth = &fixture.auth;
-    let owner = login(auth, "").await;
-    let page = request(auth, Method::GET, pages::TOTP, None, Some(&owner), &[]).await;
-    let csrf = input(&page.text, "csrf_token");
-    let page = request(
-        auth,
-        Method::POST,
-        "/agent-connect/owner/totp/enroll",
-        Some(ISSUER),
-        Some(&owner),
-        &[("csrf_token", &csrf), ("passphrase", PASSWORD)],
-    )
-    .await;
+    let setup = setup_session(auth, ISSUER, None).await;
+    let page = request(auth, Method::GET, pages::TOTP, None, Some(&setup), &[]).await;
     assert_eq!(page.status, StatusCode::OK, "{}", page.text);
     assert!(page.text.contains("<svg viewBox="));
     assert!(page.text.contains("role='img' aria-label='QR code"));
@@ -808,17 +952,26 @@ async fn authenticator_enrollment_login_approval_and_replay() {
     let response = request(
         auth,
         Method::POST,
-        "/agent-connect/owner/totp/verify",
+        ENROLL_TOTP,
         Some(ISSUER),
-        Some(&owner),
+        Some(&setup),
         &[
             ("csrf_token", &input(&page.text, "csrf_token")),
             ("totp", &factor),
         ],
     )
     .await;
-    assert_eq!(response.status, StatusCode::FOUND);
-    assert_eq!(response.headers["location"], pages::SECURITY);
+    assert_eq!(response.status, StatusCode::FOUND, "{}", response.text);
+    assert_eq!(response.headers["location"], OWNER);
+    // Enrolling ends the setup session and starts an owner session on a new cookie.
+    let owner = cookie(&response);
+    assert_ne!(owner, setup);
+    assert_eq!(
+        request(auth, Method::GET, OWNER, None, Some(&setup), &[])
+            .await
+            .headers["location"],
+        LOGIN
+    );
     assert_eq!(
         request(auth, Method::GET, OWNER, None, Some(&owner), &[])
             .await
@@ -1044,10 +1197,12 @@ async fn safe_pending_continuation_and_csrf_expiry() {
         ],
     )
     .await;
+    // An unenrolled address goes through setup and then back to the request.
     assert_eq!(response.status, StatusCode::FOUND);
-    assert_eq!(response.headers[header::LOCATION], continuation);
+    assert_eq!(response.headers[header::LOCATION], pages::SETUP);
     assert_eq!(response.headers["referrer-policy"], "no-referrer");
-    let owner = cookie(&response);
+    let (owner, target) = enroll_passkey_at(auth, ISSUER, None, &cookie(&response)).await;
+    assert_eq!(target, continuation);
     let page = request(
         auth,
         Method::GET,
@@ -1114,7 +1269,7 @@ async fn owner_ui_has_labels_empty_states_and_hashed_styles() {
     assert!(page.text.contains("<main class='page'>"));
     assert!(page.text.contains("No apps yet"));
     assert!(page.text.contains("aria-label='Owner pages'"));
-    assert!(page.text.contains("href='/agent-connect/owner/totp'"));
+    assert!(!page.text.contains("href='/agent-connect/owner/totp'"));
     let uri = pushed(auth).await;
     let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
     assert!(page.text.contains("Books &lt;app&gt;"));
@@ -1343,9 +1498,11 @@ async fn failed_sign_in_retries_original_consent_with_fresh_csrf() {
     )
     .await;
     assert_eq!(signed_in.status, StatusCode::FOUND);
-    assert_eq!(signed_in.headers[header::LOCATION], continuation);
+    assert_eq!(signed_in.headers[header::LOCATION], pages::SETUP);
+    let (owner, target) = enroll_passkey_at(auth, ISSUER, None, &cookie(&signed_in)).await;
+    assert_eq!(target, continuation);
     assert!(auth.inner.lock().unwrap().stored.grants.is_empty());
-    let approved = consent(auth, &cookie(&signed_in), &uri, "approve", "", "3600").await;
+    let approved = consent(auth, &owner, &uri, "approve", "", "3600").await;
     assert!(!code(&approved).is_empty()); // Also verifies original app state and issuer.
     assert_eq!(auth.inner.lock().unwrap().stored.grants.len(), 1);
 }
@@ -1358,8 +1515,13 @@ async fn failed_sign_in_totp_persistence_error_keeps_unavailable_status_and_no_a
     {
         let mut inner = auth.inner.lock().unwrap();
         let mut next = inner.stored.clone();
-        next.totp_secret = Some(secret.clone());
-        next.last_totp_step = None;
+        next.factors.insert(
+            ISSUER.into(),
+            Factor::Totp {
+                secret: secret.clone(),
+                last_step: None,
+            },
+        );
         auth.commit(&mut inner, next).unwrap();
     }
     let (_, target, page) = pending_sign_in(auth).await;
@@ -1418,10 +1580,10 @@ async fn failed_sign_in_totp_persistence_error_keeps_unavailable_status_and_no_a
     assert!(inner.sessions.is_empty());
     assert!(inner.stored.grants.is_empty());
     assert!(inner.codes.is_empty());
-    assert!(inner.stored.last_totp_step.is_none());
+    assert!(totp_step(&inner.stored, ISSUER).is_none());
     assert!(!inner.anonymous_csrf.contains_key(&hash(&token)));
     let persisted: Stored = serde_json::from_slice(&fs::read(saved).unwrap()).unwrap();
-    assert!(persisted.last_totp_step.is_none());
+    assert!(totp_step(&persisted, ISSUER).is_none());
 }
 
 #[tokio::test]
@@ -1430,7 +1592,13 @@ async fn failed_sign_in_factor_and_budgets_preserve_only_valid_retry() {
     let auth = &fixture.auth;
     let (_, target, initial) = pending_sign_in(auth).await;
     let anonymous = cookie(&initial);
-    auth.inner.lock().unwrap().stored.totp_secret = Some(base32(&[9; 20]));
+    auth.inner.lock().unwrap().stored.factors.insert(
+        ISSUER.into(),
+        Factor::Totp {
+            secret: base32(&[9; 20]),
+            last_step: None,
+        },
+    );
     let peer = IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED);
     for (login_count, factor_count, status, message) in [
         (
@@ -1729,15 +1897,15 @@ async fn sign_in_cookie_errors_distinguish_missing_duplicates_and_invalid_values
             "More than one sign-in session cookie was sent",
         ),
         (
-            Some(format!("__Host-agent_connect_owner; {anonymous}")),
+            Some(format!("__Host-agent_connect_owner_443; {anonymous}")),
             "More than one sign-in session cookie was sent",
         ),
         (
-            Some("__Host-agent_connect_owner=".into()),
+            Some("__Host-agent_connect_owner_443=".into()),
             "Your owner session is missing or has expired",
         ),
         (
-            Some("__Host-agent_connect_owner=must-not-be-reflected".into()),
+            Some("__Host-agent_connect_owner_443=must-not-be-reflected".into()),
             "Your owner session is missing or has expired",
         ),
     ] {
@@ -2068,7 +2236,7 @@ async fn logout_expires_owner_cookie_without_revoking_application() {
     assert_eq!(reply.status, StatusCode::FOUND);
     assert_eq!(
         reply.headers[header::SET_COOKIE],
-        "__Host-agent_connect_owner=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure"
+        "__Host-agent_connect_owner_443=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure"
     );
     assert!(
         auth.authenticate(tokens["access_token"].as_str().unwrap(), APP)
@@ -2100,32 +2268,44 @@ async fn owner_cookie_policy_follows_each_entry_point_through_login_and_logout()
         (
             ISSUER,
             "gateway.example",
-            "__Host-agent_connect_owner",
+            "__Host-agent_connect_owner_443",
             "/",
             "; Secure",
         ),
         (
             "http://localhost:19840",
             "localhost:19840",
-            "agent_connect_owner",
+            "agent_connect_owner_19840",
             "/agent-connect",
             "",
         ),
         (
             "https://second.example",
             "second.example",
-            "__Host-agent_connect_owner",
+            "__Host-agent_connect_owner_443",
             "/",
             "; Secure",
         ),
         (
             "https://gateway.example:9443",
             "gateway.example:9443",
-            "__Host-agent_connect_owner",
+            "__Host-agent_connect_owner_9443",
             "/",
             "; Secure",
         ),
     ];
+    // TOTP on every address: passphrase sign-in, so this test stays about cookies.
+    let secret = base32(&[9; 20]);
+    for (origin, ..) in &endpoints {
+        auth.inner.lock().unwrap().stored.factors.insert(
+            origin.to_string(),
+            Factor::Totp {
+                secret: secret.clone(),
+                last_step: None,
+            },
+        );
+    }
+    let code = totp(&secret, auth.now() / 30).unwrap();
     let mut owners = Vec::new();
     for (origin, host, name, path, secure) in endpoints {
         let page = request_at(auth, Method::GET, LOGIN, None, None, Some(host), &[]).await;
@@ -2145,6 +2325,7 @@ async fn owner_cookie_policy_follows_each_entry_point_through_login_and_logout()
             &[
                 ("csrf_token", &input(&page.text, "csrf_token")),
                 ("passphrase", PASSWORD),
+                ("totp", &code),
             ],
         )
         .await;
@@ -2223,11 +2404,20 @@ async fn owner_cookie_policy_follows_each_entry_point_through_login_and_logout()
 async fn https_owner_cookie_ignores_legacy_credentials_during_login() {
     let fixture = Fixture::new();
     let auth = &fixture.auth;
+    let secret = base32(&[9; 20]);
+    auth.inner.lock().unwrap().stored.factors.insert(
+        ISSUER.into(),
+        Factor::Totp {
+            secret: secret.clone(),
+            last_step: None,
+        },
+    );
     let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
     let anonymous = cookie(&page);
     let fields = [
         ("csrf_token", input(&page.text, "csrf_token")),
         ("passphrase", PASSWORD.into()),
+        ("totp", totp(&secret, auth.now() / 30).unwrap()),
     ];
     let fields: Vec<_> = fields
         .iter()
@@ -2262,7 +2452,7 @@ async fn https_owner_cookie_ignores_legacy_credentials_during_login() {
     .await;
     assert_eq!(reply.status, StatusCode::FOUND, "{}", reply.text);
     let owner = cookie(&reply);
-    assert!(owner.starts_with("__Host-agent_connect_owner=owner_"));
+    assert!(owner.starts_with("__Host-agent_connect_owner_443=owner_"));
     let polluted = format!("{legacy}; {owner}; agent_connect_owner=other");
     assert_eq!(
         request(auth, Method::GET, OWNER, None, Some(&polluted), &[])
@@ -2286,10 +2476,10 @@ async fn owner_cookie_rejects_invalid_or_duplicate_selected_credentials() {
     let owner = login(auth, "").await;
     let invalid = [
         owner.clone(),
-        "__Host-agent_connect_owner=".into(),
-        "__Host-agent_connect_owner".into(),
-        "__Host-agent_connect_owner=unknown".into(),
-        format!("__Host-agent_connect_owner={}", "x".repeat(257)),
+        "__Host-agent_connect_owner_443=".into(),
+        "__Host-agent_connect_owner_443".into(),
+        "__Host-agent_connect_owner_443=unknown".into(),
+        format!("__Host-agent_connect_owner_443={}", "x".repeat(257)),
     ];
     for extra in &invalid {
         for separate_headers in [false, true] {
@@ -2389,7 +2579,7 @@ async fn owner_cookie_rejects_non_ascii_selected_values() {
     let auth = &fixture.auth;
     let owner = login(auth, "").await;
     for bytes in [&[0xff][..], "\u{00ff}".as_bytes()] {
-        let mut invalid = b"__Host-agent_connect_owner=owner-".to_vec();
+        let mut invalid = b"__Host-agent_connect_owner_443=owner-".to_vec();
         invalid.extend_from_slice(bytes);
         for with_valid in [false, true] {
             let mut builder = axum::http::Request::builder()
@@ -2481,6 +2671,7 @@ async fn profile_choice_is_fixed_in_grant_and_unoffered_profiles_are_rejected() 
             ("decision", "approve"),
             ("duration", "3600"),
             ("profile", "read-only"),
+            ("credential", &assert_passkey(&auth, ISSUER, &page.text)),
         ],
     )
     .await;
@@ -2528,8 +2719,6 @@ async fn legacy_default_grant_survives_upgrade_and_entry_point_addition() {
         grant.as_object_mut().unwrap().remove("approved_at");
         grant.as_object_mut().unwrap().remove("revoked_at");
     }
-    stored.as_object_mut().unwrap().remove("totp_reset_count");
-    stored.as_object_mut().unwrap().remove("last_totp_reset_at");
     fs::write(path, serde_json::to_vec(&stored).unwrap()).unwrap();
     let mut configuration = config(dir.clone(), None);
     configuration.profiles.push(PermissionProfile::ReadOnly);
@@ -2565,14 +2754,8 @@ async fn reset_totp_requires_stopped_gateway_preserves_grants_and_passphrase() {
     )
     .await
     .json();
-    let before = {
-        let mut inner = auth.inner.lock().unwrap();
-        let mut next = inner.stored.clone();
-        next.totp_secret = Some(base32(&[9; 20]));
-        next.last_totp_step = Some(auth.now() / 30);
-        auth.commit(&mut inner, next.clone()).unwrap();
-        next
-    };
+    let before = auth.inner.lock().unwrap().stored.clone();
+    assert!(before.factors.contains_key(ISSUER));
     assert!(
         AuthService::reset_totp(&dir)
             .unwrap_err()
@@ -2585,15 +2768,12 @@ async fn reset_totp_requires_stopped_gateway_preserves_grants_and_passphrase() {
     let auth = AuthService::open(config(dir.clone(), None)).unwrap();
     {
         let inner = auth.inner.lock().unwrap();
-        assert!(inner.stored.totp_secret.is_none());
-        assert!(inner.stored.last_totp_step.is_none());
+        assert!(inner.stored.factors.is_empty());
         assert_eq!(inner.stored.password_hash, before.password_hash);
         assert_eq!(
             serde_json::to_value(&inner.stored.grants).unwrap(),
             serde_json::to_value(&before.grants).unwrap()
         );
-        assert_eq!(inner.stored.totp_reset_count, 1);
-        assert!(inner.stored.last_totp_reset_at.is_some());
     }
     assert!(
         auth.authenticate(tokens["access_token"].as_str().unwrap(), APP)
@@ -2710,22 +2890,8 @@ async fn entry_points_pair_with_exact_issuer_and_bind_owner_sessions_to_origin()
             .unwrap()
             .contains("Secure")
     );
-    let reply = request_at(
-        &auth,
-        Method::POST,
-        LOGIN,
-        Some(SECOND),
-        Some(&cookie(&page)),
-        Some(SECOND_HOST),
-        &[
-            ("csrf_token", &input(&page.text, "csrf_token")),
-            ("continue", ""),
-            ("passphrase", PASSWORD),
-        ],
-    )
-    .await;
-    assert_eq!(reply.status, StatusCode::FOUND, "{}", reply.text);
-    let owner = cookie(&reply);
+    // The second address takes its own passkey, on http://localhost.
+    let owner = login_at(&auth, SECOND, Some(SECOND_HOST), "").await;
     let metadata = request_at(
         &auth,
         Method::GET,
@@ -2773,6 +2939,7 @@ async fn entry_points_pair_with_exact_issuer_and_bind_owner_sessions_to_origin()
     )
     .await;
     assert_eq!(page.status, StatusCode::OK);
+    let credential = assert_passkey(&auth, SECOND, &page.text);
     let cross_origin = request_at(
         &auth,
         Method::POST,
@@ -2803,6 +2970,7 @@ async fn entry_points_pair_with_exact_issuer_and_bind_owner_sessions_to_origin()
             ("decision", "approve"),
             ("duration", "3600"),
             ("profile", "sandboxed"),
+            ("credential", &credential),
         ],
     )
     .await;
@@ -2925,70 +3093,62 @@ async fn entry_points_pair_with_exact_issuer_and_bind_owner_sessions_to_origin()
 }
 
 #[tokio::test]
-async fn entry_point_totp_enrollment_and_verification_cannot_cross_origins() {
+async fn factors_are_per_address_and_enrollment_cannot_cross_origins() {
     const SECOND: &str = "https://second.example";
     let dir = std::env::temp_dir().join(random("agent-connect-factor-origin-test-"));
     let mut configuration = config(dir.clone(), Some(PASSWORD));
     configuration.entry_points.push(SECOND.into());
     let auth = AuthService::open(configuration).unwrap();
-    let primary_owner = login(&auth, "").await;
-    let page = request(
-        &auth,
-        Method::GET,
-        pages::TOTP,
-        None,
-        Some(&primary_owner),
-        &[],
-    )
-    .await;
-    let token = form_token(&page.text, "/agent-connect/owner/totp/enroll");
-    let cross = request_at(
-        &auth,
-        Method::POST,
-        "/agent-connect/owner/totp/enroll",
-        Some(SECOND),
-        Some(&primary_owner),
-        Some("second.example"),
-        &[("csrf_token", &token), ("passphrase", PASSWORD)],
-    )
-    .await;
-    assert_ne!(cross.status, StatusCode::OK);
-    let enrolled = request(
-        &auth,
-        Method::POST,
-        "/agent-connect/owner/totp/enroll",
-        Some(ISSUER),
-        Some(&primary_owner),
-        &[("csrf_token", &token), ("passphrase", PASSWORD)],
-    )
-    .await;
-    assert_eq!(enrolled.status, StatusCode::OK, "{}", enrolled.text);
-    let secret = enrollment_secret(&enrolled.text);
+    let setup = setup_session(&auth, ISSUER, None).await;
+    let page = request(&auth, Method::GET, pages::TOTP, None, Some(&setup), &[]).await;
+    assert_eq!(page.status, StatusCode::OK, "{}", page.text);
+    let secret = enrollment_secret(&page.text);
     let factor = totp(&secret, auth.now() / 30).unwrap();
-    let token = input(&enrolled.text, "csrf_token");
+    let token = input(&page.text, "csrf_token");
     let cross = request_at(
         &auth,
         Method::POST,
-        "/agent-connect/owner/totp/verify",
+        ENROLL_TOTP,
         Some(SECOND),
-        Some(&primary_owner),
+        Some(&setup),
         Some("second.example"),
         &[("csrf_token", &token), ("totp", &factor)],
     )
     .await;
     assert_ne!(cross.status, StatusCode::FOUND);
-    assert!(auth.inner.lock().unwrap().stored.totp_secret.is_none());
+    assert!(auth.inner.lock().unwrap().stored.factors.is_empty());
     let verified = request(
         &auth,
         Method::POST,
-        "/agent-connect/owner/totp/verify",
+        ENROLL_TOTP,
         Some(ISSUER),
-        Some(&primary_owner),
+        Some(&setup),
         &[("csrf_token", &token), ("totp", &factor)],
     )
     .await;
-    assert_eq!(verified.status, StatusCode::FOUND);
-    assert!(auth.inner.lock().unwrap().stored.totp_secret.is_some());
+    assert_eq!(verified.status, StatusCode::FOUND, "{}", verified.text);
+    {
+        let inner = auth.inner.lock().unwrap();
+        assert!(matches!(
+            inner.stored.factors.get(ISSUER),
+            Some(Factor::Totp { .. })
+        ));
+        assert!(!inner.stored.factors.contains_key(SECOND));
+    }
+    // The other address is still unenrolled: its passphrase opens setup only,
+    // and it takes a passkey of its own.
+    let second = login_at(&auth, SECOND, Some("second.example"), "").await;
+    let inner = auth.inner.lock().unwrap();
+    assert!(matches!(
+        inner.stored.factors.get(SECOND),
+        Some(Factor::Passkey { .. })
+    ));
+    assert!(matches!(
+        inner.stored.factors.get(ISSUER),
+        Some(Factor::Totp { .. })
+    ));
+    drop(inner);
+    assert!(!second.is_empty());
     drop(auth);
     fs::remove_dir_all(dir).unwrap();
 }
@@ -2998,11 +3158,7 @@ async fn owner_sections_require_session_reject_queries_and_removed_route() {
     let fixture = Fixture::new();
     let auth = &fixture.auth;
     let owner = login(auth, "").await;
-    for (path, heading) in [
-        (pages::SECURITY, "Security"),
-        (pages::GATEWAY, "Gateway"),
-        (pages::TOTP, "Set up an authenticator"),
-    ] {
+    for (path, heading) in [(pages::SECURITY, "Security"), (pages::GATEWAY, "Gateway")] {
         let anonymous = request(auth, Method::GET, path, None, None, &[]).await;
         assert_eq!(anonymous.status, StatusCode::FOUND);
         assert_eq!(anonymous.headers["location"], LOGIN);
@@ -3263,14 +3419,21 @@ mod sign_in_audit_tests {
             let anonymous = cookie(&page);
             let cookie_value = match case {
                 "duplicate" => format!("{anonymous}; {anonymous}"),
-                "malformed" => "__Host-agent_connect_owner=".into(),
-                "unknown" => format!("__Host-agent_connect_owner={marker}"),
+                "malformed" => "__Host-agent_connect_owner_443=".into(),
+                "unknown" => format!("__Host-agent_connect_owner_443={marker}"),
                 _ => anonymous,
             };
             {
                 let mut inner = auth.inner.lock().unwrap();
-                inner.stored.totp_secret =
-                    matches!(case, "factor" | "factor_budget").then(|| base32(&[9; 20]));
+                if matches!(case, "factor" | "factor_budget") {
+                    inner.stored.factors.insert(
+                        ISSUER.into(),
+                        Factor::Totp {
+                            secret: base32(&[9; 20]),
+                            last_step: None,
+                        },
+                    );
+                }
                 if case == "login_budget" {
                     inner.login_budgets.insert(
                         ClientSource::legacy(None),
@@ -3345,7 +3508,7 @@ mod sign_in_audit_tests {
             let mut inner = auth.inner.lock().unwrap();
             inner.login_budgets.clear();
             inner.factor_budgets.clear();
-            inner.stored.totp_secret = None;
+            inner.stored.factors.clear();
         }
         let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
         advance(auth, 601);
@@ -3449,13 +3612,11 @@ mod sign_in_audit_tests {
             for index in 0..MAX_TRANSIENT {
                 inner.sessions.insert(
                     format!("fixture-owner-{index}"),
-                    Session {
-                        source: None,
-                        origin: ISSUER.into(),
-                        expires: auth.now() + 3600,
-                        owner: true,
-                        enrollment: None,
-                    },
+                    Session::new(
+                        ISSUER.into(),
+                        Authority::Owner(FactorKind::Passkey),
+                        auth.now() + 3600,
+                    ),
                 );
             }
         }
@@ -3797,18 +3958,15 @@ mod client_address_tests {
         .await
     }
     fn owner(auth: &AuthService) -> String {
+        synthetic(auth, Authority::Owner(FactorKind::Totp))
+    }
+    fn synthetic(auth: &AuthService, authority: Authority) -> String {
         let token = random("synthetic-owner-");
         auth.inner.lock().unwrap().sessions.insert(
             hash(&token),
-            Session {
-                source: None,
-                origin: ISSUER.into(),
-                expires: auth.now() + 3600,
-                owner: true,
-                enrollment: None,
-            },
+            Session::new(ISSUER.into(), authority, auth.now() + 3600),
         );
-        format!("__Host-agent_connect_owner={token}")
+        format!("__Host-agent_connect_owner_443={token}")
     }
     fn owner_id(cookie: &str) -> String {
         hash(cookie.split_once('=').unwrap().1)
@@ -4071,16 +4229,12 @@ mod client_address_tests {
         {
             let mut inner = auth.inner.lock().unwrap();
             for i in 1..MAX_TRANSIENT {
-                inner.anonymous.insert(
-                    format!("synthetic-{i}"),
-                    Session {
-                        source: Some(source(ISSUER, &format!("198.51.100.{}", i % 250 + 1))),
-                        origin: ISSUER.into(),
-                        expires: auth.now() + 600,
-                        owner: false,
-                        enrollment: None,
-                    },
-                );
+                inner.anonymous.insert(format!("synthetic-{i}"), {
+                    let mut session =
+                        Session::new(ISSUER.into(), Authority::Anonymous, auth.now() + 600);
+                    session.source = Some(source(ISSUER, &format!("198.51.100.{}", i % 250 + 1)));
+                    session
+                });
             }
         }
         let before = auth.inner.lock().unwrap().rate_count;
@@ -4410,22 +4564,33 @@ mod client_address_tests {
         let fixture = fixture();
         let auth = &fixture.auth;
         let owner = owner(auth);
-        let id = owner_id(&owner);
+        let setup = synthetic(auth, Authority::Setup);
         let secret = base32(&[9; 20]);
-        for (path, action, factor_enabled) in [
-            ("/agent-connect/owner/totp/enroll", "enroll", false),
-            ("/agent-connect/owner/totp/verify", "factor_verify", false),
-            (AUTHORIZE, "consent:pending-fixture", true),
+        for (path, action, factor_enabled, session) in [
+            (ENROLL_TOTP, "factor_verify", false, &setup),
+            (AUTHORIZE, "consent:pending-fixture", true, &owner),
         ] {
+            let id = owner_id(session);
             for (ip, expected) in [
                 (CLIENT, StatusCode::TOO_MANY_REQUESTS),
                 (OTHER, StatusCode::BAD_REQUEST),
             ] {
                 let token = {
                     let mut inner = auth.inner.lock().unwrap();
-                    inner.stored.totp_secret = factor_enabled.then(|| secret.clone());
-                    inner.sessions.get_mut(&id).unwrap().enrollment =
-                        Some((secret.clone(), auth.now() + 600));
+                    inner.stored.factors.clear();
+                    if factor_enabled {
+                        inner.stored.factors.insert(
+                            ISSUER.into(),
+                            Factor::Totp {
+                                secret: secret.clone(),
+                                last_step: None,
+                            },
+                        );
+                    }
+                    inner.sessions.get_mut(&id).unwrap().enrollment = Some(Enrollment::Totp {
+                        secret: secret.clone(),
+                        expires: auth.now() + 600,
+                    });
                     inner.pending.insert(
                         "pending-fixture".into(),
                         Pending {
@@ -4449,9 +4614,7 @@ mod client_address_tests {
                     csrf(&mut inner, &id, action, auth.now())
                 };
                 let mut fields = vec![("csrf_token", token.as_str())];
-                if path.ends_with("/enroll") {
-                    fields.push(("passphrase", "invalid-fixture"));
-                } else if path == AUTHORIZE {
+                if path == AUTHORIZE {
                     fields.extend([
                         ("request_uri", "pending-fixture"),
                         ("decision", "approve"),
@@ -4469,15 +4632,10 @@ mod client_address_tests {
                     ISSUER,
                     Some(PROXY),
                     &[("x-client-ip", ip)],
-                    Some(&owner),
+                    Some(session),
                     &fields,
                 )
                 .await;
-                let expected = if path.ends_with("/enroll") && ip == OTHER {
-                    StatusCode::UNAUTHORIZED
-                } else {
-                    expected
-                };
                 assert_eq!(reply.status, expected, "{path}: {}", reply.text);
             }
         }
@@ -4503,7 +4661,323 @@ mod client_address_tests {
         assert!(auth.inner.lock().unwrap().stored.grants.is_empty());
         assert_eq!(
             auth.inner.lock().unwrap().factor_budgets[&source(ISSUER, OTHER)].count,
-            3
+            2
         );
     }
+}
+
+// ADR 0019: one second factor per address. One test per rule.
+
+#[tokio::test]
+async fn passkey_address_signs_in_with_the_passkey_alone_and_refuses_the_passphrase() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    login(auth, "").await; // enrolls the passkey
+    let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
+    assert!(page.text.contains("data-passkey="));
+    assert!(!page.text.contains("name=passphrase"));
+    let refused = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&cookie(&page)),
+        &[
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("continue", ""),
+            ("passphrase", PASSWORD),
+            ("totp", "123456"),
+        ],
+    )
+    .await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED, "{}", refused.text);
+    assert!(!refused.headers.contains_key(header::SET_COOKIE));
+    let owner = login(auth, "").await;
+    assert_eq!(
+        request(auth, Method::GET, OWNER, None, Some(&owner), &[])
+            .await
+            .status,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn setup_session_can_only_enroll() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let setup = setup_session(auth, ISSUER, None).await;
+    for path in [OWNER, pages::SECURITY, pages::GATEWAY] {
+        let page = request(auth, Method::GET, path, None, Some(&setup), &[]).await;
+        assert_eq!(page.status, StatusCode::FOUND);
+        assert_eq!(page.headers[header::LOCATION], pages::SETUP);
+    }
+    let uri = pushed(auth).await;
+    let consent = request(
+        auth,
+        Method::GET,
+        &authorize_url(APP, &uri),
+        None,
+        Some(&setup),
+        &[],
+    )
+    .await;
+    assert_eq!(consent.status, StatusCode::FOUND);
+    assert!(
+        consent.headers[header::LOCATION]
+            .to_str()
+            .unwrap()
+            .starts_with(LOGIN)
+    );
+    let id = hash(setup.split_once('=').unwrap().1);
+    for (path, action, fields) in [
+        (
+            AUTHORIZE,
+            format!("consent:{uri}"),
+            vec![
+                ("request_uri", uri.as_str()),
+                ("decision", "approve"),
+                ("duration", "3600"),
+            ],
+        ),
+        (
+            "/agent-connect/owner/grants/revoke-all",
+            "revoke-all".into(),
+            vec![],
+        ),
+        (
+            "/agent-connect/owner/sessions/end",
+            "end:any".into(),
+            vec![("session_id", "any")],
+        ),
+        ("/agent-connect/owner/logout", "logout".into(), vec![]),
+    ] {
+        let token = csrf(&mut auth.inner.lock().unwrap(), &id, &action, auth.now());
+        let mut fields = fields;
+        fields.push(("csrf_token", &token));
+        let reply = request(
+            auth,
+            Method::POST,
+            path,
+            Some(ISSUER),
+            Some(&setup),
+            &fields,
+        )
+        .await;
+        assert_eq!(
+            reply.status,
+            StatusCode::FORBIDDEN,
+            "{path}: {}",
+            reply.text
+        );
+    }
+    assert!(auth.inner.lock().unwrap().stored.grants.is_empty());
+    assert!(auth.inner.lock().unwrap().pending.contains_key(&uri));
+    // The setup page offers a passkey, with the authenticator app as the alternative.
+    let page = request(auth, Method::GET, pages::SETUP, None, Some(&setup), &[]).await;
+    assert!(page.text.contains("data-ceremony=create"));
+    assert!(page.text.contains(&format!("href='{}'", pages::TOTP)));
+}
+
+#[tokio::test]
+async fn first_enrollment_wins_and_the_address_leaves_setup() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let first = setup_session(auth, ISSUER, None).await;
+    let second = setup_session(auth, ISSUER, None).await;
+    let late = request(auth, Method::GET, pages::SETUP, None, Some(&second), &[]).await;
+    let late_credential = create_passkey(auth, ISSUER, &late.text);
+    enroll_passkey_at(auth, ISSUER, None, &first).await;
+    let refused = request(
+        auth,
+        Method::POST,
+        ENROLL_PASSKEY,
+        Some(ISSUER),
+        Some(&second),
+        &[
+            ("csrf_token", &input(&late.text, "csrf_token")),
+            ("credential", &late_credential),
+        ],
+    )
+    .await;
+    assert_ne!(refused.status, StatusCode::FOUND);
+    assert_eq!(auth.inner.lock().unwrap().stored.factors.len(), 1);
+    // The passphrase no longer opens setup there.
+    let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
+    assert!(page.text.contains("data-passkey="));
+}
+
+#[tokio::test]
+async fn passkey_assertions_are_single_use_and_bound_to_their_purpose() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    let owner = login(auth, "").await;
+    // A sign-in assertion replayed: its challenge was consumed.
+    let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
+    let credential = assert_passkey(auth, ISSUER, &page.text);
+    let fields = [
+        ("csrf_token", input(&page.text, "csrf_token")),
+        ("continue", String::new()),
+        ("credential", credential.clone()),
+    ];
+    let fields: Vec<_> = fields.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    let anonymous = cookie(&page);
+    let first = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&anonymous),
+        &fields,
+    )
+    .await;
+    assert_eq!(first.status, StatusCode::FOUND, "{}", first.text);
+    let again = request(auth, Method::GET, LOGIN, None, Some(&anonymous), &[]).await;
+    let replay = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&anonymous),
+        &[
+            ("csrf_token", &input(&again.text, "csrf_token")),
+            ("continue", ""),
+            ("credential", &credential),
+        ],
+    )
+    .await;
+    assert_ne!(replay.status, StatusCode::FOUND);
+    // A sign-in assertion cannot approve: approval asks for one of its own.
+    let uri = pushed(auth).await;
+    let consent_page = request(
+        auth,
+        Method::GET,
+        &authorize_url(APP, &uri),
+        None,
+        Some(&owner),
+        &[],
+    )
+    .await;
+    let login_page = request(auth, Method::GET, LOGIN, None, Some(&owner), &[]).await;
+    let wrong = assert_passkey(auth, ISSUER, &login_page.text);
+    let refused = request(
+        auth,
+        Method::POST,
+        AUTHORIZE,
+        Some(ISSUER),
+        Some(&owner),
+        &[
+            ("request_uri", &uri),
+            ("csrf_token", &input(&consent_page.text, "csrf_token")),
+            ("decision", "approve"),
+            ("duration", "3600"),
+            ("credential", &wrong),
+        ],
+    )
+    .await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED, "{}", refused.text);
+    assert!(auth.inner.lock().unwrap().stored.grants.is_empty());
+    // Denying needs no passkey.
+    let denied = consent(auth, &owner, &uri, "deny", "", "3600").await;
+    assert_eq!(denied.status, StatusCode::FOUND);
+}
+
+#[tokio::test]
+async fn a_passkey_from_one_address_is_refused_on_another() {
+    const SECOND: &str = "https://second.example";
+    let dir = std::env::temp_dir().join(random("agent-connect-cross-passkey-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
+    login(&auth, "").await;
+    login_at(&auth, SECOND, Some("second.example"), "").await;
+    let first_id = match auth.inner.lock().unwrap().stored.factors.get(ISSUER) {
+        Some(Factor::Passkey { passkey, .. }) => passkey.cred_id().clone(),
+        _ => panic!("passkey on the first address"),
+    };
+    // Ask the authenticator to answer the second address's challenge with the
+    // first address's credential. Real authenticators would not; the gateway
+    // must not rely on that.
+    let page = request_at(
+        &auth,
+        Method::GET,
+        LOGIN,
+        None,
+        None,
+        Some("second.example"),
+        &[],
+    )
+    .await;
+    let mut options: RequestChallengeResponse =
+        serde_json::from_str(&passkey_options(&page.text)).unwrap();
+    options.public_key.allow_credentials[0].id = first_id;
+    let forged = {
+        let mut keys = authenticators().lock().unwrap();
+        let key = keys.get_mut(&auth.config.state_dir).unwrap();
+        serde_json::to_string(
+            &key.do_authentication(Url::parse(SECOND).unwrap(), options)
+                .unwrap(),
+        )
+        .unwrap()
+    };
+    let refused = request_at(
+        &auth,
+        Method::POST,
+        LOGIN,
+        Some(SECOND),
+        Some(&cookie(&page)),
+        Some("second.example"),
+        &[
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("continue", ""),
+            ("credential", &forged),
+        ],
+    )
+    .await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED, "{}", refused.text);
+    drop(auth);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn ip_literal_address_explains_why_there_is_no_passkey_and_offers_totp() {
+    const LOOPBACK: &str = "http://127.0.0.1:19841";
+    let dir = std::env::temp_dir().join(random("agent-connect-ip-literal-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(LOOPBACK.into());
+    let auth = AuthService::open(configuration).unwrap();
+    let setup = setup_session(&auth, LOOPBACK, Some("127.0.0.1:19841")).await;
+    let page = request_at(
+        &auth,
+        Method::GET,
+        pages::SETUP,
+        None,
+        Some(&setup),
+        Some("127.0.0.1:19841"),
+        &[],
+    )
+    .await;
+    assert_eq!(page.status, StatusCode::OK, "{}", page.text);
+    assert!(!page.text.contains("data-passkey="));
+    assert!(page.text.contains("bare IP address"));
+    assert!(page.text.contains("<code>localhost</code>"));
+    assert!(page.text.contains(&format!("href='{}'", pages::TOTP)));
+    drop(auth);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn earlier_state_versions_are_refused_with_the_way_forward() {
+    let dir = std::env::temp_dir().join(random("agent-connect-old-state-test-"));
+    drop(AuthService::open(config(dir.clone(), Some(PASSWORD))).unwrap());
+    let path = dir.join("authorization.json");
+    let mut stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    stored["version"] = json!(1);
+    fs::write(&path, serde_json::to_vec(&stored).unwrap()).unwrap();
+    let error = AuthService::open(config(dir.clone(), None))
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(error.contains("earlier Agent Connect version"), "{error}");
+    assert!(error.contains("run setup again"), "{error}");
+    fs::remove_dir_all(dir).unwrap();
 }

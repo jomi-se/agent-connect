@@ -39,6 +39,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 use url::Url;
+use webauthn_rs::prelude::{
+    Passkey, PasskeyAuthentication, PasskeyRegistration, PublicKeyCredential,
+    RegisterPublicKeyCredential, Uuid, Webauthn, WebauthnBuilder,
+};
 
 const OWNER: &str = "/agent-connect/owner";
 const LOGIN: &str = "/agent-connect/owner/login";
@@ -46,6 +50,8 @@ const AUTHORIZE: &str = "/agent-connect/oauth/authorize";
 const TOKEN: &str = "/agent-connect/oauth/token";
 const PAR: &str = "/agent-connect/oauth/par";
 const REVOKE: &str = "/agent-connect/oauth/revoke";
+const ENROLL_TOTP: &str = "/agent-connect/owner/totp/verify";
+const ENROLL_PASSKEY: &str = "/agent-connect/owner/passkey/enroll";
 const REQUEST_TTL: u64 = 600;
 const CODE_TTL: u64 = 120;
 const ACCESS_TTL: u64 = 300;
@@ -59,23 +65,35 @@ const MAX_GRANTS: usize = 256;
 const MAX_BODY: usize = 128 * 1024;
 const MAX_SPENT_REFRESH: usize = 16384;
 const MAX_STATE: u64 = 32 * 1024 * 1024;
+const STATE_VERSION: u32 = 2;
+const SETUP_TTL: u64 = 600;
+const OWNER_TTL: u64 = 12 * 3600;
+const CEREMONY_TTL: u64 = 600;
+const MAX_CEREMONIES: usize = 8;
+const MAX_CREDENTIAL: usize = 16 * 1024;
 
 struct OwnerCookiePolicy {
-    name: &'static str,
+    name: String,
     path: &'static str,
     secure: bool,
 }
 impl OwnerCookiePolicy {
+    /// Browsers share cookies across the ports of one host, so the name carries
+    /// the port: signing in on one address never replaces another's cookie.
     fn for_origin(origin: &str) -> Self {
+        let port = Url::parse(origin)
+            .ok()
+            .and_then(|url| url.port_or_known_default())
+            .unwrap_or(0);
         if origin.starts_with("https:") {
             Self {
-                name: "__Host-agent_connect_owner",
+                name: format!("__Host-agent_connect_owner_{port}"),
                 path: "/",
                 secure: true,
             }
         } else {
             Self {
-                name: "agent_connect_owner",
+                name: format!("agent_connect_owner_{port}"),
                 path: "/agent-connect",
                 secure: false,
             }
@@ -178,13 +196,35 @@ struct Stored {
     version: u32,
     issuer: String,
     password_hash: String,
-    totp_secret: Option<String>,
-    last_totp_step: Option<u64>,
-    #[serde(default)]
-    totp_reset_count: u64,
-    #[serde(default)]
-    last_totp_reset_at: Option<u64>,
+    /// One second factor per configured origin. Records for an origin removed
+    /// from configuration are kept, not erased.
+    factors: BTreeMap<String, Factor>,
     grants: Vec<Grant>,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum Factor {
+    Passkey {
+        user: Uuid,
+        passkey: Box<Passkey>,
+    },
+    Totp {
+        secret: String,
+        last_step: Option<u64>,
+    },
+}
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum FactorKind {
+    Passkey,
+    Totp,
+}
+impl Factor {
+    fn kind(&self) -> FactorKind {
+        match self {
+            Factor::Passkey { .. } => FactorKind::Passkey,
+            Factor::Totp { .. } => FactorKind::Totp,
+        }
+    }
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -240,13 +280,50 @@ struct Code {
     grant: String,
     expires: u64,
 }
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Authority {
+    Anonymous,
+    /// Knows the passphrase on an address with no factor: may enroll one, nothing else.
+    Setup,
+    /// Signed in with the address's factor.
+    Owner(FactorKind),
+}
 struct Session {
     // Admission accounting only; never checked when accepting a session or CSRF.
     source: Option<ClientSource>,
     origin: String,
     expires: u64,
-    owner: bool,
-    enrollment: Option<(String, u64)>,
+    authority: Authority,
+    enrollment: Option<Enrollment>,
+    /// Pending passkey assertions, by purpose (`login:…`, `consent:…`). Single use.
+    ceremonies: HashMap<String, (PasskeyAuthentication, u64)>,
+    /// Where a setup session goes once its factor is enrolled.
+    continuation: String,
+}
+#[derive(Clone)]
+enum Enrollment {
+    Totp {
+        secret: String,
+        expires: u64,
+    },
+    Passkey {
+        user: Uuid,
+        state: PasskeyRegistration,
+        expires: u64,
+    },
+}
+impl Session {
+    fn new(origin: String, authority: Authority, expires: u64) -> Self {
+        Self {
+            source: None,
+            origin,
+            expires,
+            authority,
+            enrollment: None,
+            ceremonies: HashMap::new(),
+            continuation: String::new(),
+        }
+    }
 }
 struct Csrf {
     session: String,
@@ -331,17 +408,27 @@ impl AuthService {
                     metadata.permissions().mode() & 0o077 == 0,
                     "authorization state must be private"
                 );
-                let stored: Stored = serde_json::from_slice(&fs::read(&path)?)?;
+                let bytes = fs::read(&path)?;
+                let version = serde_json::from_slice::<Value>(&bytes)?
+                    .get("version")
+                    .and_then(Value::as_u64);
                 ensure!(
-                    stored.version == 1
-                        && stored.issuer == config.public_url
-                        && stored.grants.len() <= MAX_GRANTS,
+                    version == Some(STATE_VERSION.into()),
+                    "owner authorization state at {} is from an earlier Agent Connect version: remove it and run setup again",
+                    path.display()
+                );
+                let stored: Stored = serde_json::from_slice(&bytes)?;
+                ensure!(
+                    stored.issuer == config.public_url && stored.grants.len() <= MAX_GRANTS,
                     "authorization state does not match gateway"
                 );
                 PasswordHash::new(&stored.password_hash)
                     .map_err(|_| anyhow!("invalid stored owner hash"))?;
-                if let Some(secret) = &stored.totp_secret {
-                    ensure!(decode_secret(secret)?.len() == 20, "invalid stored factor");
+                for (origin, factor) in &stored.factors {
+                    canonical_origin(origin)?;
+                    if let Factor::Totp { secret, .. } = factor {
+                        ensure!(decode_secret(secret)?.len() == 20, "invalid stored factor");
+                    }
                 }
                 for grant in &stored.grants {
                     canonical_origin(&grant.client)?;
@@ -363,13 +450,10 @@ impl AuthService {
                     .ok_or_else(|| anyhow!("first boot requires an owner passphrase"))?;
                 let hash = hash_passphrase(passphrase)?;
                 let stored = Stored {
-                    version: 1,
+                    version: STATE_VERSION,
                     issuer: config.public_url.clone(),
                     password_hash: hash,
-                    totp_secret: None,
-                    last_totp_step: None,
-                    totp_reset_count: 0,
-                    last_totp_reset_at: None,
+                    factors: BTreeMap::new(),
                     grants: Vec::new(),
                 };
                 save(&config.state_dir, &stored)?;
@@ -418,23 +502,11 @@ impl AuthService {
     }
 
     /// Owner-run recovery only: refuse active serving, never bootstrap missing state,
-    /// preserve the passphrase and all grants, and record bounded recovery metadata.
+    /// preserve the passphrase and all grants, and return every address to setup.
     pub fn reset_totp(state_dir: &std::path::Path) -> Result<bool> {
         recover(state_dir, |stored| {
-            let enrolled = stored.totp_secret.is_some();
-            if enrolled {
-                stored.totp_secret = None;
-                stored.last_totp_step = None;
-                stored.totp_reset_count = stored
-                    .totp_reset_count
-                    .checked_add(1)
-                    .ok_or_else(|| anyhow!("recovery audit capacity"))?;
-                stored.last_totp_reset_at = Some(
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)?
-                        .as_secs(),
-                );
-            }
+            let enrolled = !stored.factors.is_empty();
+            stored.factors.clear();
             Ok(enrolled)
         })
     }
@@ -483,9 +555,10 @@ impl AuthService {
             "/agent-connect/owner/grants/revoke-all",
             "/agent-connect/owner/sessions/end",
             "/agent-connect/owner/grants/revoke",
-            "/agent-connect/owner/totp",
-            "/agent-connect/owner/totp/enroll",
-            "/agent-connect/owner/totp/verify",
+            pages::SETUP,
+            pages::TOTP,
+            ENROLL_TOTP,
+            ENROLL_PASSKEY,
             PAR,
             AUTHORIZE,
             TOKEN,
@@ -720,29 +793,40 @@ impl AuthService {
         }
         if method == Method::GET && path == LOGIN {
             let args = fields(query.as_bytes(), &["client_id", "request_uri"])?;
-            let continuation = self.continuation(&inner, &args, &self.request_origin(headers)?)?;
+            let origin = self.request_origin(headers)?;
+            let continuation = self.continuation(&inner, &args, &origin)?;
             let (session, cookie) = self.session(&mut inner, headers, false, &source)?;
-            let csrf = csrf(&mut inner, &session, &format!("login:{continuation}"), now);
+            let purpose = format!("login:{continuation}");
+            let csrf = csrf(&mut inner, &session, &purpose, now);
             let waiting = args
                 .get("request_uri")
                 .and_then(|uri| inner.pending.get(uri))
                 .map(|pending| pending.client_name.clone());
+            let method = match self.factor(&inner, &origin) {
+                None => pages::SignIn::Setup,
+                Some(Factor::Totp { .. }) => pages::SignIn::Totp,
+                Some(Factor::Passkey { .. }) => pages::SignIn::Passkey(
+                    self.begin_assertion(&mut inner, &session, &origin, &purpose)?,
+                ),
+            };
             let page = pages::sign_in(
                 &(hidden("csrf_token", &csrf) + &hidden("continue", &continuation)),
-                inner.stored.totp_secret.is_some(),
+                method,
                 waiting.as_deref(),
             );
-            return Ok(self.with_cookie(html(page), cookie, &self.request_origin(headers)?));
+            return Ok(self.with_cookie(html(page), cookie, &origin));
         }
         if method == Method::POST && path == LOGIN {
             self.owner_origin(headers)?;
             let form = form(
                 headers,
                 body,
-                &["csrf_token", "continue", "passphrase", "totp"],
+                &["csrf_token", "continue", "passphrase", "totp", "credential"],
             )?;
             let session = self.session_id(&inner, headers, false)?;
+            let origin = self.request_origin(headers)?;
             let continuation = form.get("continue").cloned().unwrap_or_default();
+            let purpose = format!("login:{continuation}");
             // Continuation is authenticated by the one-use CSRF binding and is never a caller URL.
             consume_csrf(
                 &mut inner,
@@ -768,7 +852,8 @@ impl AuthService {
                 None => LOGIN.to_string(),
             };
             let mut login_source = source.clone();
-            let verification: Result<()> = (|| {
+            let factor = self.factor(&inner, &origin).map(|factor| factor.kind());
+            let verification: Result<Authority> = (|| {
                 login_source = attempt_budget(
                     &mut inner.login_budgets,
                     &source,
@@ -778,23 +863,30 @@ impl AuthService {
                     "login_rate_limited",
                     partitioned,
                 )?;
-                let passphrase = required(&form, "passphrase")?;
-                ensure!(passphrase.len() <= 1024, "invalid_credentials");
-                let parsed = PasswordHash::new(&inner.stored.password_hash)
-                    .map_err(|_| anyhow!("invalid_credentials"))?;
-                ensure!(
-                    Argon2::default()
-                        .verify_password(passphrase.as_bytes(), &parsed)
-                        .is_ok(),
-                    "invalid_credentials"
-                );
-                self.verify_factor(
-                    &mut inner,
-                    form.get("totp").map(String::as_str).unwrap_or(""),
-                    &source,
-                )
+                // A passkey stands alone; TOTP and setup start from the passphrase.
+                if factor != Some(FactorKind::Passkey) {
+                    let passphrase = required(&form, "passphrase")?;
+                    ensure!(passphrase.len() <= 1024, "invalid_credentials");
+                    let parsed = PasswordHash::new(&inner.stored.password_hash)
+                        .map_err(|_| anyhow!("invalid_credentials"))?;
+                    ensure!(
+                        Argon2::default()
+                            .verify_password(passphrase.as_bytes(), &parsed)
+                            .is_ok(),
+                        "invalid_credentials"
+                    );
+                }
+                match factor {
+                    None => Ok(Authority::Setup),
+                    Some(kind) => {
+                        self.verify_factor(
+                            &mut inner, &session, &origin, &purpose, &form, &source,
+                        )?;
+                        Ok(Authority::Owner(kind))
+                    }
+                }
             })();
-            verification.map_err(|reason| SignInRetry {
+            let authority = verification.map_err(|reason| SignInRetry {
                 reason,
                 target: retry,
             })?;
@@ -814,42 +906,95 @@ impl AuthService {
                 "authorization_capacity"
             );
             let token = random("owner_");
-            inner.sessions.insert(
-                hash(&token),
-                Session {
-                    source: None,
-                    origin: self.request_origin(headers)?,
-                    owner: true,
-                    expires: now + 12 * 3600,
-                    enrollment: None,
-                },
-            );
-            let target = if continuation.is_empty() {
-                OWNER.to_string()
+            let (fresh, target) = if authority == Authority::Setup {
+                let mut fresh = Session::new(origin.clone(), authority, now + SETUP_TTL);
+                fresh.continuation = continuation;
+                (fresh, pages::SETUP.to_string())
             } else {
-                continuation
+                let target = if continuation.is_empty() {
+                    OWNER.to_string()
+                } else {
+                    continuation
+                };
+                (
+                    Session::new(origin.clone(), authority, now + OWNER_TTL),
+                    target,
+                )
             };
-            return Ok(self.with_cookie(
-                redirect(&target)?,
-                Some(token),
-                &self.request_origin(headers)?,
-            ));
+            inner.sessions.insert(hash(&token), fresh);
+            return Ok(self.with_cookie(redirect(&target)?, Some(token), &origin));
         }
-        if method == Method::GET
-            && [OWNER, pages::SECURITY, pages::GATEWAY, pages::TOTP].contains(&path)
-        {
-            let Ok(session) = self.session_id(&inner, headers, true) else {
+        if method == Method::GET && (path == pages::SETUP || path == pages::TOTP) {
+            let Ok(session) = self.session_id_for(&inner, headers, |a| a == Authority::Setup)
+            else {
                 return redirect(LOGIN);
             };
             ensure!(query.is_empty(), "invalid_request");
+            let origin = self.request_origin(headers)?;
+            ensure!(
+                self.factor(&inner, &origin).is_none(),
+                "factor_already_enrolled"
+            );
             if path == pages::TOTP {
-                ensure!(
-                    inner.stored.totp_secret.is_none(),
-                    "factor_already_enrolled"
-                );
-                let token = csrf(&mut inner, &session, "enroll", now);
-                return Ok(html(pages::totp_start(&hidden("csrf_token", &token))));
+                let mut bytes = [0u8; 20];
+                OsRng.fill_bytes(&mut bytes);
+                let secret = base32(&bytes);
+                inner.sessions.get_mut(&session).unwrap().enrollment = Some(Enrollment::Totp {
+                    secret: secret.clone(),
+                    expires: now + CEREMONY_TTL,
+                });
+                let token = csrf(&mut inner, &session, "factor_verify", now);
+                let mut uri = Url::parse("otpauth://totp/Agent%20Connect:owner")?;
+                uri.query_pairs_mut()
+                    .append_pair("secret", &secret)
+                    .append_pair("issuer", "Agent Connect")
+                    .append_pair("algorithm", "SHA1")
+                    .append_pair("digits", "6")
+                    .append_pair("period", "30");
+                return Ok(html(pages::totp_scan(
+                    &secret,
+                    uri.as_str(),
+                    &hidden("csrf_token", &token),
+                )));
             }
+            let options = if passkey_possible(&origin) {
+                let user = Uuid::new_v4();
+                let host = Url::parse(&origin)?
+                    .host_str()
+                    .unwrap_or_default()
+                    .to_string();
+                let (options, state) = webauthn(&origin)?
+                    .start_passkey_registration(user, &host, "Agent Connect owner", None)
+                    .map_err(|_| anyhow!("passkey_unavailable"))?;
+                inner.sessions.get_mut(&session).unwrap().enrollment = Some(Enrollment::Passkey {
+                    user,
+                    state,
+                    expires: now + CEREMONY_TTL,
+                });
+                Some(serde_json::to_string(&options)?)
+            } else {
+                None
+            };
+            let token = csrf(&mut inner, &session, "enroll", now);
+            return Ok(html(pages::setup(
+                &hidden("csrf_token", &token),
+                options.as_deref(),
+            )));
+        }
+        if method == Method::GET && [OWNER, pages::SECURITY, pages::GATEWAY].contains(&path) {
+            let Ok(session) = self.session_id(&inner, headers, true) else {
+                if self
+                    .session_id_for(&inner, headers, |a| a == Authority::Setup)
+                    .is_ok()
+                {
+                    return redirect(pages::SETUP);
+                }
+                return redirect(LOGIN);
+            };
+            ensure!(query.is_empty(), "invalid_request");
+            let factor = self
+                .factor(&inner, &self.request_origin(headers)?)
+                .map(|factor| factor.kind());
             let logout_token = csrf(&mut inner, &session, "logout", now);
             let addresses = std::iter::once(&self.config.public_url)
                 .chain(self.config.entry_points.iter())
@@ -865,7 +1010,7 @@ impl AuthService {
                 let revoke_all_token = csrf(&mut inner, &session, "revoke-all", now);
                 return Ok(html(pages::security(pages::Security {
                     logout_token,
-                    authenticator: inner.stored.totp_secret.is_some(),
+                    passkey: factor == Some(FactorKind::Passkey),
                     active_grants,
                     revoke_all_token,
                 })));
@@ -993,7 +1138,6 @@ impl AuthService {
                             .collect()
                     })
                     .unwrap_or_default(),
-                authenticator: inner.stored.totp_secret.is_some(),
                 requests,
                 live,
                 events,
@@ -1138,9 +1282,18 @@ impl AuthService {
                     return redirect(&format!("{LOGIN}?{}", url.query().unwrap_or("")));
                 }
             };
-            let token = csrf(&mut inner, &session, &format!("consent:{uri}"), now);
+            let purpose = format!("consent:{uri}");
+            let token = csrf(&mut inner, &session, &purpose, now);
+            let origin = self.request_origin(headers)?;
+            let factor = match self.factor(&inner, &origin) {
+                Some(Factor::Passkey { .. }) => pages::ApprovalFactor::Passkey(
+                    self.begin_assertion(&mut inner, &session, &origin, &purpose)?,
+                ),
+                Some(Factor::Totp { .. }) => pages::ApprovalFactor::Totp,
+                None => bail!("owner_login_required"),
+            };
             let harness = self.config.harness;
-            let mut response = html(pages::consent(pages::Consent {
+            let page = pages::consent(pages::Consent {
                 name: pending.client_name.clone(),
                 origin: pending.client.clone(),
                 tools: pending.tools.clone(),
@@ -1157,13 +1310,11 @@ impl AuthService {
                         selected: *profile == self.config.default_profile,
                     })
                     .collect(),
-                factor: inner.stored.totp_secret.is_some(),
-            }));
-            response.headers_mut().insert(
-                "content-security-policy",
-                HeaderValue::from_str(&page_csp(Some(&pending.client), "", ""))?,
-            );
-            return Ok(response);
+                factor,
+            });
+            // The callback leaves through the form, so the application origin
+            // joins form-action; the page's own script and styles stay pinned.
+            return Ok(html_for(page, Some(&pending.client)));
         }
         if path == AUTHORIZE && method == Method::POST {
             self.owner_origin(headers)?;
@@ -1176,6 +1327,7 @@ impl AuthService {
                     "decision",
                     "duration",
                     "totp",
+                    "credential",
                     "profile",
                 ],
             )?;
@@ -1215,9 +1367,13 @@ impl AuthService {
             } else {
                 bail!("invalid_profile")
             };
+            let origin = self.request_origin(headers)?;
             self.verify_factor(
                 &mut inner,
-                form.get("totp").map(String::as_str).unwrap_or(""),
+                &session,
+                &origin,
+                &format!("consent:{uri}"),
+                &form,
                 &source,
             )?;
             let duration: u64 = required(&form, "duration")?.parse()?;
@@ -1414,15 +1570,143 @@ impl AuthService {
         self.commit(inner, next)
     }
 
-    fn verify_factor(&self, inner: &mut Inner, code: &str, source: &ClientSource) -> Result<()> {
-        let Some(secret) = inner.stored.totp_secret.clone() else {
-            return Ok(());
-        };
+    fn factor(&self, inner: &Inner, origin: &str) -> Option<Factor> {
+        inner.stored.factors.get(origin).cloned()
+    }
+    /// Fresh proof of the address's factor: a passkey assertion for `purpose`,
+    /// or a TOTP code. An address without a factor proves nothing.
+    fn verify_factor(
+        &self,
+        inner: &mut Inner,
+        session: &str,
+        origin: &str,
+        purpose: &str,
+        form: &BTreeMap<String, String>,
+        source: &ClientSource,
+    ) -> Result<()> {
         self.factor_budget(inner, source)?;
-        let step = verify_totp(&secret, code, self.now(), inner.stored.last_totp_step)?;
+        match self.factor(inner, origin) {
+            Some(Factor::Passkey { .. }) => self.finish_assertion(
+                inner,
+                session,
+                origin,
+                purpose,
+                form.get("credential").map(String::as_str).unwrap_or(""),
+            ),
+            Some(Factor::Totp { secret, last_step }) => {
+                let code = form.get("totp").map(String::as_str).unwrap_or("");
+                let step = verify_totp(&secret, code, self.now(), last_step)?;
+                let mut next = inner.stored.clone();
+                next.factors.insert(
+                    origin.to_string(),
+                    Factor::Totp {
+                        secret,
+                        last_step: Some(step),
+                    },
+                );
+                self.commit(inner, next)
+            }
+            None => bail!("owner_login_required"),
+        }
+    }
+    /// Start a passkey assertion bound to this session, origin and purpose; the
+    /// options go to the page. A newer one for the same purpose replaces it.
+    fn begin_assertion(
+        &self,
+        inner: &mut Inner,
+        session: &str,
+        origin: &str,
+        purpose: &str,
+    ) -> Result<String> {
+        let Some(Factor::Passkey { passkey, .. }) = self.factor(inner, origin) else {
+            bail!("invalid_request");
+        };
+        let (options, state) = webauthn(origin)?
+            .start_passkey_authentication(&[*passkey])
+            .map_err(|_| anyhow!("passkey_unavailable"))?;
+        let now = self.now();
+        let session = session_mut(inner, session).ok_or_else(|| anyhow!("invalid_session"))?;
+        session.ceremonies.retain(|_, (_, expires)| *expires > now);
+        ensure!(
+            session.ceremonies.len() < MAX_CEREMONIES || session.ceremonies.contains_key(purpose),
+            "authorization_capacity"
+        );
+        session
+            .ceremonies
+            .insert(purpose.to_string(), (state, now + CEREMONY_TTL));
+        Ok(serde_json::to_string(&options)?)
+    }
+    /// Verify a passkey assertion. The matching challenge is consumed whether or
+    /// not the assertion verifies.
+    fn finish_assertion(
+        &self,
+        inner: &mut Inner,
+        session: &str,
+        origin: &str,
+        purpose: &str,
+        credential: &str,
+    ) -> Result<()> {
+        let now = self.now();
+        let (state, expires) = session_mut(inner, session)
+            .and_then(|session| session.ceremonies.remove(purpose))
+            .ok_or_else(|| anyhow!("invalid_credentials"))?;
+        ensure!(expires > now, "invalid_credentials");
+        ensure!(
+            !credential.is_empty() && credential.len() <= MAX_CREDENTIAL,
+            "invalid_credentials"
+        );
+        let credential: PublicKeyCredential =
+            serde_json::from_str(credential).map_err(|_| anyhow!("invalid_credentials"))?;
+        let result = webauthn(origin)?
+            .finish_passkey_authentication(&credential, &state)
+            .map_err(|_| anyhow!("invalid_credentials"))?;
+        ensure!(result.user_verified(), "invalid_credentials");
         let mut next = inner.stored.clone();
-        next.last_totp_step = Some(step);
-        self.commit(inner, next)
+        if let Some(Factor::Passkey { passkey, .. }) = next.factors.get_mut(origin)
+            && passkey.update_credential(&result) == Some(true)
+        {
+            self.commit(inner, next)?;
+        }
+        Ok(())
+    }
+    /// Commit a factor for this unenrolled address and turn the setup session
+    /// into a full owner session on a fresh cookie.
+    fn enroll(
+        &self,
+        inner: &mut Inner,
+        session: &str,
+        origin: &str,
+        factor: Factor,
+    ) -> Result<Response> {
+        ensure!(
+            self.factor(inner, origin).is_none(),
+            "factor_already_enrolled"
+        );
+        let kind = factor.kind();
+        let mut next = inner.stored.clone();
+        next.factors.insert(origin.to_string(), factor);
+        self.commit(inner, next)?;
+        let continuation = inner
+            .sessions
+            .remove(session)
+            .map(|session| session.continuation)
+            .unwrap_or_default();
+        inner.csrf.retain(|_, token| token.session != session);
+        let token = random("owner_");
+        inner.sessions.insert(
+            hash(&token),
+            Session::new(
+                origin.to_string(),
+                Authority::Owner(kind),
+                self.now() + OWNER_TTL,
+            ),
+        );
+        let target = if continuation.is_empty() {
+            OWNER.to_string()
+        } else {
+            continuation
+        };
+        Ok(self.with_cookie(redirect(&target)?, Some(token), origin))
     }
     fn factor_budget(&self, inner: &mut Inner, source: &ClientSource) -> Result<()> {
         attempt_budget(
@@ -1445,8 +1729,72 @@ impl AuthService {
         source: &ClientSource,
     ) -> Result<Response> {
         self.owner_origin(headers)?;
-        let session = self.session_id(inner, headers, true)?;
         let now = self.now();
+        if [ENROLL_TOTP, ENROLL_PASSKEY].contains(&path) {
+            let session = self.session_id_for(inner, headers, |a| a == Authority::Setup)?;
+            let origin = self.request_origin(headers)?;
+            let fields: &[&str] = if path == ENROLL_TOTP {
+                &["csrf_token", "totp"]
+            } else {
+                &["csrf_token", "credential"]
+            };
+            let form = form(headers, body, fields)?;
+            consume_csrf(
+                inner,
+                &session,
+                if path == ENROLL_TOTP {
+                    "factor_verify"
+                } else {
+                    "enroll"
+                },
+                required(&form, "csrf_token")?,
+                now,
+            )?;
+            ensure!(
+                self.factor(inner, &origin).is_none(),
+                "factor_already_enrolled"
+            );
+            self.factor_budget(inner, source)?;
+            let enrollment = inner
+                .sessions
+                .get_mut(&session)
+                .and_then(|session| session.enrollment.take())
+                .ok_or_else(|| anyhow!("invalid_enrollment"))?;
+            let factor = match (path, enrollment) {
+                (ENROLL_TOTP, Enrollment::Totp { secret, expires }) => {
+                    ensure!(expires > now, "invalid_enrollment");
+                    let step = verify_totp(&secret, required(&form, "totp")?, now, None)?;
+                    Factor::Totp {
+                        secret,
+                        last_step: Some(step),
+                    }
+                }
+                (
+                    ENROLL_PASSKEY,
+                    Enrollment::Passkey {
+                        user,
+                        state,
+                        expires,
+                    },
+                ) => {
+                    ensure!(expires > now, "invalid_enrollment");
+                    let credential = required(&form, "credential")?;
+                    ensure!(credential.len() <= MAX_CREDENTIAL, "invalid_credentials");
+                    let credential: RegisterPublicKeyCredential = serde_json::from_str(credential)
+                        .map_err(|_| anyhow!("invalid_credentials"))?;
+                    let passkey = webauthn(&origin)?
+                        .finish_passkey_registration(&credential, &state)
+                        .map_err(|_| anyhow!("invalid_credentials"))?;
+                    Factor::Passkey {
+                        user,
+                        passkey: Box::new(passkey),
+                    }
+                }
+                _ => bail!("invalid_enrollment"),
+            };
+            return self.enroll(inner, &session, &origin, factor);
+        }
+        let session = self.session_id(inner, headers, true)?;
         match path {
             "/agent-connect/owner/logout" => {
                 let form = form(headers, body, &["csrf_token"])?;
@@ -1501,79 +1849,6 @@ impl AuthService {
                 self.commit(inner, next)?;
                 inner.codes.clear();
                 redirect(OWNER)
-            }
-            "/agent-connect/owner/totp/enroll" => {
-                let form = form(headers, body, &["csrf_token", "passphrase"])?;
-                consume_csrf(
-                    inner,
-                    &session,
-                    "enroll",
-                    required(&form, "csrf_token")?,
-                    now,
-                )?;
-                ensure!(
-                    inner.stored.totp_secret.is_none(),
-                    "factor_already_enrolled"
-                );
-                self.factor_budget(inner, source)?;
-                let passphrase = required(&form, "passphrase")?;
-                ensure!(passphrase.len() <= 1024, "invalid_credentials");
-                let parsed = PasswordHash::new(&inner.stored.password_hash)
-                    .map_err(|_| anyhow!("invalid_credentials"))?;
-                ensure!(
-                    Argon2::default()
-                        .verify_password(passphrase.as_bytes(), &parsed)
-                        .is_ok(),
-                    "invalid_credentials"
-                );
-                let mut bytes = [0u8; 20];
-                OsRng.fill_bytes(&mut bytes);
-                let secret = base32(&bytes);
-                inner.sessions.get_mut(&session).unwrap().enrollment =
-                    Some((secret.clone(), now + 600));
-                let token = csrf(inner, &session, "factor_verify", now);
-                let mut uri = Url::parse("otpauth://totp/Agent%20Connect:owner")?;
-                uri.query_pairs_mut()
-                    .append_pair("secret", &secret)
-                    .append_pair("issuer", "Agent Connect")
-                    .append_pair("algorithm", "SHA1")
-                    .append_pair("digits", "6")
-                    .append_pair("period", "30");
-                Ok(html(pages::totp_scan(
-                    &secret,
-                    uri.as_str(),
-                    &hidden("csrf_token", &token),
-                )))
-            }
-            "/agent-connect/owner/totp/verify" => {
-                let form = form(headers, body, &["csrf_token", "totp"])?;
-                consume_csrf(
-                    inner,
-                    &session,
-                    "factor_verify",
-                    required(&form, "csrf_token")?,
-                    now,
-                )?;
-                ensure!(
-                    inner.stored.totp_secret.is_none(),
-                    "factor_already_enrolled"
-                );
-                self.factor_budget(inner, source)?;
-                let (secret, expires) = inner
-                    .sessions
-                    .get(&session)
-                    .and_then(|s| s.enrollment.clone())
-                    .ok_or_else(|| anyhow!("invalid_enrollment"))?;
-                ensure!(expires > now, "invalid_enrollment");
-                let step = verify_totp(&secret, required(&form, "totp")?, now, None)?;
-                let mut next = inner.stored.clone();
-                next.totp_secret = Some(secret);
-                next.last_totp_step = Some(step);
-                self.commit(inner, next)?;
-                // Keep the verifying owner, invalidate peers that never verified this factor.
-                inner.sessions.retain(|id, _| id == &session);
-                inner.csrf.clear();
-                redirect(pages::SECURITY)
             }
             _ => bail!("invalid_request"),
         }
@@ -1657,6 +1932,16 @@ impl AuthService {
         Ok(())
     }
     fn session_id(&self, inner: &Inner, headers: &HeaderMap, owner: bool) -> Result<String> {
+        self.session_id_for(inner, headers, |authority| {
+            !owner || matches!(authority, Authority::Owner(_))
+        })
+    }
+    fn session_id_for(
+        &self,
+        inner: &Inner,
+        headers: &HeaderMap,
+        accept: impl Fn(Authority) -> bool,
+    ) -> Result<String> {
         let origin = self.request_origin(headers)?;
         let policy = OwnerCookiePolicy::for_origin(&origin);
         // Browsers can send non-ASCII bytes in unrelated cookies. Select the
@@ -1687,13 +1972,9 @@ impl AuthService {
             inner
                 .sessions
                 .get(&id)
-                .or_else(|| if owner {
-                    None
-                } else {
-                    inner.anonymous.get(&id)
-                })
+                .or_else(|| inner.anonymous.get(&id))
                 .is_some_and(|s| s.expires > self.now()
-                    && (!owner || s.owner)
+                    && accept(s.authority)
                     && origin == s.origin),
             "owner_login_required"
         );
@@ -1738,16 +2019,13 @@ impl AuthService {
         }
         let token = random("anonymous_");
         let id = hash(&token);
-        inner.anonymous.insert(
-            id.clone(),
-            Session {
-                source: partitioned.then(|| source.clone()),
-                origin: self.request_origin(headers)?,
-                owner: false,
-                expires: self.now() + 600,
-                enrollment: None,
-            },
+        let mut session = Session::new(
+            self.request_origin(headers)?,
+            Authority::Anonymous,
+            self.now() + 600,
         );
+        session.source = partitioned.then(|| source.clone());
+        inner.anonymous.insert(id.clone(), session);
         Ok((id, Some(token)))
     }
     fn record_sign_in_failure(&self, reason: sign_in_audit::Reason, entry_point: Option<String>) {
@@ -1963,7 +2241,7 @@ fn recover(
     );
     let mut stored: Stored = serde_json::from_slice(&fs::read(path)?)?;
     ensure!(
-        stored.version == 1 && stored.grants.len() <= MAX_GRANTS,
+        stored.version == STATE_VERSION && stored.grants.len() <= MAX_GRANTS,
         "invalid authorization state"
     );
     canonical_origin(&stored.issuer)?;
@@ -2298,14 +2576,39 @@ fn page_csp(client: Option<&str>, dynamic_css: &str, script: &str) -> String {
 }
 
 fn html(page: pages::Page) -> Response {
+    html_for(page, None)
+}
+fn html_for(page: pages::Page, client: Option<&str>) -> Response {
     Response::builder()
         .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
         .header(
             "content-security-policy",
-            page_csp(None, &page.dynamic_css, page.script),
+            page_csp(client, &page.dynamic_css, page.script),
         )
         .body(Body::from(pages::document(&page)))
         .unwrap()
+}
+fn session_mut<'a>(inner: &'a mut Inner, id: &str) -> Option<&'a mut Session> {
+    match inner.sessions.get_mut(id) {
+        Some(session) => Some(session),
+        None => inner.anonymous.get_mut(id),
+    }
+}
+/// Browsers allow passkeys only on a domain name, never on an IP literal.
+fn passkey_possible(origin: &str) -> bool {
+    Url::parse(origin).is_ok_and(|url| matches!(url.host(), Some(url::Host::Domain(_))))
+}
+/// The relying party for one address: its exact hostname as RP ID and its exact
+/// origin, port included. Nothing is shared across addresses.
+fn webauthn(origin: &str) -> Result<Webauthn> {
+    ensure!(passkey_possible(origin), "passkey_unavailable");
+    let url = Url::parse(origin)?;
+    let host = url
+        .host_str()
+        .ok_or_else(|| anyhow!("passkey_unavailable"))?;
+    WebauthnBuilder::new(host, &url)
+        .and_then(|builder| builder.rp_name("Agent Connect").build())
+        .map_err(|_| anyhow!("passkey_unavailable"))
 }
 
 fn owner_error(status: StatusCode, reason: &str, path: &str, retry: Option<&str>) -> Response {

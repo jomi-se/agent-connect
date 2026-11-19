@@ -19,11 +19,11 @@ literal origins, so it cannot cover every entry point the gateway supports.
 Each entry-point address has **one second factor: a passkey or TOTP, never
 both.** What an address accepts follows from which one it has:
 
-| Address enrolled with | Sign-in and approvals |
-|---|---|
-| a passkey | the passkey alone, with user verification |
-| TOTP | sign-in: the passphrase plus a TOTP code; each approval: a fresh code |
-| nothing yet | the passphrase, for enrolling a factor only |
+| Address enrolled with | Sign-in and approvals                                                 |
+| --------------------- | --------------------------------------------------------------------- |
+| a passkey             | the passkey alone, with user verification                             |
+| TOTP                  | sign-in: the passphrase plus a TOTP code; each approval: a fresh code |
+| nothing yet           | the passphrase, for enrolling a factor only                           |
 
 1. **A passkey stands alone.** It already proves possession and user
    verification, and it is the part a phishing page cannot steal. Asking for
@@ -58,16 +58,17 @@ both.** What an address accepts follows from which one it has:
    tunnel get the same treatment.
 7. **Everyday changes in the console, lockout recovery on the host.**
 
-   | Action | Owner console | Host CLI |
-   |---|---|---|
-   | Remove an address's factor | yes, with a fresh assertion of the signed-in factor | yes, an exact address or explicit "all" |
-   | Change the passphrase | yes, the old passphrase plus a fresh assertion | yes |
-   | Full reset: new passphrase, every address back to setup | no | yes |
+   | Action                                                  | Owner console                                       | Host CLI                                |
+   | ------------------------------------------------------- | --------------------------------------------------- | --------------------------------------- |
+   | Remove an address's factor                              | yes, with a fresh assertion of the signed-in factor | yes, an exact address or explicit "all" |
+   | Change the passphrase                                   | yes, the old passphrase plus a fresh assertion      | yes                                     |
+   | Full reset: new passphrase, every address back to setup | no                                                  | yes                                     |
 
    Changing the passphrase keeps enrolled factors, since the passphrase only
    gates enrollment. Grants survive all of these. Host access is owner
    authority, so the CLI needs no factor; one reset command replaces
    `reset-totp`.
+
 8. **Start fresh.** The project is pre-1.0 and keeps nothing compatible. The
    new version does not read the old authorization state: the gateway refuses
    to start on it and says to run setup again, which replaces it. The owner
