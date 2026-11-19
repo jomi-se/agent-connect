@@ -23,7 +23,7 @@ end.
 1. **Library spike.** Done: `webauthn-rs` 0.6.2 has no OpenSSL, builds static
    for both Linux musl targets with the release's Zig toolchain, refuses an IP
    literal origin in its builder, and its `SoftPasskey` completes a real
-   registration and sign-in in-process. In local Chromium, its virtual
+   registration and sign-in in-process. In local Chromium, the virtual
    authenticator registers and signs in from a script allowed by a per-response
    CSP nonce, while an un-nonced script on the same page is blocked; the whole
    run takes under two seconds. On `127.0.0.1` the browser refuses with
