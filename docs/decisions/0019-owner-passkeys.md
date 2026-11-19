@@ -22,7 +22,7 @@ both.** What an address accepts follows from which one it has:
 | Address enrolled with | Sign-in and approvals |
 |---|---|
 | a passkey | the passkey alone, with user verification |
-| TOTP | the passphrase plus a TOTP code |
+| TOTP | sign-in: the passphrase plus a TOTP code; each approval: a fresh code |
 | nothing yet | the passphrase, for enrolling a factor only |
 
 1. **A passkey stands alone.** It already proves possession and user
@@ -30,7 +30,8 @@ both.** What an address accepts follows from which one it has:
    the passphrase as well adds little, since the passphrase usually lives in
    the same password manager. Each approval needs a fresh passkey assertion.
 2. **TOTP needs the passphrase too.** A six-digit code can be phished and
-   proves nothing about the user, so it is only a second factor.
+   proves nothing about the user, so it is only a second factor. Sign-in
+   takes both; each approval in that signed-in session takes a fresh code.
 3. **An unenrolled address can only enroll.** The passphrase alone opens a
    setup session that can enroll a passkey or TOTP for that address and do
    nothing else: no approvals, no owner authority. Enrollment is first-come
@@ -67,10 +68,10 @@ both.** What an address accepts follows from which one it has:
    gates enrollment. Grants survive all of these. Host access is owner
    authority, so the CLI needs no factor; one reset command replaces
    `reset-totp`.
-8. **No migration.** The project is pre-1.0 and keeps nothing compatible. The
-   gateway-wide TOTP enrollment is dropped on upgrade; every address starts
-   unenrolled, which by decision 3 means setup only, so nothing gains
-   authority. Owner sessions are invalidated.
+8. **Start fresh.** The project is pre-1.0 and keeps nothing compatible. The
+   new version does not read the old authorization state: the gateway refuses
+   to start on it and says to run setup again, which replaces it. The owner
+   sets the passphrase again and applications pair again.
 9. **JavaScript is required for passkeys.** Inspecting, denying, revoking and
    navigating stay server-rendered forms. Passkey enrollment and use need
    WebAuthn; a browser without it gets a plain explanation, never a
@@ -78,6 +79,13 @@ both.** What an address accepts follows from which one it has:
    the script lives only in the gateway's own owner pages, and the OAuth flow
    and browser SDK are untouched. `PRODUCT.md`'s no-JavaScript rule changes
    to match when this ships.
+10. **Sign-outs follow the factor.** Removing an address's factor ends that
+    address's sessions. Changing the passphrase ends every session but the
+    current one. Every session is also gone on restart, as today.
+11. **One activity view.** The console lists pending requests from every
+    address, each linking to the address it belongs to.
+12. **One cookie per address.** Two ports on the same host get different
+    cookie names, so signing in on one does not replace the other's cookie.
 
 ## Protocol, state and CSP
 
