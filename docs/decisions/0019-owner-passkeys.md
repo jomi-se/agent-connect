@@ -39,6 +39,11 @@ both.** What an address accepts follows from which one it has:
 4. **Passkey is the default; TOTP is for addresses that cannot have one.**
    Setup offers a passkey first. TOTP is offered where a passkey cannot work
    (an IP literal origin) or when the owner chooses it.
+   On an IP literal address, the setup page says plainly why there is no
+   passkey (browsers allow passkeys only on a domain name) and how to get
+   one: open the gateway by a name instead, such as `localhost` on the same
+   machine, the tailnet's DNS name, or a domain or tunnel the operator
+   controls. The exact wording and links are settled with the page.
 5. **No downgrade.** Once an address has a passkey, TOTP is not accepted there.
    The factor is removed only by the owner signed in with it, or by the
    host-side reset, after which the address is back to setup.
