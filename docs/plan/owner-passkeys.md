@@ -1,14 +1,15 @@
-# Owner passkeys instead of TOTP
+# Owner passkeys
 
 Status: ready-for-human
 
-Replace TOTP with passkeys, as the second factor after the passphrase for
-sign-in and approvals. A passkey is bound to its domain, so each entry-point
-address gets one; the first enrollment on an address is first-come, so
-operators enroll right after exposing it. Recovery is a host-side
-`reset-passkey`, like `reset-totp`. The owner pages' CSP needs a nonce for the
-WebAuthn script.
+Each entry-point address gets one second factor, a passkey or TOTP, never
+both. A passkey signs in and approves on its own; TOTP needs the passphrase
+too; an address with neither can only enroll one. Passkey is the default, and
+TOTP covers addresses that cannot have one (IP literals). Recovery is one
+host-side reset per address. No migration: the gateway-wide TOTP enrollment is
+dropped on upgrade.
 
-[ADR 0019](../decisions/0019-owner-passkeys.md) proposes the policy and
-implementation boundaries and waits for the owner to accept it. Migration
-policy and library compatibility are unresolved.
+[ADR 0019](../decisions/0019-owner-passkeys.md) holds the table and the
+decisions, and waits for the owner to accept it. First step after that:
+check that `webauthn-rs` and its OpenSSL 3 dependency build and link on every
+release target.

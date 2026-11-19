@@ -1,55 +1,107 @@
 # ADR 0019: Owner passkeys
 
-Status: Proposed (2026-10-28)
+Status: Proposed (rewritten 2026-11-19)
 
 ## Context
 
-Owner authentication currently combines a passphrase with an optional, globally enrolled TOTP factor. Owner sessions and application approvals already bind to an exact configured entry-point origin. Offline recovery preserves the passphrase and application grants under an exclusive authorization-state lock.
+The owner signs in to the gateway's owner pages and approves applications
+there. Today that takes the passphrase plus an optional TOTP code, enrolled
+once for the whole gateway. Owner sessions and approvals already bind to the
+exact entry-point origin they were made on.
 
-The accepted backlog direction is to replace TOTP with passkeys as a second factor after the passphrase for sign-in and approvals, permit one credential per entry-point address, use first-come enrollment, provide host-side `reset-passkey`, and authorize the WebAuthn script with a CSP nonce. This ADR proposes the remaining policy and implementation boundaries; its defaults are not yet accepted.
+A passkey is stronger than a TOTP code: a phishing page cannot capture it, and
+with user verification it needs both the device and the owner's biometric or
+PIN. But a passkey is bound to a domain, and browsers refuse WebAuthn on IP
+literal origins, so it cannot cover every entry point the gateway supports.
 
-Configured HTTPS addresses and HTTP loopback addresses, including IP literals, are supported product behavior. Selecting a library does not authorize removing those capabilities.
+## Decision
 
-## Proposed decisions requiring owner acceptance
+Each entry-point address has **one second factor: a passkey or TOTP, never
+both.** What an address accepts follows from which one it has:
 
-1. **Preserve protection during migration.** Active version-1 TOTP state must never become passphrase-only authority through an ordinary upgrade. Refuse startup without modifying that state until an explicit offline migration authorizes removal of the old factor and subsequent passkey enrollment. Preserve password hashes and grants. State without an enrolled factor may convert under the existing lock. The precise migration command remains to be settled; no online TOTP compatibility flow or `reset-totp` alias remains afterward.
+| Address enrolled with | Sign-in and approvals |
+|---|---|
+| a passkey | the passkey alone, with user verification |
+| TOTP | the passphrase plus a TOTP code |
+| nothing yet | the passphrase, for enrolling a factor only |
 
-2. **Restrict unenrolled addresses to setup.** A correct passphrase creates an enrollment-only session until that address has a passkey. It cannot approve applications or acquire full owner authority. Existing application grants remain valid. First-come means the first successful, durably committed registration by someone who knows the passphrase, not the first anonymous request. This tightens today's optional-factor behavior and requires explicit acceptance; retaining passphrase-only approvals is the alternative.
+1. **A passkey stands alone.** It already proves possession and user
+   verification, and it is the part a phishing page cannot steal. Asking for
+   the passphrase as well adds little, since the passphrase usually lives in
+   the same password manager. Each approval needs a fresh passkey assertion.
+2. **TOTP needs the passphrase too.** A six-digit code can be phished and
+   proves nothing about the user, so it is only a second factor.
+3. **An unenrolled address can only enroll.** The passphrase alone opens a
+   setup session that can enroll a passkey or TOTP for that address and do
+   nothing else: no approvals, no owner authority. Enrollment is first-come
+   among people who know the passphrase; operators enroll right after exposing
+   an address. Existing application grants stay valid.
+4. **Passkey is the default; TOTP is for addresses that cannot have one.**
+   Setup offers a passkey first. TOTP is offered where a passkey cannot work
+   (an IP literal origin) or when the owner chooses it.
+5. **No downgrade.** Once an address has a passkey, TOTP is not accepted there.
+   The factor is removed only by the owner signed in with it, or by the
+   host-side reset, after which the address is back to setup.
+6. **Factors are per address.** Credentials are indexed by the full configured
+   origin, port included. A passkey's RP ID is the exact hostname, with its
+   own random user handle per address; no sharing across entry points, no
+   parent-domain, wildcard or Related Origins policy.
+7. **Recovery is on the host.** One reset command replaces `reset-totp`. It
+   takes an exact address or an explicit "all", keeps the passphrase and the
+   grants, and returns the affected addresses to setup.
+8. **No migration.** The project is pre-1.0 and keeps nothing compatible. The
+   gateway-wide TOTP enrollment is dropped on upgrade; every address starts
+   unenrolled, which by decision 3 means setup only, so nothing gains
+   authority. Owner sessions are invalidated.
+9. **JavaScript is required for passkeys.** Inspecting, denying, revoking and
+   navigating stay server-rendered forms. Passkey enrollment and use need
+   WebAuthn; a browser without it gets a plain explanation, never a
+   passphrase-only way past an enrolled passkey.
 
-3. **Require fresh proof for approvals.** Recommend a fresh passphrase followed by a passkey assertion for each approval. Today approvals rely on the existing passphrase-authenticated session plus fresh TOTP. Retaining that session-based first factor is an explicit alternative. Denial continues to require valid owner-session/CSRF checks but no fresh factor.
+## Protocol, state and CSP
 
-4. **Separate address records from RP identity.** Index credentials by full canonical configured origin, including port. Use the exact hostname as RP ID, separate random user handles per address, and exact-origin verification. Do not share credentials automatically across entry points or enable parent-domain, wildcard, or Related Origins policies. WebAuthn RP IDs omit scheme/port, while discoverable credentials associate RP ID and user handle; these are distinct from application origin boundaries. [WebAuthn specification](https://www.w3.org/TR/webauthn-3/).
+The change stays inside owner authorization, the owner pages, host-side
+recovery and their tests. Application OAuth/PKCE and the browser SDK do not
+change.
 
-5. **Make recovery scope explicit.** `reset-passkey` requires an exact entry-point selector or explicit all-addresses selection. It preserves passphrase and grants and returns affected addresses to setup. Enrollment invalidates other sessions and challenges for that address while preserving verified sessions on other addresses; global invalidation remains an alternative. Rotate the completing session.
+Authorization state stores, per address: which factor it has, the passkey
+credential or TOTP secret, its user handle and enrollment/reset metadata,
+alongside the passphrase hash and grants. Records for an address removed from
+configuration are kept, not erased. Writes stay private and atomic, and fail
+closed.
 
-6. **Make the browser requirement honest.** Update the product's plain-forms requirement: inspection, denial, revocation and navigation remain server-rendered; passkey enrollment and verification require JavaScript/WebAuthn. Unsupported browsers and disabled JavaScript receive useful explanations, never a passphrase-only bypass for an enrolled credential.
+WebAuthn challenges are server-side, single-use and short-lived, bound to the
+session, exact origin, purpose and current credential; an approval challenge
+also binds the pending request and the selected duration and profile. A failed
+check consumes the challenge. A restart invalidates unfinished ceremonies.
+Enrollment re-checks at commit that the address is still unenrolled, and
+invalidates other sessions on that address.
 
-7. **Decide the owner-origin migration explicitly.** WebAuthn registration and authentication require a domain-form caller origin; IPv4 and IPv6 literals fail before RP-ID selection. `http://localhost:<port>` with RP ID `localhost` is the ordinary local path; HTTPS on a literal IP does not solve the restriction. Replacing the server library cannot preserve direct IP-origin passkey authentication. Decide the supported owner authentication origin and migration before implementation; do not silently remove existing entry points, transfer sessions across origins or downgrade them to passphrase-only authority. [WebAuthn origin checks](https://www.w3.org/TR/webauthn-3/), [Chromium supported origins](https://chromium.googlesource.com/chromium/src/+/HEAD/content/browser/webauth/origins.md).
+A small static script calls `navigator.credentials.create/get` and posts the
+result as a same-origin form. Credentials and passphrases stay out of URLs,
+browser storage and logs. A script-bearing page gets a fresh nonce of at least
+128 bits, shared by its CSP header and script element; the other CSP rules
+(hashed styles, framing, no-store, the application callback) are unchanged.
 
-## Protocol, state and CSP boundary
+## Library
 
-Keep the change inside gateway owner authorization, owner pages, offline recovery and their tests. Application OAuth/PKCE contracts and the browser SDK remain unchanged.
+`webauthn-rs` 0.5.5 is the candidate. Its passkey API keeps registration and
+authentication state on the server, requires user verification and allows
+synced passkeys. Its core needs OpenSSL 3, so before any feature work, every
+release target must build and link it within its existing install contract.
+If that fails, pick another library before writing the feature.
 
-Version-2 authorization state stores bounded per-origin credential records, stable opaque user handles, enrollment/reset metadata, and the existing passphrase/grants. Preserve inactive records when an address is removed from configuration; do not silently erase security state. Maintain private atomic writes and fail closed if persistence fails.
+## Qualification
 
-Registration and authentication challenges remain bounded, expiring, server-side state. Bind each to the initiating session, exact origin, purpose and current credential. Login carries only a validated pending continuation. Approval also binds the pending request and selected duration/profile. Correct passphrase validation issues a challenge, not authenticated authority. Completion verifies a single-use challenge, current request/session/credential state and exact origin before committing success. Failed verification consumes the matched challenge; mismatched sessions cannot consume another session's record. Restart invalidates unfinished ceremonies. Concurrent registration rechecks that the address remains unenrolled at commit.
+Tests cover real registration and assertion, exact-origin and cross-port
+isolation, session/purpose/CSRF/expiry binding, replay, concurrent enrollment,
+bad signatures and missing user verification, cancellation, the no-downgrade
+rule, the TOTP path, and persistence failure. The owner pages are exercised in
+Chromium with a virtual authenticator, CSP enforced, through full sign-in and
+approval. Real devices and mobile credential providers are qualified
+separately; a virtual authenticator proves the protocol, not the devices.
 
-Use a small static script for `navigator.credentials.create/get`, encoding the response into a bounded same-origin form submission. Keep credentials and passphrases out of URLs, persistent browser storage and diagnostics. Retain explicit user initiation, cancellation and fresh-retry paths; never replay an uncertain approval.
-
-Generate a fresh cryptographic nonce for each script-bearing response and share it between the CSP header and script element. Preserve hashed styles, framing restrictions, no-store and the narrowly allowed application callback. The consent page's CSP override must preserve script authorization. Avoid executable interpolation of options and unnecessary network-policy expansion. CSP requires unique, unpredictable nonces and recommends at least 128 bits. [CSP nonce requirements](https://www.w3.org/TR/CSP3/#security-nonces).
-
-## Candidate library and unresolved compatibility
-
-`webauthn-rs` 0.5.5 is a candidate, not a selection. Its high-level passkey methods separate browser options from server-held registration/authentication state; persisted credentials support updates after authentication. Prefer these APIs over custom signature verification or low-level internals. [Versioned API](https://docs.rs/webauthn-rs/0.5.5/webauthn_rs/struct.Webauthn.html), [credential updates](https://docs.rs/webauthn-rs/0.5.5/webauthn_rs/prelude/struct.Passkey.html).
-
-Its passkey flow requires user verification and permits synchronized authenticators. Exact-origin/port checks are available; its builder's domain validation excludes IP-literal origins, consistent with the browser restriction above. Owner-origin migration is a product decision rather than a library substitution. [Versioned source](https://docs.rs/crate/webauthn-rs/0.5.5/source/src/lib.rs).
-
-Its core also depends on OpenSSL; upstream requires OpenSSL 3. Every supported release artifact must retain its installation/runtime contract, rather than acquiring an undeclared native dependency. Cross-target build/linking qualification is mandatory. [Versioned manifest](https://docs.rs/crate/webauthn-rs-core/0.5.5/source/Cargo.toml), [upstream requirements](https://github.com/kanidm/webauthn-rs/blob/master/OpenSSL.md). Physical-device and mobile credential-provider behavior also remains unqualified.
-
-## Implementation qualification
-
-Verify genuine registration/assertion processing; exact-origin and cross-port isolation; session, purpose, CSRF and expiry binding; replay rejection; concurrent enrollment; invalid signatures/user verification; cancellation; unchanged approval selections; denial; and persistence failure without new authority. Prove active-TOTP migration fails closed and offline recovery preserves grants/passphrase.
-
-Exercise actual gateway pages in Chromium with a virtual WebAuthn authenticator, including CSP enforcement and complete login/approval flows. Separately qualify supported real-device browser paths and the accepted migration for IP-literal entry points; virtual success does not establish physical-device compatibility. [Chromium WebAuthn protocol](https://chromedevtools.github.io/devtools-protocol/tot/WebAuthn/).
-
-Resolve the owner choices and candidate-library compatibility before accepting this ADR. The implementation then needs the evidence above; accepting a design does not establish browser or release qualification.
+References: [WebAuthn Level 3](https://www.w3.org/TR/webauthn-3/),
+[Chromium WebAuthn origins](https://chromium.googlesource.com/chromium/src/+/HEAD/content/browser/webauth/origins.md),
+[CSP nonces](https://www.w3.org/TR/CSP3/#security-nonces),
+[webauthn-rs 0.5.5](https://docs.rs/webauthn-rs/0.5.5/webauthn_rs/struct.Webauthn.html).
