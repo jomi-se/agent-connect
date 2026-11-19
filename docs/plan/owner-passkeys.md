@@ -23,7 +23,12 @@ end.
 1. **Library spike.** Done: `webauthn-rs` 0.6.2 has no OpenSSL, builds static
    for both Linux musl targets with the release's Zig toolchain, refuses an IP
    literal origin in its builder, and its `SoftPasskey` completes a real
-   registration and sign-in in-process.
+   registration and sign-in in-process. In local Chromium, its virtual
+   authenticator registers and signs in from a script allowed by a per-response
+   CSP nonce, while an un-nonced script on the same page is blocked; the whole
+   run takes under two seconds. On `127.0.0.1` the browser refuses with
+   `SecurityError: This is an invalid domain.`, so the gateway should know from
+   the configured origin and render the explanation without trying.
 2. **Map today's owner authentication** (sessions, TOTP state, how addresses
    are identified, CSP, tests) against the ADR, and list where they don't fit.
 3. **Per-address state and the table's rules**, as Rust tests with
@@ -50,6 +55,3 @@ end.
 - **`webauthn-rs` 0.6.2 depends on `rsa` 0.10.0-rc**, built in whether or not
   RS256 is accepted; its high-level API has no algorithm switch. RS256 is what
   older Windows Hello credentials use. Current lean: keep the library default.
-- **The virtual authenticator under the CSP nonce**, and how fast the owner UI
-  test runs on a development machine, are unproven until step 7 (a spike may
-  come earlier).
