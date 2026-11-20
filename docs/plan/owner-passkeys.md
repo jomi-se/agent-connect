@@ -96,3 +96,7 @@ before release:
 - **Upgrade note lives in the changelog only.** The gateway's refusal message
   says to run setup again; the install guide says only that a release may ask
   for it.
+- **Every owner surface gets a design pass together**, once this works end
+  to end: setup, sign-in, consent, Security, Activity, the error pages and
+  the CLI messages. They carry too much explanatory text; aim for labels,
+  with explanation kept for the irreversible and the uncommon.
