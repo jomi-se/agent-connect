@@ -7,11 +7,12 @@ import net from "node:net";
 import { join } from "node:path";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 import { rootlessEnginePath } from "./rootless-engine-stub.mjs";
+import { enrollmentSecret, totpCode } from "./owner-totp.mjs";
 
 const ownerPath = "/agent-connect/owner";
 const loginPath = `${ownerPath}/login`;
+const setupPath = `${ownerPath}/setup`;
 const clientHeader = "x-fixture-client-address";
-const cookieName = "agent_connect_owner";
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function availablePort() {
@@ -94,6 +95,7 @@ export async function verifyClientAddressPolicy({
     env.PATH = await rootlessEnginePath(directory, env.PATH);
     const port = await availablePort();
     const authority = `127.0.0.1:${port}`;
+    const cookieName = `agent_connect_owner_${port}`;
     const origin = `http://${authority}`;
     const runtime = join(directory, "runtime");
     const setup = await ownerTerminal(
@@ -336,10 +338,10 @@ export async function verifyClientAddressPolicy({
       "A separate trusted client must still sign in",
     );
     assert.ok(
-      signedIn.headers.location === ownerPath,
-      "Sign-in must return to the owner console",
+      signedIn.headers.location === setupPath,
+      "Sign-in on an address with no factor must lead to setup",
     );
-    const ownerCookie = selectedCookie(signedIn);
+    const setupCookie = selectedCookie(signedIn);
 
     // Actual localAddress binding, not a forged forwarding header or ConnectInfo.
     await exhaust("127.0.0.2", (index) => address(`192.0.2.${10 + index}`));
@@ -382,10 +384,35 @@ export async function verifyClientAddressPolicy({
       "Cookie and CSRF must remain valid after a client-address change",
     );
     assert.ok(
-      changedAddress.headers.location === ownerPath,
-      "Address-change sign-in must return to the owner console",
+      changedAddress.headers.location === setupPath,
+      "Address-change sign-in must lead to setup",
     );
     selectedCookie(changedAddress);
+
+    // The passphrase opened setup only. A bare IP address cannot have a
+    // passkey, so set up TOTP there for a full owner session.
+    const enrollHeaders = address("192.0.2.40");
+    const enrollment = await request({
+      path: `${ownerPath}/totp`,
+      headers: enrollHeaders,
+      cookie: setupCookie,
+    });
+    assert.equal(enrollment.status, 200, "Setup must offer TOTP enrollment");
+    const secret = enrollmentSecret(enrollment.text);
+    secrets.add(secret);
+    const enrolled = await request({
+      method: "POST",
+      path: `${ownerPath}/totp/verify`,
+      headers: enrollHeaders,
+      cookie: setupCookie,
+      fields: { csrf_token: csrf(enrollment), totp: totpCode(secret) },
+    });
+    assert.equal(enrolled.status, 302, "TOTP enrollment must complete");
+    assert.ok(
+      enrolled.headers.location === ownerPath,
+      "Enrollment must lead to the owner console",
+    );
+    const ownerCookie = selectedCookie(enrolled);
 
     // Exercise only the per-source request window. The global 600-request
     // ceiling is covered in Rust; this entire fixture stays well below it.

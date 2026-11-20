@@ -5265,3 +5265,95 @@ async fn a_totp_session_removes_totp_addresses_with_a_fresh_code_but_never_a_pas
     drop(auth);
     fs::remove_dir_all(dir).unwrap();
 }
+
+#[tokio::test]
+async fn activity_links_a_request_to_the_address_it_was_made_on() {
+    const SECOND: &str = "https://second.example";
+    let dir = std::env::temp_dir().join(random("agent-connect-activity-address-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
+    let owner = login(&auth, "").await;
+    let details = json!([{"type":"agent_connect","tools":[{"name":"read_book","description":"Read","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}]}]).to_string();
+    let challenge = hash(VERIFIER);
+    let made = request_at(
+        &auth,
+        Method::POST,
+        PAR,
+        Some(APP),
+        None,
+        Some("second.example"),
+        &[
+            ("client_id", APP),
+            ("client_name", "Books"),
+            ("redirect_uri", "https://app.example/callback"),
+            ("resource", "https://second.example/acp"),
+            ("response_type", "code"),
+            ("scope", "acp"),
+            ("state", "s"),
+            ("code_challenge", &challenge),
+            ("code_challenge_method", "S256"),
+            ("authorization_details", &details),
+        ],
+    )
+    .await;
+    assert_eq!(made.status, StatusCode::CREATED, "{}", made.text);
+    let page = request(&auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+    assert!(
+        page.text
+            .contains("href='https://second.example/agent-connect/oauth/authorize?"),
+        "{}",
+        page.text
+    );
+    assert!(page.text.contains(" · on https://second.example</p>"));
+    drop(auth);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn passkey_successes_do_not_spend_the_factor_budget_but_failures_do() {
+    let dir = std::env::temp_dir().join(random("agent-connect-passkey-budget-test-"));
+    let auth = AuthService::open(config(dir.clone(), Some(PASSWORD))).unwrap();
+    let owner = login(&auth, "").await;
+    // Enrollment spent an attempt; start from a fresh window.
+    advance(&auth, 61);
+    // More approvals in a minute than the budget's five attempts.
+    for _ in 0..7 {
+        let uri = pushed(&auth).await;
+        code(&consent(&auth, &owner, &uri, "approve", "", "3600").await);
+    }
+    // Failed assertions still run out.
+    let uri = pushed(&auth).await;
+    let mut statuses = Vec::new();
+    for _ in 0..6 {
+        let page = request(
+            &auth,
+            Method::GET,
+            &authorize_url(APP, &uri),
+            None,
+            Some(&owner),
+            &[],
+        )
+        .await;
+        let refused = request(
+            &auth,
+            Method::POST,
+            AUTHORIZE,
+            Some(ISSUER),
+            Some(&owner),
+            &[
+                ("request_uri", &uri),
+                ("csrf_token", &input(&page.text, "csrf_token")),
+                ("decision", "approve"),
+                ("duration", "3600"),
+                ("credential", ""),
+                ("profile", "sandboxed"),
+            ],
+        )
+        .await;
+        statuses.push(refused.text.contains("Too many attempts"));
+    }
+    assert_eq!(statuses, [false, false, false, false, false, true]);
+    drop(auth);
+    fs::remove_dir_all(dir).unwrap();
+}

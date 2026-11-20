@@ -125,23 +125,24 @@ headless one.
 
 The hosted routes are:
 
-| Route                                                                  | Purpose                                                                            |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `/healthz`                                                             | Credential-free runtime health                                                     |
-| `/agent-connect/owner`                                                 | Activity feed with pending requests, live sessions and grant history               |
-| `/agent-connect/owner/login`, `/agent-connect/owner/logout`            | Owner session authentication                                                       |
-| `/agent-connect/owner/security`                                        | Authenticator status, setup link and revoke-all control                            |
-| `/agent-connect/owner/gateway`                                         | Configured entry points, harness and native access profiles                        |
-| `/agent-connect/owner/totp`                                            | Authenticator setup starts with owner passphrase confirmation                      |
-| `/agent-connect/owner/totp/enroll`, `/agent-connect/owner/totp/verify` | Server-rendered QR and otpauth link, then code verification; redirects to Security |
-| `/agent-connect/owner/grants/revoke-all`                               | Revoke all application grants from Security                                        |
-| `/agent-connect/owner/sessions/end`                                    | End a live session from Activity while retaining its grant                         |
-| `/agent-connect/owner/grants/revoke`                                   | Owner revocation of an individual grant                                            |
-| `/agent-connect/oauth/par`, `/agent-connect/oauth/authorize`           | Pushed authorization request and owner consent                                     |
-| `/agent-connect/oauth/token`, `/agent-connect/oauth/revoke`            | PKCE code exchange, rotating refresh and application revocation                    |
-| `/.well-known/oauth-authorization-server/agent-connect`                | Authorization-server metadata                                                      |
-| `/.well-known/oauth-protected-resource/acp`                            | Protected ACP resource metadata                                                    |
-| `/acp`                                                                 | Grant-authorized ACP WebSocket                                                     |
+| Route                                                               | Purpose                                                                       |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `/healthz`                                                          | Credential-free runtime health                                                |
+| `/agent-connect/owner`                                              | Activity feed with pending requests, live sessions and grant history          |
+| `/agent-connect/owner/login`, `/agent-connect/owner/logout`         | Owner session authentication                                                  |
+| `/agent-connect/owner/security`                                     | Each address's passkey or authenticator, with removal, and revoke-all control |
+| `/agent-connect/owner/gateway`                                      | Configured entry points, harness and native access profiles                   |
+| `/agent-connect/owner/setup`, `/agent-connect/owner/passkey/enroll` | Setup for an address with no factor: create its passkey                       |
+| `/agent-connect/owner/totp`, `/agent-connect/owner/totp/verify`     | Or set up an authenticator app instead: QR and otpauth link, then a code      |
+| `/agent-connect/owner/factor/remove`                                | Remove an address's factor from Security with a fresh passkey or code         |
+| `/agent-connect/owner/grants/revoke-all`                            | Revoke all application grants from Security                                   |
+| `/agent-connect/owner/sessions/end`                                 | End a live session from Activity while retaining its grant                    |
+| `/agent-connect/owner/grants/revoke`                                | Owner revocation of an individual grant                                       |
+| `/agent-connect/oauth/par`, `/agent-connect/oauth/authorize`        | Pushed authorization request and owner consent                                |
+| `/agent-connect/oauth/token`, `/agent-connect/oauth/revoke`         | PKCE code exchange, rotating refresh and application revocation               |
+| `/.well-known/oauth-authorization-server/agent-connect`             | Authorization-server metadata                                                 |
+| `/.well-known/oauth-protected-resource/acp`                         | Protected ACP resource metadata                                               |
+| `/acp`                                                              | Grant-authorized ACP WebSocket                                                |
 
 Authorization requests expire after ten minutes; single-use authorization codes
 after two minutes. Access tokens last at most five minutes. Owner consent offers
@@ -271,14 +272,18 @@ Owner login attempts are bounded by the actual socket peer, not client-supplied
 forwarding headers. A reverse proxy makes clients share its peer budget; rate
 limit public ingress as well and investigate the proxy's shared budget when
 legitimate owner sign-in is throttled. Application grant expiry/rotation does
-not create owner sign-in authority. Optional TOTP has replay protection: login
-and approval require distinct fresh codes, which can require waiting for the
-next authenticator interval.
+not create owner sign-in authority. Each address has its own passkey or TOTP
+([ADR 0019](../decisions/0019-owner-passkeys.md)). A passkey needs the address
+to be a name (`localhost`, a tailnet name, a domain); on a bare IP address the
+setup page explains this and offers TOTP. TOTP has replay protection: login and
+approval require distinct fresh codes, which can require waiting for the next
+authenticator interval.
 
 Use distinct hostnames for the gateway owner surface and third-party application
 servers. Browser cookies are not isolated by port: two ports on one hostname do
 not provide separate owner-cookie trust boundaries, including for `__Host-`
-cookies. Server sessions and CSRF checks still bind to the complete configured
+cookies. Each address's cookie name carries its port, so signing in on one does
+not replace another's session, but each can still read the other's. Server sessions and CSRF checks still bind to the complete configured
 origin, including scheme and port. The local sample's loopback
 servers are operator-controlled; production examples use `gateway.example` and
 `app.example` as separate hosts.

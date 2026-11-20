@@ -1117,15 +1117,26 @@ impl AuthService {
                     },
                 })));
             }
+            // One activity view: a request made on another address is reviewed
+            // there, where its consent and that address's factor apply.
+            let here = self.request_origin(headers)?;
             let requests = inner
                 .pending
                 .iter()
-                .map(|(uri, pending)| pages::Request {
-                    name: pending.client_name.clone(),
-                    origin: pending.client.clone(),
-                    href: authorize_url(&pending.client, uri),
-                    tools: pending.tools.len(),
-                    expires: pending.expires,
+                .map(|(uri, pending)| {
+                    let elsewhere = (pending.issuer != here).then(|| pending.issuer.clone());
+                    pages::Request {
+                        name: pending.client_name.clone(),
+                        origin: pending.client.clone(),
+                        href: format!(
+                            "{}{}",
+                            elsewhere.as_deref().unwrap_or(""),
+                            authorize_url(&pending.client, uri)
+                        ),
+                        address: elsewhere,
+                        tools: pending.tools.len(),
+                        expires: pending.expires,
+                    }
                 })
                 .collect();
             let grants = inner.stored.grants.clone();
@@ -1658,15 +1669,25 @@ impl AuthService {
         form: &BTreeMap<String, String>,
         source: &ClientSource,
     ) -> Result<()> {
-        self.factor_budget(inner, source)?;
+        let counted = self.factor_budget(inner, source)?;
         match self.factor(inner, origin) {
-            Some(Factor::Passkey { .. }) => self.finish_assertion(
-                inner,
-                session,
-                origin,
-                purpose,
-                form.get("credential").map(String::as_str).unwrap_or(""),
-            ),
+            Some(Factor::Passkey { .. }) => {
+                let verified = self.finish_assertion(
+                    inner,
+                    session,
+                    origin,
+                    purpose,
+                    form.get("credential").map(String::as_str).unwrap_or(""),
+                );
+                // A passkey cannot be guessed, so only failures spend the
+                // budget; an owner approving several apps in a minute is fine.
+                if verified.is_ok()
+                    && let Some(budget) = inner.factor_budgets.get_mut(&counted)
+                {
+                    budget.count = budget.count.saturating_sub(1);
+                }
+                verified
+            }
             Some(Factor::Totp { secret, last_step }) => {
                 let code = form.get("totp").map(String::as_str).unwrap_or("");
                 let step = verify_totp(&secret, code, self.now(), last_step)?;
@@ -1782,7 +1803,7 @@ impl AuthService {
         };
         Ok(self.with_cookie(redirect(&target)?, Some(token), origin))
     }
-    fn factor_budget(&self, inner: &mut Inner, source: &ClientSource) -> Result<()> {
+    fn factor_budget(&self, inner: &mut Inner, source: &ClientSource) -> Result<ClientSource> {
         attempt_budget(
             &mut inner.factor_budgets,
             source,
@@ -1792,7 +1813,6 @@ impl AuthService {
             "factor_rate_limited",
             !self.config.client_address_policies.is_empty(),
         )
-        .map(|_| ())
     }
     fn owner_post(
         &self,

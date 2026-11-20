@@ -25,7 +25,7 @@ its extensions evolve.
 
 ## Authority and reliability
 
-Owner login, optional TOTP, exact-origin fixed-tool consent, rotating grants,
+Owner login with a passkey or TOTP per address, exact-origin fixed-tool consent, rotating grants,
 profile choice, session inspection/end-session and revocation live in the
 gateway. Production sessions run in owned disposable boxes with dedicated
 shared harness homes and restricted owned egress. Owner state stays outside

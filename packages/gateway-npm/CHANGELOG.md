@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Owner sign-in takes a passkey. Each address the gateway is opened by has one
+  second factor: a passkey, which alone signs in and approves each app, or an
+  authenticator app (TOTP), which needs the passphrase to sign in and a fresh
+  code for each approval. TOTP is for addresses where a passkey cannot work,
+  such as a bare IP address; the page says so and how to get a name instead.
+  On an address with neither, the passphrase only opens setup. See ADR 0019.
+- Security lists every address with its factor and removes one with a fresh
+  passkey or code. `agent-connect remove-factor <address>` (or `--all`)
+  replaces `reset-totp`.
+- After upgrading, the gateway refuses the earlier owner state and says to run
+  `agent-connect setup` again: set the passphrase, set up each address, and
+  pair applications again.
+- Each address gets its own owner cookie, named with its port, so signing in
+  on one port no longer replaces another's session.
+
 - The box is built on Node 26.13.0, the current LTS, instead of Node 24.
   The launcher still runs on Node 24.15 or newer.
 

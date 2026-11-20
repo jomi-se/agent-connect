@@ -14,7 +14,7 @@ application / browser
                  | exact-origin rotating grants + ACP WebSocket (unstable)
                  v
 Agent Connect gateway
-  owner sign-in / optional TOTP / consent / grant revocation
+  owner sign-in (passkey or TOTP) / consent / grant revocation
   fixed approved tools / policy proxy / resumable session hosts
                  | official ACP adapter + MCP-over-ACP polyfill (unstable)
                  v

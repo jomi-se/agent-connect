@@ -22,4 +22,4 @@ Tickets:
 - [02 Native platform matrix](issues/02-native-platform-matrix.md)
 
 Out of scope for now: per-app box isolation, Windows, mobile approval and
-mobile recovery codes. Owner TOTP and offline recovery exist.
+mobile recovery codes. Owner passkeys, TOTP and offline recovery exist.

@@ -130,13 +130,17 @@ agent-connect setup --origin https://gateway.example --apply --non-interactive
 ## 3. Connect an application
 
 Open `http://127.0.0.1:18940/agent-connect/owner`, or
-`https://gateway.example/agent-connect/owner` remotely. Sign in with the owner
-passphrase. Activity shows runtime health, pending requests, live sessions and grant history.
-Security manages the authenticator and revoking all app access; Gateway lists
-configured entry points, the harness and native access profiles. Connect apps through a configured entry point. Optional TOTP
-setup confirms your passphrase, then shows a QR code and an authenticator link.
-Click **Enter the key by hand** to copy the setup key and reveal it for manual entry.
-Verification returns to Security; sign-in and each approval then need a fresh code.
+`https://gateway.example/agent-connect/owner` remotely. The first time on an
+address, the owner passphrase opens setup: create a passkey, which from then on
+signs in and approves apps there on its own. Where a passkey cannot work (a bare
+IP address such as `127.0.0.1`; open `localhost` instead on the same machine),
+set up an authenticator app: scan the QR code or click **Enter the key by hand**
+to copy the key, and sign-in then takes the passphrase and a code, and each
+approval a fresh code. Activity shows runtime health, pending requests, live
+sessions and grant history. Security lists each address's passkey or
+authenticator and revokes all app access; Gateway lists configured entry points,
+the harness and native access profiles. Connect apps through a configured entry
+point.
 
 In your app, enter the gateway origin and choose **Connect**. Review the exact
 application origin, complete tool schemas, available restricted profile, native
@@ -231,7 +235,8 @@ config for service/doctor commands. Upgrade uses the new installed release's
 box, updates the owned service executable even when its image is
 unchanged, names the box images it
 replaced without removing them, and preserves owner
-passphrase, TOTP, grant records, journals and login homes. Image or harness-policy
+passphrase, passkeys and authenticators, grant records, journals and login
+homes, except where a release says to run setup again. Image or harness-policy
 changes invalidate existing application authority: pair affected apps again.
 Retaining a grant record does not keep it valid under a changed policy. Never
 replay interrupted turns or initialize over existing state.

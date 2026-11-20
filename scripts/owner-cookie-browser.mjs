@@ -17,10 +17,12 @@ import { join } from "node:path";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 import { runCleanupTasks, stopFixtureChild } from "./test-fixture-cleanup.mjs";
 import { rootlessEnginePath } from "./rootless-engine-stub.mjs";
+import { setUpTotpInBrowser } from "./owner-totp.mjs";
 
 export const ownerCookieResolverRules =
   "MAP owner.example.test 127.0.0.1, MAP sibling.example.test 127.0.0.1";
-const selectedName = "__Host-agent_connect_owner";
+// Each address has its own cookie; the name carries its port.
+let selectedName;
 const ownerPath = "/agent-connect/owner";
 const loginPath = `${ownerPath}/login`;
 const logoutPath = `${ownerPath}/logout`;
@@ -215,6 +217,7 @@ export async function verifyOwnerCookies({
       proxy.listen(0, "127.0.0.1", ok);
     });
     const tlsPort = proxy.address().port;
+    selectedName = `__Host-agent_connect_owner_${tlsPort}`;
     const origin = `https://owner.example.test:${tlsPort}`;
     const sibling = `https://sibling.example.test:${tlsPort}`;
     const runtime = join(directory, "runtime");
@@ -281,9 +284,13 @@ export async function verifyOwnerCookies({
           reply.url() === `${origin}${loginPath}` &&
           reply.request().method() === "POST",
       ),
-      page.getByRole("button", { name: "Sign in", exact: true }).click(),
+      page.getByRole("button", { name: "Continue", exact: true }).click(),
     ]);
     await assertSetCookie(signedIn, 43200);
+    // A new address has no factor: the passphrase opens setup only. The
+    // fixture's certificate is not trusted, which passkeys refuse, so it sets
+    // up the authenticator app; cookies are what is checked here.
+    await setUpTotpInBrowser(page);
     await page
       .getByRole("heading", { name: "No apps yet", exact: true })
       .waitFor();

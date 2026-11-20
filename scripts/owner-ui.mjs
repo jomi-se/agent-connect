@@ -2,7 +2,7 @@
 // Synthetic owner/factor state stays isolated; screenshots default to a temporary
 // review root or are retained in OWNER_UI_SCREENSHOTS when explicitly requested.
 import assert from "node:assert/strict";
-import { createHash, createHmac } from "node:crypto";
+import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import {
   chmod,
@@ -29,6 +29,13 @@ import { verifyClientAddressPolicy } from "./client-address-fixture.mjs";
 import { ownerTerminal } from "../deploy/gateway/test/clean-room/owner-terminal.mjs";
 import { rootlessEnginePath } from "./rootless-engine-stub.mjs";
 import { engine, engineEnv } from "./container-engine.mjs";
+import { ownerPasskeys, passkeySignIn } from "./owner-passkey-browser.mjs";
+import {
+  nextTotpStep,
+  setUpTotpInBrowser,
+  totpCode,
+  totpStep,
+} from "./owner-totp.mjs";
 
 const boxImage = requireBoxImage();
 const repo = resolve(import.meta.dirname, "..");
@@ -84,7 +91,12 @@ const listener = net.createServer();
 await new Promise((ok) => listener.listen(0, "127.0.0.1", ok));
 const port = listener.address().port;
 await new Promise((ok) => listener.close(ok));
-const origin = `http://127.0.0.1:${port}`;
+// The owner's main address is a name, so it gets a passkey (Chromium's virtual
+// authenticator: real WebAuthn and signatures, no device). The same gateway by
+// bare IP address cannot have one and takes the TOTP path.
+const origin = `http://localhost:${port}`;
+const ipOrigin = `http://127.0.0.1:${port}`;
+const ownerCookieName = `agent_connect_owner_${port}`;
 const application = createServer((_request, response) => {
   response.writeHead(200, { "Content-Type": "text/html" });
   response.end(
@@ -121,6 +133,7 @@ Object.assign(config, {
   mock_root: root,
   harness_home: undefined,
   listen: `127.0.0.1:${port}`,
+  entry_points: [ipOrigin],
 });
 await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
 let gateway = spawn(binary, ["serve", "--config", configPath], {
@@ -191,6 +204,7 @@ try {
     password,
   });
   const context = await browser.newContext();
+  const passkeys = ownerPasskeys();
   // Both owner pages and the synthetic app callback are served by real local HTTP.
   const page = await context.newPage();
   const errors = [];
@@ -243,7 +257,7 @@ try {
   assert.equal(await httpSignIn.headerValue("strict-transport-security"), null);
   const anonymousCookies = await context.cookies(owner);
   assert.equal(anonymousCookies.length, 1);
-  assert.equal(anonymousCookies[0].name, "agent_connect_owner");
+  assert.equal(anonymousCookies[0].name, ownerCookieName);
   assert.equal(anonymousCookies[0].path, "/agent-connect");
   assert.equal(anonymousCookies[0].secure, false);
   assert.equal(anonymousCookies[0].httpOnly, true);
@@ -268,7 +282,7 @@ try {
   await page.keyboard.press("Tab");
   assert.equal(
     await page
-      .getByRole("button", { name: "Sign in" })
+      .getByRole("button", { name: "Continue" })
       .evaluate((button) => button === document.activeElement),
     true,
   );
@@ -277,20 +291,39 @@ try {
     .inputValue();
   const wrongPassphrase = "deliberately-wrong-test-passphrase";
   await page.getByLabel("Owner passphrase").fill(wrongPassphrase);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
   await page
     .getByRole("heading", { name: "Sign-in did not complete" })
     .waitFor();
   await capture("sign-in-error", { compact: true });
   await page.goto(owner);
   await page.getByLabel("Owner passphrase").fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  // No factor yet: the passphrase opens setup only, and setup offers a passkey.
+  const createPasskey = page.getByRole("button", {
+    name: "Create a passkey",
+    exact: true,
+  });
+  await createPasskey.waitFor();
+  await capture("setup-passkey", { compact: true });
+  assert.equal(
+    (await page.goto(owner)).url(),
+    `${origin}/agent-connect/owner/setup`,
+    "A setup session reaches nothing but setup",
+  );
+  await passkeys.use(page, () =>
+    Promise.all([
+      page.waitForURL(owner),
+      page.getByRole("button", { name: "Create a passkey" }).click(),
+    ]),
+  );
+  assert.deepEqual(passkeys.relyingParties(), ["localhost"]);
   await page
     .getByRole("heading", { name: "No apps yet", exact: true })
     .waitFor();
   const signedInCookies = await context.cookies(owner);
   assert.equal(signedInCookies.length, 1);
-  assert.equal(signedInCookies[0].name, "agent_connect_owner");
+  assert.equal(signedInCookies[0].name, ownerCookieName);
   assert.equal(signedInCookies[0].path, "/agent-connect");
   assert.equal(signedInCookies[0].secure, false);
   assert.ok(signedInCookies[0].value.startsWith("owner_"));
@@ -318,13 +351,14 @@ try {
     );
   await capture("activity-empty");
   await page.getByRole("link", { name: "Security", exact: true }).click();
-  await page.getByText("Authenticator is off", { exact: true }).waitFor();
+  await page.getByText("Passkey · this address", { exact: true }).waitFor();
+  await page.getByText("Not set up", { exact: true }).waitFor();
   assert.ok(
     await page
       .getByRole("button", { name: "Revoke all", exact: true })
       .isDisabled(),
   );
-  await capture("security-off");
+  await capture("security");
   await page.getByRole("link", { name: "Gateway", exact: true }).click();
   await page
     .getByRole("heading", {
@@ -342,6 +376,7 @@ try {
   async function push({
     stress = false,
     state = "synthetic-visual-state",
+    at = origin,
   } = {}) {
     const client = stress
       ? `https://${["library".repeat(8), "books".repeat(10), "reading".repeat(8), "app", "example"].join(".")}`
@@ -386,7 +421,7 @@ try {
       client_id: client,
       client_name: stress ? "Library".repeat(28) : "The evening library",
       redirect_uri: `${client}/callback`,
-      resource: `${origin}/acp`,
+      resource: `${at}/acp`,
       response_type: "code",
       scope: "acp",
       state,
@@ -394,20 +429,24 @@ try {
       code_challenge_method: "S256",
       authorization_details: JSON.stringify([{ type: "agent_connect", tools }]),
     });
-    const reply = await fetch(`${origin}/agent-connect/oauth/par`, {
+    const reply = await fetch(`${at}/agent-connect/oauth/par`, {
       method: "POST",
       headers: { Origin: client },
       body: params,
     });
     assert.equal(reply.status, 201);
     const { request_uri } = await reply.json();
-    return `${origin}/agent-connect/oauth/authorize?${new URLSearchParams({ client_id: client, request_uri })}`;
+    return `${at}/agent-connect/oauth/authorize?${new URLSearchParams({ client_id: client, request_uri })}`;
   }
+  // The bare IP address: no factor yet and no passkey possible. A failed
+  // sign-in keeps the waiting request through the retry link, setup explains
+  // the missing passkey, and TOTP set up there leads back to the request.
+  const ipOwner = `${ipOrigin}/agent-connect/owner`;
   const recoveryContext = await browser.newContext();
   try {
     const recoveryPage = await recoveryContext.newPage();
     recoveryPage.on("pageerror", (error) => errors.push(error.message));
-    await recoveryPage.goto(owner);
+    await recoveryPage.goto(ipOwner);
     await recoveryPage.getByLabel("Owner passphrase").waitFor();
     assert.equal(
       await recoveryPage
@@ -416,7 +455,9 @@ try {
       0,
     );
     const recoveryState = "synthetic-sign-in-recovery-state";
-    const originalRequest = new URL(await push({ state: recoveryState }));
+    const originalRequest = new URL(
+      await push({ state: recoveryState, at: ipOrigin }),
+    );
     const waitingApp =
       "Sign in to review the request from The evening library.";
     await recoveryPage.goto(originalRequest.href);
@@ -427,11 +468,11 @@ try {
     const [failedSignIn] = await Promise.all([
       recoveryPage.waitForResponse(
         (reply) =>
-          reply.url() === `${owner}/login` &&
+          reply.url() === `${ipOwner}/login` &&
           reply.request().method() === "POST",
       ),
       recoveryPage
-        .getByRole("button", { name: "Sign in", exact: true })
+        .getByRole("button", { name: "Continue", exact: true })
         .click(),
     ]);
     assert.equal(failedSignIn.status(), 401);
@@ -442,8 +483,8 @@ try {
       name: "Return to sign-in",
       exact: true,
     });
-    const retryUrl = new URL(await retry.getAttribute("href"), origin);
-    assert.equal(retryUrl.origin, origin);
+    const retryUrl = new URL(await retry.getAttribute("href"), ipOrigin);
+    assert.equal(retryUrl.origin, ipOrigin);
     assert.equal(retryUrl.pathname, "/agent-connect/owner/login");
     for (const key of ["client_id", "request_uri"])
       assert.equal(
@@ -455,8 +496,68 @@ try {
     await recoveryPage.getByText(waitingApp, { exact: true }).waitFor();
     await recoveryPage.getByLabel("Owner passphrase").fill(password);
     await recoveryPage
-      .getByRole("button", { name: "Sign in", exact: true })
+      .getByRole("button", { name: "Continue", exact: true })
       .click();
+    await recoveryPage
+      .getByRole("heading", { name: "Set up an authenticator", exact: true })
+      .waitFor();
+    assert.match(
+      await recoveryPage.locator("main").innerText(),
+      /bare IP address[\s\S]*localhost/,
+      "The IP address page says why there is no passkey and where to get one",
+    );
+    await capture("setup-ip-address", { compact: true, target: recoveryPage });
+    await recoveryPage
+      .getByRole("link", { name: "Use an authenticator app", exact: true })
+      .click();
+    await recoveryPage
+      .getByRole("img", {
+        name: "QR code for adding Agent Connect to an authenticator",
+      })
+      .waitFor();
+    assert.equal(await recoveryPage.locator(".qr svg").count(), 1);
+    await capture("authenticator-qr", { target: recoveryPage });
+    const uri = await recoveryPage
+      .getByRole("link", { name: "Open in authenticator app" })
+      .getAttribute("href");
+    const secret = new URL(uri).searchParams.get("secret");
+    await recoveryContext.grantPermissions(
+      ["clipboard-read", "clipboard-write"],
+      { origin: ipOrigin },
+    );
+    const manual = recoveryPage.locator(".manual summary");
+    await manual.click();
+    await recoveryPage.getByText("Copied", { exact: true }).waitFor();
+    assert.ok(
+      (await recoveryPage.evaluate(() => navigator.clipboard.readText())) ===
+        secret,
+      "Manual setup click copies the complete unspaced key",
+    );
+    assert.equal(
+      await recoveryPage.locator(".manual").getAttribute("open"),
+      "",
+    );
+    await capture("authenticator-key-copied", { target: recoveryPage });
+    await recoveryPage.emulateMedia({ reducedMotion: "reduce" });
+    await manual.focus();
+    await manual.press("Enter");
+    assert.equal(
+      await recoveryPage.locator(".manual").getAttribute("open"),
+      null,
+    );
+    assert.equal(
+      await recoveryPage
+        .locator(".copy-status")
+        .evaluate((status) => getComputedStyle(status).animationName),
+      "none",
+    );
+    await recoveryPage.emulateMedia({ reducedMotion: "no-preference" });
+    const enrollmentStep = totpStep();
+    await recoveryPage
+      .getByLabel("Code shown in your authenticator")
+      .fill(totpCode(secret, enrollmentStep));
+    await recoveryPage.getByRole("button", { name: "Turn on" }).click();
+    // Enrolling leads back to the request that was waiting.
     await recoveryPage
       .getByRole("heading", {
         name: "Allow The evening library to use your agent?",
@@ -476,8 +577,65 @@ try {
     assert.equal(recoveredCallback.pathname, "/callback");
     assert.equal(recoveredCallback.searchParams.get("state"), recoveryState);
     assert.equal(recoveredCallback.searchParams.get("error"), "access_denied");
-    assert.equal(recoveredCallback.searchParams.get("iss"), origin);
+    assert.equal(recoveredCallback.searchParams.get("iss"), ipOrigin);
     assert.equal(recoveredCallback.searchParams.has("code"), false);
+    // Each approval on a TOTP address takes a fresh code.
+    await recoveryPage.goto(await push({ at: ipOrigin }));
+    await recoveryPage.getByLabel("Authenticator code").waitFor();
+    await capture("factor-consent", { target: recoveryPage });
+    await recoveryPage
+      .getByLabel("Authenticator code")
+      .fill(totpCode(secret, enrollmentStep));
+    await recoveryPage
+      .getByRole("button", { name: "Approve", exact: true })
+      .click();
+    await recoveryPage
+      .getByRole("heading", { name: "Authenticator code not accepted" })
+      .waitFor();
+    await capture("factor-error", { compact: true, target: recoveryPage });
+    await recoveryPage.goto(await push({ at: ipOrigin }));
+    const freshStep = await nextTotpStep(enrollmentStep);
+    await recoveryPage
+      .getByLabel("Authenticator code")
+      .fill(totpCode(secret, freshStep));
+    await recoveryPage.getByLabel("Authenticator code").press("Enter");
+    await recoveryPage.waitForURL(`${appOrigin}/**`);
+    assert.ok(
+      new URL(recoveryPage.url()).searchParams.get("code"),
+      "Enter approves rather than denying consent",
+    );
+    // Revoke it there, so the main address's flow below starts with no grant.
+    await recoveryPage.goto(ipOwner);
+    await recoveryPage
+      .getByRole("button", { name: "Revoke", exact: true })
+      .click();
+    await recoveryPage.getByText("revoked", { exact: true }).waitFor();
+    await recoveryPage.goto(await push({ at: ipOrigin }));
+    await recoveryPage
+      .getByRole("button", { name: "Deny", exact: true })
+      .click();
+    await recoveryPage.waitForURL(`${appOrigin}/**`);
+    await recoveryPage.goto(ipOwner);
+    const [httpLogout] = await Promise.all([
+      recoveryPage.waitForResponse(
+        (reply) =>
+          reply.url() === `${ipOwner}/logout` &&
+          reply.request().method() === "POST",
+      ),
+      recoveryPage
+        .getByRole("button", { name: "Sign out", exact: true })
+        .click(),
+    ]);
+    assert.equal(
+      await httpLogout.headerValue("set-cookie"),
+      `${ownerCookieName}=; Path=/agent-connect; HttpOnly; SameSite=Lax; Max-Age=0`,
+    );
+    await recoveryPage.getByLabel("Authenticator code").waitFor();
+    const signedOutCookies = await recoveryContext.cookies(ipOwner);
+    assert.equal(signedOutCookies.length, 1);
+    assert.equal(signedOutCookies[0].name, ownerCookieName);
+    assert.ok(signedOutCookies[0].value.startsWith("anonymous_"));
+    await capture("factor-sign-in", { compact: true, target: recoveryPage });
   } finally {
     await recoveryContext.close();
   }
@@ -486,26 +644,33 @@ try {
     const missingCookiePage = await missingCookieContext.newPage();
     missingCookiePage.on("pageerror", (error) => errors.push(error.message));
     await missingCookiePage.goto(`${owner}/login`);
-    await missingCookiePage.getByLabel("Owner passphrase").waitFor();
+    const passkeyButton = missingCookiePage.getByRole("button", {
+      name: "Sign in with your passkey",
+      exact: true,
+    });
+    await passkeyButton.waitFor();
+    await capture("passkey-sign-in", {
+      compact: true,
+      target: missingCookiePage,
+    });
     const omittedCookie = (await missingCookieContext.cookies(owner)).find(
-      ({ name }) => name === "agent_connect_owner",
+      ({ name }) => name === ownerCookieName,
     );
     assert.ok(omittedCookie);
     const csrf = await missingCookiePage
       .locator('input[name="csrf_token"]')
       .inputValue();
     await missingCookieContext.clearCookies();
-    await missingCookiePage.getByLabel("Owner passphrase").fill(password);
-    const [missingCookieReply] = await Promise.all([
-      missingCookiePage.waitForResponse(
-        (reply) =>
-          reply.url() === `${owner}/login` &&
-          reply.request().method() === "POST",
-      ),
-      missingCookiePage
-        .getByRole("button", { name: "Sign in", exact: true })
-        .click(),
-    ]);
+    const [missingCookieReply] = await passkeys.use(missingCookiePage, () =>
+      Promise.all([
+        missingCookiePage.waitForResponse(
+          (reply) =>
+            reply.url() === `${owner}/login` &&
+            reply.request().method() === "POST",
+        ),
+        passkeyButton.click(),
+      ]),
+    );
     assert.equal(missingCookieReply.status(), 403);
     assert.equal(
       (await missingCookieReply.request().allHeaders()).cookie,
@@ -546,7 +711,24 @@ try {
   };
   const consent = await push();
   await page.goto(owner);
-  await page.getByRole("link", { name: "Review", exact: true }).waitFor();
+  // The request whose code was refused on the IP address is still pending:
+  // Activity lists it too, reviewed on the address it was made on.
+  const elsewhere = page
+    .locator("article.request")
+    .filter({ hasText: `on ${ipOrigin}` });
+  assert.ok(
+    (
+      await elsewhere
+        .getByRole("link", { name: "Review", exact: true })
+        .getAttribute("href")
+    ).startsWith(`${ipOrigin}/agent-connect/oauth/authorize?`),
+    "A request links to the address it was made on",
+  );
+  await page
+    .locator("article.request")
+    .filter({ hasNotText: `on ${ipOrigin}` })
+    .getByRole("link", { name: "Review", exact: true })
+    .waitFor();
   await capture("activity-pending");
   await page.goto(consent);
   const profiles = page.locator('input[type="radio"][name="profile"]');
@@ -580,8 +762,12 @@ try {
     await schema.evaluate((element) => element.scrollLeft > 0),
     "Schema must scroll with the keyboard",
   );
-  await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await page.waitForURL(`${appOrigin}/**`);
+  await passkeys.use(page, () =>
+    Promise.all([
+      page.waitForURL(`${appOrigin}/**`),
+      page.getByRole("button", { name: "Approve", exact: true }).click(),
+    ]),
+  );
   const authorizationCode = new URL(page.url()).searchParams.get("code");
   assert.ok(authorizationCode);
   const exchanged = await fetch(`${origin}/agent-connect/oauth/token`, {
@@ -726,8 +912,12 @@ try {
   await page.getByText("revoked", { exact: true }).waitFor();
   await capture("activity-revoked");
   await page.goto(await push());
-  await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await page.waitForURL(`${appOrigin}/**`);
+  await passkeys.use(page, () =>
+    Promise.all([
+      page.waitForURL(`${appOrigin}/**`),
+      page.getByRole("button", { name: "Approve", exact: true }).click(),
+    ]),
+  );
   await page.goto(`${owner}/security`);
   const revokeAll = page.getByRole("button", {
     name: "Revoke all",
@@ -778,9 +968,7 @@ try {
     await new Promise((ok) => setTimeout(ok, 50));
   }
   assert.match(diagnostics, /listening on/);
-  await page.goto(owner);
-  await page.getByLabel("Owner passphrase").fill(password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await passkeySignIn(page, passkeys, { owner, password });
   await page.getByText("expired", { exact: true }).waitFor();
   assert.equal(
     await page
@@ -794,115 +982,24 @@ try {
   await capture("long-app-origin-and-tool-names");
   await page.goto(owner);
   await capture("long-pending-origin");
-  await page.goto(`${owner}/totp`);
-  await capture("authenticator-start", { compact: true });
-  await page.getByLabel("Owner passphrase").fill(password);
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page
-    .getByRole("img", {
-      name: "QR code for adding Agent Connect to an authenticator",
-    })
-    .waitFor();
-  assert.equal(await page.locator(".qr svg").count(), 1);
-  await capture("authenticator-qr");
-  const uri = await page
-    .getByRole("link", { name: "Open in authenticator app" })
-    .getAttribute("href");
-  const secret = new URL(uri).searchParams.get("secret");
-  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
-    origin,
-  });
-  const manual = page.locator(".manual summary");
-  await manual.click();
-  await page.getByText("Copied", { exact: true }).waitFor();
-  assert.ok(
-    (await page.evaluate(() => navigator.clipboard.readText())) === secret,
-    "Manual setup click copies the complete unspaced key",
+  // Security: the IP address now has TOTP. Removing it takes a fresh
+  // passkey assertion here and puts that address back to setup.
+  await page.goto(`${owner}/security`);
+  const ipRow = page.locator(".row").filter({ hasText: ipOrigin });
+  await ipRow.getByText("Authenticator app", { exact: true }).waitFor();
+  await capture("security-addresses");
+  await passkeys.use(page, () =>
+    Promise.all([
+      page.waitForResponse(
+        (reply) =>
+          reply.url() === `${owner}/factor/remove` &&
+          reply.request().method() === "POST",
+      ),
+      ipRow.getByRole("button", { name: "Remove", exact: true }).click(),
+    ]),
   );
-  assert.equal(await page.locator(".manual").getAttribute("open"), "");
-  await capture("authenticator-key-copied");
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await manual.focus();
-  await manual.press("Enter");
-  assert.equal(await page.locator(".manual").getAttribute("open"), null);
-  assert.equal(
-    await page
-      .locator(".copy-status")
-      .evaluate((status) => getComputedStyle(status).animationName),
-    "none",
-  );
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-
-  const bits = [...secret]
-    .map((letter) =>
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-        .indexOf(letter)
-        .toString(2)
-        .padStart(5, "0"),
-    )
-    .join("");
-  const bytes = Buffer.from(
-    bits.match(/.{8}/g).map((byte) => parseInt(byte, 2)),
-  );
-  const step = Buffer.alloc(8);
-  step.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
-  const digest = createHmac("sha1", bytes).update(step).digest();
-  const offset = digest.at(-1) & 15;
-  const code = ((digest.readUInt32BE(offset) & 0x7fffffff) % 1e6)
-    .toString()
-    .padStart(6, "0");
-  await page.getByLabel("Code shown in your authenticator").fill(code);
-  await page.getByRole("button", { name: "Turn on" }).click();
-  await page.getByText("Authenticator is on", { exact: true }).waitFor();
-  await capture("security-on");
-  await page.goto(await push());
-  await page.getByLabel("Authenticator code").waitFor();
-  await capture("factor-consent");
-  await page.getByLabel("Authenticator code").fill(code);
-  await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await page
-    .getByRole("heading", { name: "Authenticator code not accepted" })
-    .waitFor();
-  await capture("factor-error", { compact: true });
-  await page.goto(await push());
-  const enrollmentStep = step.readBigUInt64BE();
-  while (BigInt(Math.floor(Date.now() / 30000)) <= enrollmentStep)
-    await new Promise((ok) => setTimeout(ok, 500));
-  step.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
-  const freshDigest = createHmac("sha1", bytes).update(step).digest();
-  const freshOffset = freshDigest.at(-1) & 15;
-  const freshCode = ((freshDigest.readUInt32BE(freshOffset) & 0x7fffffff) % 1e6)
-    .toString()
-    .padStart(6, "0");
-  await page.getByLabel("Authenticator code").fill(freshCode);
-  await page.getByLabel("Authenticator code").press("Enter");
-  await page.waitForURL(`${appOrigin}/**`);
-  assert.ok(
-    new URL(page.url()).searchParams.get("code"),
-    "Enter approves rather than denying consent",
-  );
-  await page.goto(await push());
-  await page.getByRole("button", { name: "Deny", exact: true }).click();
-  await page.waitForURL(`${appOrigin}/**`);
-  await page.goto(owner);
-  const [httpLogout] = await Promise.all([
-    page.waitForResponse(
-      (reply) =>
-        reply.url() === `${owner}/logout` &&
-        reply.request().method() === "POST",
-    ),
-    page.getByRole("button", { name: "Sign out", exact: true }).click(),
-  ]);
-  assert.equal(
-    await httpLogout.headerValue("set-cookie"),
-    "agent_connect_owner=; Path=/agent-connect; HttpOnly; SameSite=Lax; Max-Age=0",
-  );
-  await page.getByLabel("Authenticator code").waitFor();
-  const signedOutCookies = await context.cookies(owner);
-  assert.equal(signedOutCookies.length, 1);
-  assert.equal(signedOutCookies[0].name, "agent_connect_owner");
-  assert.ok(signedOutCookies[0].value.startsWith("anonymous_"));
-  await capture("factor-sign-in", { compact: true });
+  await page.waitForURL(`${owner}/security`);
+  await ipRow.getByText("Not set up", { exact: true }).waitFor();
   // A real, isolated boxed runtime with no agent sessions exercises health UI.
   // Remove only this runtime's network proxy; no provider credentials or login are used.
   const probeListener = net.createServer();
@@ -962,8 +1059,9 @@ try {
   await problemPage.goto(`${probeOrigin}/agent-connect/owner`);
   await problemPage.getByLabel("Owner passphrase").fill(password);
   await problemPage
-    .getByRole("button", { name: "Sign in", exact: true })
+    .getByRole("button", { name: "Continue", exact: true })
     .click();
+  await setUpTotpInBrowser(problemPage);
   assert.equal(await problemPage.locator(".runtime-problem").count(), 0);
   run(engine, ["rm", "--force", problemProxy]);
   const outageDeadline = Date.now() + 25000;
@@ -998,6 +1096,7 @@ try {
         await pausePage.locator('input[name="csrf_token"]').inputValue(),
       );
       await pausePage.getByLabel("Owner passphrase").fill(marker);
+      await pausePage.getByLabel("Authenticator code").fill("000000");
       const [failed] = await Promise.all([
         pausePage.waitForResponse(
           (reply) =>

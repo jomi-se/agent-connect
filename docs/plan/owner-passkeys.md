@@ -44,7 +44,12 @@ end.
    replaces `reset-totp`; the passphrase changes on the host only, with
    `reset-passphrase`.
 7. **Browser test** of the full flow in local Chromium with a virtual
-   authenticator, CSP enforced.
+   authenticator, CSP enforced (`npm run verify -- test:ui:owner`). The main
+   address is `localhost`, with a passkey through Chromium's virtual
+   authenticator; the same gateway by `127.0.0.1` takes the TOTP path, the
+   IP-literal explanation and the sign-in recovery link through setup. The
+   HTTPS cookie fixture sets up TOTP, since Chromium refuses WebAuthn on its
+   untrusted test certificate.
 8. **Docs:** `PRODUCT.md`'s owner-page rules, configuration, troubleshooting.
 9. **Real devices**, by the owner: enroll and approve from a phone and from a
    desktop password manager, and read the IP literal page.
@@ -79,3 +84,15 @@ before release:
   addresses that have a factor.
 - **Error and audit wording** now says "passphrase or passkey" where sign-in
   can fail either way.
+- **Missing WebAuthn shows a sentence, not a page.** A browser without
+  WebAuthn sees "This browser can't use passkeys" in the form's status line;
+  no separate page, and the passkey form stays visible.
+- **Passkey successes don't spend the factor attempt budget** (5 a minute
+  per connection); failed assertions and every TOTP attempt still do. Found
+  by the browser test: a sign-in and four approvals in a minute hit it.
+- **Activity links each request to its own address** and says "on
+  <address>" when it is not this one; the review happens there, under that
+  address's factor.
+- **Upgrade note lives in the changelog only.** The gateway's refusal message
+  says to run setup again; the install guide says only that a release may ask
+  for it.

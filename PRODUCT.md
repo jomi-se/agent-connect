@@ -25,8 +25,9 @@ application supplies a fixed set of tools and its own UI; the owner's agent
 supplies the intelligence, under scoped, revocable consent granted on pages the
 owner's gateway serves.
 
-The owner pages exist so the owner can, from any device: sign in, secure the
-gateway with an authenticator, approve or deny an application's request, see
+The owner pages exist so the owner can, from any device: sign in, secure each
+address with a passkey or an authenticator, approve or deny an application's
+request, see
 which applications hold access and which sessions are running, and end sessions
 or revoke access. Success is a decision made quickly and correctly, with no
 doubt about which application gets what.
@@ -43,7 +44,9 @@ and under which restricted profile it runs, and can revoke it at any time.
 - First run: the owner installs the gateway on a remote machine, runs
   `agent-connect setup` and `agent-connect login` over SSH, then opens the owner
   pages in a browser through a configured entry point (tailnet or public HTTPS
-  origin) and enrolls an authenticator remotely through those pages.
+  origin). The passphrase there opens setup only, where the owner creates a
+  passkey for that address (or an authenticator app where a passkey cannot
+  work).
 - Recurring: an application the owner is using redirects to the gateway's
   consent page; the owner reviews and approves or denies, then returns to the
   application. This often happens on a phone, mid-task.
@@ -56,10 +59,12 @@ and under which restricted profile it runs, and can revoke it at any time.
 
 - Pages are server-rendered HTML from the Rust gateway
   (`crates/gateway/src/authorization.rs`) with a strict Content Security Policy:
-  inline styles and the rare enhancement script are hash-pinned. Every flow
-  must work as plain forms and links.
-- Owner sign-in uses a passphrase plus an optional TOTP authenticator; a fresh
-  code is required for sign-in and for each approval once enrolled.
+  inline styles and scripts are hash-pinned. Every flow other than using a
+  passkey works as plain forms and links.
+- Each entry-point address has one second factor
+  ([ADR 0019](docs/decisions/0019-owner-passkeys.md)): a passkey, which alone
+  signs in and approves, or TOTP, which needs the passphrase to sign in and a
+  fresh code for each approval. An address with neither can only enroll one.
 - Consent shows the exact application origin, the fixed tools with their exact
   input schemas, access duration and restricted profile. These facts must stay
   inspectable; how prominently they are shown is a design decision.
@@ -94,9 +99,13 @@ and under which restricted profile it runs, and can revoke it at any time.
    behind vague summaries, but full detail is disclosed on demand.
 3. Secure setup is a guided path, not a buried setting.
 4. Work equally well on a phone over a remote link and on a laptop.
-5. Every page works without JavaScript. Small hash-pinned enhancements are
-   allowed where they remove real friction (copying the authenticator setup
-   key); the page must still work when they do not run.
+5. Every page works without JavaScript, except that a passkey needs it:
+   creating one and using it to sign in or approve. Without WebAuthn the page
+   says so plainly and never offers a passphrase-only way past a passkey.
+   Inspecting, denying, revoking and navigating stay plain forms. Other small
+   hash-pinned enhancements are allowed where they remove real friction
+   (copying the authenticator setup key); the page must still work when they
+   do not run.
 
 ## Accessibility & Inclusion
 

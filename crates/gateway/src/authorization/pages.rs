@@ -152,7 +152,7 @@ pub(super) fn sign_in(fields: &str, method: SignIn, waiting: Option<&str>) -> Pa
 pub(super) fn setup(fields: &str, options: Option<&str>) -> Page {
     let body = match options {
         Some(options) => format!(
-            "<div class='panel'><h1>Set up a passkey</h1><p class='lede'>From now on, your passkey alone signs in and approves apps on this address.</p><form method=post action='/agent-connect/owner/passkey/enroll' data-passkey='{}' data-ceremony=create>{fields}<input type=hidden name=credential value=''><p class='passkey-status hint' role='status' aria-live='polite'></p><div class='actions'><button class='wide'>Create a passkey</button></div></form><p class='hint below'>Can’t use a passkey here? <a href='{TOTP}'>Use an authenticator app instead</a>.</p></div>",
+            "<div class='panel'><h1>Set up a passkey</h1><p class='lede'>From now on, your passkey alone signs in and approves apps on this address.</p><form method=post action='/agent-connect/owner/passkey/enroll' data-passkey='{}' data-ceremony=create>{fields}<input type=hidden name=credential value=''><p class='passkey-status hint' role='status' aria-live='polite'></p><div class='actions'><button class='wide'>Create a passkey</button><a class='button secondary wide' href='{TOTP}'>Use an authenticator app instead</a></div></form></div>",
             escape(options)
         ),
         None => format!(
@@ -222,6 +222,8 @@ pub(super) struct Request {
     pub name: String,
     pub origin: String,
     pub href: String,
+    /// The address the request was made on, when it is not this one.
+    pub address: Option<String>,
     pub tools: usize,
     pub expires: u64,
 }
@@ -277,14 +279,19 @@ pub(super) fn console(view: Console) -> Page {
     for (index, request) in view.requests.iter().enumerate() {
         let _ = write!(
             body,
-            "<article class='request' aria-labelledby='request-{0}'><span class='dot' aria-hidden='true'></span><div><h2 id='request-{0}'>{1} <span>wants to use your agent</span></h2><p class='request-origin'>{2}</p><p class='meta'>{3} tool{4} · request expires {5}</p></div><a class='button' href='{6}'>Review</a></article>",
+            "<article class='request' aria-labelledby='request-{0}'><span class='dot' aria-hidden='true'></span><div><h2 id='request-{0}'>{1} <span>wants to use your agent</span></h2><p class='request-origin'>{2}</p><p class='meta'>{3} tool{4} · request expires {5}{7}</p></div><a class='button' href='{6}'>Review</a></article>",
             index,
             escape(&request.name),
             origin(&request.origin),
             request.tools,
             if request.tools == 1 { "" } else { "s" },
             until(now, request.expires),
-            escape(&request.href)
+            escape(&request.href),
+            request
+                .address
+                .as_deref()
+                .map(|address| format!(" · on {}", escape(address)))
+                .unwrap_or_default()
         );
     }
     let live = view.live.as_deref().unwrap_or_default();
@@ -1012,6 +1019,7 @@ time{font-variant-numeric:tabular-nums}
 .foot{padding:0 1rem 1.5rem;text-align:center;color:var(--muted);font-size:.8125rem}
 .panel{padding:1.75rem;background:var(--paper);border:1px solid var(--line);border-radius:.9rem;box-shadow:0 1px 2px #202d2c0d,0 12px 32px -18px #202d2c33}
 .lede{margin-top:.5rem;color:var(--muted)}
+.panel>p+p{margin-top:.75rem}
 .hint{margin-top:.35rem;color:var(--muted);font-size:.875rem}
 .hint.below{margin-top:.75rem}
 .meta{margin-top:.15rem;color:var(--muted);font-size:.875rem}
@@ -1020,7 +1028,7 @@ label,legend{font-weight:620}
 input:not([type=radio]){width:100%;min-height:3rem;padding:.65rem .8rem;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line-strong);border-radius:.5rem;transition:border-color .15s ease-out}
 input:not([type=radio]):hover{border-color:var(--muted)}
 .code-input{max-width:11rem;font-family:var(--mono);font-size:1.25rem;letter-spacing:.3em;font-variant-numeric:tabular-nums}
-button,.button{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-height:2.75rem;padding:.6rem 1.15rem;font:inherit;font-weight:650;line-height:1.2;color:#fff;background:var(--teal);border:1px solid transparent;border-radius:.5rem;text-decoration:none;cursor:pointer;transition:background-color .15s ease-out,border-color .15s ease-out,color .15s ease-out}
+button,.button{display:inline-flex;align-items:center;justify-content:center;text-align:center;gap:.5rem;min-height:2.75rem;padding:.6rem 1.15rem;font:inherit;font-weight:650;line-height:1.2;color:#fff;background:var(--teal);border:1px solid transparent;border-radius:.5rem;text-decoration:none;cursor:pointer;transition:background-color .15s ease-out,border-color .15s ease-out,color .15s ease-out}
 button:hover,.button:hover{color:#fff;background:var(--teal-ink)}
 button:active,.button:active{transform:translateY(1px)}
 .secondary,.secondary:hover{color:var(--ink)}
