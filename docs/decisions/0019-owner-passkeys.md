@@ -105,16 +105,20 @@ closed.
 
 WebAuthn challenges are server-side, single-use and short-lived, bound to the
 session, exact origin, purpose and current credential; an approval challenge
-also binds the pending request and the selected duration and profile. A failed
+also binds the pending request. It does not bind the duration or profile picked
+in the form: the passkey prompt cannot show them, so whoever could change them
+could also change what the owner sees, and a taken-over owner page is lost
+either way. The gain over today is the fresh tap itself: a stolen session
+cookie cannot approve. A failed
 check consumes the challenge. A restart invalidates unfinished ceremonies.
 Enrollment re-checks at commit that the address is still unenrolled, and
 replaces the setup session with a full owner session.
 
 A small static script calls `navigator.credentials.create/get` and posts the
 result as a same-origin form. Credentials and passphrases stay out of URLs,
-browser storage and logs. A script-bearing page gets a fresh nonce of at least
-128 bits, shared by its CSP header and script element; the other CSP rules
-(hashed styles, framing, no-store, the application callback) are unchanged.
+browser storage and logs. The script is static, so a script-bearing page
+allows it by its hash in the CSP header, as styles already are; the other CSP
+rules (framing, no-store, the application callback) are unchanged.
 
 ## Library
 
@@ -138,5 +142,5 @@ separately; a virtual authenticator proves the protocol, not the devices.
 
 References: [WebAuthn Level 3](https://www.w3.org/TR/webauthn-3/),
 [Chromium WebAuthn origins](https://chromium.googlesource.com/chromium/src/+/HEAD/content/browser/webauth/origins.md),
-[CSP nonces](https://www.w3.org/TR/CSP3/#security-nonces),
+[CSP hashes](https://www.w3.org/TR/CSP3/#external-hash),
 [webauthn-rs 0.6.2](https://docs.rs/webauthn-rs/0.6.2/webauthn_rs/struct.Webauthn.html).
