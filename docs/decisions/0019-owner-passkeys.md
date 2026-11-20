@@ -61,11 +61,13 @@ both.** What an address accepts follows from which one it has:
    | Action                                                  | Owner console                                       | Host CLI                                |
    | ------------------------------------------------------- | --------------------------------------------------- | --------------------------------------- |
    | Remove an address's factor                              | yes, with a fresh assertion of the signed-in factor | yes, an exact address or explicit "all" |
-   | Change the passphrase                                   | yes, the old passphrase plus a fresh assertion      | yes                                     |
+   | Change the passphrase                                   | no, for now                                         | yes                                     |
    | Full reset: new passphrase, every address back to setup | no                                                  | yes                                     |
 
    Changing the passphrase keeps enrolled factors, since the passphrase only
-   gates enrollment. Grants survive all of these. Host access is owner
+   gates enrollment. It stays on the host, where the owner already types it at
+   a terminal prompt; a console form can come later if it is missed. Grants
+   survive all of these. Host access is owner
    authority, so the CLI needs no factor; one reset command replaces
    `reset-totp`.
 
@@ -81,8 +83,9 @@ both.** What an address accepts follows from which one it has:
    and browser SDK are untouched. `PRODUCT.md`'s no-JavaScript rule changes
    to match when this ships.
 10. **Sign-outs follow the factor.** Removing an address's factor ends that
-    address's sessions. Changing the passphrase ends every session but the
-    current one. Every session is also gone on restart, as today.
+    address's sessions. Changing the passphrase ends every session, since it
+    happens on the host with the gateway stopped. Every session is also gone
+    on restart, as today.
 11. **One activity view.** The console lists pending requests from every
     address, each linking to the address it belongs to.
 12. **One cookie per address.** Two ports on the same host get different
