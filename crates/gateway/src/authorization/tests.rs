@@ -2741,10 +2741,14 @@ async fn legacy_default_grant_survives_upgrade_and_entry_point_addition() {
 }
 
 #[tokio::test]
-async fn reset_totp_requires_stopped_gateway_preserves_grants_and_passphrase() {
-    let dir = std::env::temp_dir().join(random("agent-connect-reset-test-"));
-    let auth = AuthService::open(config(dir.clone(), Some(PASSWORD))).unwrap();
+async fn host_removal_takes_one_exact_address_or_all_and_keeps_grants_and_passphrase() {
+    const SECOND: &str = "https://second.example";
+    let dir = std::env::temp_dir().join(random("agent-connect-remove-factor-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
     let owner = login(&auth, "").await;
+    login_at(&auth, SECOND, Some("second.example"), "").await;
     let uri = pushed(&auth).await;
     let tokens = exchange(
         &auth,
@@ -2755,17 +2759,36 @@ async fn reset_totp_requires_stopped_gateway_preserves_grants_and_passphrase() {
     .await
     .json();
     let before = auth.inner.lock().unwrap().stored.clone();
-    assert!(before.factors.contains_key(ISSUER));
+    let one = FactorTarget::Address(format!("{SECOND}/"));
     assert!(
-        AuthService::reset_totp(&dir)
+        AuthService::remove_factor(&dir, &one)
             .unwrap_err()
             .to_string()
             .contains("stop the gateway")
     );
     drop(auth);
-    assert!(AuthService::reset_totp(&dir).unwrap());
-    assert!(!AuthService::reset_totp(&dir).unwrap());
-    let auth = AuthService::open(config(dir.clone(), None)).unwrap();
+    // A trailing slash is still the same address; only that one goes back to setup.
+    assert_eq!(
+        AuthService::remove_factor(&dir, &one).unwrap(),
+        vec![SECOND.to_string()]
+    );
+    let again = AuthService::remove_factor(&dir, &one)
+        .unwrap_err()
+        .to_string();
+    assert!(again.contains("no passkey or authenticator is set up for https://second.example"));
+    assert!(again.contains(ISSUER), "{again}");
+    assert_eq!(
+        AuthService::remove_factor(&dir, &FactorTarget::All).unwrap(),
+        vec![ISSUER.to_string()]
+    );
+    assert!(
+        AuthService::remove_factor(&dir, &FactorTarget::All)
+            .unwrap()
+            .is_empty()
+    );
+    let mut configuration = config(dir.clone(), None);
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
     {
         let inner = auth.inner.lock().unwrap();
         assert!(inner.stored.factors.is_empty());
@@ -2779,10 +2802,10 @@ async fn reset_totp_requires_stopped_gateway_preserves_grants_and_passphrase() {
         auth.authenticate(tokens["access_token"].as_str().unwrap(), APP)
             .is_ok()
     );
-    login(&auth, "").await;
+    setup_session(&auth, ISSUER, None).await;
     drop(auth);
     fs::remove_dir_all(&dir).unwrap();
-    assert!(AuthService::reset_totp(&dir).is_err());
+    assert!(AuthService::remove_factor(&dir, &FactorTarget::All).is_err());
     assert!(!dir.exists());
 }
 
@@ -4979,5 +5002,266 @@ fn earlier_state_versions_are_refused_with_the_way_forward() {
         .to_string();
     assert!(error.contains("earlier Agent Connect version"), "{error}");
     assert!(error.contains("run setup again"), "{error}");
+    fs::remove_dir_all(dir).unwrap();
+}
+
+/// Set up TOTP on an unenrolled address through the real pages. Returns the
+/// owner cookie and the secret.
+async fn enroll_totp_at(
+    auth: &Arc<AuthService>,
+    origin: &str,
+    host: Option<&str>,
+) -> (String, String) {
+    let setup = setup_session(auth, origin, host).await;
+    let page = request_at(
+        auth,
+        Method::GET,
+        pages::TOTP,
+        None,
+        Some(&setup),
+        host,
+        &[],
+    )
+    .await;
+    assert_eq!(page.status, StatusCode::OK, "{}", page.text);
+    let secret = enrollment_secret(&page.text);
+    let code = totp(&secret, auth.now() / 30).unwrap();
+    let enrolled = request_at(
+        auth,
+        Method::POST,
+        ENROLL_TOTP,
+        Some(origin),
+        Some(&setup),
+        host,
+        &[
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("totp", &code),
+        ],
+    )
+    .await;
+    assert_eq!(enrolled.status, StatusCode::FOUND, "{}", enrolled.text);
+    (cookie(&enrolled), secret)
+}
+/// The CSRF token of the security page's Remove form for `address`, if shown.
+fn remove_token(page: &str, address: &str) -> Option<String> {
+    let marker = format!("name='address' value='{}'", escape(address));
+    let before = page
+        .split(&marker)
+        .next()
+        .filter(|b| b.len() < page.len())?;
+    let form = before.rsplit("<form").next()?;
+    Some(input(form, "csrf_token"))
+}
+
+#[tokio::test]
+async fn removing_a_factor_in_the_console_takes_a_fresh_passkey_and_signs_that_address_out() {
+    const SECOND: &str = "https://second.example";
+    let dir = std::env::temp_dir().join(random("agent-connect-console-remove-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
+    let owner = login(&auth, "").await;
+    let second = login_at(&auth, SECOND, Some("second.example"), "").await;
+    let page = request(&auth, Method::GET, pages::SECURITY, None, Some(&owner), &[]).await;
+    assert_eq!(page.status, StatusCode::OK, "{}", page.text);
+    assert!(page.text.contains("data-passkey="));
+    assert!(
+        page.headers["content-security-policy"]
+            .to_str()
+            .unwrap()
+            .contains("script-src 'sha256-")
+    );
+    let token = remove_token(&page.text, SECOND).expect("a Remove form for the second address");
+    // Without the passkey nothing is removed, and the challenge is spent.
+    let refused = request(
+        &auth,
+        Method::POST,
+        REMOVE_FACTOR,
+        Some(ISSUER),
+        Some(&owner),
+        &[
+            ("csrf_token", &token),
+            ("address", SECOND),
+            ("credential", ""),
+        ],
+    )
+    .await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED, "{}", refused.text);
+    assert!(
+        auth.inner
+            .lock()
+            .unwrap()
+            .stored
+            .factors
+            .contains_key(SECOND)
+    );
+    // Past the factor attempt budget's window.
+    advance(&auth, 61);
+    let page = request(&auth, Method::GET, pages::SECURITY, None, Some(&owner), &[]).await;
+    let credential = assert_passkey(&auth, ISSUER, &page.text);
+    let removed = request(
+        &auth,
+        Method::POST,
+        REMOVE_FACTOR,
+        Some(ISSUER),
+        Some(&owner),
+        &[
+            ("csrf_token", &remove_token(&page.text, SECOND).unwrap()),
+            ("address", SECOND),
+            ("credential", &credential),
+        ],
+    )
+    .await;
+    assert_eq!(removed.status, StatusCode::FOUND, "{}", removed.text);
+    assert_eq!(removed.headers[header::LOCATION], pages::SECURITY);
+    assert!(
+        !auth
+            .inner
+            .lock()
+            .unwrap()
+            .stored
+            .factors
+            .contains_key(SECOND)
+    );
+    // The second address's session is gone; this one stays.
+    let ended = request_at(
+        &auth,
+        Method::GET,
+        OWNER,
+        None,
+        Some(&second),
+        Some("second.example"),
+        &[],
+    )
+    .await;
+    assert_eq!(ended.headers[header::LOCATION], LOGIN);
+    let kept = request(&auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+    assert_eq!(kept.status, StatusCode::OK);
+    // Back to setup: the passphrase there opens setup only.
+    setup_session(&auth, SECOND, Some("second.example")).await;
+    // Removing this address's own factor signs this browser out too.
+    let page = request(&auth, Method::GET, pages::SECURITY, None, Some(&owner), &[]).await;
+    let credential = assert_passkey(&auth, ISSUER, &page.text);
+    let own = request(
+        &auth,
+        Method::POST,
+        REMOVE_FACTOR,
+        Some(ISSUER),
+        Some(&owner),
+        &[
+            ("csrf_token", &remove_token(&page.text, ISSUER).unwrap()),
+            ("address", ISSUER),
+            ("credential", &credential),
+        ],
+    )
+    .await;
+    assert_eq!(own.status, StatusCode::FOUND, "{}", own.text);
+    assert_eq!(own.headers[header::LOCATION], LOGIN);
+    assert!(
+        own.headers[header::SET_COOKIE]
+            .to_str()
+            .unwrap()
+            .contains("Max-Age=0")
+    );
+    assert!(auth.inner.lock().unwrap().stored.factors.is_empty());
+    let gone = request(&auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+    assert_eq!(gone.headers[header::LOCATION], LOGIN);
+    drop(auth);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn a_totp_session_removes_totp_addresses_with_a_fresh_code_but_never_a_passkey() {
+    const SECOND: &str = "https://second.example";
+    const LOOPBACK: &str = "http://127.0.0.1:19842";
+    let dir = std::env::temp_dir().join(random("agent-connect-totp-remove-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    configuration.entry_points.push(LOOPBACK.into());
+    let auth = AuthService::open(configuration).unwrap();
+    login(&auth, "").await;
+    let (owner, secret) = enroll_totp_at(&auth, LOOPBACK, Some("127.0.0.1:19842")).await;
+    enroll_totp_at(&auth, SECOND, Some("second.example")).await;
+    let page = request_at(
+        &auth,
+        Method::GET,
+        pages::SECURITY,
+        None,
+        Some(&owner),
+        Some("127.0.0.1:19842"),
+        &[],
+    )
+    .await;
+    assert_eq!(page.status, StatusCode::OK, "{}", page.text);
+    assert!(!page.text.contains("data-passkey="));
+    assert!(page.text.contains("Sign in with a passkey to remove it."));
+    assert!(remove_token(&page.text, ISSUER).is_none());
+    assert!(remove_token(&page.text, SECOND).is_some());
+    // A passkey address refuses a TOTP session even with a valid form for it.
+    let session = hash(owner.split_once('=').unwrap().1);
+    let token = csrf(
+        &mut auth.inner.lock().unwrap(),
+        &session,
+        &format!("remove-factor:{ISSUER}"),
+        auth.now(),
+    );
+    let forged = request_at(
+        &auth,
+        Method::POST,
+        REMOVE_FACTOR,
+        Some(LOOPBACK),
+        Some(&owner),
+        Some("127.0.0.1:19842"),
+        &[
+            ("csrf_token", &token),
+            ("address", ISSUER),
+            ("totp", "000000"),
+        ],
+    )
+    .await;
+    assert!(
+        forged.text.contains("Only a sign-in with a passkey"),
+        "{}",
+        forged.text
+    );
+    assert!(
+        auth.inner
+            .lock()
+            .unwrap()
+            .stored
+            .factors
+            .contains_key(ISSUER)
+    );
+    // The code used to sign in cannot be used again; a fresh one removes it.
+    advance(&auth, 30);
+    let page = request_at(
+        &auth,
+        Method::GET,
+        pages::SECURITY,
+        None,
+        Some(&owner),
+        Some("127.0.0.1:19842"),
+        &[],
+    )
+    .await;
+    let removed = request_at(
+        &auth,
+        Method::POST,
+        REMOVE_FACTOR,
+        Some(LOOPBACK),
+        Some(&owner),
+        Some("127.0.0.1:19842"),
+        &[
+            ("csrf_token", &remove_token(&page.text, SECOND).unwrap()),
+            ("address", SECOND),
+            ("totp", &totp(&secret, auth.now() / 30).unwrap()),
+        ],
+    )
+    .await;
+    assert_eq!(removed.status, StatusCode::FOUND, "{}", removed.text);
+    let factors = auth.inner.lock().unwrap().stored.factors.clone();
+    assert!(!factors.contains_key(SECOND));
+    assert!(factors.contains_key(ISSUER) && factors.contains_key(LOOPBACK));
+    drop(auth);
     fs::remove_dir_all(dir).unwrap();
 }

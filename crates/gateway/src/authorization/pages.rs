@@ -560,26 +560,70 @@ fn owner_page(title: &str, tab: Tab, logout_token: String, body: String, css: St
 
 pub(super) struct Security {
     pub logout_token: String,
-    pub passkey: bool,
+    pub addresses: Vec<AddressFactor>,
+    /// What removing a factor asks for: the signed-in address's own factor.
+    pub proof: ApprovalFactor,
     pub active_grants: usize,
     pub revoke_all_token: String,
 }
 
+pub(super) struct AddressFactor {
+    pub address: String,
+    pub current: bool,
+    /// `Some(true)` for a passkey, `Some(false)` for an authenticator app.
+    pub passkey: Option<bool>,
+    /// Present when this session may remove the address's factor.
+    pub remove_token: Option<String>,
+}
+
+pub(super) const REMOVE_FACTOR: &str = "/agent-connect/owner/factor/remove";
+
 pub(super) fn security(view: Security) -> Page {
-    let authenticator = if view.passkey {
-        format!(
-            "<div class='row'>{}<div class='row-main'><p class='row-title'>Passkey is on</p><p class='meta'>Your passkey signs in and approves every app on this address.</p><p class='hint'>Lost it? On the gateway host, stop the gateway and run <code>agent-connect reset-totp</code>, then set up a new one here. App access is not affected.</p></div></div>",
-            shield(true)
-        )
-    } else {
-        format!(
-            "<div class='row'>{}<div class='row-main'><p class='row-title'>Authenticator is on</p><p class='meta'>Sign-in and every approval need a fresh code.</p><p class='hint'>Lost it? On the gateway host, stop the gateway and run <code>agent-connect reset-totp</code>, then set it up again here. App access is not affected.</p></div></div>",
-            shield(true)
-        )
-    };
+    let mut uses_passkey = false;
+    let factors = view
+        .addresses
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            let kind = match row.passkey {
+                Some(true) => "Passkey",
+                Some(false) => "Authenticator app",
+                None => "Not set up",
+            };
+            let action = match (&row.remove_token, &view.proof) {
+                (Some(token), ApprovalFactor::Passkey(options)) => {
+                    uses_passkey = true;
+                    format!(
+                        "<form method=post action='{REMOVE_FACTOR}' data-passkey='{}' data-ceremony=get>{}{}<input type=hidden name=credential value=''><button class='secondary danger'>Remove</button><p class='passkey-status hint' role='status' aria-live='polite'></p></form>",
+                        escape(options),
+                        hidden("csrf_token", token),
+                        hidden("address", &row.address)
+                    )
+                }
+                (Some(token), ApprovalFactor::Totp) => format!(
+                    "<form method=post action='{REMOVE_FACTOR}'>{}{}<label class='visually-hidden' for='remove-totp-{index}'>Authenticator code</label><input id='remove-totp-{index}' name=totp {CODE_INPUT} placeholder='Code'><button class='secondary danger'>Remove</button></form>",
+                    hidden("csrf_token", token),
+                    hidden("address", &row.address)
+                ),
+                (None, _) if row.passkey == Some(true) => {
+                    "<p class='hint'>Sign in with a passkey to remove it.</p>".to_string()
+                }
+                (None, _) => String::new(),
+            };
+            format!(
+                "<div class='row'>{}<div class='row-main'><p class='row-title'>{}</p><p class='meta'>{kind}{}</p></div>{action}</div>",
+                shield(row.passkey.is_some()),
+                escape(&row.address),
+                if row.current { " · this address" } else { "" }
+            )
+        })
+        .collect::<String>();
+    let authenticator = format!(
+        "<section class='section' aria-labelledby='factors-title'><h2 id='factors-title'>Sign-in</h2><div class='list'>{factors}</div><p class='hint below'>Removing one signs that address out; the next sign-in there sets up a new one with the passphrase. Locked out? On the gateway host, stop the gateway and run <code>agent-connect remove-factor &lt;address&gt;</code>. App access is not affected.</p></section>"
+    );
     let apps = view.active_grants;
     let body = format!(
-        "<h1>Security</h1><div class='list'>{authenticator}<div class='row'><div class='row-main'><p class='row-title'>Revoke every app’s access</p><p class='meta'>{}. Revoking can’t undo what they already did.</p></div><form method=post action='/agent-connect/owner/grants/revoke-all'>{}<button class='secondary danger'{}>Revoke all</button></form></div></div>",
+        "<h1>Security</h1>{authenticator}<section class='section' aria-labelledby='apps-title'><h2 id='apps-title'>Apps</h2><div class='list'><div class='row'><div class='row-main'><p class='row-title'>Revoke every app’s access</p><p class='meta'>{}. Revoking can’t undo what they already did.</p></div><form method=post action='/agent-connect/owner/grants/revoke-all'>{}<button class='secondary danger'{}>Revoke all</button></form></div></div></section>",
         match apps {
             0 => "No app has access right now".to_string(),
             1 => "1 app has access".to_string(),
@@ -588,13 +632,17 @@ pub(super) fn security(view: Security) -> Page {
         hidden("csrf_token", &view.revoke_all_token),
         if apps == 0 { " disabled" } else { "" }
     );
-    owner_page(
+    let mut page = owner_page(
         "Security",
         Tab::Security,
         view.logout_token,
         body,
         String::new(),
-    )
+    );
+    if uses_passkey {
+        page.script = PASSKEY_SCRIPT;
+    }
+    page
 }
 
 pub(super) struct Gateway {
@@ -1188,7 +1236,7 @@ mod tests {
         let failures: Vec<_> = (0..64)
             .map(|index| SignInFailure {
                 at: 1_700_000_000 - index,
-                reason: "The owner passphrase was not accepted.",
+                reason: "The passphrase or passkey was not accepted.",
                 entry_point: Some(format!("https://gateway-{index}.example")),
             })
             .collect();

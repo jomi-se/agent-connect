@@ -49,8 +49,8 @@ and under which restricted profile it runs, and can revoke it at any time.
   application. This often happens on a phone, mid-task.
 - Occasional: reviewing active grants and live sessions, ending a session,
   revoking one or all grants, signing out of a shared browser.
-- Recovery from a lost authenticator is a host-side command
-  (`agent-connect reset-totp`), not a web flow.
+- Recovery from a lost passkey or authenticator is a host-side command
+  (`agent-connect remove-factor`), not a web flow.
 
 ## Capabilities and Constraints
 

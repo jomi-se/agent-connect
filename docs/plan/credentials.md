@@ -64,10 +64,10 @@ replacing private owner state, grants, journals or dedicated login homes. Change
 image or harness policy invalidates grants and requires application reapproval.
 Unattended setup never starts provider login. Owner credential presence is
 checked through metadata by `doctor`; validity remains an owner-run live check.
-Lost gateway TOTP is recovered with `agent-connect reset-totp` after stopping
-the gateway. The exclusive state lock prevents concurrent reset; passphrase and
-grant records remain intact, and bounded recovery metadata records the reset.
-There is no app-grant or remote factor-reset authority.
+A lost passkey or authenticator is recovered with `agent-connect remove-factor`
+after stopping the gateway ([ADR 0019](../decisions/0019-owner-passkeys.md)).
+The exclusive state lock prevents concurrent reset; passphrase and grant records
+remain intact. There is no app-grant or remote factor-reset authority.
 
 Normal setup now creates gateway-owned sign-in and authorization state, separate
 from the dedicated provider login. First-time `agent-connect setup` prompts for a hidden

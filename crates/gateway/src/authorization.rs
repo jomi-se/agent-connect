@@ -52,6 +52,7 @@ const PAR: &str = "/agent-connect/oauth/par";
 const REVOKE: &str = "/agent-connect/oauth/revoke";
 const ENROLL_TOTP: &str = "/agent-connect/owner/totp/verify";
 const ENROLL_PASSKEY: &str = "/agent-connect/owner/passkey/enroll";
+const REMOVE_FACTOR: &str = pages::REMOVE_FACTOR;
 const REQUEST_TTL: u64 = 600;
 const CODE_TTL: u64 = 120;
 const ACCESS_TTL: u64 = 300;
@@ -212,6 +213,11 @@ enum Factor {
         secret: String,
         last_step: Option<u64>,
     },
+}
+/// What a host-side factor removal covers: one exact address, or all of them.
+pub enum FactorTarget {
+    Address(String),
+    All,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum FactorKind {
@@ -501,14 +507,44 @@ impl AuthService {
         Ok(())
     }
 
-    /// Owner-run recovery only: refuse active serving, never bootstrap missing state,
-    /// preserve the passphrase and all grants, and return every address to setup.
-    pub fn reset_totp(state_dir: &std::path::Path) -> Result<bool> {
+    /// Owner-run recovery only, refused while the gateway runs and never
+    /// creating missing state: put one address, or every address, back to
+    /// setup. The passphrase and grants are kept. Returns the addresses whose
+    /// factor was removed; naming an address without one is an error that lists
+    /// the enrolled addresses.
+    pub fn remove_factor(
+        state_dir: &std::path::Path,
+        target: &FactorTarget,
+    ) -> Result<Vec<String>> {
+        let mut removed = Vec::new();
         recover(state_dir, |stored| {
-            let enrolled = !stored.factors.is_empty();
-            stored.factors.clear();
-            Ok(enrolled)
-        })
+            match target {
+                FactorTarget::All => {
+                    removed = std::mem::take(&mut stored.factors).into_keys().collect();
+                }
+                FactorTarget::Address(address) => {
+                    let origin = Url::parse(address)
+                        .map(|url| url.origin().ascii_serialization())
+                        .map_err(|_| {
+                            anyhow!("{address} is not an address such as https://agent.example.com")
+                        })?;
+                    if stored.factors.remove(&origin).is_none() {
+                        let enrolled = stored.factors.keys().cloned().collect::<Vec<_>>();
+                        bail!(
+                            "no passkey or authenticator is set up for {origin}; set up: {}",
+                            if enrolled.is_empty() {
+                                "none".to_string()
+                            } else {
+                                enrolled.join(", ")
+                            }
+                        );
+                    }
+                    removed.push(origin);
+                }
+            }
+            Ok(!removed.is_empty())
+        })?;
+        Ok(removed)
     }
 
     /// Owner-run recovery only: replace the passphrase hash and preserve the
@@ -559,6 +595,7 @@ impl AuthService {
             pages::TOTP,
             ENROLL_TOTP,
             ENROLL_PASSKEY,
+            REMOVE_FACTOR,
             PAR,
             AUTHORIZE,
             TOKEN,
@@ -992,15 +1029,51 @@ impl AuthService {
                 return redirect(LOGIN);
             };
             ensure!(query.is_empty(), "invalid_request");
-            let factor = self
-                .factor(&inner, &self.request_origin(headers)?)
-                .map(|factor| factor.kind());
             let logout_token = csrf(&mut inner, &session, "logout", now);
             let addresses = std::iter::once(&self.config.public_url)
                 .chain(self.config.entry_points.iter())
                 .cloned()
                 .collect::<Vec<_>>();
             if path == pages::SECURITY {
+                let origin = self.request_origin(headers)?;
+                let Some(Authority::Owner(signed_in)) =
+                    inner.sessions.get(&session).map(|s| s.authority)
+                else {
+                    bail!("owner_login_required");
+                };
+                let proof =
+                    match signed_in {
+                        FactorKind::Passkey => pages::ApprovalFactor::Passkey(
+                            self.begin_assertion(&mut inner, &session, &origin, "factor:remove")?,
+                        ),
+                        FactorKind::Totp => pages::ApprovalFactor::Totp,
+                    };
+                // Configured addresses first, then any whose record outlived its
+                // configuration, so every stored factor can be removed here.
+                let mut listed = addresses.clone();
+                for stored in inner.stored.factors.keys() {
+                    if !listed.contains(stored) {
+                        listed.push(stored.clone());
+                    }
+                }
+                let mut rows = Vec::new();
+                for address in listed {
+                    let kind = inner.stored.factors.get(&address).map(Factor::kind);
+                    let remove_token = kind.filter(|kind| may_remove(signed_in, *kind)).map(|_| {
+                        csrf(
+                            &mut inner,
+                            &session,
+                            &format!("remove-factor:{address}"),
+                            now,
+                        )
+                    });
+                    rows.push(pages::AddressFactor {
+                        current: address == origin,
+                        passkey: kind.map(|kind| kind == FactorKind::Passkey),
+                        remove_token,
+                        address,
+                    });
+                }
                 let active_grants = inner
                     .stored
                     .grants
@@ -1010,7 +1083,8 @@ impl AuthService {
                 let revoke_all_token = csrf(&mut inner, &session, "revoke-all", now);
                 return Ok(html(pages::security(pages::Security {
                     logout_token,
-                    passkey: factor == Some(FactorKind::Passkey),
+                    addresses: rows,
+                    proof,
                     active_grants,
                     revoke_all_token,
                 })));
@@ -1814,6 +1888,55 @@ impl AuthService {
                 );
                 Ok(response)
             }
+            REMOVE_FACTOR => {
+                let form = form(
+                    headers,
+                    body,
+                    &["csrf_token", "address", "credential", "totp"],
+                )?;
+                let address = required(&form, "address")?.to_string();
+                consume_csrf(
+                    inner,
+                    &session,
+                    &format!("remove-factor:{address}"),
+                    required(&form, "csrf_token")?,
+                    now,
+                )?;
+                let Some(Authority::Owner(signed_in)) =
+                    inner.sessions.get(&session).map(|s| s.authority)
+                else {
+                    bail!("owner_login_required");
+                };
+                let target = self
+                    .factor(inner, &address)
+                    .ok_or_else(|| anyhow!("invalid_request"))?;
+                ensure!(may_remove(signed_in, target.kind()), "passkey_required");
+                let origin = self.request_origin(headers)?;
+                self.verify_factor(inner, &session, &origin, "factor:remove", &form, source)?;
+                let mut next = inner.stored.clone();
+                next.factors.remove(&address);
+                self.commit(inner, next)?;
+                // The address is back to setup: whoever was signed in there is out.
+                let ended = inner
+                    .sessions
+                    .iter()
+                    .filter(|(_, s)| s.origin == address)
+                    .map(|(id, _)| id.clone())
+                    .collect::<std::collections::HashSet<_>>();
+                inner.sessions.retain(|id, _| !ended.contains(id));
+                inner
+                    .csrf
+                    .retain(|_, token| !ended.contains(&token.session));
+                if address != origin {
+                    return redirect(pages::SECURITY);
+                }
+                let mut response = redirect(LOGIN)?;
+                response.headers_mut().insert(
+                    header::SET_COOKIE,
+                    OwnerCookiePolicy::for_origin(&origin).header("", 0),
+                );
+                Ok(response)
+            }
             "/agent-connect/owner/grants/revoke" => {
                 let form = form(headers, body, &["csrf_token", "grant_id"])?;
                 let id = required(&form, "grant_id")?;
@@ -2488,6 +2611,10 @@ fn pkce_verifier(value: &str) -> bool {
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || b"._~-".contains(&c))
 }
+/// No downgrade: only a passkey sign-in removes a passkey.
+fn may_remove(signed_in: FactorKind, target: FactorKind) -> bool {
+    signed_in == FactorKind::Passkey || target == FactorKind::Totp
+}
 fn csrf(inner: &mut Inner, session: &str, action: &str, now: u64) -> String {
     // Only one outstanding challenge per session/action; bound page refresh growth.
     let csrf = if inner.anonymous.contains_key(session) {
@@ -2615,7 +2742,7 @@ fn owner_error(status: StatusCode, reason: &str, path: &str, retry: Option<&str>
     let (title, message) = match reason {
         "invalid_credentials" => (
             "Sign-in did not complete",
-            "The owner passphrase was not accepted. Try again with the passphrase you chose during setup.",
+            "The passphrase or passkey was not accepted. Try again with the passphrase you chose during setup, or your passkey for this address.",
         ),
         "invalid_factor" => (
             "Authenticator code not accepted",
@@ -2649,12 +2776,16 @@ fn owner_error(status: StatusCode, reason: &str, path: &str, retry: Option<&str>
             "Reload this request and select one of the profiles configured by the gateway owner before approving access.",
         ),
         "invalid_enrollment" => (
-            "Enrollment expired",
-            "Start authenticator setup again from Security and finish it within 10 minutes.",
+            "Setup expired",
+            "Sign in with the passphrase to start setup again, and finish it within 10 minutes.",
         ),
         "factor_already_enrolled" => (
-            "Authenticator already enrolled",
-            "An authenticator is already enrolled for this gateway. Use it for owner sign-in and access approval.",
+            "Already set up",
+            "This address already has a passkey or authenticator. Sign in with it.",
+        ),
+        "passkey_required" => (
+            "A passkey is needed",
+            "Only a sign-in with a passkey can remove a passkey.",
         ),
         "authorization_capacity" | "grant_capacity" | "slow_down" => (
             "Gateway is busy",

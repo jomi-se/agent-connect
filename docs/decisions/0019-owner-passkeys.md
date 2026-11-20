@@ -68,8 +68,9 @@ both.** What an address accepts follows from which one it has:
    gates enrollment. It stays on the host, where the owner already types it at
    a terminal prompt; a console form can come later if it is missed. Grants
    survive all of these. Host access is owner
-   authority, so the CLI needs no factor; one reset command replaces
-   `reset-totp`.
+   authority, so the CLI needs no factor. `remove-factor` (an exact address
+   or `--all`) replaces `reset-totp`; a full reset is `remove-factor --all`
+   followed by `reset-passphrase`.
 
 8. **Start fresh.** The project is pre-1.0 and keeps nothing compatible. The
    new version does not read the old authorization state: the gateway refuses

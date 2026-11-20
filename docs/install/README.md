@@ -208,8 +208,8 @@ sample retains its transcript and reports interruption without automatically
 replaying prompts or uncertain effects. Provider transcripts do not create a
 general restoration API. See the [SDK recovery contract](../../packages/web-sdk/README.md).
 
-A lost authenticator or passphrase has a local owner-run recovery:
-[`reset-totp`](troubleshooting.md#lost-authenticator) or
+A lost passkey, authenticator or passphrase has a local owner-run recovery:
+[`remove-factor`](troubleshooting.md#lost-passkey-or-authenticator) or
 [`reset-passphrase`](troubleshooting.md#lost-passphrase). Stop the gateway
 before recovery; provider authentication is separate.
 

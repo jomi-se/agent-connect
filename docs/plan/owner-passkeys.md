@@ -34,10 +34,15 @@ end.
 3. **Per-address state and the table's rules**, as Rust tests with
    `SoftPasskey`: one test per row of both tables, plus cross-address reuse,
    replay and concurrent enrollment.
-4. **Enrollment and sign-in pages:** the small script, the CSP nonce, the IP
-   literal explanation with the TOTP option.
+4. **Enrollment and sign-in pages:** the small script (allowed by its hash in
+   the CSP), the IP literal explanation with the TOTP option.
 5. **Approvals** with a fresh passkey assertion.
-6. **Console actions and the host reset command.**
+6. **Console actions and the host reset command.** Security lists every
+   address with its factor and a Remove button (fresh assertion of the
+   signed-in factor; a TOTP session sees passkey rows without one). Removing
+   signs that address out. `agent-connect remove-factor <address>|--all`
+   replaces `reset-totp`; the passphrase changes on the host only, with
+   `reset-passphrase`.
 7. **Browser test** of the full flow in local Chromium with a virtual
    authenticator, CSP enforced.
 8. **Docs:** `PRODUCT.md`'s owner-page rules, configuration, troubleshooting.
@@ -55,3 +60,22 @@ end.
 - **`webauthn-rs` 0.6.2 depends on `rsa` 0.10.0-rc**, built in whether or not
   RS256 is accepted; its high-level API has no algorithm switch. RS256 is what
   older Windows Hello credentials use. Current lean: keep the library default.
+
+## To review at the end
+
+Calls made while building, small enough not to stop for, worth a second look
+before release:
+
+- **Removal challenge is not tied to the row.** One passkey challenge on the
+  Security page covers every Remove button; the address is a form field
+  under CSRF. Same reasoning as approvals: the prompt cannot show which row.
+- **Security lists stored-but-unconfigured addresses too**, after the
+  configured ones, so a factor whose address left the configuration can still
+  be removed from the console.
+- **No separate full-reset command.** `remove-factor --all` plus
+  `reset-passphrase` is the full reset.
+- **`remove-factor` normalizes the address it is given** (a trailing slash or
+  path is dropped to the origin) and, when nothing matches, lists the
+  addresses that have a factor.
+- **Error and audit wording** now says "passphrase or passkey" where sign-in
+  can fail either way.

@@ -300,7 +300,7 @@ try {
     exact: true,
   });
   await signInHistory
-    .getByText("The owner passphrase was not accepted.", { exact: true })
+    .getByText("The passphrase or passkey was not accepted.", { exact: true })
     .waitFor();
   assert.ok((await signInHistory.innerText()).includes(origin));
   const auditPrivateValues = [

@@ -70,15 +70,22 @@ pub struct SetupCli {
 }
 
 #[derive(Args)]
-pub struct ResetTotpCli {
+#[command(group = clap::ArgGroup::new("target").required(true).args(["address", "all"]))]
+pub struct RemoveFactorCli {
     #[arg(long, env = "AGENT_CONNECT_CONFIG", hide_env_values = true)]
     pub config: Option<PathBuf>,
-    /// Confirm offline authenticator recovery without a terminal prompt.
+    /// The address whose passkey or authenticator to remove, such as
+    /// https://agent.example.com.
+    pub address: Option<String>,
+    /// Remove every address's passkey or authenticator.
+    #[arg(long)]
+    pub all: bool,
+    /// Confirm without a terminal prompt.
     #[arg(long)]
     pub yes: bool,
 }
 
-pub async fn reset_totp(cli: ResetTotpCli) -> anyhow::Result<()> {
+pub async fn remove_factor(cli: RemoveFactorCli) -> anyhow::Result<()> {
     let path = cli.config.map(Ok).unwrap_or_else(|| {
         Ok::<_, anyhow::Error>(default_runtime_directory()?.join("config.json"))
     })?;
@@ -88,32 +95,41 @@ pub async fn reset_totp(cli: ResetTotpCli) -> anyhow::Result<()> {
     }
     .resolve()?;
     if configured.headless_static_bearer {
-        return Err(usage("headless runtimes have no owner authenticator"));
+        return Err(usage("headless runtimes have no owner sign-in"));
     }
+    let target = match cli.address {
+        Some(address) => crate::authorization::FactorTarget::Address(address),
+        None => crate::authorization::FactorTarget::All,
+    };
     if !cli.yes {
         if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
             return Err(usage(
-                "reset-totp requires owner terminal confirmation or explicit --yes; stop the gateway first",
+                "remove-factor requires owner terminal confirmation or explicit --yes; stop the gateway first",
             ));
         }
-        if !confirm(
-            "Reset the owner authenticator? Stop the gateway first; applications and owner passphrase are retained.",
-        )? {
+        let question = match &target {
+            crate::authorization::FactorTarget::Address(address) => format!(
+                "Remove the passkey or authenticator for {address}? Stop the gateway first; applications and the owner passphrase are kept."
+            ),
+            crate::authorization::FactorTarget::All => "Remove the passkey or authenticator for every address? Stop the gateway first; applications and the owner passphrase are kept.".to_string(),
+        };
+        if !confirm(&question)? {
             return Ok(());
         }
     }
     let state = configured.state_dir.join("auth");
-    let changed =
-        tokio::task::spawn_blocking(move || crate::authorization::AuthService::reset_totp(&state))
-            .await??;
-    println!(
-        "{}",
-        if changed {
-            "Owner authenticator reset. Restart the gateway, sign in with your owner passphrase, and enroll a new authenticator."
-        } else {
-            "Owner authenticator was already disabled; private state was preserved."
-        }
-    );
+    let removed = tokio::task::spawn_blocking(move || {
+        crate::authorization::AuthService::remove_factor(&state, &target)
+    })
+    .await??;
+    if removed.is_empty() {
+        println!("No address had a passkey or authenticator; nothing changed.");
+    } else {
+        println!(
+            "Removed the passkey or authenticator for {}. Restart the gateway, sign in there with the owner passphrase, and set up a new one.",
+            removed.join(", ")
+        );
+    }
     Ok(())
 }
 
@@ -144,7 +160,7 @@ pub async fn reset_passphrase(cli: ResetPassphraseCli) -> anyhow::Result<()> {
     })
     .await??;
     println!(
-        "Owner passphrase replaced. Restart the gateway and sign in with the new passphrase; applications and authenticator are retained."
+        "Owner passphrase replaced. Restart the gateway; passkeys, authenticators and applications are kept. The new passphrase is what sets up an address that has neither."
     );
     Ok(())
 }

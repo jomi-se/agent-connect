@@ -76,7 +76,7 @@ impl Reason {
             Self::InvalidCsrf => "The sign-in form could not be verified.",
             Self::InvalidOrigin => "The sign-in form came from an unexpected origin.",
             Self::InvalidTarget => "The sign-in request did not match a configured entry point.",
-            Self::InvalidCredentials => "The owner passphrase was not accepted.",
+            Self::InvalidCredentials => "The passphrase or passkey was not accepted.",
             Self::InvalidFactor => "The authenticator code was not accepted.",
             Self::LoginRateLimited => "Sign-in attempts were temporarily paused.",
             Self::FactorRateLimited => "Authenticator attempts were temporarily paused.",

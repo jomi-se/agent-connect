@@ -85,24 +85,26 @@ Choose the documented sandboxed profile only if its wider native authority is
 acceptable, or use a host that supports the harness sandbox. This failure is not
 evidence that a write reached the filesystem and was rejected by read-only policy.
 
-## Lost authenticator
+## Lost passkey or authenticator
 
-Recovery is a local owner operation, unavailable through a web recovery endpoint:
+Each address has its own passkey or authenticator. If you can still sign in on
+another address with a passkey, remove the lost one from **Security** there.
+Otherwise remove it on the host; there is no web recovery endpoint:
 
 ```sh
 agent-connect service stop
-agent-connect reset-totp --config <config> --yes
+agent-connect remove-factor https://agent.example.com --config <config> --yes
 agent-connect service start
 ```
 
-For a non-default runtime, pass the same config to both service commands.
-`--yes` explicitly confirms the local reset. `reset-totp` requires the private authorization state to be owned by the invoking
-user and refuses to proceed while the gateway holds its exclusive state lock.
-It clears the enrolled factor and its replay counter while preserving the owner
-passphrase and application grants. It records recovery count/time without
-printing any secret. Sign in with the existing passphrase and set up a new
-authenticator from Security. Recovery does not grant access to a lost owner passphrase or
-authenticate the provider.
+Name the exact address, or pass `--all` for every address. For a non-default
+runtime, pass the same config to both service commands. `--yes` confirms
+without a terminal prompt. `remove-factor` requires the private authorization
+state to be owned by the invoking user and refuses to proceed while the gateway
+holds its exclusive state lock. It keeps the owner passphrase and application
+grants. Sign in on that address with the passphrase and set up a new passkey or
+authenticator. A full reset is `remove-factor --all` followed by
+`reset-passphrase`.
 
 ## Lost passphrase
 
@@ -115,7 +117,8 @@ agent-connect service start
 ```
 
 It prompts twice for the new passphrase and refuses to proceed while the gateway
-holds its state lock. The authenticator and application grants are preserved.
+holds its state lock. Passkeys, authenticators and application grants are kept;
+the new passphrase is what sets up an address that has neither.
 
 ## Container cleanup and capacity
 

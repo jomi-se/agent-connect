@@ -33,7 +33,7 @@ use agent_connect_gateway::config::{
 use agent_connect_gateway::credentials::{HarnessHome, default_home, login_args, select_harness};
 use agent_connect_gateway::engine::{self, Engine};
 use agent_connect_gateway::operations::{
-    self, DoctorCli, ResetPassphraseCli, ResetTotpCli, ServiceCli, SetupCli,
+    self, DoctorCli, RemoveFactorCli, ResetPassphraseCli, ServiceCli, SetupCli,
 };
 use agent_connect_gateway::policy::{GrantSessions, PermissionProfile, PolicyConfig, PolicyProxy};
 use agent_connect_gateway::resume::{
@@ -84,8 +84,9 @@ enum Command {
     Doctor(DoctorCli),
     /// Install and operate the gateway's per-user systemd or launchd service.
     Service(ServiceCli),
-    /// Reset a lost owner TOTP factor offline; stop the service first.
-    ResetTotp(ResetTotpCli),
+    /// Remove an address's passkey or authenticator offline (one address or
+    /// --all); stop the service first.
+    RemoveFactor(RemoveFactorCli),
     /// Replace a lost owner passphrase offline at a terminal; stop the service first.
     ResetPassphrase(ResetPassphraseCli),
     /// Serve owner sign-in, app consent, grant management and unstable ACP.
@@ -288,7 +289,7 @@ async fn run() -> anyhow::Result<()> {
         Command::Setup(cli) => return operations::setup(cli).await,
         Command::Doctor(cli) => return operations::doctor(cli).await,
         Command::Service(cli) => return operations::service(cli).await,
-        Command::ResetTotp(cli) => return operations::reset_totp(cli).await,
+        Command::RemoveFactor(cli) => return operations::remove_factor(cli).await,
         Command::ResetPassphrase(cli) => return operations::reset_passphrase(cli).await,
         Command::Login(cli) => {
             use std::io::IsTerminal;
