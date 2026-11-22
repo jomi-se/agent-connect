@@ -76,6 +76,10 @@ before release:
 
 ### Settled
 
+- **Activity links each request to its own address.** Kept, and written up
+  as the [surface model](../architecture/surface-model.md): to an application each address is its own gateway, so a
+  request is reviewed at the address it came through; to the owner the
+  console is one gateway and shows every address.
 - **Rate limits and guess limits are separate.** Rate limits catch runaway or
   hostile traffic and count every request (600 a minute without an owner
   session, a per-source limit with client address rules, a concurrency cap).
@@ -120,9 +124,6 @@ before release:
 
 ### Still to review
 
-- **Activity links each request to its own address** and says "on
-  <address>" when it is not this one; the review happens there, under that
-  address's factor.
 - **Upgrade note lives in the changelog only.** The gateway's refusal message
   says to run setup again; the install guide says only that a release may ask
   for it.

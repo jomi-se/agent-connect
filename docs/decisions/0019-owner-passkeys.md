@@ -93,7 +93,8 @@ both.** What an address accepts follows from which one it has:
     `reset-passphrase`) revokes every app grant while the gateway is stopped;
     every owner session is also gone on restart, as today.
 11. **One activity view.** The console lists pending requests from every
-    address, each linking to the address it belongs to.
+    address, each linking to the address it belongs to. The [surface model](../architecture/surface-model.md) sets out
+    what belongs to one address and what the whole gateway shares.
 12. **One cookie per address.** Two ports on the same host get different
     cookie names, so signing in on one does not replace the other's cookie.
 
