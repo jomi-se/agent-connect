@@ -137,10 +137,10 @@ before release:
   - Done: no footer; passphrase sign-in, passkey setup, the IP address page,
     authenticator setup and the sign-in pause; the approval page's "Tools",
     no fold-out, no passkey reminder.
-  - Approval page: the risk sentence becomes "An approved app can use your
-    agent's login and see other apps' conversations." until
-    [per-app conversations](app-conversations.md) land, then "An approved app
-    can use your agent's login."
+  - Approval page: the risk sentence reads "An approved app can use your
+    agent's login and see other apps' conversations." When
+    [per-app conversations](app-conversations.md) land, it becomes "An
+    approved app can use your agent's login."
   - Next, one at a time: Activity (move sign-in failures to Security; cut the
     session ID and the history's explanation), Security, Gateway, the error
     pages, the CLI messages.
