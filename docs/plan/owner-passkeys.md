@@ -76,6 +76,11 @@ before release:
 
 ### Settled
 
+- **A browser without passkeys hears so when it tries.** The passkey
+  sign-in page is a heading and one button. Pressing it where the browser has
+  no WebAuthn says "This browser can't use passkeys." and posts nothing; any
+  other failure says the passkey didn't go through. It is the visitor's own
+  browser, so the sentence tells an attacker nothing.
 - **A failed sign-in says only "Sign-in failed".** A wrong passphrase, passkey
   or authenticator code, and a paused code budget, all get the same 401 page:
   the code is checked after the passphrase, so a separate answer for it would
@@ -108,9 +113,6 @@ before release:
 
 ### Still to review
 
-- **Missing WebAuthn shows a sentence, not a page.** A browser without
-  WebAuthn sees "This browser can't use passkeys" in the form's status line;
-  no separate page, and the passkey form stays visible.
 - **Passkey successes don't spend the factor attempt budget** (5 a minute
   per connection); failed assertions and every TOTP attempt still do. Found
   by the browser test: a sign-in and four approvals in a minute hit it.

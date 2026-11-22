@@ -111,12 +111,14 @@ pub(super) enum SignIn {
 const PASSPHRASE_INPUT: &str = "<div class='field'><label for='owner-passphrase'>Owner passphrase</label><input id='owner-passphrase' type=password name=passphrase autocomplete=current-password required maxlength=1024></div>";
 
 pub(super) fn sign_in(fields: &str, method: SignIn, waiting: Option<&str>) -> Page {
-    let lede = match waiting {
-        Some(name) => format!(
-            "Sign in to review the request from <strong>{}</strong>.",
+    // A passkey sign-in needs no words beyond its button.
+    let lede = match (&method, waiting) {
+        (SignIn::Passkey(_), _) => String::new(),
+        (_, Some(name)) => format!(
+            "<p class='lede'>Sign in to review the request from <strong>{}</strong>.</p>",
             escape(name)
         ),
-        None => "Manage the apps that use your agent.".into(),
+        (_, None) => "<p class='lede'>Manage the apps that use your agent.</p>".into(),
     };
     let (form, script) = match method {
         SignIn::Passkey(options) => (
@@ -142,7 +144,7 @@ pub(super) fn sign_in(fields: &str, method: SignIn, waiting: Option<&str>) -> Pa
     let mut page = plain(
         "Sign in",
         Width::Compact,
-        format!("<div class='panel'><h1>Sign in</h1><p class='lede'>{lede}</p>{form}</div>"),
+        format!("<div class='panel'><h1>Sign in</h1>{lede}{form}</div>"),
     );
     page.script = script;
     page
@@ -167,17 +169,19 @@ pub(super) fn setup(fields: &str, options: Option<&str>) -> Page {
 }
 
 /// Runs the passkey ceremony for a form with `data-passkey` options, then posts
-/// the credential with the form. Without JavaScript or WebAuthn the form says so.
+/// the credential with the form. A browser without passkeys hears so when the
+/// button is pressed; without JavaScript the empty credential is refused.
 const PASSKEY_SCRIPT: &str = r#"(() => {
   for (const form of document.querySelectorAll('form[data-passkey]')) {
     const status = form.querySelector('.passkey-status');
     const field = form.querySelector('input[name=credential]');
-    if (!window.PublicKeyCredential || !PublicKeyCredential.parseRequestOptionsFromJSON) {
-      status.textContent = 'This browser can’t use passkeys. Try a current browser.';
-    }
     form.addEventListener('submit', async (event) => {
       if (field.value || (event.submitter && event.submitter.value === 'deny')) return;
       event.preventDefault();
+      if (!window.PublicKeyCredential || !PublicKeyCredential.parseRequestOptionsFromJSON) {
+        status.textContent = 'This browser can’t use passkeys.';
+        return;
+      }
       status.textContent = '';
       try {
         const options = JSON.parse(form.dataset.passkey);

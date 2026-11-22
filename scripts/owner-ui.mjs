@@ -639,6 +639,30 @@ try {
   } finally {
     await recoveryContext.close();
   }
+  // A browser without passkeys hears so when the button is pressed, and posts nothing.
+  const noPasskeyContext = await browser.newContext();
+  try {
+    await noPasskeyContext.addInitScript(() => {
+      delete window.PublicKeyCredential;
+    });
+    const noPasskeyPage = await noPasskeyContext.newPage();
+    noPasskeyPage.on("pageerror", (error) => errors.push(error.message));
+    let posted = false;
+    noPasskeyPage.on("request", (request) => {
+      if (request.method() === "POST") posted = true;
+    });
+    await noPasskeyPage.goto(`${owner}/login`);
+    assert.equal(await noPasskeyPage.locator(".lede").count(), 0);
+    await noPasskeyPage
+      .getByRole("button", { name: "Sign in with your passkey", exact: true })
+      .click();
+    await noPasskeyPage
+      .getByText("This browser can’t use passkeys.", { exact: true })
+      .waitFor();
+    assert.equal(posted, false);
+  } finally {
+    await noPasskeyContext.close();
+  }
   const missingCookieContext = await browser.newContext();
   try {
     const missingCookiePage = await missingCookieContext.newPage();
