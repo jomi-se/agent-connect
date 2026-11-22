@@ -14,9 +14,9 @@
   lists each stored passkey and authenticator to filter and choose from, or
   takes an address or `--all`; both `remove-factor` and `reset-passphrase` revoke every app
   grant.
-- After upgrading, the gateway refuses the earlier owner state and says to run
-  `agent-connect setup` again: set the passphrase, set up each address, and
-  pair applications again.
+- After upgrading, the gateway refuses the earlier owner state: remove the
+  file it names and run `agent-connect setup` again, then set up each address
+  and pair applications again.
 - Each address gets its own owner cookie, named with its port, so signing in
   on one port no longer replaces another's session.
 - A failed sign-in says only "Sign-in failed", whichever part was wrong. A

@@ -76,6 +76,8 @@ before release:
 
 ### Settled
 
+- **The upgrade note lives in the changelog only.** It says what the gateway's
+  refusal says: remove the old owner state and run setup again.
 - **Activity links each request to its own address.** Kept, and written up
   as the [surface model](../architecture/surface-model.md): to an application each address is its own gateway, so a
   request is reviewed at the address it came through; to the owner the
@@ -124,9 +126,6 @@ before release:
 
 ### Still to review
 
-- **Upgrade note lives in the changelog only.** The gateway's refusal message
-  says to run setup again; the install guide says only that a release may ask
-  for it.
 - **Every owner surface gets a design pass together**, once this works end
   to end: setup, sign-in, consent, Security, Activity, the error pages and
   the CLI messages. They carry too much explanatory text; aim for labels,
