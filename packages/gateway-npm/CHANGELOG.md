@@ -10,8 +10,9 @@
   On an address with neither, the passphrase only opens setup. See ADR 0019.
 - Security lists each configured address with its factor and removes one with a
   fresh passkey or code, signing that address out and revoking apps approved
-  there. `agent-connect remove-factor <address>` (or `--all`) replaces
-  `reset-totp`; both `remove-factor` and `reset-passphrase` revoke every app
+  there. `agent-connect remove-factor` replaces `reset-totp`: at a terminal it
+  lists each stored passkey and authenticator to filter and choose from, or
+  takes an address or `--all`; both `remove-factor` and `reset-passphrase` revoke every app
   grant.
 - After upgrading, the gateway refuses the earlier owner state and says to run
   `agent-connect setup` again: set the passphrase, set up each address, and

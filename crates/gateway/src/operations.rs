@@ -70,22 +70,22 @@ pub struct SetupCli {
 }
 
 #[derive(Args)]
-#[command(group = clap::ArgGroup::new("target").required(true).args(["address", "all"]))]
 pub struct RemoveFactorCli {
     #[arg(long, env = "AGENT_CONNECT_CONFIG", hide_env_values = true)]
     pub config: Option<PathBuf>,
     /// The address whose passkey or authenticator to remove, such as
-    /// https://agent.example.com.
+    /// https://agent.example.com. Without one, a terminal lists them to choose from.
     pub address: Option<String>,
     /// Remove every address's passkey or authenticator.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "address")]
     pub all: bool,
-    /// Confirm without a terminal prompt.
+    /// Confirm without a terminal prompt; needs an address or --all.
     #[arg(long)]
     pub yes: bool,
 }
 
 pub async fn remove_factor(cli: RemoveFactorCli) -> anyhow::Result<()> {
+    use crate::authorization::{AuthService, FactorTarget, StoredFactors, factor_address};
     let path = cli.config.map(Ok).unwrap_or_else(|| {
         Ok::<_, anyhow::Error>(default_runtime_directory()?.join("config.json"))
     })?;
@@ -97,46 +97,169 @@ pub async fn remove_factor(cli: RemoveFactorCli) -> anyhow::Result<()> {
     if configured.headless_static_bearer {
         return Err(usage("headless runtimes have no owner sign-in"));
     }
-    let target = match cli.address {
-        Some(address) => crate::authorization::FactorTarget::Address(address),
-        None => crate::authorization::FactorTarget::All,
-    };
-    if !cli.yes {
-        if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
-            return Err(usage(
-                "remove-factor requires owner terminal confirmation or explicit --yes; stop the gateway first",
-            ));
-        }
-        let question = match &target {
-            crate::authorization::FactorTarget::Address(address) => format!(
-                "Remove the passkey or authenticator for {address} and revoke every app grant? Stop the gateway first; the owner passphrase is kept."
-            ),
-            crate::authorization::FactorTarget::All => "Remove the passkey or authenticator for every address and revoke every app grant? Stop the gateway first; the owner passphrase is kept.".to_string(),
-        };
-        if !confirm(&question)? {
-            return Ok(());
-        }
+    let interactive = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+    if cli.yes && cli.address.is_none() && !cli.all {
+        return Err(usage("remove-factor --yes needs an address or --all"));
     }
+    if !cli.yes && !interactive {
+        return Err(usage(
+            "remove-factor needs a terminal, or an address or --all with --yes; stop the gateway first",
+        ));
+    }
+    let addresses: Vec<String> = configured
+        .public_url
+        .iter()
+        .chain(&configured.entry_points)
+        .filter_map(|address| factor_address(address))
+        .collect();
+    let mut chosen = String::new();
     let state = configured.state_dir.join("auth");
     let removal = tokio::task::spawn_blocking(move || {
-        crate::authorization::AuthService::remove_factor(&state, &target)
+        AuthService::remove_factor(&state, |stored: &StoredFactors| {
+            if stored.factors.is_empty() {
+                eprintln!("No address has a passkey or authenticator.");
+                return Ok(None);
+            }
+            let named = cli.address.as_deref().map(|address| {
+                factor_address(address)
+                    .filter(|origin| stored.factors.iter().any(|f| &f.address == origin))
+                    .ok_or(address)
+            });
+            let target = match named {
+                _ if cli.all => FactorTarget::All,
+                Some(Ok(origin)) => FactorTarget::Address(origin),
+                // Without a prompt, the store names the addresses that have one.
+                Some(Err(address)) if cli.yes => FactorTarget::Address(address.to_string()),
+                Some(Err(address)) => {
+                    eprintln!("No passkey or authenticator for {address}.");
+                    match pick_factor(stored, &addresses)? {
+                        Some(target) => target,
+                        None => return Ok(None),
+                    }
+                }
+                None => match pick_factor(stored, &addresses)? {
+                    Some(target) => target,
+                    None => return Ok(None),
+                },
+            };
+            chosen = describe_factor(stored, &target);
+            if !cli.yes && !confirm_removal(&chosen, stored.apps_with_access)? {
+                return Ok(None);
+            }
+            Ok(Some(target))
+        })
+        .map(|removal| (removal, chosen))
     })
-    .await??;
-    if removal.removed.is_empty() && removal.revoked_grants == 0 {
-        println!(
-            "No address had a passkey or authenticator and no app had access; nothing changed."
-        );
-    } else if removal.removed.is_empty() {
-        println!(
-            "No address had a passkey or authenticator; every app grant was revoked. Restart the gateway; apps will need to connect again."
-        );
-    } else {
-        println!(
-            "Removed the passkey or authenticator for {} and revoked every app grant. Restart the gateway, sign in there with the owner passphrase, and set up a new one; apps will need to connect again.",
-            removal.removed.join(", ")
-        );
+    .await?;
+    let (Some(removal), chosen) = removal? else {
+        return Ok(());
+    };
+    println!(
+        "Removed {chosen}. Restart the gateway, then sign in with the owner passphrase to set up a new one."
+    );
+    if removal.revoked_grants > 0 {
+        println!("{}", apps_reconnect(removal.revoked_grants));
     }
     Ok(())
+}
+
+/// "the passkey for https://agent.example.com", or every factor.
+fn describe_factor(
+    stored: &crate::authorization::StoredFactors,
+    target: &crate::authorization::FactorTarget,
+) -> String {
+    match target {
+        crate::authorization::FactorTarget::All => "every passkey and authenticator".into(),
+        crate::authorization::FactorTarget::Address(address) => {
+            match stored.factors.iter().find(|f| &f.address == address) {
+                Some(f) if f.passkey => format!("the passkey for {address}"),
+                Some(_) => format!("the authenticator for {address}"),
+                None => format!("the passkey or authenticator for {address}"),
+            }
+        }
+    }
+}
+
+fn apps_reconnect(apps: usize) -> String {
+    match apps {
+        1 => "1 app will need to connect again.".into(),
+        n => format!("{n} apps will need to connect again."),
+    }
+}
+
+/// The picker's rows: each stored factor with its kind, marking addresses
+/// that have left configuration, and every factor at once when there are
+/// several.
+fn factor_rows(
+    stored: &crate::authorization::StoredFactors,
+    configured: &[String],
+) -> Vec<(String, crate::authorization::FactorTarget)> {
+    let width = stored
+        .factors
+        .iter()
+        .map(|f| f.address.len())
+        .max()
+        .unwrap_or(0);
+    let mut rows: Vec<_> = stored
+        .factors
+        .iter()
+        .map(|f| {
+            let kind = if f.passkey {
+                "passkey"
+            } else {
+                "authenticator"
+            };
+            let note = if configured.contains(&f.address) {
+                ""
+            } else {
+                ", not configured"
+            };
+            (
+                format!("{:width$}  {kind}{note}", f.address),
+                crate::authorization::FactorTarget::Address(f.address.clone()),
+            )
+        })
+        .collect();
+    if rows.len() > 1 {
+        rows.push((
+            "All of them".into(),
+            crate::authorization::FactorTarget::All,
+        ));
+    }
+    rows
+}
+
+fn pick_factor(
+    stored: &crate::authorization::StoredFactors,
+    configured: &[String],
+) -> anyhow::Result<Option<crate::authorization::FactorTarget>> {
+    let rows = factor_rows(stored, configured);
+    let labels = rows.iter().map(|(label, _)| label.clone()).collect();
+    let picked = inquire::Select::new("Remove which passkey or authenticator?", labels)
+        .with_help_message("↑↓ to move, type to filter, enter to choose, esc to cancel")
+        .with_page_size(10)
+        .raw_prompt();
+    match picked {
+        Ok(choice) => Ok(Some(rows[choice.index].1.clone())),
+        Err(inquire::InquireError::OperationCanceled)
+        | Err(inquire::InquireError::OperationInterrupted) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn confirm_removal(chosen: &str, apps: usize) -> anyhow::Result<bool> {
+    let question = format!("Remove {chosen}?");
+    let help = apps_reconnect(apps);
+    let mut prompt = inquire::Confirm::new(&question).with_default(false);
+    if apps > 0 {
+        prompt = prompt.with_help_message(&help);
+    }
+    match prompt.prompt() {
+        Ok(yes) => Ok(yes),
+        Err(inquire::InquireError::OperationCanceled)
+        | Err(inquire::InquireError::OperationInterrupted) => Ok(false),
+        Err(error) => Err(error.into()),
+    }
 }
 
 #[derive(Args)]
@@ -807,6 +930,49 @@ pub(super) fn create_private_directory(path: &Path) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn remove_factor_rows_name_each_factor_and_mark_unconfigured_addresses() {
+        use crate::authorization::{FactorTarget, StoredFactor, StoredFactors};
+        let stored = StoredFactors {
+            factors: vec![
+                StoredFactor {
+                    address: "https://agent.example.com".into(),
+                    passkey: true,
+                },
+                StoredFactor {
+                    address: "https://old.example".into(),
+                    passkey: false,
+                },
+            ],
+            apps_with_access: 3,
+        };
+        let rows = factor_rows(&stored, &["https://agent.example.com".into()]);
+        let labels: Vec<_> = rows.iter().map(|(label, _)| label.as_str()).collect();
+        assert_eq!(
+            labels,
+            [
+                "https://agent.example.com  passkey",
+                "https://old.example        authenticator, not configured",
+                "All of them",
+            ]
+        );
+        assert_eq!(rows[2].1, FactorTarget::All);
+        assert_eq!(
+            describe_factor(&stored, &rows[1].1),
+            "the authenticator for https://old.example"
+        );
+        assert_eq!(
+            describe_factor(&stored, &FactorTarget::All),
+            "every passkey and authenticator"
+        );
+        assert_eq!(apps_reconnect(1), "1 app will need to connect again.");
+        // One factor needs no "All of them" row.
+        let one = StoredFactors {
+            factors: stored.factors[..1].to_vec(),
+            apps_with_access: 0,
+        };
+        assert_eq!(factor_rows(&one, &[]).len(), 1);
+    }
     fn test_harness() -> box_build::HarnessVersions {
         [
             ("@openai/codex", "0.160.1"),

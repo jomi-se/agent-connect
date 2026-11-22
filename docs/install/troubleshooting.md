@@ -94,13 +94,16 @@ on the host; there is no web recovery endpoint:
 
 ```sh
 agent-connect service stop
-agent-connect remove-factor https://agent.example.com --config <config> --yes
+agent-connect remove-factor
 agent-connect service start
 ```
 
-Name any stored address (including one that has left the configuration), or
-pass `--all` for every address. For a non-default runtime, pass the same config
-to both service commands. `--yes` confirms without a terminal prompt.
+At a terminal, `remove-factor` lists each stored passkey and authenticator,
+including one whose address has left the configuration; type to filter, choose
+one or all of them, and confirm. Naming an address skips the list (a path or
+trailing slash is dropped). For a script, name the address or pass `--all`,
+with `--yes` to confirm without a prompt. For a non-default runtime, pass the
+same `--config` to all three commands.
 `remove-factor` requires the private authorization state to be owned by the
 invoking user and refuses to proceed while the gateway holds its exclusive
 state lock. It keeps the owner passphrase and revokes every application grant.

@@ -67,8 +67,9 @@ both.** What an address accepts follows from which one it has:
    Changing the passphrase keeps enrolled factors, since the passphrase only
    gates enrollment. It stays on the host, where the owner already types it at
    a terminal prompt; a console form can come later if it is missed. Host
-   access is owner authority, so the CLI needs no factor. `remove-factor` (an
-   exact address or `--all`) replaces `reset-totp`; a full reset is
+   access is owner authority, so the CLI needs no factor. `remove-factor`
+   replaces `reset-totp`: at a terminal it lists the stored factors to choose
+   from, and an address or `--all` names the target directly; a full reset is
    `remove-factor --all` followed by `reset-passphrase`. Both terminal recovery
    commands revoke every app grant: recovery cannot know what leaked, and
    reconnecting an app is cheap (grants last 30 days at most).

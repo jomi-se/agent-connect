@@ -42,7 +42,8 @@ end.
    the signed-in factor; a TOTP session sees passkey rows without one).
    Removing signs that address out and revokes app grants approved on that
    address (ending live sessions within a second).
-   `agent-connect remove-factor <address>|--all` replaces `reset-totp`; the
+   `agent-connect remove-factor` (a picker at a terminal, or an address or
+   `--all`) replaces `reset-totp`; the
    passphrase changes on the host only, with `reset-passphrase`. Both terminal
    recovery commands revoke every app grant.
 7. **Browser test** of the full flow in local Chromium with a virtual
@@ -92,11 +93,15 @@ before release:
   grant: recovery cannot know what leaked, and reconnecting an app is cheap
   (grants last 30 days at most).
 
+- **`remove-factor` is a picker at a terminal.** It lists each stored
+  passkey and authenticator (marking addresses no longer configured) with
+  arrow keys and a fuzzy filter, then confirms with what goes and how many
+  apps will need to connect again. A named address skips the list after
+  dropping any path or trailing slash; one with no factor opens the list. With
+  `--yes`, an address or `--all` is required and nothing prompts.
+
 ### Still to review
 
-- **`remove-factor` normalizes the address it is given** (a trailing slash or
-  path is dropped to the origin) and, when nothing matches, lists the
-  addresses that have a factor.
 - **Error and audit wording** now says "passphrase or passkey" where sign-in
   can fail either way.
 - **Missing WebAuthn shows a sentence, not a page.** A browser without

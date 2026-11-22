@@ -2825,6 +2825,64 @@ async fn pair_at(
     (issued.json(), auth_code)
 }
 
+/// Host-side removal of an owner-chosen target, as the CLI does after its prompt.
+fn remove_offline(dir: &std::path::Path, target: FactorTarget) -> Result<FactorRemoval> {
+    AuthService::remove_factor(dir, |_| Ok(Some(target))).map(|removal| removal.expect("chosen"))
+}
+
+#[tokio::test]
+async fn host_removal_shows_the_stored_factors_and_changes_nothing_when_none_is_chosen() {
+    const SECOND: &str = "https://second.example";
+    let dir = std::env::temp_dir().join(random("agent-connect-remove-factor-choose-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
+    let owner = login(&auth, "").await;
+    enroll_totp_at(&auth, SECOND, Some("second.example")).await;
+    let tokens = pair(&auth, &owner, "3600").await;
+    let before = auth.inner.lock().unwrap().stored.clone();
+    let now = auth.now();
+    drop(auth);
+    let mut seen = None;
+    let removal = AuthService::remove_factor_at(&dir, now, |choices| {
+        seen = Some((choices.factors.clone(), choices.apps_with_access));
+        Ok(None)
+    })
+    .unwrap();
+    assert!(removal.is_none());
+    let (factors, apps) = seen.unwrap();
+    assert_eq!(
+        factors,
+        vec![
+            StoredFactor {
+                address: ISSUER.into(),
+                passkey: true,
+            },
+            StoredFactor {
+                address: SECOND.into(),
+                passkey: false,
+            },
+        ]
+    );
+    assert_eq!(apps, 1);
+    let mut configuration = config(dir.clone(), None);
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
+    {
+        let inner = auth.inner.lock().unwrap();
+        assert_eq!(inner.stored.factors.len(), before.factors.len());
+        assert!(inner.stored.grants.iter().all(|grant| !grant.revoked));
+    }
+    assert!(auth.is_grant_active(tokens["grant_id"].as_str().unwrap()));
+    assert_eq!(
+        factor_address("https://second.example/agent-connect/owner"),
+        Some(SECOND.into())
+    );
+    assert_eq!(factor_address("second.example"), None);
+    drop(auth);
+    fs::remove_dir_all(dir).unwrap();
+}
+
 #[tokio::test]
 async fn host_removal_takes_one_exact_address_or_all_and_revokes_every_grant() {
     const SECOND: &str = "https://second.example";
@@ -2839,7 +2897,7 @@ async fn host_removal_takes_one_exact_address_or_all_and_revokes_every_grant() {
     let before = auth.inner.lock().unwrap().stored.clone();
     let one = FactorTarget::Address(format!("{SECOND}/"));
     assert!(
-        AuthService::remove_factor(&dir, &one)
+        remove_offline(&dir, one.clone())
             .unwrap_err()
             .to_string()
             .contains("stop the gateway")
@@ -2847,12 +2905,10 @@ async fn host_removal_takes_one_exact_address_or_all_and_revokes_every_grant() {
     drop(auth);
     // A trailing slash is still the same address; removing one factor offline
     // revokes every app grant across all addresses.
-    let removal = AuthService::remove_factor(&dir, &one).unwrap();
+    let removal = remove_offline(&dir, one.clone()).unwrap();
     assert_eq!(removal.removed, vec![SECOND.to_string()]);
     assert_eq!(removal.revoked_grants, 2);
-    let again = AuthService::remove_factor(&dir, &one)
-        .unwrap_err()
-        .to_string();
+    let again = remove_offline(&dir, one.clone()).unwrap_err().to_string();
     assert!(again.contains("no passkey or authenticator is set up for https://second.example"));
     assert!(again.contains(ISSUER), "{again}");
     let mut configuration = config(dir.clone(), None);
@@ -2884,10 +2940,10 @@ async fn host_removal_takes_one_exact_address_or_all_and_revokes_every_grant() {
     let owner = login(&auth, "").await;
     let fresh = pair(&auth, &owner, "3600").await;
     drop(auth);
-    let all = AuthService::remove_factor(&dir, &FactorTarget::All).unwrap();
+    let all = remove_offline(&dir, FactorTarget::All).unwrap();
     assert_eq!(all.removed, vec![ISSUER.to_string()]);
     assert_eq!(all.revoked_grants, 1);
-    let empty = AuthService::remove_factor(&dir, &FactorTarget::All).unwrap();
+    let empty = remove_offline(&dir, FactorTarget::All).unwrap();
     assert!(empty.removed.is_empty());
     assert_eq!(empty.revoked_grants, 0);
     let mut configuration = config(dir.clone(), None);
@@ -2898,7 +2954,7 @@ async fn host_removal_takes_one_exact_address_or_all_and_revokes_every_grant() {
     setup_session(&auth, ISSUER, None).await;
     drop(auth);
     fs::remove_dir_all(&dir).unwrap();
-    assert!(AuthService::remove_factor(&dir, &FactorTarget::All).is_err());
+    assert!(remove_offline(&dir, FactorTarget::All).is_err());
     assert!(!dir.exists());
 }
 
@@ -5523,8 +5579,7 @@ async fn security_lists_only_configured_addresses_while_dropped_factors_stay_ine
     drop(auth);
 
     // Terminal remove-factor still accepts a stored address even after it leaves config.
-    let removal =
-        AuthService::remove_factor(&dir, &FactorTarget::Address(SECOND.to_string())).unwrap();
+    let removal = remove_offline(&dir, FactorTarget::Address(SECOND.to_string())).unwrap();
     assert_eq!(removal.removed, vec![SECOND.to_string()]);
     fs::remove_dir_all(dir).unwrap();
 }

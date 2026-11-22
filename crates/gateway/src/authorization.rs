@@ -214,9 +214,31 @@ enum Factor {
     },
 }
 /// What a host-side factor removal covers: one exact address, or all of them.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FactorTarget {
     Address(String),
     All,
+}
+/// One address's stored passkey or authenticator, as the terminal lists it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredFactor {
+    pub address: String,
+    pub passkey: bool,
+}
+/// What the owner chooses from before a host-side factor removal.
+#[derive(Debug)]
+pub struct StoredFactors {
+    pub factors: Vec<StoredFactor>,
+    /// App grants still in force; a removal revokes them all.
+    pub apps_with_access: usize,
+}
+/// The origin an address names, as factors are stored: a trailing slash or
+/// path is dropped. `None` when it is not an address.
+pub fn factor_address(address: &str) -> Option<String> {
+    Url::parse(address)
+        .ok()
+        .map(|url| url.origin().ascii_serialization())
+        .filter(|origin| origin != "null")
 }
 /// Result of host-side factor removal.
 #[derive(Debug, PartialEq, Eq)]
@@ -514,28 +536,54 @@ impl AuthService {
 
     /// Owner-run recovery only, refused while the gateway runs and never
     /// creating missing state: put one address, or every address, back to
-    /// setup and revoke every app grant. The passphrase is kept. Returns the
-    /// addresses whose factor was removed and how many app grants were revoked;
-    /// naming an address without a factor is an error that lists the enrolled
-    /// addresses and leaves state unchanged.
+    /// setup and revoke every app grant. The passphrase is kept. `choose` sees
+    /// the stored factors under the state lock and returns what to remove, or
+    /// `None` to leave state unchanged. Returns the addresses whose factor was
+    /// removed and how many app grants were revoked; naming an address without
+    /// a factor is an error that lists the enrolled addresses and leaves state
+    /// unchanged.
     pub fn remove_factor(
         state_dir: &std::path::Path,
-        target: &FactorTarget,
-    ) -> Result<FactorRemoval> {
+        choose: impl FnOnce(&StoredFactors) -> Result<Option<FactorTarget>>,
+    ) -> Result<Option<FactorRemoval>> {
+        Self::remove_factor_at(state_dir, unix_now(), choose)
+    }
+    fn remove_factor_at(
+        state_dir: &std::path::Path,
+        now: u64,
+        choose: impl FnOnce(&StoredFactors) -> Result<Option<FactorTarget>>,
+    ) -> Result<Option<FactorRemoval>> {
         let mut removed = Vec::new();
         let mut revoked_grants = 0;
-        let now = unix_now();
+        let mut chosen = false;
         recover(state_dir, |stored| {
+            let choices = StoredFactors {
+                factors: stored
+                    .factors
+                    .iter()
+                    .map(|(address, factor)| StoredFactor {
+                        address: address.clone(),
+                        passkey: factor.kind() == FactorKind::Passkey,
+                    })
+                    .collect(),
+                apps_with_access: stored
+                    .grants
+                    .iter()
+                    .filter(|grant| !grant.revoked && grant.expires > now)
+                    .count(),
+            };
+            let Some(target) = choose(&choices)? else {
+                return Ok(false);
+            };
+            chosen = true;
             match target {
                 FactorTarget::All => {
                     removed = std::mem::take(&mut stored.factors).into_keys().collect();
                 }
                 FactorTarget::Address(address) => {
-                    let origin = Url::parse(address)
-                        .map(|url| url.origin().ascii_serialization())
-                        .map_err(|_| {
-                            anyhow!("{address} is not an address such as https://agent.example.com")
-                        })?;
+                    let origin = factor_address(&address).ok_or_else(|| {
+                        anyhow!("{address} is not an address such as https://agent.example.com")
+                    })?;
                     if stored.factors.remove(&origin).is_none() {
                         let enrolled = stored.factors.keys().cloned().collect::<Vec<_>>();
                         bail!(
@@ -553,10 +601,10 @@ impl AuthService {
             revoked_grants = revoke_all_grants(&mut stored.grants, now);
             Ok(!removed.is_empty() || revoked_grants > 0)
         })?;
-        Ok(FactorRemoval {
+        Ok(chosen.then_some(FactorRemoval {
             removed,
             revoked_grants,
-        })
+        }))
     }
 
     /// Owner-run recovery only: replace the passphrase hash, keep passkeys and
