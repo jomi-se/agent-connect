@@ -1648,7 +1648,7 @@ try {
     await delay(500);
   }
   const banner = allGrantsOwner.locator(".runtime-problem[role=status]");
-  assert.match(await banner.textContent(), /box runtime is not responding/i);
+  assert.match(await banner.textContent(), /Sessions can.t start/);
   assert.match(await banner.textContent(), /agent-connect doctor/);
   const outageDoctor = await commandResult(gateway, [
     "doctor",

@@ -310,7 +310,7 @@ pub(super) fn console(view: Console) -> Page {
     if view.requests.is_empty() && live.is_empty() && view.events.is_empty() {
         let _ = write!(
             body,
-            "<section class='first-run' aria-labelledby='empty-title'><h1 id='empty-title'>No apps yet</h1><p class='lede'>Give an app this gateway’s address. Its request will appear here for you to approve.</p>{}</section>",
+            "<section class='first-run' aria-labelledby='empty-title'><h1 id='empty-title'>No apps yet</h1><p class='lede'>Give an app this address to connect.</p>{}</section>",
             addresses(&view.addresses)
         );
         let mut page = owner_page(
