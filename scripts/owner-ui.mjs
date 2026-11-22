@@ -353,15 +353,9 @@ try {
   await capture("security");
   await page.getByRole("link", { name: "Gateway", exact: true }).click();
   await page
-    .getByRole("heading", {
-      name: "Access options when you approve an app",
-      exact: true,
-    })
+    .getByRole("heading", { name: "Access options", exact: true })
     .waitFor();
-  await page.getByText("Details and limits", { exact: true }).click();
-  await page
-    .getByText(/Deny-all and app-tools-only are not offered for Codex/)
-    .waitFor();
+  await page.getByText("Agent: Codex", { exact: true }).waitFor();
   await capture("gateway");
 
   let pendingAuthorization;

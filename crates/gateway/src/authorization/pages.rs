@@ -657,16 +657,15 @@ pub(super) struct Gateway {
     pub logout_token: String,
     pub harness: &'static str,
     pub addresses: Vec<String>,
-    /// Label, one-line summary and full description.
-    pub profiles: Vec<(&'static str, &'static str, &'static str)>,
-    pub profile_note: &'static str,
+    /// Label and one-line summary.
+    pub profiles: Vec<(&'static str, &'static str)>,
 }
 
 pub(super) fn gateway(view: Gateway) -> Page {
     let profiles = view
         .profiles
         .iter()
-        .map(|(label, summary, _)| {
+        .map(|(label, summary)| {
             format!(
                 "<div class='row'><div class='row-main'><p class='row-title'>{}</p><p class='meta'>{}</p></div></div>",
                 escape(label),
@@ -674,22 +673,10 @@ pub(super) fn gateway(view: Gateway) -> Page {
             )
         })
         .collect::<String>();
-    let details = view
-        .profiles
-        .iter()
-        .map(|(label, _, description)| {
-            format!(
-                "<p><strong>{}.</strong> {}</p>",
-                escape(label),
-                escape(description)
-            )
-        })
-        .collect::<String>();
     let body = format!(
-        "<h1>Gateway</h1><p class='lede'>Give an app one of these addresses. You sign in and approve on the address it uses.</p>{}<div class='list'><div class='row'><div class='row-main'><p class='row-title'>Your agent: {}</p><p class='meta'>Each session runs in a disposable box with restricted network access.</p></div></div></div><section class='section' aria-labelledby='profiles-title'><h2 id='profiles-title'>Access options when you approve an app</h2><div class='list'>{profiles}</div><details class='fineprint limits'><summary>Details and limits</summary>{details}<p>{}</p></details></section>",
+        "<h1>Gateway</h1><section class='section' aria-labelledby='addresses-title'><h2 id='addresses-title'>Addresses</h2>{}</section><div class='list'><div class='row'><div class='row-main'><p class='row-title'>Agent: {}</p></div></div></div><section class='section' aria-labelledby='profiles-title'><h2 id='profiles-title'>Access options</h2><div class='list'>{profiles}</div></section>",
         addresses(&view.addresses),
-        escape(view.harness),
-        escape(view.profile_note)
+        escape(view.harness)
     );
     let mut page = owner_page(
         "Gateway",
@@ -1094,7 +1081,7 @@ pre{max-height:22rem;margin:0 .9rem .9rem;padding:.8rem .9rem;overflow:auto;font
 .address{font-size:.9375rem;overflow-wrap:anywhere;user-select:all;-webkit-user-select:all}
 .section{margin-top:2.25rem}
 .list{margin-top:1.25rem;border-top:1px solid var(--line)}
-.addresses+.list{margin-top:0;border-top:0}
+.addresses+.list,.section:has(>.addresses)+.list{margin-top:0;border-top:0}
 .list .row{padding:1rem 0;border-bottom:1px solid var(--line)}
 .hint code,.alert code{white-space:nowrap}
 .section>h2{margin-bottom:.75rem}

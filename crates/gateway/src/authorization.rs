@@ -1149,19 +1149,8 @@ impl AuthService {
                         .config
                         .profiles
                         .iter()
-                        .map(|p| {
-                            (
-                                profile_label(*p),
-                                profile_summary(*p),
-                                profile_description(*p, harness),
-                            )
-                        })
+                        .map(|p| (profile_label(*p), profile_summary(*p)))
                         .collect(),
-                    profile_note: if harness == Harness::Codex {
-                        "Deny-all and app-tools-only are not offered for Codex: inside its box, its own tools can act without asking for permission."
-                    } else {
-                        "Read-only is not offered for Claude Code. Its options govern permission requests; actions that do not ask for permission may still run."
-                    },
                 })));
             }
             // One activity view: a request made on another address is reviewed
@@ -2683,28 +2672,6 @@ fn profile_summary(profile: PermissionProfile) -> &'static str {
         }
         PermissionProfile::AppToolsOnly => {
             "Only this app’s tool requests are allowed; actions that do not ask may still run."
-        }
-    }
-}
-fn profile_description(profile: PermissionProfile, harness: Harness) -> &'static str {
-    match profile {
-        PermissionProfile::Sandboxed => {
-            "The agent’s own tools work freely inside the disposable box, and all approved app tools are allowed. Approved apps can still reach the shared agent login and other apps’ conversations."
-        }
-        PermissionProfile::ReadOnly => {
-            "The agent’s own tools can read but not write. Approved app tools still work and other permission requests are denied. If this host cannot start the agent’s sandbox, sessions refuse to run instead of running unrestricted."
-        }
-        PermissionProfile::DenyAll if harness == Harness::Claude => {
-            "Claude Code’s permission requests are denied. Actions that do not ask for permission may still run, so this does not block every action of its own tools."
-        }
-        PermissionProfile::AppToolsOnly if harness == Harness::Claude => {
-            "Only permission requests tied to this app’s tools are allowed; others are denied. Matching depends on the adapter, and actions that do not ask for permission may still run."
-        }
-        PermissionProfile::DenyAll => {
-            "Permission requests are denied. Actions that do not ask for permission may still run."
-        }
-        PermissionProfile::AppToolsOnly => {
-            "Only permission requests tied to approved app tools are allowed. Actions that do not ask for permission may still run."
         }
     }
 }
