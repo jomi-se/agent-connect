@@ -65,9 +65,6 @@ end.
   and the authenticator signs (real authenticators don't; `SoftPasskey`
   does). Per-address storage is the guard, and it gets its own test.
   `SoftPasskey` is laxer than real authenticators, so the browser test stays.
-- **`webauthn-rs` 0.6.2 depends on `rsa` 0.10.0-rc**, built in whether or not
-  RS256 is accepted; its high-level API has no algorithm switch. RS256 is what
-  older Windows Hello credentials use. Current lean: keep the library default.
 
 ## To review at the end
 
@@ -76,6 +73,13 @@ before release:
 
 ### Settled
 
+- **`webauthn-rs` 0.6.2 brings in `rsa` 0.10.0-rc, and it stays.** Its
+  `crypto-glue` dependency is on the current RustCrypto generation (`digest`
+  0.11, `signature` 3), and `rsa`'s release for that generation is still a
+  release candidate; no advisory drove it. RUSTSEC-2023-0071 (Marvin) is
+  unfixed in 0.9 and 0.10 alike and concerns private-key operations; the
+  gateway only verifies RS256 signatures, which older Windows Hello passkeys
+  use. The final 0.10.0 already satisfies the library's requirement.
 - **The upgrade note lives in the changelog only.** It says what the gateway's
   refusal says: remove the old owner state and run setup again.
 - **Activity links each request to its own address.** Kept, and written up
