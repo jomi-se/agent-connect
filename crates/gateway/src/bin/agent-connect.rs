@@ -3,7 +3,7 @@
 // One WebSocket per application connection. Each connection gets its own
 // chain and adapter process:
 //
-//   browser --WebSocket(ACP)--> [PolicyProxy -> McpOverAcpPolyfill] -> adapter
+//   browser --WebSocket(ACP)--> [PolicyProxy] -> adapter
 //
 // Browser WebSocket constructors cannot set headers, so the bearer token
 // travels as a subprotocol (`bearer.<token>`) next to the ACP subprotocol,
@@ -22,7 +22,6 @@ use std::time::{Duration, Instant};
 use agent_client_protocol::AcpAgent;
 use agent_client_protocol::{ConnectTo, Lines};
 use agent_client_protocol_conductor::{ConductorImpl, ProxiesAndAgent};
-use agent_client_protocol_polyfill::mcp_over_acp::McpOverAcpPolyfill;
 use agent_connect_gateway::authorization::{
     AuthConfig, AuthService, AuthorizedGrant, OwnerProblem, OwnerRuntime, OwnerRuntimeSnapshot,
     OwnerSession,
@@ -1182,10 +1181,8 @@ async fn run_host(
         actions_dir: Some(gateway.cli.state_dir.join("actions")),
         log_session: label.clone(),
     });
-    let mut components = ProxiesAndAgent::new(agent).proxy(policy);
-    if !boxed {
-        components = components.proxy(McpOverAcpPolyfill::http());
-    }
+    // Adapters bridge the application's MCP-over-ACP server themselves.
+    let components = ProxiesAndAgent::new(agent).proxy(policy);
     let chain = ConductorImpl::new_agent("agent-connect-gateway", components);
     let host = {
         let _sessions = gateway.sessions.lock().unwrap();

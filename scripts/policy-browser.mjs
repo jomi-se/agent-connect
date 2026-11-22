@@ -57,7 +57,7 @@ try {
       let serial = 0;
       const waiting = new Map();
       const observed = {
-        connects: [],
+        servers: [],
         listCalls: 0,
         toolCalls: [],
         answer: "",
@@ -92,58 +92,70 @@ try {
         }
         if (message.id === undefined) return;
         let result;
-        if (message.method === "mcp/connect") {
-          observed.connects.push(message.params.serverId);
-          result = { connectionId: "policy-app-connection" };
-        } else if (message.method === "mcp/disconnect") result = {};
-        else if (message.method === "mcp/message") {
+        if (message.method === "mcp/message") {
+          // MCP 2026-07-28 over ACP: each request names its server, and the
+          // answer is a carrier holding an MCP result or error.
+          if (!observed.servers.includes(message.params.serverId))
+            observed.servers.push(message.params.serverId);
           switch (message.params.method) {
-            case "initialize":
+            case "server/discover":
               result = {
-                protocolVersion: message.params.params.protocolVersion,
-                capabilities: { tools: {} },
-                serverInfo: { name: "app", version: "1" },
+                result: {
+                  resultType: "complete",
+                  supportedVersions: ["2026-07-28"],
+                  ttlMs: 0,
+                  cacheScope: "private",
+                  capabilities: { tools: {} },
+                  _meta: {
+                    "io.modelcontextprotocol/serverInfo": {
+                      name: "app",
+                      version: "1",
+                    },
+                  },
+                },
               };
               break;
             case "ping":
-              result = {};
+              result = { result: {} };
               break;
             case "tools/list":
               observed.listCalls++;
               result = {
-                tools: tools
-                  .map((tool) =>
-                    tool.name === "highlight"
-                      ? {
-                          ...tool,
-                          inputSchema: {
-                            type: "object",
-                            properties: { changed: { type: "string" } },
-                          },
-                        }
-                      : tool,
-                  )
-                  .concat([
-                    {
-                      name: "unapproved_policy_tool",
-                      description: "Not approved",
-                      inputSchema: { type: "object" },
-                    },
-                  ]),
+                result: {
+                  tools: tools
+                    .map((tool) =>
+                      tool.name === "highlight"
+                        ? {
+                            ...tool,
+                            inputSchema: {
+                              type: "object",
+                              properties: { changed: { type: "string" } },
+                            },
+                          }
+                        : tool,
+                    )
+                    .concat([
+                      {
+                        name: "unapproved_policy_tool",
+                        description: "Not approved",
+                        inputSchema: { type: "object" },
+                      },
+                    ]),
+                },
               };
               break;
             case "tools/call":
               observed.toolCalls.push(message.params.params.name);
               result = {
-                content: [{ type: "text", text: "unexpected policy call" }],
+                result: {
+                  content: [{ type: "text", text: "unexpected policy call" }],
+                },
               };
               break;
             default:
-              send({
-                id: message.id,
-                error: { code: -32601, message: "Unsupported method" },
-              });
-              return;
+              result = {
+                error: { code: -32601, message: "Method not found" },
+              };
           }
         } else if (message.method === "session/request_permission")
           result = { outcome: { outcome: "cancelled" } };

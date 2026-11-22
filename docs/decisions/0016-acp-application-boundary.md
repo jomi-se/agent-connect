@@ -87,10 +87,11 @@ gained what a web application needs:
      and records bounded recovery metadata. App credentials provide no recovery
      authority. Remote recovery codes and mobile push approval remain deferred.
 3. **Execution: unmodified ACP adapters.** The owner selects the harness.
-   Adapters run behind the official MCP-over-ACP polyfill. No adapter is
-   forked or patched.
+   Adapters bridge the application's MCP-over-ACP server themselves (the
+   official polyfill did this until adapters spoke MCP 2026-07-28 natively,
+   November 2026). No adapter is forked or patched.
 4. **Isolation: one disposable container per session.** The box holds the
-   polyfill and the adapter. Its only network exit is an egress proxy that
+   adapter. Its only network exit is an egress proxy that
    refuses private, reserved, metadata and tailnet destinations. Inside the
    box the harness may use its native tools freely: the box, not permission
    prompts, bounds native actions.

@@ -1,12 +1,4 @@
-import type {
-  ConnectMcpRequest,
-  ConnectMcpResponse,
-  DisconnectMcpRequest,
-  DisconnectMcpResponse,
-  McpServer,
-  MessageMcpRequest,
-  MessageMcpResponse,
-} from "@agentclientprotocol/sdk";
+import type { McpServer } from "@agentclientprotocol/sdk";
 
 import type {
   ApplicationTool,
@@ -17,18 +9,44 @@ import type {
   SingleMcpServerOptions,
 } from "./types.js";
 
+/** The MCP revision the MCP-over-ACP binding carries. */
+export const MCP_PROTOCOL_VERSION = "2026-07-28";
+const PROTOCOL_VERSION_META = "io.modelcontextprotocol/protocolVersion";
+const CLIENT_CAPABILITIES_META = "io.modelcontextprotocol/clientCapabilities";
+const SERVER_INFO_META = "io.modelcontextprotocol/serverInfo";
 const ACTION_ID_META_KEY = "agent-connect/actionId";
 const INVALID_REQUEST = -32600;
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
 const INTERNAL_ERROR = -32603;
+const UNSUPPORTED_PROTOCOL_VERSION = -32022;
+/** Outer binding error: no server is registered under the requested ID. */
+const SERVER_UNAVAILABLE = -33001;
 
-interface ConnectionState {
-  readonly id: string;
-  initialized: boolean;
+/** @experimental One `mcp/message` request of the MCP-over-ACP binding. */
+export interface McpMessageRequest {
+  readonly serverId: string;
+  readonly requestId: string | number;
+  readonly method: string;
+  readonly params?: Record<string, unknown> | null;
+  readonly _meta?: Record<string, unknown> | null;
 }
 
-/** @experimental Unstable MCP-over-ACP protocol error. */
+/** @experimental The response carrier: an inner MCP result or error, never both. */
+export type McpMessageResponse =
+  | { readonly result: JsonObject }
+  | {
+      readonly error: {
+        readonly code: number;
+        readonly message: string;
+        readonly data?: JsonValue;
+      };
+    };
+
+/**
+ * @experimental An inner MCP error. It travels inside a successful
+ * `mcp/message` response, so the agent's MCP client sees an ordinary MCP error.
+ */
 export class McpOverAcpError extends Error {
   readonly code: number;
   readonly data: JsonValue | undefined;
@@ -36,6 +54,22 @@ export class McpOverAcpError extends Error {
   constructor(code: number, message: string, data?: JsonValue) {
     super(message);
     this.name = "McpOverAcpError";
+    this.code = code;
+    this.data = data;
+  }
+}
+
+/**
+ * A failure of the binding itself, answered as an ACP error rather than an
+ * inner MCP one.
+ */
+export class McpBindingError extends Error {
+  readonly code: number;
+  readonly data: JsonValue | undefined;
+
+  constructor(code: number, message: string, data?: JsonValue) {
+    super(message);
+    this.name = "McpBindingError";
     this.code = code;
     this.data = data;
   }
@@ -49,22 +83,19 @@ export function defineTool<Arguments extends JsonObject>(
 
 /**
  * @experimental Unstable MCP-over-ACP implementation.
- * A deliberately narrow application-owned MCP server transported through ACP.
- *
- * It supports one logical connection and a fixed tool set. Draft ACP transport
- * details are isolated here so the application-facing tool API can survive
- * protocol changes.
+ * A deliberately narrow application-owned MCP server transported through ACP,
+ * on MCP 2026-07-28: stateless requests routed by server ID, discovery through
+ * `server/discover`, and a fixed tool set. Transport details stay here so the
+ * application-facing tool API can survive protocol changes.
  */
 export class SingleMcpServer {
   readonly descriptor: McpServer;
 
   private readonly name: string;
-  private readonly serverId: string;
+  readonly serverId: string;
   private readonly version: string;
   private readonly instructions: string | undefined;
   private readonly tools: ReadonlyMap<string, ApplicationTool>;
-  private readonly createConnectionId: () => string;
-  private connection: ConnectionState | undefined;
 
   constructor(options: SingleMcpServerOptions) {
     assertNonEmpty(options.serverId, "serverId");
@@ -85,7 +116,6 @@ export class SingleMcpServer {
     this.version = options.version;
     this.instructions = options.instructions;
     this.tools = tools;
-    this.createConnectionId = options.createConnectionId ?? defaultConnectionId;
     this.descriptor = {
       type: "acp",
       name: options.name,
@@ -93,76 +123,80 @@ export class SingleMcpServer {
     };
   }
 
-  connect = (request: ConnectMcpRequest): ConnectMcpResponse => {
+  message = async (request: McpMessageRequest): Promise<McpMessageResponse> => {
     if (request.serverId !== this.serverId) {
+      throw new McpBindingError(
+        SERVER_UNAVAILABLE,
+        "MCP server registration unavailable",
+        { serverId: request.serverId },
+      );
+    }
+    try {
+      return { result: await this.dispatch(request) };
+    } catch (error) {
+      if (!(error instanceof McpOverAcpError)) throw error;
+      return {
+        error: {
+          code: error.code,
+          message: error.message,
+          ...(error.data === undefined ? {} : { data: error.data }),
+        },
+      };
+    }
+  };
+
+  private async dispatch(request: McpMessageRequest): Promise<JsonObject> {
+    const meta = request.params?.["_meta"];
+    const version = isJsonObject(meta)
+      ? meta[PROTOCOL_VERSION_META]
+      : undefined;
+    if (typeof version !== "string") {
       throw new McpOverAcpError(
         INVALID_PARAMS,
-        `Unknown MCP server: ${request.serverId}`,
+        `Invalid params: missing ${PROTOCOL_VERSION_META} in params._meta`,
       );
     }
-    if (this.connection) {
+    if (version !== MCP_PROTOCOL_VERSION) {
       throw new McpOverAcpError(
-        INVALID_REQUEST,
-        "This MCP server already has an active connection",
+        UNSUPPORTED_PROTOCOL_VERSION,
+        "Unsupported protocol version",
+        { supported: [MCP_PROTOCOL_VERSION], requested: version },
       );
     }
-
-    const connectionId = this.createConnectionId();
-    assertNonEmpty(connectionId, "connectionId");
-    this.connection = { id: connectionId, initialized: false };
-    return { connectionId };
-  };
-
-  disconnect = (request: DisconnectMcpRequest): DisconnectMcpResponse => {
-    this.requireConnection(request.connectionId);
-    this.connection = undefined;
-    return {};
-  };
-
-  message = async (request: MessageMcpRequest): Promise<MessageMcpResponse> => {
-    const connection = this.requireConnection(request.connectionId);
+    if (!isJsonObject(meta) || !isJsonObject(meta[CLIENT_CAPABILITIES_META])) {
+      throw new McpOverAcpError(
+        INVALID_PARAMS,
+        `Invalid params: missing ${CLIENT_CAPABILITIES_META} in params._meta`,
+      );
+    }
 
     switch (request.method) {
-      case "initialize":
-        return this.initialize(connection, request.params);
-      case "notifications/initialized":
-        this.requireInitialized(connection);
-        return {};
+      case "server/discover":
+        // Discovery results are cacheable since MCP's caching fields arrived;
+        // this server's tools belong to one session, so nothing is shared.
+        return {
+          resultType: "complete",
+          supportedVersions: [MCP_PROTOCOL_VERSION],
+          ttlMs: 0,
+          cacheScope: "private",
+          capabilities: { tools: { listChanged: false } },
+          ...(this.instructions ? { instructions: this.instructions } : {}),
+          _meta: {
+            [SERVER_INFO_META]: { name: this.name, version: this.version },
+          },
+        };
       case "ping":
         return {};
       case "tools/list":
-        this.requireInitialized(connection);
         return this.listTools();
       case "tools/call":
-        this.requireInitialized(connection);
-        return this.callTool(connection, request.params, toolMeta(request));
+        return this.callTool(request, toolMeta(request));
       default:
         throw new McpOverAcpError(
           METHOD_NOT_FOUND,
-          `Unsupported MCP method: ${request.method}`,
+          `Method not found: ${request.method}`,
         );
     }
-  };
-
-  private initialize(
-    connection: ConnectionState,
-    params: Record<string, unknown> | null | undefined,
-  ): JsonObject {
-    const protocolVersion = params?.["protocolVersion"];
-    if (typeof protocolVersion !== "string" || protocolVersion.length === 0) {
-      throw new McpOverAcpError(
-        INVALID_PARAMS,
-        "MCP initialize requires protocolVersion",
-      );
-    }
-
-    connection.initialized = true;
-    return {
-      protocolVersion,
-      capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: this.name, version: this.version },
-      ...(this.instructions ? { instructions: this.instructions } : {}),
-    };
   }
 
   private listTools(): JsonObject {
@@ -176,12 +210,11 @@ export class SingleMcpServer {
   }
 
   private async callTool(
-    connection: ConnectionState,
-    params: Record<string, unknown> | null | undefined,
+    request: McpMessageRequest,
     meta: Readonly<Record<string, unknown>> | null,
   ): Promise<JsonObject> {
-    const name = params?.["name"];
-    const arguments_ = params?.["arguments"];
+    const name = request.params?.["name"];
+    const arguments_ = request.params?.["arguments"];
     if (typeof name !== "string" || name.length === 0) {
       throw new McpOverAcpError(
         INVALID_PARAMS,
@@ -202,7 +235,7 @@ export class SingleMcpServer {
 
     try {
       const result = await tool.execute(arguments_, {
-        connectionId: connection.id,
+        requestId: String(request.requestId),
         toolName: name,
         meta,
         actionId: actionIdFromMeta(meta),
@@ -221,29 +254,6 @@ export class SingleMcpServer {
       };
     }
   }
-
-  private requireConnection(connectionId: string): ConnectionState {
-    if (!this.connection || this.connection.id !== connectionId) {
-      throw new McpOverAcpError(
-        INVALID_PARAMS,
-        `Unknown MCP connection: ${connectionId}`,
-      );
-    }
-    return this.connection;
-  }
-
-  private requireInitialized(connection: ConnectionState): void {
-    if (!connection.initialized) {
-      throw new McpOverAcpError(
-        INVALID_REQUEST,
-        "MCP connection is not initialized",
-      );
-    }
-  }
-}
-
-function defaultConnectionId(): string {
-  return globalThis.crypto.randomUUID();
 }
 
 function assertNonEmpty(value: string, label: string): void {
@@ -260,13 +270,16 @@ function actionIdFromMeta(
 }
 
 function toolMeta(
-  request: MessageMcpRequest,
+  request: McpMessageRequest,
 ): Readonly<Record<string, unknown>> {
   const inner = isJsonObject(request.params?.["_meta"])
     ? request.params["_meta"]
     : {};
   const outer = request._meta ?? {};
   const meta: Record<string, unknown> = { ...inner, ...outer };
+  // The binding's own request metadata is not for tools.
+  for (const key of Object.keys(meta))
+    if (key.startsWith("io.modelcontextprotocol/")) delete meta[key];
   // MCP progress belongs to the inner tools/call request. Gateway action IDs
   // belong to the outer ACP envelope; neither namespace may replace the other.
   delete meta["progressToken"];

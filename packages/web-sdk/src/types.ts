@@ -32,7 +32,8 @@ export interface ApplicationToolResult {
 export interface ApplicationToolContext {
   /** Cooperative cancellation; handlers remain responsible for their side effects. */
   readonly signal?: AbortSignal;
-  readonly connectionId: string;
+  /** The MCP request this call arrived in. */
+  readonly requestId: string;
   readonly toolName: string;
   readonly meta: Readonly<Record<string, unknown>> | null;
   readonly actionId: string | undefined;
@@ -185,7 +186,6 @@ export interface SingleMcpServerOptions {
   readonly version: string;
   readonly instructions?: string;
   readonly tools: readonly ApplicationTool[];
-  readonly createConnectionId?: () => string;
 }
 
 /** @experimental Unstable ACP WebSocket stream options. */

@@ -2,7 +2,7 @@
 //! application traffic. It is default-deny in both directions and uses only
 //! generic ACP and MCP-over-ACP message shapes, never harness-specific events.
 //!
-//! Chain position: app -> [PolicyProxy] -> McpOverAcpPolyfill -> adapter.
+//! Chain position: app -> [PolicyProxy] -> adapter.
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
@@ -285,9 +285,21 @@ fn deny(responder: Responder, error: agent_client_protocol::Error, why: &str) ->
     Ok(Handled::Yes)
 }
 
-/// Inner MCP methods a harness may send to the application's server.
-const MCP_REQUESTS_TO_APP: &[&str] = &["initialize", "ping", "tools/list", "tools/call"];
-const MCP_NOTIFICATIONS_TO_APP: &[&str] = &["notifications/initialized", "notifications/cancelled"];
+/// Refuses one inner MCP request with an MCP error in the response carrier.
+fn deny_inner(responder: Responder, error: Value, why: &str) -> Outcome {
+    tracing::warn!(reason = why, "policy denied a message");
+    responder.respond(json!({ "error": error }))?;
+    Ok(Handled::Yes)
+}
+
+/// MCP-over-ACP binding error: no server is registered under the requested ID.
+const MCP_SERVER_UNAVAILABLE: i32 = -33001;
+
+/// Inner MCP 2026-07-28 requests a harness may send to the application's server.
+/// The binding is stateless: no connect, no `initialize`; each `mcp/message`
+/// names its server and carries one request.
+const MCP_REQUESTS_TO_APP: &[&str] = &["server/discover", "ping", "tools/list", "tools/call"];
+const MCP_NOTIFICATIONS_TO_APP: &[&str] = &["notifications/cancelled"];
 /// Inner MCP notifications the application's server may send to the harness.
 const MCP_NOTIFICATIONS_FROM_APP: &[&str] = &["notifications/cancelled", "notifications/progress"];
 
@@ -471,23 +483,6 @@ impl PolicyHandler {
     async fn handle_agent(&self, message: Dispatch, cx: &ConnectionTo<Conductor>) -> Outcome {
         match message {
             Dispatch::Request(request, responder) => match request.method() {
-                "mcp/connect" => {
-                    let id = request
-                        .params
-                        .get("serverId")
-                        .and_then(Value::as_str)
-                        .unwrap_or("");
-                    if self.state.lock().unwrap().declared_servers.contains(id) {
-                        pass(Dispatch::Request(request, responder))
-                    } else {
-                        deny(
-                            responder,
-                            agent_client_protocol::Error::invalid_params(),
-                            &format!("mcp/connect to undeclared server {id}"),
-                        )
-                    }
-                }
-                "mcp/disconnect" => pass(Dispatch::Request(request, responder)),
                 "mcp/message" => self.mcp_request_to_app(request, responder, cx).await,
                 "session/request_permission" => self.answer_permission(&request.params, responder),
                 method => {
@@ -550,13 +545,37 @@ impl PolicyHandler {
         responder: Responder,
         cx: &ConnectionTo<Conductor>,
     ) -> Outcome {
-        let method = inner_method(&request.params).unwrap_or("").to_string();
-        if !MCP_REQUESTS_TO_APP.contains(&method.as_str()) {
-            // Includes MCP 2026-07-28 `server/discover`: refusing it with
-            // method-not-found lets modern clients fall back to `initialize`.
+        let server = request
+            .params
+            .get("serverId")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        if !self
+            .state
+            .lock()
+            .unwrap()
+            .declared_servers
+            .contains(&server)
+        {
+            // A binding failure, not an MCP one: no such server on this session.
             return deny(
                 responder,
-                agent_client_protocol::Error::method_not_found().data(json!(method)),
+                agent_client_protocol::Error::new(
+                    MCP_SERVER_UNAVAILABLE,
+                    "MCP server registration unavailable",
+                )
+                .data(json!({ "serverId": server })),
+                &format!("mcp/message to undeclared server {server}"),
+            );
+        }
+        let method = inner_method(&request.params).unwrap_or("").to_string();
+        if !MCP_REQUESTS_TO_APP.contains(&method.as_str()) {
+            // An inner MCP error travels in a successful response's carrier, so
+            // the harness's MCP client sees an ordinary method-not-found.
+            return deny_inner(
+                responder,
+                json!({ "code": -32601, "message": format!("Method not found: {method}") }),
                 &format!("MCP {method} to app"),
             );
         }
@@ -611,8 +630,11 @@ impl PolicyHandler {
                         .forward_cancellation_from(responder.cancellation())
                         .on_receiving_result(async move |result| {
                             if let Some(dir) = actions_dir {
+                                // The application's answer is a carrier: an inner error, or a
+                                // result that may itself report a tool error.
                                 let status = match &result {
-                                    Ok(value) if value.get("isError").and_then(Value::as_bool) == Some(true) => ActionStatus::Failed,
+                                    Ok(value) if value.get("error").is_some() => ActionStatus::Failed,
+                                    Ok(value) if value.pointer("/result/isError").and_then(Value::as_bool) == Some(true) => ActionStatus::Failed,
                                     Ok(_) => ActionStatus::Completed,
                                     Err(_) => ActionStatus::Uncertain,
                                 };
@@ -628,9 +650,9 @@ impl PolicyHandler {
                         })?;
                     Ok(Handled::Yes)
                 } else {
-                    deny(
+                    deny_inner(
                         responder,
-                        agent_client_protocol::Error::invalid_params().data(json!({"tool": name})),
+                        json!({ "code": -32602, "message": format!("Unknown tool: {name}") }),
                         &format!("unapproved tool {name}"),
                     )
                 }
@@ -640,9 +662,12 @@ impl PolicyHandler {
                 cx.send_request_to(Client, request)
                     .forward_cancellation_from(responder.cancellation())
                     .on_receiving_result(async move |result| {
-                        responder.respond_with_result(
-                            result.map(|listed| filter_tool_list(listed, &config)),
-                        )
+                        responder.respond_with_result(result.map(|mut carrier| {
+                            if let Some(listed) = carrier.get_mut("result") {
+                                *listed = filter_tool_list(listed.take(), &config);
+                            }
+                            carrier
+                        }))
                     })?;
                 Ok(Handled::Yes)
             }

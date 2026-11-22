@@ -72,6 +72,28 @@ function decide({ tools, history }) {
     return undefined;
   };
 
+  // Claude Code may defer MCP tools behind ToolSearch, listing only their
+  // names. Load the application's tools first, as a real model would.
+  const toolSearch = findTool(tools, "ToolSearch");
+  if (
+    toolSearch &&
+    /SPIKE-(TOOLS|ASK|LATEASK)/.test(lastUser) &&
+    ["read_passage", "highlight", "ask_reader"].some(
+      (base) => !findTool(tools, base),
+    ) &&
+    resultFor("ToolSearch") === undefined
+  ) {
+    return {
+      call: {
+        ...toolSearch,
+        args: {
+          query:
+            "select:mcp__app__read_passage,mcp__app__highlight,mcp__app__ask_reader",
+          max_results: 5,
+        },
+      },
+    };
+  }
   if (lastUser.includes("SPIKE-PROGRESS")) {
     const codexPlan = findTool(tools, "update_plan");
     const claudePlan = findTool(tools, "TodoWrite");
@@ -388,6 +410,9 @@ function messagesHistory(body) {
       typeof message.content === "string"
         ? [{ type: "text", text: message.content }]
         : (message.content ?? []);
+    // Text sent beside a tool result ("Tool loaded.") belongs to that result,
+    // not to a new user turn.
+    const answersTool = blocks.some((block) => block.type === "tool_result");
     for (const block of blocks) {
       if (block.type === "tool_use")
         history.push({ kind: "call", id: block.id, name: block.name });
@@ -397,7 +422,7 @@ function messagesHistory(body) {
           id: block.tool_use_id,
           text: textOf(block.content),
         });
-      else if (block.type === "text" && message.role === "user")
+      else if (block.type === "text" && message.role === "user" && !answersTool)
         history.push({ kind: "user", text: block.text });
     }
   }

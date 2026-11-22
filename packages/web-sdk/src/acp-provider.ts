@@ -12,7 +12,7 @@ import {
 } from "./acp-pairing.js";
 import { AgentConnectError } from "./errors.js";
 import { SDK_VERSION } from "./version.js";
-import { SingleMcpServer, McpOverAcpError } from "./single-mcp-server.js";
+import { SingleMcpServer, McpBindingError } from "./single-mcp-server.js";
 import {
   createResumableAcpStream,
   type ResumableAcpStream,
@@ -278,7 +278,8 @@ export class AcpProvider implements AcpTaskSource {
               pending.timer = setInterval(() => {
                 void this.connection.agent
                   .notify("mcp/message", {
-                    connectionId: ctx.connectionId,
+                    serverId: this.server.serverId,
+                    requestId: ctx.requestId,
                     method: "notifications/progress",
                     params: {
                       progressToken,
@@ -306,7 +307,7 @@ export class AcpProvider implements AcpTaskSource {
       try {
         return await fn();
       } catch (error) {
-        if (error instanceof McpOverAcpError)
+        if (error instanceof McpBindingError)
           throw new RequestError(error.code, error.message, error.data);
         throw error;
       }
@@ -327,19 +328,9 @@ export class AcpProvider implements AcpTaskSource {
     });
     const app = client({ name: "agent-connect-web" })
       .onRequest(
-        "mcp/connect",
-        (p: unknown) => p as Parameters<SingleMcpServer["connect"]>[0],
-        (ctx) => wrap(() => this.server.connect(ctx.params)),
-      )
-      .onRequest(
         "mcp/message",
         (p: unknown) => p as Parameters<SingleMcpServer["message"]>[0],
         (ctx) => wrap(() => this.server.message(ctx.params)),
-      )
-      .onRequest(
-        "mcp/disconnect",
-        (p: unknown) => p as Parameters<SingleMcpServer["disconnect"]>[0],
-        (ctx) => wrap(() => this.server.disconnect(ctx.params)),
       )
       .onNotification(
         "mcp/message",

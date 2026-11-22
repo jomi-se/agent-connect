@@ -24,7 +24,7 @@ Agent Connect gateway (one or more configured entry-point addresses)
   per-address owner sign-in (passkey or TOTP) / consent / grant revocation
   default-deny policy proxy / action journal / resumable session hosts
   OTel JSON logs (session.id, no full session content)
-                 | official ACP adapter + MCP-over-ACP polyfill (unstable)
+                 | official ACP adapter, bridging MCP-over-ACP itself (unstable)
                  v
 one disposable container per session (rootless Podman or Docker)
   locally built box (latest harnesses or owner pins; refreshed in background)
@@ -57,7 +57,7 @@ owner authority.
 
 ## Sessions, boxes and egress
 
-Each session runs an unmodified ACP adapter and MCP-over-ACP polyfill inside a
+Each session runs an unmodified ACP adapter, which bridges MCP-over-ACP itself, inside a
 disposable container on rootless Podman (recommended on Linux) or Docker
 ([ADR 0020](../decisions/0020-container-engines.md)). Setup and `serve` refuse
 a rootful engine unless the owner opts in explicitly, and the container user

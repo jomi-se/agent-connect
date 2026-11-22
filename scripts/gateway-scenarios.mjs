@@ -176,6 +176,14 @@ try {
   ]);
   await mkdir(join(run, ".run/codex-home"), { recursive: true });
   await mkdir(join(run, ".run/claude-config"), { recursive: true });
+  // As in the box's managed settings: auto mode's safety check needs
+  // Anthropic's servers, which the mock model is not.
+  await writeFile(
+    join(run, ".run/claude-config/settings.json"),
+    JSON.stringify({
+      permissions: { defaultMode: "default", disableAutoMode: "disable" },
+    }),
+  );
   await mkdir(join(run, ".run/browser"), { recursive: true });
   const mockPort = await port();
   const mockUrl = `http://127.0.0.1:${mockPort}`;
@@ -390,7 +398,7 @@ try {
         assert.equal(report.oversizedInitialCode, 1009);
         assert.equal(report.denied["session/set_mode"], -32601);
         assert.equal(report.denied["session/set_config_option"], -32601);
-        assert.deepEqual(report.connects, ["policy-app"]);
+        assert.deepEqual(report.servers, ["policy-app"]);
         assert.ok(report.listCalls > 0, "real adapter must request tools/list");
         assert.match(report.answer, /MISSING-TOOLS read=true highlight=false/);
         assert.deepEqual(report.toolCalls, []);

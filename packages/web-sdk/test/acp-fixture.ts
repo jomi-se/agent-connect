@@ -159,6 +159,8 @@ export class Peer {
     } as AnyMessage);
   }
   request(socket: Socket, method: string, params: unknown): Promise<unknown> {
+    // Like an adapter on MCP 2026-07-28: every inner request names its version.
+    if (method === "mcp/message") params = withMcpVersion(params);
     const state = this.states.get(socket)!;
     const id = ++state.id;
     return new Promise((resolve) => {
@@ -166,4 +168,20 @@ export class Peer {
       this.send(socket, { jsonrpc: "2.0", id, method, params } as AnyMessage);
     });
   }
+}
+
+function withMcpVersion(params: unknown): unknown {
+  const envelope = params as Record<string, unknown>;
+  const inner = (envelope["params"] ?? {}) as Record<string, unknown>;
+  return {
+    ...envelope,
+    params: {
+      ...inner,
+      _meta: {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {},
+        ...((inner["_meta"] as Record<string, unknown>) ?? {}),
+      },
+    },
+  };
 }

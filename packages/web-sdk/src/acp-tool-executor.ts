@@ -180,7 +180,7 @@ export class AcpToolExecutor {
 
             try {
               const result = await tool.execute(arguments_, {
-                connectionId: this.sessionId,
+                requestId: event.requestToken,
                 toolName: event.name,
                 meta: null,
                 actionId: event.actionId,

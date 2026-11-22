@@ -5,8 +5,6 @@ Things the product or its tests do wrong today. Proposals go in
 [how work is tracked](../agents/issue-tracker.md). Close a defect only after
 reproducing it on purpose and checking the fix against that reproduction.
 
-- [Application tools fail to start with codex-acp 2.8 and later](mcp-over-acp-binding.md)
-  (ready-for-agent)
 - [Interrupted test runs leave their resources behind](interrupted-test-runs-leave-resources.md)
   (needs-triage)
 - [Podman: stale network state breaks joining a session network](podman-stale-session-network.md)

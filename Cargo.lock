@@ -106,25 +106,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "agent-client-protocol-polyfill"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d1228ff84ad624bf373419b219091966476ebc7b14d17c7849281ef336d334a"
-dependencies = [
- "agent-client-protocol",
- "async-stream",
- "axum",
- "futures",
- "futures-concurrency",
- "rustc-hash",
- "serde_json",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "agent-client-protocol-rmcp"
 version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -177,7 +158,6 @@ version = "0.0.6"
 dependencies = [
  "agent-client-protocol",
  "agent-client-protocol-conductor",
- "agent-client-protocol-polyfill",
  "agent-client-protocol-rmcp",
  "anyhow",
  "argon2",

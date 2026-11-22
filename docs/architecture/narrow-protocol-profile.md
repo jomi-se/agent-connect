@@ -29,15 +29,24 @@ mode and model):
 - `session/update`
 - `session/request_permission` (answered by the gateway from the consented
   permission profile, never forwarded to the application)
-- `mcp/connect`, `mcp/message`, `mcp/disconnect`
+- `mcp/message`, for the application's declared MCP server only
 
 ## Allowed nested MCP messages
 
-- Requests to application: `initialize`, `ping`, `tools/list`, `tools/call`
-- Notifications to application: `notifications/initialized`,
-  `notifications/cancelled`
+MCP-over-ACP carries MCP 2026-07-28, which is stateless: there is no connect
+or `initialize`. Each `mcp/message` request names its server (`serverId`) and
+carries one MCP request, with the MCP version in its `params._meta`; the answer
+is a carrier holding either an MCP `result` or an MCP `error`. Only failures of
+the binding itself, such as an undeclared server, are ACP errors.
+
+- Requests to application: `server/discover`, `ping`, `tools/list`,
+  `tools/call`
+- Notifications to application: `notifications/cancelled`
 - Notifications from application: `notifications/cancelled`,
   `notifications/progress`
+
+Any other inner request gets an MCP method-not-found in the carrier, which
+an MCP client treats as an ordinary unsupported method.
 
 Resources, prompts, logging, completion, sampling, elicitation, subscriptions,
 pagination and multiple logical servers are not admitted.
@@ -62,12 +71,11 @@ pagination and multiple logical servers are not admitted.
 ## Rejection behavior
 
 The policy proxy drops undeclared or schema-drifted tools on `tools/list` and
-rejects unapproved calls on `tools/call`. The browser SDK rejects:
+answers unapproved calls on `tools/call` with an MCP error. The browser SDK
+rejects:
 
-- unknown server IDs on `mcp/connect`;
-- a second active logical connection;
-- unknown or closed connection IDs;
-- MCP messages before initialization where required;
+- unknown server IDs, as a binding error;
+- a missing or other MCP version in `params._meta`;
 - unsupported MCP methods;
 - malformed or unknown tool calls.
 

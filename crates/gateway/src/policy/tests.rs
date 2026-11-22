@@ -196,7 +196,10 @@ fn mcp(method: &str, params: Value) -> Value {
 #[tokio::test]
 async fn actual_handlers_deny_authority_and_filter_changed_tools() {
     let probes = vec![
-        probe("mcp/connect", json!({"serverId":"undeclared"})),
+        probe(
+            "mcp/message",
+            json!({"serverId":"undeclared","method":"tools/list","params":{}}),
+        ),
         probe("fs/read_text_file", json!({})),
         probe("fs/write_text_file", json!({})),
         probe("terminal/create", json!({})),
@@ -206,8 +209,12 @@ async fn actual_handlers_deny_authority_and_filter_changed_tools() {
         probe("terminal/wait_for_exit", json!({})),
         mcp("tools/call", json!({"name":"unapproved","arguments":{}})),
         mcp("tools/list", json!({})),
+        // The pre-2026 handshake, and anything else unlisted, gets an inner
+        // method-not-found; discovery reaches the application.
+        mcp("initialize", json!({})),
+        mcp("server/discover", json!({})),
     ];
-    let listed = json!({"tools":[{"name":"approved","inputSchema":{"type":"object","additionalProperties":false}},{"name":"unapproved","inputSchema":{"type":"object"}}]});
+    let listed = json!({"result":{"tools":[{"name":"approved","inputSchema":{"type":"object","additionalProperties":false}},{"name":"unapproved","inputSchema":{"type":"object"}}]}});
     let (results, delivered, setup) = run(
         config(PermissionProfile::DenyAll),
         listed,
@@ -218,12 +225,21 @@ async fn actual_handlers_deny_authority_and_filter_changed_tools() {
     assert_eq!(setup["cwd"], "/safe");
     assert_eq!(setup["mcpServers"].as_array().unwrap().len(), 1);
     let results = results.lock().unwrap();
-    assert!(results[..9].iter().all(Result::is_err));
-    assert_eq!(results[9].as_ref().unwrap()["tools"], json!([]));
+    // An undeclared server and the gateway-side methods fail at the ACP level.
+    assert!(results[..8].iter().all(Result::is_err));
+    assert_eq!(
+        results[0].as_ref().unwrap_err().code,
+        agent_client_protocol::ErrorCode::Other(-33001)
+    );
+    // An unapproved tool and an unlisted method are inner MCP errors.
+    assert_eq!(results[8].as_ref().unwrap()["error"]["code"], -32602);
+    assert_eq!(results[9].as_ref().unwrap()["result"]["tools"], json!([]));
+    assert_eq!(results[10].as_ref().unwrap()["error"]["code"], -32601);
+    assert!(results[11].as_ref().unwrap().get("result").is_some());
     assert_eq!(
         delivered.lock().unwrap().len(),
-        1,
-        "only tools/list reached application"
+        2,
+        "only tools/list and server/discover reached the application"
     );
 }
 #[tokio::test]
@@ -266,7 +282,7 @@ async fn metadata_and_durable_lifecycle_survive_real_handlers() {
         );
         let (_, delivered, _) = run(
             cfg,
-            json!({"isError":is_error,"content":[]}),
+            json!({"result":{"isError":is_error,"content":[]}}),
             vec![call],
             vec![],
         )
@@ -447,10 +463,10 @@ async fn tool_list_uses_only_approved_definition_metadata() {
     let mut cfg = config(PermissionProfile::DenyAll);
     let approved = json!({"name":"approved","description":"Consented description","inputSchema":{"type":"object"}});
     cfg.tool_definitions = Some(BTreeMap::from([("approved".into(), approved.clone())]));
-    let listed = json!({"tools":[{"name":"approved","description":"Changed hostile description","annotations":{"readOnlyHint":false},"inputSchema":{"type":"object"}}]});
+    let listed = json!({"result":{"tools":[{"name":"approved","description":"Changed hostile description","annotations":{"readOnlyHint":false},"inputSchema":{"type":"object"}}]}});
     let (results, _, _) = run(cfg, listed, vec![mcp("tools/list", json!({}))], vec![]).await;
     assert_eq!(
-        results.lock().unwrap()[0].as_ref().unwrap()["tools"],
+        results.lock().unwrap()[0].as_ref().unwrap()["result"]["tools"],
         json!([approved])
     );
 }

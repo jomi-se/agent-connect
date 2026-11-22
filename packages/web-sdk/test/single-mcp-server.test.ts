@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { McpOverAcpError, SingleMcpServer, defineTool } from "../src/index.js";
+import { McpBindingError } from "../src/single-mcp-server.js";
+import { SingleMcpServer, defineTool } from "../src/index.js";
+
+const VERSION_META = {
+  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+  "io.modelcontextprotocol/clientCapabilities": {},
+};
 
 function createServer() {
   const execute = vi.fn(
@@ -11,7 +17,7 @@ function createServer() {
     serverId: "spreadsheet",
     name: "Spreadsheet",
     version: "0.0.1",
-    createConnectionId: () => "mcp-connection-1",
+    instructions: "Read the open sheet.",
     tools: [
       defineTool({
         name: "read_range",
@@ -28,8 +34,29 @@ function createServer() {
   return { execute, server };
 }
 
+/** One MCP 2026-07-28 request over the binding. */
+function request(
+  method: string,
+  params: Record<string, unknown> = {},
+  extra: Record<string, unknown> = {},
+) {
+  return {
+    serverId: "spreadsheet",
+    requestId: "request-1",
+    method,
+    params: {
+      ...params,
+      _meta: {
+        ...VERSION_META,
+        ...((params["_meta"] as Record<string, unknown>) ?? {}),
+      },
+    },
+    ...extra,
+  };
+}
+
 describe("SingleMcpServer", () => {
-  it("connects, initializes, lists tools, and calls a handler", async () => {
+  it("discovers, lists tools and calls a handler, each answer in the carrier", async () => {
     const { execute, server } = createServer();
 
     expect(server.descriptor).toEqual({
@@ -37,55 +64,55 @@ describe("SingleMcpServer", () => {
       name: "Spreadsheet",
       serverId: "spreadsheet",
     });
-    expect(server.connect({ serverId: "spreadsheet" })).toEqual({
-      connectionId: "mcp-connection-1",
-    });
-
-    await expect(
-      server.message({
-        connectionId: "mcp-connection-1",
-        method: "initialize",
-        params: { protocolVersion: "2025-06-18" },
-      }),
-    ).resolves.toMatchObject({
-      protocolVersion: "2025-06-18",
-      capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: "Spreadsheet", version: "0.0.1" },
-    });
-
-    await expect(
-      server.message({
-        connectionId: "mcp-connection-1",
-        method: "tools/list",
-      }),
-    ).resolves.toEqual({
-      tools: [
-        {
-          name: "read_range",
-          description: "Read cells",
-          inputSchema: {
-            type: "object",
-            properties: { range: { type: "string" } },
-            required: ["range"],
+    await expect(server.message(request("server/discover"))).resolves.toEqual({
+      result: {
+        resultType: "complete",
+        supportedVersions: ["2026-07-28"],
+        ttlMs: 0,
+        cacheScope: "private",
+        capabilities: { tools: { listChanged: false } },
+        instructions: "Read the open sheet.",
+        _meta: {
+          "io.modelcontextprotocol/serverInfo": {
+            name: "Spreadsheet",
+            version: "0.0.1",
           },
         },
-      ],
+      },
     });
-
+    await expect(server.message(request("ping"))).resolves.toEqual({
+      result: {},
+    });
+    await expect(server.message(request("tools/list"))).resolves.toEqual({
+      result: {
+        tools: [
+          {
+            name: "read_range",
+            description: "Read cells",
+            inputSchema: {
+              type: "object",
+              properties: { range: { type: "string" } },
+              required: ["range"],
+            },
+          },
+        ],
+      },
+    });
     await expect(
-      server.message({
-        connectionId: "mcp-connection-1",
-        method: "tools/call",
-        params: { name: "read_range", arguments: { range: "A1:B2" } },
-        _meta: { "agent-connect/actionId": "action-123" },
-      }),
+      server.message(
+        request(
+          "tools/call",
+          { name: "read_range", arguments: { range: "A1:B2" } },
+          { _meta: { "agent-connect/actionId": "action-123" } },
+        ),
+      ),
     ).resolves.toEqual({
-      content: [{ type: "text", text: "values:A1:B2" }],
+      result: { content: [{ type: "text", text: "values:A1:B2" }] },
     });
     expect(execute).toHaveBeenCalledWith(
       { range: "A1:B2" },
       {
-        connectionId: "mcp-connection-1",
+        requestId: "request-1",
         toolName: "read_range",
         meta: { "agent-connect/actionId": "action-123" },
         actionId: "action-123",
@@ -93,43 +120,48 @@ describe("SingleMcpServer", () => {
     );
   });
 
-  it("rejects messages before initialization", async () => {
+  it("answers MCP errors inside the carrier, so clients can fall back", async () => {
     const { server } = createServer();
-    server.connect({ serverId: "spreadsheet" });
-
+    // The pre-2026 handshake is just an unknown method now.
+    await expect(server.message(request("initialize"))).resolves.toEqual({
+      error: { code: -32601, message: "Method not found: initialize" },
+    });
+    await expect(
+      server.message(request("tools/call", { name: "missing", arguments: {} })),
+    ).resolves.toMatchObject({ error: { code: -32602 } });
     await expect(
       server.message({
-        connectionId: "mcp-connection-1",
+        serverId: "spreadsheet",
+        requestId: 2,
+        method: "tools/list",
+        params: {
+          _meta: { "io.modelcontextprotocol/protocolVersion": "2025-06-18" },
+        },
+      }),
+    ).resolves.toEqual({
+      error: {
+        code: -32022,
+        message: "Unsupported protocol version",
+        data: { supported: ["2026-07-28"], requested: "2025-06-18" },
+      },
+    });
+    await expect(
+      server.message({
+        serverId: "spreadsheet",
+        requestId: 3,
         method: "tools/list",
       }),
-    ).rejects.toMatchObject({
-      name: "McpOverAcpError",
-      code: -32600,
-    });
+    ).resolves.toMatchObject({ error: { code: -32602 } });
   });
 
-  it("rejects unknown servers, duplicate connections, and unknown tools", async () => {
+  it("refuses another server ID as a binding failure, not an MCP error", async () => {
     const { server } = createServer();
-
-    expect(() => server.connect({ serverId: "other" })).toThrow(
-      McpOverAcpError,
-    );
-    server.connect({ serverId: "spreadsheet" });
-    expect(() => server.connect({ serverId: "spreadsheet" })).toThrow(
-      /already has an active connection/,
-    );
-    await server.message({
-      connectionId: "mcp-connection-1",
-      method: "initialize",
-      params: { protocolVersion: "2025-06-18" },
-    });
     await expect(
-      server.message({
-        connectionId: "mcp-connection-1",
-        method: "tools/call",
-        params: { name: "missing", arguments: {} },
-      }),
-    ).rejects.toMatchObject({ code: -32602 });
+      server.message({ ...request("tools/list"), serverId: "other" }),
+    ).rejects.toBeInstanceOf(McpBindingError);
+    await expect(
+      server.message({ ...request("tools/list"), serverId: "other" }),
+    ).rejects.toMatchObject({ code: -33001 });
   });
 
   it("returns handler failures as MCP tool errors without leaking stacks", async () => {
@@ -137,7 +169,6 @@ describe("SingleMcpServer", () => {
       serverId: "spreadsheet",
       name: "Spreadsheet",
       version: "0.0.1",
-      createConnectionId: () => "connection",
       tools: [
         defineTool({
           name: "write_range",
@@ -149,31 +180,15 @@ describe("SingleMcpServer", () => {
         }),
       ],
     });
-    server.connect({ serverId: "spreadsheet" });
-    await server.message({
-      connectionId: "connection",
-      method: "initialize",
-      params: { protocolVersion: "2025-06-18" },
-    });
-
     await expect(
-      server.message({
-        connectionId: "connection",
-        method: "tools/call",
-        params: { name: "write_range", arguments: {} },
-      }),
+      server.message(
+        request("tools/call", { name: "write_range", arguments: {} }),
+      ),
     ).resolves.toEqual({
-      content: [{ type: "text", text: "write rejected" }],
-      isError: true,
-    });
-  });
-
-  it("allows a fresh logical connection after disconnect", () => {
-    const { server } = createServer();
-    server.connect({ serverId: "spreadsheet" });
-    expect(server.disconnect({ connectionId: "mcp-connection-1" })).toEqual({});
-    expect(server.connect({ serverId: "spreadsheet" })).toEqual({
-      connectionId: "mcp-connection-1",
+      result: {
+        content: [{ type: "text", text: "write rejected" }],
+        isError: true,
+      },
     });
   });
 
@@ -196,31 +211,29 @@ describe("SingleMcpServer", () => {
     ).toThrow(/Duplicate application tool/);
   });
 });
+
 it("preserves inner MCP progress tokens while the gateway supplies the authoritative action ID", async () => {
   const { server, execute } = createServer();
-  server.connect({ serverId: "spreadsheet" });
-  await server.message({
-    connectionId: "mcp-connection-1",
-    method: "initialize",
-    params: { protocolVersion: "2025-06-18" },
-  });
-  await server.message({
-    connectionId: "mcp-connection-1",
-    method: "tools/call",
-    params: {
-      name: "read_range",
-      arguments: { range: "A1" },
-      _meta: {
-        progressToken: "adapter-progress",
-        "agent-connect/actionId": "untrusted-inner",
+  await server.message(
+    request(
+      "tools/call",
+      {
+        name: "read_range",
+        arguments: { range: "A1" },
+        _meta: {
+          progressToken: "adapter-progress",
+          "agent-connect/actionId": "untrusted-inner",
+        },
       },
-    },
-    _meta: {
-      progressToken: "outer-must-not-win",
-      "agent-connect/actionId": "durable-gateway-action",
-      trace: "retained",
-    },
-  });
+      {
+        _meta: {
+          progressToken: "outer-must-not-win",
+          "agent-connect/actionId": "durable-gateway-action",
+          trace: "retained",
+        },
+      },
+    ),
+  );
   expect(execute).toHaveBeenCalledWith(
     { range: "A1" },
     expect.objectContaining({
@@ -236,22 +249,17 @@ it("preserves inner MCP progress tokens while the gateway supplies the authorita
 
 it("ignores outer-only progress tokens and inner-only action IDs", async () => {
   const { server, execute } = createServer();
-  server.connect({ serverId: "spreadsheet" });
-  await server.message({
-    connectionId: "mcp-connection-1",
-    method: "initialize",
-    params: { protocolVersion: "2025-06-18" },
-  });
-  await server.message({
-    connectionId: "mcp-connection-1",
-    method: "tools/call",
-    params: {
-      name: "read_range",
-      arguments: { range: "A1" },
-      _meta: { "agent-connect/actionId": "untrusted-inner" },
-    },
-    _meta: { progressToken: "not-an-MCP-token" },
-  });
+  await server.message(
+    request(
+      "tools/call",
+      {
+        name: "read_range",
+        arguments: { range: "A1" },
+        _meta: { "agent-connect/actionId": "untrusted-inner" },
+      },
+      { _meta: { progressToken: "not-an-MCP-token" } },
+    ),
+  );
   expect(execute).toHaveBeenCalledWith(
     { range: "A1" },
     expect.objectContaining({ actionId: undefined, meta: {} }),

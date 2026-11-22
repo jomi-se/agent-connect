@@ -47,16 +47,9 @@ describe("ACP provider-owned contracts", () => {
       const peer = new Peer();
       peer.onPrompt = (socket, _params, reply) => {
         void (async () => {
-          const { connectionId } = (await peer.request(socket, "mcp/connect", {
+          await peer.request(socket, "mcp/message", {
             serverId: "application-tools",
-          })) as { connectionId: string };
-          await peer.request(socket, "mcp/message", {
-            connectionId,
-            method: "initialize",
-            params: { protocolVersion: "2025-06-18" },
-          });
-          await peer.request(socket, "mcp/message", {
-            connectionId,
+            requestId: "call-1",
             method: "tools/call",
             params: {
               name: "highlight",
@@ -209,16 +202,9 @@ describe("ACP provider-owned contracts", () => {
     let toolResult: unknown;
     peer.onPrompt = (socket, _params, reply) => {
       void (async () => {
-        const connected = (await peer.request(socket, "mcp/connect", {
-          serverId: "application-tools",
-        })) as { connectionId: string };
-        await peer.request(socket, "mcp/message", {
-          connectionId: connected.connectionId,
-          method: "initialize",
-          params: { protocolVersion: "2025-06-18" },
-        });
         toolResult = await peer.request(socket, "mcp/message", {
-          connectionId: connected.connectionId,
+          serverId: "application-tools",
+          requestId: "call-1",
           method: "tools/call",
           params: { name: "highlight", arguments: { text: "hello" } },
           _meta: { "agent-connect/actionId": "stable-action" },
@@ -245,7 +231,9 @@ describe("ACP provider-owned contracts", () => {
     for await (const event of session.streamTask("highlight"))
       events.push(event);
     expect(executions).toBe(1);
-    expect(toolResult).toEqual({ content: [{ type: "text", text: "hello" }] });
+    expect(toolResult).toEqual({
+      result: { content: [{ type: "text", text: "hello" }] },
+    });
     expect(events.some((e) => e.type === "tool.completed")).toBe(true);
     await expect(
       provider.submitToolResult("stable-action", "{}"),
@@ -353,16 +341,9 @@ describe("ACP provider-owned contracts", () => {
     });
     peer.onPrompt = (socket) => {
       void (async () => {
-        const connected = (await peer.request(socket, "mcp/connect", {
-          serverId: "application-tools",
-        })) as { connectionId: string };
-        await peer.request(socket, "mcp/message", {
-          connectionId: connected.connectionId,
-          method: "initialize",
-          params: { protocolVersion: "2025-06-18" },
-        });
         void peer.request(socket, "mcp/message", {
-          connectionId: connected.connectionId,
+          serverId: "application-tools",
+          requestId: "call-1",
           method: "tools/call",
           params: { name: "highlight", arguments: { text: "held" } },
           _meta: { "agent-connect/actionId": "held" },
@@ -412,16 +393,9 @@ describe("ACP provider-owned contracts", () => {
     let returned: unknown;
     peer.onPrompt = (socket, _params, reply) => {
       void (async () => {
-        const connection = (await peer.request(socket, "mcp/connect", {
-          serverId: "application-tools",
-        })) as { connectionId: string };
-        await peer.request(socket, "mcp/message", {
-          connectionId: connection.connectionId,
-          method: "initialize",
-          params: { protocolVersion: "2025-06-18" },
-        });
         returned = await peer.request(socket, "mcp/message", {
-          connectionId: connection.connectionId,
+          serverId: "application-tools",
+          requestId: "call-1",
           method: "tools/call",
           params: { name: "highlight", arguments: { text: "image" } },
           _meta: { "agent-connect/actionId": "structured-action" },
@@ -447,7 +421,7 @@ describe("ACP provider-owned contracts", () => {
     });
     const events: AcpExecutionEvent[] = [];
     for await (const event of session.streamTask("image")) events.push(event);
-    expect(returned).toEqual(result);
+    expect(returned).toEqual({ result });
     expect(
       events.find((event) => event.type === "tool.completed"),
     ).toMatchObject({ isError: true });

@@ -342,7 +342,7 @@ describe("AcpToolExecutor", () => {
     expect(execute).toHaveBeenCalledWith(
       { prefix: "browser" },
       {
-        connectionId: "public-session",
+        requestId: expect.any(String),
         signal: expect.any(AbortSignal),
         toolName: "get_nonce",
         meta: null,

@@ -10,7 +10,6 @@ description = "Consent-enforcing ACP gateway for user-owned agents"
 [dependencies]
 agent-client-protocol = { version = "=2.2.0", features = ["unstable_mcp_over_acp"] }
 agent-client-protocol-conductor = "=2.2.0"
-agent-client-protocol-polyfill = "=2.2.0"
 agent-client-protocol-rmcp = { version = "=3.1.1", features = ["unstable_mcp_over_acp"] }
 anyhow = "1"
 rpassword = "7"

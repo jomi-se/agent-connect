@@ -183,16 +183,9 @@ it("executes application tools once through AcpToolExecutor while ACP supplies t
         rawInput: { text: "hello" },
         status: "in_progress",
       });
-      const connection = (await peer.request(socket, "mcp/connect", {
-        serverId: "application-tools",
-      })) as { connectionId: string };
-      await peer.request(socket, "mcp/message", {
-        connectionId: connection.connectionId,
-        method: "initialize",
-        params: { protocolVersion: "2025-06-18" },
-      });
       const result = await peer.request(socket, "mcp/message", {
-        connectionId: connection.connectionId,
+        serverId: "application-tools",
+        requestId: "call-1",
         method: "tools/call",
         params: { name: "highlight", arguments: { text: "hello" } },
         _meta: { "agent-connect/actionId": "stable-ui-action" },
@@ -288,16 +281,9 @@ it("maps cancel to session/cancel and abort, with a cooperative held application
   peer.onPrompt = (socket, _p, reply) => {
     finish = reply;
     void (async () => {
-      const connection = (await peer.request(socket, "mcp/connect", {
-        serverId: "application-tools",
-      })) as { connectionId: string };
-      await peer.request(socket, "mcp/message", {
-        connectionId: connection.connectionId,
-        method: "initialize",
-        params: { protocolVersion: "2025-06-18" },
-      });
       void peer.request(socket, "mcp/message", {
-        connectionId: connection.connectionId,
+        serverId: "application-tools",
+        requestId: "call-1",
         method: "tools/call",
         params: { name: "highlight", arguments: { text: "held" } },
         _meta: { "agent-connect/actionId": "cancel-ui" },

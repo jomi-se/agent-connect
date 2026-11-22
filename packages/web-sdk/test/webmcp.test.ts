@@ -125,7 +125,7 @@ describe("WebMCP adapter faults", () => {
     expect(Object.isFrozen(tool.inputSchema.properties)).toBe(true);
     await tool.execute(
       {},
-      { connectionId: "test", toolName: "read", actionId: "a", meta: null },
+      { requestId: "test", toolName: "read", actionId: "a", meta: null },
     );
     expect(f.context.executeTool).toHaveBeenCalledWith(
       expect.objectContaining({ description: "Read" }),

@@ -3,22 +3,14 @@
 # Setup passes the exact versions it resolved as one JSON object, e.g.
 #   {"@agentclientprotocol/codex-acp":"2.1.0","@openai/codex":"0.164.0",...}
 # so the box tag identifies its contents. With no argument (checkout tests),
-# everything installs at npm's latest, the adapters below their ceilings. Codex is
-# the release codex-acp runs, so a pinned Codex is forced with an override
-# rather than installed beside it.
+# everything installs at npm's latest. Codex is the release codex-acp runs, so a
+# pinned Codex is forced with an override rather than installed beside it.
 set -eu
 mkdir -p /opt/adapters
 cd /opt/adapters
 node -e '
 const versions = JSON.parse(process.argv[1] || "{}");
-// Both adapters stay on ACP SDK 2.6 until the gateway speaks the MCP-over-ACP
-// binding that came after it (ADAPTER_CEILINGS in box_build.rs;
-// docs/issues/mcp-over-acp-binding.md).
-const ceilings = {
-  "@agentclientprotocol/codex-acp": "<2.8.0",
-  "@agentclientprotocol/claude-agent-acp": "<0.107.1",
-};
-const latest = (name) => versions[name] ?? ceilings[name] ?? "latest";
+const latest = (name) => versions[name] ?? "latest";
 const codex = versions["@openai/codex"];
 const manifest = {
   private: true,

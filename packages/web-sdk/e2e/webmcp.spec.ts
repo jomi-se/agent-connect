@@ -25,7 +25,7 @@ type NativeDocument = Document & { modelContext: NativeContext };
 
 const sdkPath = "/packages/web-sdk/src/index.ts";
 const invocation: ApplicationToolContext = {
-  connectionId: "browser-fixture",
+  requestId: "browser-fixture",
   toolName: "fixture",
   actionId: "fixture-action",
   meta: null,

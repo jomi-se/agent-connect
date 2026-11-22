@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Application tools speak MCP 2026-07-28 over ACP, as current Codex and
+  Claude Code adapters do: each `mcp/message` names its server and carries one
+  request, `server/discover` replaces `initialize`, and every answer is an MCP
+  result or error in the response carrier. There is no `mcp/connect` or
+  `mcp/disconnect` any more. Tool handlers get the MCP `requestId` in place of
+  `connectionId`, and `SingleMcpServerOptions` loses `createConnectionId`.
 - Depend on zod 4.6.7, which fixes unbounded memory use while validating
   oversized constrained collections (GHSA-mrhx-c7xc-m3w5).
 - Depend on AI SDK `ai` 7.0.143.
