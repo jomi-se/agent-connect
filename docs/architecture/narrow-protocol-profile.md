@@ -1,61 +1,74 @@
 # Narrow experimental ACP/MCP-over-ACP profile
 
-Status: experimental ACP implementation profile.
-
-This profile describes the deliberately narrow ACP browser/gateway boundary.
-ACP and MCP-over-ACP remain unstable; it is not full protocol conformance.
-Applications use the root browser SDK and its AI SDK chat transport.
+This profile defines the narrow ACP and MCP-over-ACP wire boundary enforced
+between `@open-agent-connect/web` and the gateway's policy proxy. ACP,
+MCP-over-ACP and `agent-connect.resume.v1` remain unstable; this is not full
+protocol conformance.
 
 ## Topology
 
-- one authenticated WebSocket;
-- one ACP client and conductor connection;
-- one agent session;
+- one authenticated WebSocket (`acp.v1` or `agent-connect.resume.v1`);
+- one ACP client and gateway policy-proxy chain per session host;
+- one agent session per grant-scoped conversation;
 - one `McpServerAcp` supplied by the application;
 - one active MCP connection for that server;
-- a fixed tool set for the session lifetime.
+- a fixed, consented tool snapshot for the grant lifetime.
 
-## ACP methods in the first end-to-end slice
+## Allowed ACP methods
+
+The gateway's policy proxy is default-deny in both directions and owns every
+authority-bearing field (`clientCapabilities`, `cwd`, MCP server declarations,
+mode and model):
 
 - `initialize`
 - `session/new`
-- `session/load`
+- `session/load` and `session/resume` (restricted to sessions created under the
+  same grant and entry-point address)
 - `session/prompt`
 - `session/cancel`
 - `session/update`
-- `session/request_permission`
-- `mcp/connect`
-- `mcp/message`
-- `mcp/disconnect`
+- `session/request_permission` (answered by the gateway from the consented
+  permission profile, never forwarded to the application)
+- `mcp/connect`, `mcp/message`, `mcp/disconnect`
 
-## Nested MCP methods
+## Allowed nested MCP messages
 
-- `initialize`
-- `notifications/initialized`
-- `ping`
-- `tools/list`
-- `tools/call`
+- Requests to application: `initialize`, `ping`, `tools/list`, `tools/call`
+- Notifications to application: `notifications/initialized`,
+  `notifications/cancelled`
+- Notifications from application: `notifications/cancelled`,
+  `notifications/progress`
 
-Resources, prompts, logging, completion, sampling, elicitation, subscriptions, pagination, and multiple logical servers are deferred.
+Resources, prompts, logging, completion, sampling, elicitation, subscriptions,
+pagination and multiple logical servers are not admitted.
 
-## Reconnect boundary
+## Resumption and reconnect boundary
 
-ACP v1 session loading does not replay in-flight transport requests. A future
-durability layer must therefore persist application tool requests before
-dispatch. The intended reconnect path creates a fresh physical transport,
-loads the agent session, establishes a new MCP connection, and redispatches or
-lists the unresolved action with the same stable action ID. This recovery path
-is not implemented in the current MVP.
+- **In-flight transport resumption (`agent-connect.resume.v1`):** Gateway-owned
+  session hosts outlive dropped WebSockets for a bounded grace period and
+  output buffer. Every ACP message travels in a sequence-numbered envelope
+  (`attach`/`attached`/`m`/`a`/`p`/`P`/`bye`); reattaching with the same grant,
+  origin and resume token resends unacknowledged frames in both directions and
+  deduplicates by sequence. Plain `acp.v1` clients keep per-socket sessions.
+- **Action journaling:** Before dispatching `tools/call` to the application,
+  the gateway persists the request in its action journal and attaches a stable
+  `agent-connect/actionId`. Handlers must be idempotent or deduplicate on that
+  ID; cancellation and disconnect cannot undo an effect that already ran.
+- **Ended sessions:** Past the grace or retention bound, or after a gateway
+  restart, the client falls back to ACP `session/load` (`provider.recover()`),
+  restoring conversation history and reporting interruption without ever
+  automatically replaying uncertain prompts or application effects.
 
-## Error behavior
+## Rejection behavior
 
-The web SDK rejects:
+The policy proxy drops undeclared or schema-drifted tools on `tools/list` and
+rejects unapproved calls on `tools/call`. The browser SDK rejects:
 
 - unknown server IDs on `mcp/connect`;
 - a second active logical connection;
 - unknown or closed connection IDs;
-- MCP messages before initialization where initialization is required;
+- MCP messages before initialization where required;
 - unsupported MCP methods;
 - malformed or unknown tool calls.
 
-Errors must be machine-readable and must not silently fall back to executing a different tool.
+Errors are machine-readable and never fall back to executing another tool.

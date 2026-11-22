@@ -1,49 +1,58 @@
 # Testing strategy
 
 Test against the real dependency we ship. If an ACP adapter or harness update
-could invalidate an assertion, exercise that real pinned dependency rather than
-an imitation of its events.
+could invalidate an assertion, exercise that real dependency rather than an
+imitation of its events.
 
 ## Evidence layers
 
-1. Agent Connect invariants: focused SDK and Rust tests exercise grants, fixed
-   tools, argument validation, admission, continuation, cancellation, revocation,
-   resume and owned resource cleanup. Controlled contract fixtures cover exact
-   races and deliberate faults without claiming harness compatibility.
-2. Real adapters with deterministic inference: `npm run verify` (in CI on every
-   PR and push to main) runs the pinned
-   Codex and Claude ACP adapters on host and in boxes with isolated HOME/XDG
-   state. The clean-room gate installs packed artifacts in a fresh container,
-   builds the public sample and exercises owner approval, tools, reconnect,
-   cancellation and browser lifecycle. No personal login is involved.
-3. Real-model application composition: opt-in runs use the packaged gateway and
-   SDK, owner-run dedicated logins, real models and application-owned state.
-   These prove meaningful tool use and user-visible behavior; deterministic
-   inference does not substitute for them.
+1. **Agent Connect invariants (fast, offline):** SDK and Rust unit tests
+   exercise grants, fixed tools, argument validation, admission, continuation,
+   cancellation, revocation, resume, OTel log formatting, per-address owner
+   factors (with real `SoftPasskey` signatures and TOTP codes) and owned
+   resource cleanup. Controlled contract fixtures cover exact races and
+   deliberate faults without claiming harness compatibility.
+2. **Real adapters with deterministic inference (`npm run verify`):** CI runs
+   every gate on every PR and push to `main` (reusing green jobs whose inputs
+   did not change). Boxed gates build the box with the latest harnesses from
+   npm ([ADR 0018](../decisions/0018-floating-harness-versions.md)); unboxed
+   compatibility fixtures keep their own adapter pins. The clean-room gate
+   installs packed release tarballs in a fresh container, builds the standalone
+   sample and exercises setup, doctor, pairing, service lifecycle, tools,
+   reconnect, cancellation and BFCache restoration. No personal login is used.
+3. **Live egress canary (`test:live`, opt-in):** Runs a few short real Codex
+   turns through a scratch boxed gateway and its egress proxy against a real
+   provider, using `ACP_LIVE_HARNESS_HOME` pointing at a dedicated signed-in
+   harness home. Because routine gates use a mock model reached without the
+   egress, run this after container-engine, OS, box-image, egress or harness
+   changes. It spends tokens and needs credentials, so CI never runs it.
+4. **Real-model application composition (opt-in):** Packaged gateway + SDK +
+   dedicated logins + real models + application state prove useful behavior
+   beyond deterministic inference; see
+   [release qualification](../plan/release-qualification/spec.md).
 
 ## Commands
 
-Use the Node in `.node-version` (26 LTS today), Docker and the pinned ACP build tools. Boxed
-gates build the box with the latest harnesses from npm, as owners get them; the
-unboxed compatibility fixtures keep their own adapter pins. Native browser gates use
-`config/webmcp-test-compat.json`.
-The owner browser gate also requires the `openssl` command to generate a
-temporary test certificate and key; CI uses Ubuntu 24.04. OpenSSL is a test
-tool dependency, not a gateway runtime requirement.
+Use the Node in `.node-version`, a container engine (rootless Podman on Linux
+or Docker; [ADR 0020](../decisions/0020-container-engines.md)) and the Rust
+toolchain. Native WebMCP gates use `config/webmcp-test-compat.json`. The owner
+UI gate requires `openssl` to generate a temporary self-signed certificate for
+its HTTPS cookie fixture (a test-only dependency; CI runs on Ubuntu 24.04).
 
 ```sh
 npm run check                           # fast gates, after every change
 npm run verify -- test:ui:owner         # only the box-backed steps you touched
-npm run verify:full                     # everything; CI runs the same gates, split into jobs
+npm run verify:full                     # full suite (CI runs the same gates in parallel)
+ACP_LIVE_HARNESS_HOME=<home> npm run verify -- test:live   # real provider + egress
 cargo test --locked --workspace
 ```
 
-When the egress check or an engine changes, run the impostor matrix against
-each engine you support. It starts containers that carry the egress owner label
-and the proxy's arguments with one weakening each (privileged, unconfined
+When the egress check or a container engine changes, run the impostor matrix
+against each supported engine. It starts containers carrying the egress owner
+label and proxy arguments with one weakening each (privileged, unconfined
 seccomp or AppArmor, host namespaces, mounts, a device, a published port, a
 larger limit, an extra variable, a capability) and requires the gateway to
-refuse every one as its egress, after its own egress passes:
+refuse every one after its own egress passes:
 
 ```sh
 ACP_BOX_IMAGE=<box image> AGENT_CONNECT_CONTAINER_ENGINE=podman \
@@ -51,66 +60,52 @@ ACP_BOX_IMAGE=<box image> AGENT_CONNECT_CONTAINER_ENGINE=podman \
 ```
 
 Keep all harness homes isolated. Never forward API-key environment variables,
-invoke personal logins, or replay uncertain prompts/effects. Tests own their
-containers, networks and processes; cleanup must leave shared peers alone and
-retain capacity until owned resources are removed.
+invoke personal logins, or replay uncertain prompts or effects. Tests own their
+containers, networks and processes; cleanup leaves shared peers alone and
+retains capacity until owned resources are removed.
 
-## Owner cookie and HTTPS evidence
+## Owner auth and browser evidence
 
-The owner UI gate retains its HTTP loopback checks and adds an isolated gateway
-fixture behind a Node standard-library HTTPS reverse proxy. Chromium exercises
-the real gateway's anonymous and authenticated cookies, rejects attempts to
-shadow the prefixed cookie with `Domain` or another path, and checks legacy
-cookie pollution, session replacement and logout. Credentials and owner state
-are synthetic; no personal login or provider subscription is used.
+Rust tests verify real WebAuthn registration and assertion (`SoftPasskey`) and
+TOTP codes, exact-origin and cross-port cookie isolation, session/purpose/CSRF/
+expiry binding, replay, concurrent enrollment, no-downgrade (TOTP never removes
+a passkey), per-address grant revocation on Security removal, all-grant
+revocation on offline recovery (`remove-factor` / `reset-passphrase`),
+persistence failure, strict `Host` selection and HSTS headers. Scoped tracing
+tests verify one sign-in audit event per failure with no leaked secrets, strict
+entry-point attribution, guess vs request-rate budgets and bounded history.
 
-The proxy certificate and key are generated at runtime with OpenSSL and removed
-during fixture cleanup. Chromium uses `ignoreHTTPSErrors` for this self-signed
-certificate. The probe checks HSTS header emission, but cannot establish browser
-HSTS learning or upgrade behavior with an untrusted certificate. Rust router
-tests cover exact Host selection, forwarding-header spoofing, HTTP exclusion
-and HSTS on success, errors and fallback responses.
+The owner UI browser gate (`test:ui:owner`) runs the real gateway in Chromium
+with CSP enforced and a virtual authenticator:
 
-The owner browser gate also follows the actual retry link after a failed
-passphrase check, completes sign-in to the original consent, and checks the
-original application callback and state after denial. A cookie removed before
-submission exercises the missing-session explanation. Rust tests cover
-continuation/issuer/expiry binding, spent CSRF, ambiguous cookies and persistence
-failure without issuing owner authority.
+- **`localhost`:** passkey enrollment, sign-in, consent approval, Security
+  factor removal (verifying that removing another address's factor revokes
+  grants approved there while preserving grants on `localhost`), and runtime
+  health banners.
+- **`127.0.0.1`:** IP-literal explanation, TOTP enrollment and per-approval
+  fresh codes, failed sign-in retry preserving pending consent, and missing
+  cookie diagnostics.
+- **Isolated HTTPS reverse-proxy fixture:** temporary OpenSSL certificate with
+  TOTP (Chromium refuses WebAuthn on untrusted certificates), exercising
+  `__Host-` cookie hardening, legacy cookie rejection, HSTS header emission
+  (not browser HSTS learning), and default sign-in audit presentation with
+  `RUST_LOG` unset.
 
-Scoped tracing tests exercise real sign-in rejection boundaries, require one
-event per failure, and verify secret-marker exclusion, strict entry-point
-attribution, retention limits and pause expiry. The browser fixture leaves
-`RUST_LOG` unset to check default audit output, owner-only history and actual
-rate-limit pause presentation without changing the main fixture's budget.
+Virtual authenticators prove the protocol, not mobile or password-manager
+devices; real-device checks stay in
+[release qualification](../plan/release-qualification/spec.md).
 
-## Fixture storage
+## Fixture storage and cleanup
 
-Fixtures live under `deploy/gateway/test/fixtures`. Per-run Codex model
-configuration belongs only to test inputs and disposable
-dedicated harness homes. The production launcher and base image carry no mock
-provider configuration; their entrypoint preserves an existing config or creates
-the file-backed credential-store default. Boxed scenarios and teardown seed only
-private fixture homes. Clean-room carries the seed in its acceptance kit, checks
-the actual launcher archive excludes fixtures, and uses the installed release's
-box without an overlay.
+Fixtures live under `deploy/gateway/test/fixtures`. Per-run mock model config
+belongs only to test inputs and disposable harness homes; the production
+launcher and base image carry no mock provider configuration. Clean-room checks
+that the packed launcher archive excludes fixtures and builds the local box
+from the installed package ([ADR 0017](../decisions/0017-local-box-build.md)).
 
-Dependency trees and per-run caches are removed after owned processes stop, on
-success and failure.
-Diagnostic output lives outside repositories. `AGENT_CONNECT_KEEP_TEST_INSTALLS=1`
-is an explicit debugging opt-in, never a default. Clean each temporary artifact
-when no active work needs it. A disconnect proves neither that generation
-stopped nor that an already-started application effect did not happen.
-
-Setup acceptance installs the packed launcher and Linux platform package in an
-isolated HOME/XDG environment, builds the local box from their files, and checks
-owner-context hash changes, reuse and failed-build fallback. Box tests check the
-curated tools, one Claude binary selected by the real adapter/SDK, the code-mode
-host Codex uses for MCP tools, and Codex ACP turns without the optional voice
-host. Runtime proxy and home boundaries remain the same; builds use normal
-network access. See
-[local box decision](../decisions/0017-local-box-build.md).
-
-Native WebMCP gates allocate a free loopback port and a fresh results directory.
-`WEBMCP_PORT` and `PLAYWRIGHT_OUTPUT_DIR` provide explicit overrides. The selected
-values are shared with test workers, so gates can run alongside existing previews.
+Per-run installs, caches, temporary certificates and test box images are
+removed on success and failure. Diagnostic output stays outside repositories;
+`AGENT_CONNECT_KEEP_TEST_INSTALLS=1` is an explicit debugging opt-in. Native
+WebMCP gates pick a free loopback port and fresh results directory (overridable
+via `WEBMCP_PORT` and `PLAYWRIGHT_OUTPUT_DIR`) so they can run alongside active
+previews.
