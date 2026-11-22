@@ -842,7 +842,8 @@ impl AuthService {
         // A rejected client must not continue exhausting the shared budget.
         // Owner traffic retains its existing exemption and global accounting.
         if partitioned && self.session_id(&inner, headers, true).is_err() {
-            attempt_budget(
+            // A rate limit, not a guess limit: every request counts.
+            let counted = attempt_budget(
                 &mut inner.request_budgets,
                 &source,
                 now,
@@ -851,6 +852,7 @@ impl AuthService {
                 "slow_down",
                 true,
             )?;
+            spend(&mut inner.request_budgets, &counted, now);
         }
         if now.saturating_sub(inner.rate_window) >= 60 {
             inner.rate_window = now;
@@ -947,10 +949,9 @@ impl AuthService {
                 Some((_, query)) => format!("{LOGIN}?{query}"),
                 None => LOGIN.to_string(),
             };
-            let mut login_source = source.clone();
             let factor = self.factor(&inner, &origin).map(|factor| factor.kind());
             let verification: Result<Authority> = (|| {
-                login_source = attempt_budget(
+                let login_source = attempt_budget(
                     &mut inner.login_budgets,
                     &source,
                     now,
@@ -962,15 +963,22 @@ impl AuthService {
                 // A passkey stands alone; TOTP and setup start from the passphrase.
                 if factor != Some(FactorKind::Passkey) {
                     let passphrase = required(&form, "passphrase")?;
-                    ensure!(passphrase.len() <= 1024, "invalid_passphrase");
-                    let parsed = PasswordHash::new(&inner.stored.password_hash)
-                        .map_err(|_| anyhow!("invalid_passphrase"))?;
-                    ensure!(
-                        Argon2::default()
-                            .verify_password(passphrase.as_bytes(), &parsed)
-                            .is_ok(),
-                        "invalid_passphrase"
-                    );
+                    let accepted = passphrase.len() <= 1024
+                        && PasswordHash::new(&inner.stored.password_hash).is_ok_and(|parsed| {
+                            Argon2::default()
+                                .verify_password(passphrase.as_bytes(), &parsed)
+                                .is_ok()
+                        });
+                    spend_on_wrong_guess(
+                        &mut inner.login_budgets,
+                        &login_source,
+                        now,
+                        if accepted {
+                            Ok(())
+                        } else {
+                            Err(anyhow!("invalid_passphrase"))
+                        },
+                    )?;
                 }
                 match factor {
                     None => Ok(Authority::Setup),
@@ -986,15 +994,6 @@ impl AuthService {
                 reason,
                 target: retry,
             })?;
-            if matches!(&login_source, ClientSource::Overflow(_)) {
-                // Success resets attempts, but overflow assignment stays sticky
-                // until its original window expires, even if a slot opens.
-                if let Some(budget) = inner.login_budgets.get_mut(&login_source) {
-                    budget.count = 0;
-                }
-            } else {
-                inner.login_budgets.remove(&login_source);
-            }
             inner.sessions.remove(&session);
             inner.anonymous.remove(&session);
             ensure!(
@@ -1723,18 +1722,16 @@ impl AuthService {
                     purpose,
                     form.get("credential").map(String::as_str).unwrap_or(""),
                 );
-                // A passkey cannot be guessed, so only failures spend the
-                // budget; an owner approving several apps in a minute is fine.
-                if verified.is_ok()
-                    && let Some(budget) = inner.factor_budgets.get_mut(&counted)
-                {
-                    budget.count = budget.count.saturating_sub(1);
-                }
-                verified
+                spend_on_wrong_guess(&mut inner.factor_budgets, &counted, self.now(), verified)
             }
             Some(Factor::Totp { secret, last_step }) => {
                 let code = form.get("totp").map(String::as_str).unwrap_or("");
-                let step = verify_totp(&secret, code, self.now(), last_step)?;
+                let step = spend_on_wrong_guess(
+                    &mut inner.factor_budgets,
+                    &counted,
+                    self.now(),
+                    verify_totp(&secret, code, self.now(), last_step),
+                )?;
                 let mut next = inner.stored.clone();
                 next.factors.insert(
                     origin.to_string(),
@@ -1892,7 +1889,7 @@ impl AuthService {
                 self.factor(inner, &origin).is_none(),
                 "factor_already_enrolled"
             );
-            self.factor_budget(inner, source)?;
+            let counted = self.factor_budget(inner, source)?;
             let enrollment = inner
                 .sessions
                 .get_mut(&session)
@@ -1901,7 +1898,13 @@ impl AuthService {
             let factor = match (path, enrollment) {
                 (ENROLL_TOTP, Enrollment::Totp { secret, expires }) => {
                     ensure!(expires > now, "invalid_enrollment");
-                    let step = verify_totp(&secret, required(&form, "totp")?, now, None)?;
+                    let code = required(&form, "totp")?;
+                    let step = spend_on_wrong_guess(
+                        &mut inner.factor_budgets,
+                        &counted,
+                        now,
+                        verify_totp(&secret, code, now, None),
+                    )?;
                     Factor::Totp {
                         secret,
                         last_step: Some(step),
@@ -1917,12 +1920,17 @@ impl AuthService {
                 ) => {
                     ensure!(expires > now, "invalid_enrollment");
                     let credential = required(&form, "credential")?;
-                    ensure!(credential.len() <= MAX_CREDENTIAL, "invalid_passkey");
-                    let credential: RegisterPublicKeyCredential =
-                        serde_json::from_str(credential).map_err(|_| anyhow!("invalid_passkey"))?;
-                    let passkey = webauthn(&origin)?
-                        .finish_passkey_registration(&credential, &state)
-                        .map_err(|_| anyhow!("invalid_passkey"))?;
+                    let registered = (|| {
+                        ensure!(credential.len() <= MAX_CREDENTIAL, "invalid_passkey");
+                        let credential: RegisterPublicKeyCredential =
+                            serde_json::from_str(credential)
+                                .map_err(|_| anyhow!("invalid_passkey"))?;
+                        webauthn(&origin)?
+                            .finish_passkey_registration(&credential, &state)
+                            .map_err(|_| anyhow!("invalid_passkey"))
+                    })();
+                    let passkey =
+                        spend_on_wrong_guess(&mut inner.factor_budgets, &counted, now, registered)?;
                     Factor::Passkey {
                         user,
                         passkey: Box::new(passkey),
@@ -3042,11 +3050,35 @@ fn attempt_budget(
             }
         }
     }
-    let budget = budgets.entry(source.clone()).or_insert(AttemptBudget {
-        window: now,
-        count: 0,
-    });
-    ensure!(budget.count < limit, "{error}");
-    budget.count += 1;
+    if let Some(budget) = budgets.get(&source) {
+        ensure!(budget.count < limit, "{error}");
+    }
     Ok(source)
+}
+/// Count one attempt against the source `attempt_budget` chose. The window
+/// starts at the first counted attempt, never at a success.
+fn spend(budgets: &mut HashMap<ClientSource, AttemptBudget>, source: &ClientSource, now: u64) {
+    budgets
+        .entry(source.clone())
+        .or_insert(AttemptBudget {
+            window: now,
+            count: 0,
+        })
+        .count += 1;
+}
+/// A guess limit counts only guesses that were wrong: a passphrase, passkey or
+/// code not accepted. Successes, and refusals that guessed nothing, spend nothing.
+fn spend_on_wrong_guess<T>(
+    budgets: &mut HashMap<ClientSource, AttemptBudget>,
+    source: &ClientSource,
+    now: u64,
+    result: Result<T>,
+) -> Result<T> {
+    if let Err(error) = &result
+        && ["invalid_passphrase", "invalid_passkey", "invalid_factor"]
+            .contains(&error.to_string().as_str())
+    {
+        spend(budgets, source, now);
+    }
+    result
 }

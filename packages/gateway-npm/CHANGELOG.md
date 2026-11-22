@@ -24,6 +24,10 @@
   passphrase was right. The sign-in history on Activity and the
   `owner_sign_in_failed` log event keep the real reason, now split into
   `invalid_passphrase` and `invalid_passkey` instead of `invalid_credentials`.
+- Sign-in and approval limits count only wrong guesses: 10 wrong passphrases
+  per 15 minutes and 5 wrong passkeys or codes a minute. Approving several
+  apps in a minute no longer pauses the owner, and a success no longer clears
+  earlier wrong guesses.
 
 - The box is built on Node 26.13.0, the current LTS, instead of Node 24.
   The launcher still runs on Node 24.15 or newer.

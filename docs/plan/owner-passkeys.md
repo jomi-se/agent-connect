@@ -76,6 +76,13 @@ before release:
 
 ### Settled
 
+- **Rate limits and guess limits are separate.** Rate limits catch runaway or
+  hostile traffic and count every request (600 a minute without an owner
+  session, a per-source limit with client address rules, a concurrency cap).
+  Guess limits count only wrong guesses: 10 wrong passphrases per 15 minutes,
+  5 wrong passkeys or codes a minute, per connection. A success never counts
+  and never clears earlier wrong guesses, so an owner approving several apps
+  in a minute is fine and nothing is handed back afterwards.
 - **A browser without passkeys hears so when it tries.** The passkey
   sign-in page is a heading and one button. Pressing it where the browser has
   no WebAuthn says "This browser can't use passkeys." and posts nothing; any
@@ -113,9 +120,6 @@ before release:
 
 ### Still to review
 
-- **Passkey successes don't spend the factor attempt budget** (5 a minute
-  per connection); failed assertions and every TOTP attempt still do. Found
-  by the browser test: a sign-in and four approvals in a minute hit it.
 - **Activity links each request to its own address** and says "on
   <address>" when it is not this one; the review happens there, under that
   address's factor.

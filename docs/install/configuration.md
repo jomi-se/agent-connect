@@ -490,8 +490,10 @@ unknown or ambiguous `Host` values before admission and adds a limit of **60
 unauthenticated requests per source per 60 seconds**, while retaining the
 **600 requests per 60 seconds** global ceiling and its owner-session exemption.
 Requests rejected by a source limit do not consume the shared allowance.
-Passphrase and authenticator limits remain **10 attempts per 900 seconds** and
-**5 attempts per 60 seconds**, including consent and authenticator enrollment.
+Those are rate limits: every request counts. Guessing has its own limits,
+which count only wrong guesses: **10 wrong passphrases per 900 seconds** and
+**5 wrong passkeys or authenticator codes per 60 seconds**, including consent
+and enrollment. A success neither counts nor clears earlier wrong guesses.
 Each budget map keeps at most 1,024 individual source entries; bounded shared
 fallback groups absorb additional sources without evicting live budgets.
 

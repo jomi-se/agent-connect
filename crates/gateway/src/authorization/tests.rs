@@ -1102,13 +1102,76 @@ async fn anonymous_flood_preserves_owner_session_and_csrf_capacity() {
     );
 }
 
+#[tokio::test]
+async fn guess_limits_count_only_wrong_guesses() {
+    const LOOPBACK: &str = "http://127.0.0.1:19843";
+    let dir = std::env::temp_dir().join(random("agent-connect-guess-limit-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(LOOPBACK.into());
+    let auth = &AuthService::open(configuration).unwrap();
+    // Setup with the passphrase, then eleven passkey sign-ins in the same
+    // second: more than either limit allows wrong guesses, and none counts.
+    for _ in 0..12 {
+        let _ = login(auth, "").await;
+    }
+    // A right authenticator code counts no more than a passkey does.
+    enroll_totp_at(auth, LOOPBACK, Some("127.0.0.1:19843")).await;
+    let spent = |budgets: &HashMap<ClientSource, AttemptBudget>| -> u32 {
+        budgets.values().map(|budget| budget.count).sum()
+    };
+    {
+        // No counter at all: a window starts at the first wrong guess, so a
+        // later pause runs its full length.
+        let inner = auth.inner.lock().unwrap();
+        assert!(inner.login_budgets.is_empty());
+        assert!(inner.factor_budgets.is_empty());
+    }
+    // A passkey that does not verify is a wrong guess.
+    let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
+    let reply = request(
+        auth,
+        Method::POST,
+        LOGIN,
+        Some(ISSUER),
+        Some(&cookie(&page)),
+        &[
+            ("csrf_token", &input(&page.text, "csrf_token")),
+            ("continue", ""),
+            ("credential", "{}"),
+        ],
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+    {
+        let inner = auth.inner.lock().unwrap();
+        assert_eq!(spent(&inner.login_budgets), 0);
+        assert_eq!(spent(&inner.factor_budgets), 1);
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// One wrong guess: the budget's check, then the charge.
+fn charge(
+    budgets: &mut HashMap<ClientSource, AttemptBudget>,
+    source: &ClientSource,
+    now: u64,
+    period: u64,
+    limit: u32,
+    error: &str,
+    partitioned: bool,
+) -> Result<ClientSource> {
+    let counted = attempt_budget(budgets, source, now, period, limit, error, partitioned)?;
+    spend(budgets, &counted, now);
+    Ok(counted)
+}
+
 #[test]
 fn peer_attempt_limits_are_independent_bounded_and_expire() {
     let first: IpAddr = "192.0.2.1".parse().unwrap();
     let other: IpAddr = "192.0.2.2".parse().unwrap();
     let mut budgets = HashMap::new();
     for _ in 0..10 {
-        attempt_budget(
+        charge(
             &mut budgets,
             &ClientSource::legacy(Some(first)),
             1000,
@@ -1120,7 +1183,7 @@ fn peer_attempt_limits_are_independent_bounded_and_expire() {
         .unwrap();
     }
     assert!(
-        attempt_budget(
+        charge(
             &mut budgets,
             &ClientSource::legacy(Some(first)),
             1000,
@@ -1131,7 +1194,7 @@ fn peer_attempt_limits_are_independent_bounded_and_expire() {
         )
         .is_err()
     );
-    attempt_budget(
+    charge(
         &mut budgets,
         &ClientSource::legacy(Some(other)),
         1000,
@@ -1141,7 +1204,7 @@ fn peer_attempt_limits_are_independent_bounded_and_expire() {
         false,
     )
     .unwrap();
-    attempt_budget(
+    charge(
         &mut budgets,
         &ClientSource::legacy(Some(first)),
         1900,
@@ -1153,7 +1216,7 @@ fn peer_attempt_limits_are_independent_bounded_and_expire() {
     .unwrap();
     for index in 0..2048 {
         let peer = IpAddr::V4(std::net::Ipv4Addr::from(0xc000_0200u32 + index));
-        attempt_budget(
+        charge(
             &mut budgets,
             &ClientSource::legacy(Some(peer)),
             1900,
@@ -4490,7 +4553,7 @@ mod client_address_tests {
         let mut budgets = HashMap::new();
         let first = source(ISSUER, CLIENT);
         for _ in 0..10 {
-            attempt_budget(
+            charge(
                 &mut budgets,
                 &first,
                 1000,
@@ -4506,7 +4569,7 @@ mod client_address_tests {
                 ISSUER.into(),
                 IpAddr::V6(std::net::Ipv6Addr::from(i as u128)),
             );
-            attempt_budget(
+            charge(
                 &mut budgets,
                 &key,
                 1000,
@@ -4523,7 +4586,7 @@ mod client_address_tests {
                 IpAddr::V6(std::net::Ipv6Addr::from((10000 + i) as u128)),
             );
             assert_eq!(
-                attempt_budget(
+                charge(
                     &mut budgets,
                     &key,
                     1000,
@@ -4537,7 +4600,7 @@ mod client_address_tests {
             );
         }
         assert!(
-            attempt_budget(
+            charge(
                 &mut budgets,
                 &source(ISSUER, OTHER),
                 1000,
@@ -4549,7 +4612,7 @@ mod client_address_tests {
             .is_err()
         );
         assert!(
-            attempt_budget(
+            charge(
                 &mut budgets,
                 &first,
                 1000,
@@ -4568,7 +4631,7 @@ mod client_address_tests {
             .clone();
         budgets.get_mut(&released).unwrap().window = 900;
         assert!(
-            attempt_budget(
+            charge(
                 &mut budgets,
                 &source(ISSUER, "203.0.113.44"),
                 1800,
@@ -4581,7 +4644,7 @@ mod client_address_tests {
         );
         assert!(!budgets.contains_key(&released));
         let missing = ClientSource::Missing(ISSUER.into());
-        attempt_budget(
+        charge(
             &mut budgets,
             &missing,
             1000,
@@ -4592,7 +4655,7 @@ mod client_address_tests {
         )
         .unwrap();
         assert_eq!(budgets.len(), MAX_CLIENT_BUDGETS + 1);
-        attempt_budget(
+        charge(
             &mut budgets,
             &first,
             1900,
@@ -4649,8 +4712,8 @@ mod client_address_tests {
         let overflow = ClientSource::Overflow(Some(ISSUER.into()));
         assert_eq!(auth.inner.lock().unwrap().login_budgets[&overflow].count, 1);
         advance(auth, 1);
-        // One individual expires before success; success must not remove the
-        // overflow marker and let the next client claim that free slot.
+        // One individual expires before success; success neither spends nor
+        // clears the overflow marker, so the next client cannot claim that slot.
         let page = get(auth, LOGIN, ISSUER, CLIENT, Some(&anonymous)).await;
         let (reply, events) = sign_in_audit_tests::captured(send(
             auth,
@@ -4672,10 +4735,10 @@ mod client_address_tests {
         {
             let inner = auth.inner.lock().unwrap();
             assert!(!inner.login_budgets.contains_key(&released));
-            assert_eq!(inner.login_budgets[&overflow].count, 0);
+            assert_eq!(inner.login_budgets[&overflow].count, 1);
             assert_eq!(inner.login_budgets[&overflow].window, started);
         }
-        for (elapsed, client, overflow_count) in [(0, OTHER, 1), (898, "198.51.100.9", 2)] {
+        for (elapsed, client, overflow_count) in [(0, OTHER, 2), (898, "198.51.100.9", 3)] {
             advance(auth, elapsed);
             let page = get(auth, LOGIN, ISSUER, client, None).await;
             let reply = send(
