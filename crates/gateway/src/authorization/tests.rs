@@ -1428,7 +1428,7 @@ async fn owner_post_errors_are_safe_html_and_api_errors_remain_json() {
     )
     .await;
     assert_eq!(response.status, StatusCode::FORBIDDEN);
-    assert!(response.text.contains("Refresh this page to continue"));
+    assert!(response.text.contains("This page expired"));
     assert!(response.text.contains(&format!("href='{OWNER}'")));
     assert!(!response.text.contains("expired<script>"));
     // A fresh GET offers another valid challenge after the consumed/invalid form.
@@ -1622,7 +1622,7 @@ async fn failed_sign_in_totp_persistence_error_keeps_unavailable_status_and_no_a
         "text/html; charset=utf-8"
     );
     assert_eq!(response.headers[header::CACHE_CONTROL], "no-store");
-    assert!(response.text.contains("Authorization unavailable"));
+    assert!(response.text.contains("Gateway unavailable"));
     assert_eq!(sign_in_retry(&response), target);
     assert!(!response.headers.contains_key(header::SET_COOKIE));
     for private in [
@@ -2004,26 +2004,26 @@ async fn sign_in_cookie_errors_distinguish_missing_duplicates_and_invalid_values
         .map(|(name, value)| (*name, value.as_str()))
         .collect();
     for (cookies, diagnostic) in [
-        (None, "The sign-in session cookie was not sent"),
+        (None, "Allow cookies for this site"),
         (
             Some("unrelated=must-not-be-reflected".into()),
-            "The sign-in session cookie was not sent",
+            "Allow cookies for this site",
         ),
         (
             Some(format!("{anonymous}; {anonymous}")),
-            "More than one sign-in session cookie was sent",
+            "Clear this site’s cookies first",
         ),
         (
             Some(format!("__Host-agent_connect_owner_443; {anonymous}")),
-            "More than one sign-in session cookie was sent",
+            "Clear this site’s cookies first",
         ),
         (
             Some("__Host-agent_connect_owner_443=".into()),
-            "Your owner session is missing or has expired",
+            "<h1>Signed out</h1>",
         ),
         (
             Some("__Host-agent_connect_owner_443=must-not-be-reflected".into()),
-            "Your owner session is missing or has expired",
+            "<h1>Signed out</h1>",
         ),
     ] {
         let reply = request(
@@ -2065,7 +2065,7 @@ async fn sign_in_cookie_errors_distinguish_missing_duplicates_and_invalid_values
             .to_vec(),
     )
     .unwrap();
-    assert!(text.contains("More than one sign-in session cookie was sent"));
+    assert!(text.contains("Clear this site’s cookies first"));
     advance(auth, REQUEST_TTL + 1);
     let expired = request(
         auth,
@@ -2077,11 +2077,7 @@ async fn sign_in_cookie_errors_distinguish_missing_duplicates_and_invalid_values
     )
     .await;
     assert_eq!(expired.status, StatusCode::FORBIDDEN);
-    assert!(
-        expired
-            .text
-            .contains("Your owner session is missing or has expired")
-    );
+    assert!(expired.text.contains("<h1>Signed out</h1>"));
     assert_eq!(sign_in_retry(&expired), LOGIN);
 }
 
@@ -5482,7 +5478,7 @@ async fn a_totp_session_removes_totp_addresses_with_a_fresh_code_but_never_a_pas
     )
     .await;
     assert!(
-        forged.text.contains("Only a sign-in with a passkey"),
+        forged.text.contains("Sign in with a passkey to remove one"),
         "{}",
         forged.text
     );

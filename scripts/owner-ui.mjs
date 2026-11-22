@@ -579,7 +579,7 @@ try {
       .getByRole("button", { name: "Approve", exact: true })
       .click();
     await recoveryPage
-      .getByRole("heading", { name: "Authenticator code not accepted" })
+      .getByRole("heading", { name: "Code not accepted" })
       .waitFor();
     await capture("factor-error", { compact: true, target: recoveryPage });
     await recoveryPage.goto(await push({ at: ipOrigin }));
@@ -691,7 +691,9 @@ try {
       undefined,
     );
     await missingCookiePage
-      .getByText(/^The sign-in session cookie was not sent\./)
+      .getByText("Allow cookies for this site, then try again.", {
+        exact: true,
+      })
       .waitFor();
     const diagnostic = await missingCookieReply.text();
     for (const secret of [password, omittedCookie.value, csrf])

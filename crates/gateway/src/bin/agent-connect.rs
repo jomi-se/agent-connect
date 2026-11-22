@@ -164,12 +164,25 @@ impl OwnerRuntime for ConsoleRuntime {
                 repair: "Run agent-connect service start on the gateway host.".into(),
             });
         }
-        let sessions: Vec<_> = gateway.hosts.session_views().into_iter().map(|session| {
-            if session.state == "cleanup-failed" {
-                problems.push(OwnerProblem { message: "A session’s container wasn’t cleaned up.".into(), repair: "Run agent-connect doctor on the gateway host.".into() });
-            }
-            OwnerSession { id: session.id, grant_id: session.grant_id, state: session.state.into(), started_at: session.started_at }
-        }).collect();
+        let sessions: Vec<_> = gateway
+            .hosts
+            .session_views()
+            .into_iter()
+            .map(|session| {
+                if session.state == "cleanup-failed" {
+                    problems.push(OwnerProblem {
+                        message: "A session’s container wasn’t cleaned up.".into(),
+                        repair: "Run agent-connect doctor on the gateway host.".into(),
+                    });
+                }
+                OwnerSession {
+                    id: session.id,
+                    grant_id: session.grant_id,
+                    state: session.state.into(),
+                    started_at: session.started_at,
+                }
+            })
+            .collect();
         OwnerRuntimeSnapshot { problems, sessions }
     }
 

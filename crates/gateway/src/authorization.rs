@@ -2830,60 +2830,39 @@ fn owner_error(status: StatusCode, reason: &str, path: &str, retry: Option<&str>
     let (title, message) = match reason {
         "invalid_credentials" => ("Sign-in failed", "Try again."),
         "invalid_passkey" => ("Passkey not accepted", "Try again."),
-        "invalid_factor" => (
-            "Authenticator code not accepted",
-            "Enter a fresh six-digit code from your enrolled authenticator. A code already used for sign-in or approval cannot be reused.",
-        ),
+        "invalid_factor" => ("Code not accepted", "Use a new code."),
         "missing_session_cookie" if path == LOGIN => (
-            "Please sign in again",
-            "The sign-in session cookie was not sent. Return to sign-in and allow cookies for this gateway before trying again.",
+            "Sign-in needs cookies",
+            "Allow cookies for this site, then try again.",
         ),
-        "duplicate_session_cookie" if path == LOGIN => (
-            "Please sign in again",
-            "More than one sign-in session cookie was sent. Clear this gateway's cookies, then return to sign-in.",
-        ),
+        "duplicate_session_cookie" if path == LOGIN => {
+            ("Sign in again", "Clear this site’s cookies first.")
+        }
         "owner_login_required"
         | "invalid_session"
         | "missing_session_cookie"
-        | "duplicate_session_cookie" => (
-            "Please sign in again",
-            "Your owner session is missing or has expired. Sign in to review the request or manage application access.",
-        ),
-        "invalid_csrf" | "invalid_owner_origin" => (
-            "Refresh this page to continue",
-            "This form could not be verified. Return to a fresh gateway page before trying again.",
-        ),
-        "login_rate_limited" | "factor_rate_limited" => (
-            "Too many attempts",
-            "Wait before trying again. Sign-in attempts are limited for your connection; clients behind the same proxy may share that limit.",
-        ),
+        | "duplicate_session_cookie" => ("Signed out", ""),
+        "invalid_csrf" | "invalid_owner_origin" => ("This page expired", ""),
+        "login_rate_limited" | "factor_rate_limited" => {
+            ("Too many attempts", "Try again in a few minutes.")
+        }
         "invalid_profile" => (
-            "Choose an available profile",
-            "Reload this request and select one of the profiles configured by the gateway owner before approving access.",
+            "That access option isn’t offered",
+            "Reload the request and pick another.",
         ),
-        "invalid_enrollment" => (
-            "Setup expired",
-            "Sign in with the passphrase to start setup again, and finish it within 10 minutes.",
-        ),
-        "factor_already_enrolled" => (
-            "Already set up",
-            "This address already has a passkey or authenticator. Sign in with it.",
-        ),
-        "passkey_required" => (
-            "A passkey is needed",
-            "Only a sign-in with a passkey can remove a passkey.",
-        ),
-        "authorization_capacity" | "grant_capacity" | "slow_down" => (
-            "Gateway is busy",
-            "The gateway cannot accept this request right now. Try again after pending requests expire or access is revoked.",
-        ),
+        "invalid_enrollment" => ("Setup expired", "Sign in again to start over."),
+        "factor_already_enrolled" => ("Already set up", "Sign in instead."),
+        "passkey_required" => ("Passkey needed", "Sign in with a passkey to remove one."),
+        "authorization_capacity" | "grant_capacity" | "slow_down" => {
+            ("Gateway is busy", "Try again in a few minutes.")
+        }
         _ if reason.contains("unavailable") => (
-            "Authorization unavailable",
-            "The gateway cannot safely authorize access right now. The owner must check the gateway before trying again.",
+            "Gateway unavailable",
+            "Run agent-connect doctor on the gateway host.",
         ),
         _ => (
-            "Request could not be completed",
-            "This request may have expired or contains information the gateway cannot accept. Review pending requests from the owner console, or start a fresh connection from the application.",
+            "This request didn’t go through",
+            "Start again from the app.",
         ),
     };
     let (target, label) = if path == LOGIN

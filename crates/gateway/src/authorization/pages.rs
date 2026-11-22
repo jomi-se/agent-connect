@@ -837,9 +837,13 @@ pub(super) fn error(title: &str, message: &str, target: &str, label: &str) -> Pa
         title,
         Width::Compact,
         format!(
-            "<div class='panel'><h1>{}</h1><p class='lede' role='alert'>{}</p><div class='actions'><a class='button wide' href='{}'>{}</a></div></div>",
+            "<div class='panel'><h1>{}</h1>{}<div class='actions'><a class='button wide' href='{}'>{}</a></div></div>",
             escape(title),
-            escape(message),
+            if message.is_empty() {
+                String::new()
+            } else {
+                format!("<p class='lede' role='alert'>{}</p>", commands(message))
+            },
             escape(target),
             escape(label)
         ),
