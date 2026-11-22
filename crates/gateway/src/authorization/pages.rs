@@ -626,7 +626,7 @@ pub(super) fn security(view: Security) -> Page {
         })
         .collect::<String>();
     let authenticator = format!(
-        "<section class='section' aria-labelledby='factors-title'><h2 id='factors-title'>Sign-in</h2><div class='list'>{factors}</div><p class='hint below'>Removing one signs that address out; the next sign-in there sets up a new one with the passphrase. Locked out? On the gateway host, stop the gateway and run <code>agent-connect remove-factor &lt;address&gt;</code>. App access is not affected.</p></section>"
+        "<section class='section' aria-labelledby='factors-title'><h2 id='factors-title'>Sign-in</h2><div class='list'>{factors}</div><p class='hint below'>Removing one signs that address out and revokes apps approved there; the next sign-in there sets up a new one with the passphrase. Locked out? On the gateway host, stop the gateway and run <code>agent-connect remove-factor &lt;address&gt;</code> (this revokes every app).</p></section>"
     );
     let apps = view.active_grants;
     let body = format!(

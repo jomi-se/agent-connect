@@ -66,8 +66,9 @@ Unattended setup never starts provider login. Owner credential presence is
 checked through metadata by `doctor`; validity remains an owner-run live check.
 A lost passkey or authenticator is recovered with `agent-connect remove-factor`
 after stopping the gateway ([ADR 0019](../decisions/0019-owner-passkeys.md)).
-The exclusive state lock prevents concurrent reset; passphrase and grant records
-remain intact. There is no app-grant or remote factor-reset authority.
+The exclusive state lock prevents concurrent reset; the passphrase remains
+intact and every app grant is revoked. There is no app-grant or remote
+factor-reset authority.
 
 Normal setup now creates gateway-owned sign-in and authorization state, separate
 from the dedicated provider login. First-time `agent-connect setup` prompts for a hidden

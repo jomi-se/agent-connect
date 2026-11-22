@@ -28,7 +28,6 @@ use std::os::{
     fd::AsRawFd,
     unix::fs::{OpenOptionsExt, PermissionsExt},
 };
-#[cfg(not(test))]
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -218,6 +217,12 @@ enum Factor {
 pub enum FactorTarget {
     Address(String),
     All,
+}
+/// Result of host-side factor removal.
+#[derive(Debug, PartialEq, Eq)]
+pub struct FactorRemoval {
+    pub removed: Vec<String>,
+    pub revoked_grants: usize,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum FactorKind {
@@ -509,14 +514,17 @@ impl AuthService {
 
     /// Owner-run recovery only, refused while the gateway runs and never
     /// creating missing state: put one address, or every address, back to
-    /// setup. The passphrase and grants are kept. Returns the addresses whose
-    /// factor was removed; naming an address without one is an error that lists
-    /// the enrolled addresses.
+    /// setup and revoke every app grant. The passphrase is kept. Returns the
+    /// addresses whose factor was removed and how many app grants were revoked;
+    /// naming an address without a factor is an error that lists the enrolled
+    /// addresses and leaves state unchanged.
     pub fn remove_factor(
         state_dir: &std::path::Path,
         target: &FactorTarget,
-    ) -> Result<Vec<String>> {
+    ) -> Result<FactorRemoval> {
         let mut removed = Vec::new();
+        let mut revoked_grants = 0;
+        let now = unix_now();
         recover(state_dir, |stored| {
             match target {
                 FactorTarget::All => {
@@ -542,17 +550,23 @@ impl AuthService {
                     removed.push(origin);
                 }
             }
-            Ok(!removed.is_empty())
+            revoked_grants = revoke_all_grants(&mut stored.grants, now);
+            Ok(!removed.is_empty() || revoked_grants > 0)
         })?;
-        Ok(removed)
+        Ok(FactorRemoval {
+            removed,
+            revoked_grants,
+        })
     }
 
-    /// Owner-run recovery only: replace the passphrase hash and preserve the
-    /// authenticator and all grants.
+    /// Owner-run recovery only: replace the passphrase hash, keep passkeys and
+    /// authenticators, and revoke every app grant.
     pub fn reset_passphrase(state_dir: &std::path::Path, passphrase: &str) -> Result<()> {
         let hash = hash_passphrase(passphrase)?;
+        let now = unix_now();
         recover(state_dir, |stored| {
             stored.password_hash = hash;
+            revoke_all_grants(&mut stored.grants, now);
             Ok(true)
         })?;
         Ok(())
@@ -700,10 +714,7 @@ impl AuthService {
         }
         #[cfg(not(test))]
         {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs()
+            unix_now()
         }
     }
 
@@ -1030,10 +1041,7 @@ impl AuthService {
             };
             ensure!(query.is_empty(), "invalid_request");
             let logout_token = csrf(&mut inner, &session, "logout", now);
-            let addresses = std::iter::once(&self.config.public_url)
-                .chain(self.config.entry_points.iter())
-                .cloned()
-                .collect::<Vec<_>>();
+            let addresses = self.configured_addresses();
             if path == pages::SECURITY {
                 let origin = self.request_origin(headers)?;
                 let Some(Authority::Owner(signed_in)) =
@@ -1048,16 +1056,8 @@ impl AuthService {
                         ),
                         FactorKind::Totp => pages::ApprovalFactor::Totp,
                     };
-                // Configured addresses first, then any whose record outlived its
-                // configuration, so every stored factor can be removed here.
-                let mut listed = addresses.clone();
-                for stored in inner.stored.factors.keys() {
-                    if !listed.contains(stored) {
-                        listed.push(stored.clone());
-                    }
-                }
                 let mut rows = Vec::new();
-                for address in listed {
+                for address in addresses {
                     let kind = inner.stored.factors.get(&address).map(Factor::kind);
                     let remove_token = kind.filter(|kind| may_remove(signed_in, *kind)).map(|_| {
                         csrf(
@@ -1645,14 +1645,10 @@ impl AuthService {
             .iter_mut()
             .find(|g| g.id == id)
             .ok_or_else(|| anyhow!("invalid_grant"))?;
-        if !grant.revoked {
-            grant.revoked_at = Some(self.now());
-        }
-        grant.revoked = true;
-        grant.access_hash = None;
-        grant.refresh_hash = None;
-        grant.access_expires = 0;
-        self.commit(inner, next)
+        revoke_grant(grant, self.now());
+        self.commit(inner, next)?;
+        inner.codes.retain(|_, code| code.grant != id);
+        Ok(())
     }
 
     fn factor(&self, inner: &Inner, origin: &str) -> Option<Factor> {
@@ -1927,6 +1923,10 @@ impl AuthService {
                 else {
                     bail!("owner_login_required");
                 };
+                ensure!(
+                    self.configured_addresses().contains(&address),
+                    "invalid_request"
+                );
                 let target = self
                     .factor(inner, &address)
                     .ok_or_else(|| anyhow!("invalid_request"))?;
@@ -1935,7 +1935,17 @@ impl AuthService {
                 self.verify_factor(inner, &session, &origin, "factor:remove", &form, source)?;
                 let mut next = inner.stored.clone();
                 next.factors.remove(&address);
+                let mut revoked_ids = std::collections::HashSet::new();
+                for grant in &mut next.grants {
+                    if self.grant_issuer(grant) == address {
+                        revoke_grant(grant, now);
+                        revoked_ids.insert(grant.id.clone());
+                    }
+                }
                 self.commit(inner, next)?;
+                inner.codes.retain(|_, code| {
+                    code.request.issuer != address && !revoked_ids.contains(&code.grant)
+                });
                 // The address is back to setup: whoever was signed in there is out.
                 let ended = inner
                     .sessions
@@ -1980,15 +1990,7 @@ impl AuthService {
                     now,
                 )?;
                 let mut next = inner.stored.clone();
-                for grant in &mut next.grants {
-                    if !grant.revoked {
-                        grant.revoked = true;
-                        grant.revoked_at = Some(now);
-                        grant.access_hash = None;
-                        grant.refresh_hash = None;
-                        grant.access_expires = 0;
-                    }
-                }
+                revoke_all_grants(&mut next.grants, now);
                 self.commit(inner, next)?;
                 inner.codes.clear();
                 redirect(OWNER)
@@ -2062,6 +2064,12 @@ impl AuthService {
             })
             .ok_or_else(|| anyhow!("invalid_target"))?;
         Ok(origin.clone())
+    }
+    fn configured_addresses(&self) -> Vec<String> {
+        std::iter::once(&self.config.public_url)
+            .chain(self.config.entry_points.iter())
+            .cloned()
+            .collect()
     }
     fn grant_issuer<'a>(&'a self, grant: &'a Grant) -> &'a str {
         grant.issuer.as_deref().unwrap_or(&self.config.public_url)
@@ -2351,6 +2359,32 @@ fn hash_passphrase(passphrase: &str) -> Result<String> {
         .hash_password(passphrase.as_bytes(), &salt)
         .map_err(|_| anyhow!("password hashing failed"))?
         .to_string())
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn revoke_grant(grant: &mut Grant, now: u64) -> bool {
+    if grant.revoked {
+        return false;
+    }
+    grant.revoked = true;
+    grant.revoked_at = Some(now);
+    grant.access_hash = None;
+    grant.refresh_hash = None;
+    grant.access_expires = 0;
+    true
+}
+
+fn revoke_all_grants(grants: &mut [Grant], now: u64) -> usize {
+    grants
+        .iter_mut()
+        .map(|grant| usize::from(revoke_grant(grant, now)))
+        .sum()
 }
 
 /// Validates private owner state under the exclusive lock, applies an offline

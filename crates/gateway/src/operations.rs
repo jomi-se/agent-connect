@@ -109,25 +109,31 @@ pub async fn remove_factor(cli: RemoveFactorCli) -> anyhow::Result<()> {
         }
         let question = match &target {
             crate::authorization::FactorTarget::Address(address) => format!(
-                "Remove the passkey or authenticator for {address}? Stop the gateway first; applications and the owner passphrase are kept."
+                "Remove the passkey or authenticator for {address} and revoke every app grant? Stop the gateway first; the owner passphrase is kept."
             ),
-            crate::authorization::FactorTarget::All => "Remove the passkey or authenticator for every address? Stop the gateway first; applications and the owner passphrase are kept.".to_string(),
+            crate::authorization::FactorTarget::All => "Remove the passkey or authenticator for every address and revoke every app grant? Stop the gateway first; the owner passphrase is kept.".to_string(),
         };
         if !confirm(&question)? {
             return Ok(());
         }
     }
     let state = configured.state_dir.join("auth");
-    let removed = tokio::task::spawn_blocking(move || {
+    let removal = tokio::task::spawn_blocking(move || {
         crate::authorization::AuthService::remove_factor(&state, &target)
     })
     .await??;
-    if removed.is_empty() {
-        println!("No address had a passkey or authenticator; nothing changed.");
+    if removal.removed.is_empty() && removal.revoked_grants == 0 {
+        println!(
+            "No address had a passkey or authenticator and no app had access; nothing changed."
+        );
+    } else if removal.removed.is_empty() {
+        println!(
+            "No address had a passkey or authenticator; every app grant was revoked. Restart the gateway; apps will need to connect again."
+        );
     } else {
         println!(
-            "Removed the passkey or authenticator for {}. Restart the gateway, sign in there with the owner passphrase, and set up a new one.",
-            removed.join(", ")
+            "Removed the passkey or authenticator for {} and revoked every app grant. Restart the gateway, sign in there with the owner passphrase, and set up a new one; apps will need to connect again.",
+            removal.removed.join(", ")
         );
     }
     Ok(())
@@ -152,7 +158,7 @@ pub async fn reset_passphrase(cli: ResetPassphraseCli) -> anyhow::Result<()> {
         return Err(usage("headless runtimes have no owner passphrase"));
     }
     let passphrase = config::prompt_owner_passphrase(
-        "New owner sign-in passphrase (at least 12 characters; stop the gateway first): ",
+        "New owner sign-in passphrase (at least 12 characters; stop the gateway first; revokes every app grant): ",
     )?;
     let state = configured.state_dir.join("auth");
     tokio::task::spawn_blocking(move || {
@@ -160,7 +166,7 @@ pub async fn reset_passphrase(cli: ResetPassphraseCli) -> anyhow::Result<()> {
     })
     .await??;
     println!(
-        "Owner passphrase replaced. Restart the gateway; passkeys, authenticators and applications are kept. The new passphrase is what sets up an address that has neither."
+        "Owner passphrase replaced and every app grant was revoked. Restart the gateway; passkeys and authenticators are kept, and apps will need to connect again. The new passphrase is what sets up an address that has neither."
     );
     Ok(())
 }

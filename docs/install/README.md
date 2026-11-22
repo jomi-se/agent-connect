@@ -137,8 +137,9 @@ IP address such as `127.0.0.1`; open `localhost` instead on the same machine),
 set up an authenticator app: scan the QR code or click **Enter the key by hand**
 to copy the key, and sign-in then takes the passphrase and a code, and each
 approval a fresh code. Activity shows runtime health, pending requests, live
-sessions and grant history. Security lists each address's passkey or
-authenticator and revokes all app access; Gateway lists configured entry points,
+sessions and grant history. Security lists each configured address's passkey or
+authenticator (removing one revokes apps approved there) and revokes all app
+access; Gateway lists configured entry points,
 the harness and native access profiles. Connect apps through a configured entry
 point.
 
@@ -202,7 +203,9 @@ For foreground operation, `serve --config <config>` remains available; avoid
 running it alongside the service on the same listener.
 
 Activity can end a live session without revoking its grant and revoke an individual
-grant. Security can revoke all grants. Sign out ends the owner browser session. Revocation affects active and
+grant. Security can remove an address's factor (signing that address out and
+revoking apps approved there) or revoke all grants. Sign out ends the owner
+browser session. Revocation affects active and
 detached authority within one second; completed effects cannot be undone. A
 revoked app must explicitly Connect for new consent.
 
@@ -215,7 +218,8 @@ general restoration API. See the [SDK recovery contract](../../packages/web-sdk/
 A lost passkey, authenticator or passphrase has a local owner-run recovery:
 [`remove-factor`](troubleshooting.md#lost-passkey-or-authenticator) or
 [`reset-passphrase`](troubleshooting.md#lost-passphrase). Stop the gateway
-before recovery; provider authentication is separate.
+before recovery; both commands revoke every app grant, and provider
+authentication is separate.
 
 ## Upgrade or uninstall
 

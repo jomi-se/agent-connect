@@ -85,9 +85,10 @@ enum Command {
     /// Install and operate the gateway's per-user systemd or launchd service.
     Service(ServiceCli),
     /// Remove an address's passkey or authenticator offline (one address or
-    /// --all); stop the service first.
+    /// --all) and revoke every app grant; stop the service first.
     RemoveFactor(RemoveFactorCli),
-    /// Replace a lost owner passphrase offline at a terminal; stop the service first.
+    /// Replace a lost owner passphrase offline at a terminal and revoke every
+    /// app grant; stop the service first.
     ResetPassphrase(ResetPassphraseCli),
     /// Serve owner sign-in, app consent, grant management and unstable ACP.
     Serve(ServeOptions),

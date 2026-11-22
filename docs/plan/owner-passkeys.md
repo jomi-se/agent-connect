@@ -38,11 +38,13 @@ end.
    the CSP), the IP literal explanation with the TOTP option.
 5. **Approvals** with a fresh passkey assertion.
 6. **Console actions and the host reset command.** Security lists every
-   address with its factor and a Remove button (fresh assertion of the
-   signed-in factor; a TOTP session sees passkey rows without one). Removing
-   signs that address out. `agent-connect remove-factor <address>|--all`
-   replaces `reset-totp`; the passphrase changes on the host only, with
-   `reset-passphrase`.
+   configured address with its factor and a Remove button (fresh assertion of
+   the signed-in factor; a TOTP session sees passkey rows without one).
+   Removing signs that address out and revokes app grants approved on that
+   address (ending live sessions within a second).
+   `agent-connect remove-factor <address>|--all` replaces `reset-totp`; the
+   passphrase changes on the host only, with `reset-passphrase`. Both terminal
+   recovery commands revoke every app grant.
 7. **Browser test** of the full flow in local Chromium with a virtual
    authenticator, CSP enforced (`npm run verify -- test:ui:owner`). The main
    address is `localhost`, with a passkey through Chromium's virtual
@@ -71,14 +73,27 @@ end.
 Calls made while building, small enough not to stop for, worth a second look
 before release:
 
-- **Removal challenge is not tied to the row.** One passkey challenge on the
-  Security page covers every Remove button; the address is a form field
-  under CSRF. Same reasoning as approvals: the prompt cannot show which row.
-- **Security lists stored-but-unconfigured addresses too**, after the
-  configured ones, so a factor whose address left the configuration can still
-  be removed from the console.
-- **No separate full-reset command.** `remove-factor --all` plus
-  `reset-passphrase` is the full reset.
+### Settled
+
+- **Remove asks for a fresh passkey tap, but the tap doesn't say which
+  address.** Kept: one passkey challenge on the Security page covers every
+  Remove button, with the address in a form field under CSRF. Same reasoning as
+  approvals: the prompt cannot show which row.
+- **Security lists only configured addresses.** A factor whose address has left
+  the configuration is inert, so the console does not need to surface it; the
+  stored record stays on disk and reappears if the address returns to
+  configuration, and `agent-connect remove-factor <address>` in the terminal
+  still takes any stored address.
+- **No separate full-reset command, and when a sign-in factor goes, what it
+  approved goes with it.** `remove-factor --all` plus `reset-passphrase` stays
+  the full reset. Removing a factor on Security revokes app grants approved on
+  that address (ending live sessions within a second), and both terminal
+  recovery commands (`remove-factor` and `reset-passphrase`) revoke every app
+  grant: recovery cannot know what leaked, and reconnecting an app is cheap
+  (grants last 30 days at most).
+
+### Still to review
+
 - **`remove-factor` normalizes the address it is given** (a trailing slash or
   path is dropped to the origin) and, when nothing matches, lists the
   addresses that have a factor.

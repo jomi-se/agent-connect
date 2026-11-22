@@ -88,8 +88,9 @@ evidence that a write reached the filesystem and was rejected by read-only polic
 ## Lost passkey or authenticator
 
 Each address has its own passkey or authenticator. If you can still sign in on
-another address with a passkey, remove the lost one from **Security** there.
-Otherwise remove it on the host; there is no web recovery endpoint:
+another address with a passkey, remove the lost one from **Security** there;
+that signs the address out and revokes apps approved on it. Otherwise remove it
+on the host; there is no web recovery endpoint:
 
 ```sh
 agent-connect service stop
@@ -97,14 +98,15 @@ agent-connect remove-factor https://agent.example.com --config <config> --yes
 agent-connect service start
 ```
 
-Name the exact address, or pass `--all` for every address. For a non-default
-runtime, pass the same config to both service commands. `--yes` confirms
-without a terminal prompt. `remove-factor` requires the private authorization
-state to be owned by the invoking user and refuses to proceed while the gateway
-holds its exclusive state lock. It keeps the owner passphrase and application
-grants. Sign in on that address with the passphrase and set up a new passkey or
-authenticator. A full reset is `remove-factor --all` followed by
-`reset-passphrase`.
+Name any stored address (including one that has left the configuration), or
+pass `--all` for every address. For a non-default runtime, pass the same config
+to both service commands. `--yes` confirms without a terminal prompt.
+`remove-factor` requires the private authorization state to be owned by the
+invoking user and refuses to proceed while the gateway holds its exclusive
+state lock. It keeps the owner passphrase and revokes every application grant.
+Sign in on that address with the passphrase and set up a new passkey or
+authenticator; applications will need to connect again. A full reset is
+`remove-factor --all` followed by `reset-passphrase`.
 
 ## Lost passphrase
 
@@ -117,8 +119,9 @@ agent-connect service start
 ```
 
 It prompts twice for the new passphrase and refuses to proceed while the gateway
-holds its state lock. Passkeys, authenticators and application grants are kept;
-the new passphrase is what sets up an address that has neither.
+holds its state lock. Passkeys and authenticators are kept, and every
+application grant is revoked; applications will need to connect again. The new
+passphrase is what sets up an address that has neither.
 
 ## Container cleanup and capacity
 

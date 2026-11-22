@@ -392,6 +392,9 @@ async fn consent(
     .await
 }
 fn code(reply: &Reply) -> String {
+    code_at(reply, ISSUER)
+}
+fn code_at(reply: &Reply, issuer: &str) -> String {
     assert_eq!(reply.status, StatusCode::FOUND, "{}", reply.text);
     let url = Url::parse(reply.headers[header::LOCATION].to_str().unwrap()).unwrap();
     assert_eq!(url.origin().ascii_serialization(), APP);
@@ -402,7 +405,7 @@ fn code(reply: &Reply) -> String {
     );
     assert_eq!(
         url.query_pairs().find(|(k, _)| k == "iss").unwrap().1,
-        ISSUER
+        issuer
     );
     url.query_pairs()
         .find(|(k, _)| k == "code")
@@ -2740,24 +2743,99 @@ async fn legacy_default_grant_survives_upgrade_and_entry_point_addition() {
     fs::remove_dir_all(dir).unwrap();
 }
 
+async fn pair_at(
+    auth: &Arc<AuthService>,
+    owner: &str,
+    origin: &str,
+    host: &str,
+) -> (Value, String) {
+    let details = json!([{"type":"agent_connect","tools":[{"name":"read_book","description":"Read","inputSchema":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}}]}]).to_string();
+    let challenge = hash(VERIFIER);
+    let resource = format!("{origin}/acp");
+    let par = request_at(
+        auth,
+        Method::POST,
+        PAR,
+        Some(APP),
+        None,
+        Some(host),
+        &[
+            ("client_id", APP),
+            ("redirect_uri", "https://app.example/callback"),
+            ("resource", &resource),
+            ("response_type", "code"),
+            ("scope", "acp"),
+            ("state", "application-state"),
+            ("code_challenge", &challenge),
+            ("code_challenge_method", "S256"),
+            ("authorization_details", &details),
+        ],
+    )
+    .await;
+    assert_eq!(par.status, StatusCode::CREATED, "{}", par.text);
+    let uri = par.json()["request_uri"].as_str().unwrap().to_string();
+    let page = request_at(
+        auth,
+        Method::GET,
+        &authorize_url(APP, &uri),
+        None,
+        Some(owner),
+        Some(host),
+        &[],
+    )
+    .await;
+    let csrf_token = input(&page.text, "csrf_token");
+    let credential = assert_passkey(auth, origin, &page.text);
+    let approved = request_at(
+        auth,
+        Method::POST,
+        AUTHORIZE,
+        Some(origin),
+        Some(owner),
+        Some(host),
+        &[
+            ("request_uri", &uri),
+            ("csrf_token", &csrf_token),
+            ("decision", "approve"),
+            ("duration", "3600"),
+            ("credential", &credential),
+            ("profile", "sandboxed"),
+        ],
+    )
+    .await;
+    let auth_code = code_at(&approved, origin);
+    let issued = request_at(
+        auth,
+        Method::POST,
+        TOKEN,
+        Some(APP),
+        None,
+        Some(host),
+        &[
+            ("grant_type", "authorization_code"),
+            ("code", &auth_code),
+            ("client_id", APP),
+            ("redirect_uri", "https://app.example/callback"),
+            ("code_verifier", VERIFIER),
+            ("resource", &resource),
+        ],
+    )
+    .await;
+    assert_eq!(issued.status, StatusCode::OK, "{}", issued.text);
+    (issued.json(), auth_code)
+}
+
 #[tokio::test]
-async fn host_removal_takes_one_exact_address_or_all_and_keeps_grants_and_passphrase() {
+async fn host_removal_takes_one_exact_address_or_all_and_revokes_every_grant() {
     const SECOND: &str = "https://second.example";
     let dir = std::env::temp_dir().join(random("agent-connect-remove-factor-test-"));
     let mut configuration = config(dir.clone(), Some(PASSWORD));
     configuration.entry_points.push(SECOND.into());
     let auth = AuthService::open(configuration).unwrap();
     let owner = login(&auth, "").await;
-    login_at(&auth, SECOND, Some("second.example"), "").await;
-    let uri = pushed(&auth).await;
-    let tokens = exchange(
-        &auth,
-        &code(&consent(&auth, &owner, &uri, "approve", "", "3600").await),
-        VERIFIER,
-        APP,
-    )
-    .await
-    .json();
+    let second_owner = login_at(&auth, SECOND, Some("second.example"), "").await;
+    let primary_tokens = pair(&auth, &owner, "3600").await;
+    let (second_tokens, _) = pair_at(&auth, &second_owner, SECOND, "second.example").await;
     let before = auth.inner.lock().unwrap().stored.clone();
     let one = FactorTarget::Address(format!("{SECOND}/"));
     assert!(
@@ -2767,41 +2845,56 @@ async fn host_removal_takes_one_exact_address_or_all_and_keeps_grants_and_passph
             .contains("stop the gateway")
     );
     drop(auth);
-    // A trailing slash is still the same address; only that one goes back to setup.
-    assert_eq!(
-        AuthService::remove_factor(&dir, &one).unwrap(),
-        vec![SECOND.to_string()]
-    );
+    // A trailing slash is still the same address; removing one factor offline
+    // revokes every app grant across all addresses.
+    let removal = AuthService::remove_factor(&dir, &one).unwrap();
+    assert_eq!(removal.removed, vec![SECOND.to_string()]);
+    assert_eq!(removal.revoked_grants, 2);
     let again = AuthService::remove_factor(&dir, &one)
         .unwrap_err()
         .to_string();
     assert!(again.contains("no passkey or authenticator is set up for https://second.example"));
     assert!(again.contains(ISSUER), "{again}");
-    assert_eq!(
-        AuthService::remove_factor(&dir, &FactorTarget::All).unwrap(),
-        vec![ISSUER.to_string()]
-    );
-    assert!(
-        AuthService::remove_factor(&dir, &FactorTarget::All)
-            .unwrap()
-            .is_empty()
-    );
     let mut configuration = config(dir.clone(), None);
     configuration.entry_points.push(SECOND.into());
     let auth = AuthService::open(configuration).unwrap();
     {
         let inner = auth.inner.lock().unwrap();
-        assert!(inner.stored.factors.is_empty());
         assert_eq!(inner.stored.password_hash, before.password_hash);
-        assert_eq!(
-            serde_json::to_value(&inner.stored.grants).unwrap(),
-            serde_json::to_value(&before.grants).unwrap()
-        );
+        assert!(inner.stored.factors.contains_key(ISSUER));
+        assert!(!inner.stored.factors.contains_key(SECOND));
+        assert_eq!(inner.stored.grants.len(), 2);
+        assert!(inner.stored.grants.iter().all(|g| g.revoked
+            && g.revoked_at.is_some()
+            && g.access_hash.is_none()
+            && g.refresh_hash.is_none()
+            && g.access_expires == 0));
     }
     assert!(
-        auth.authenticate(tokens["access_token"].as_str().unwrap(), APP)
-            .is_ok()
+        auth.authenticate(primary_tokens["access_token"].as_str().unwrap(), APP)
+            .is_err()
     );
+    assert!(
+        auth.authenticate_at(second_tokens["access_token"].as_str().unwrap(), APP, SECOND)
+            .is_err()
+    );
+    assert!(!auth.is_grant_active(primary_tokens["grant_id"].as_str().unwrap()));
+    assert!(!auth.is_grant_active(second_tokens["grant_id"].as_str().unwrap()));
+    // Pair a fresh grant on ISSUER, then test --all revokes it and clears remaining factors.
+    let owner = login(&auth, "").await;
+    let fresh = pair(&auth, &owner, "3600").await;
+    drop(auth);
+    let all = AuthService::remove_factor(&dir, &FactorTarget::All).unwrap();
+    assert_eq!(all.removed, vec![ISSUER.to_string()]);
+    assert_eq!(all.revoked_grants, 1);
+    let empty = AuthService::remove_factor(&dir, &FactorTarget::All).unwrap();
+    assert!(empty.removed.is_empty());
+    assert_eq!(empty.revoked_grants, 0);
+    let mut configuration = config(dir.clone(), None);
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
+    assert!(auth.inner.lock().unwrap().stored.factors.is_empty());
+    assert!(!auth.is_grant_active(fresh["grant_id"].as_str().unwrap()));
     setup_session(&auth, ISSUER, None).await;
     drop(auth);
     fs::remove_dir_all(&dir).unwrap();
@@ -2810,21 +2903,17 @@ async fn host_removal_takes_one_exact_address_or_all_and_keeps_grants_and_passph
 }
 
 #[tokio::test]
-async fn reset_passphrase_requires_stopped_gateway_and_preserves_grants() {
+async fn reset_passphrase_requires_stopped_gateway_keeps_factors_and_revokes_grants() {
     const REPLACEMENT: &str = "replacement owner passphrase";
+    const SECOND: &str = "https://second.example";
     let dir = std::env::temp_dir().join(random("agent-connect-reset-passphrase-"));
-    let auth = AuthService::open(config(dir.clone(), Some(PASSWORD))).unwrap();
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
     let owner = login(&auth, "").await;
-    let uri = pushed(&auth).await;
-    let tokens = exchange(
-        &auth,
-        &code(&consent(&auth, &owner, &uri, "approve", "", "3600").await),
-        VERIFIER,
-        APP,
-    )
-    .await
-    .json();
-    let before = auth.inner.lock().unwrap().stored.clone();
+    let second_owner = login_at(&auth, SECOND, Some("second.example"), "").await;
+    let primary_tokens = pair(&auth, &owner, "3600").await;
+    let (second_tokens, _) = pair_at(&auth, &second_owner, SECOND, "second.example").await;
     assert!(
         AuthService::reset_passphrase(&dir, REPLACEMENT)
             .unwrap_err()
@@ -2834,7 +2923,9 @@ async fn reset_passphrase_requires_stopped_gateway_and_preserves_grants() {
     drop(auth);
     assert!(AuthService::reset_passphrase(&dir, "too short").is_err());
     AuthService::reset_passphrase(&dir, REPLACEMENT).unwrap();
-    let auth = AuthService::open(config(dir.clone(), None)).unwrap();
+    let mut configuration = config(dir.clone(), None);
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
     {
         let inner = auth.inner.lock().unwrap();
         let hash = PasswordHash::new(&inner.stored.password_hash).unwrap();
@@ -2848,15 +2939,25 @@ async fn reset_passphrase_requires_stopped_gateway_and_preserves_grants() {
                 .verify_password(PASSWORD.as_bytes(), &hash)
                 .is_err()
         );
-        assert_eq!(
-            serde_json::to_value(&inner.stored.grants).unwrap(),
-            serde_json::to_value(&before.grants).unwrap()
-        );
+        assert!(inner.stored.factors.contains_key(ISSUER));
+        assert!(inner.stored.factors.contains_key(SECOND));
+        assert_eq!(inner.stored.grants.len(), 2);
+        assert!(inner.stored.grants.iter().all(|g| g.revoked
+            && g.revoked_at.is_some()
+            && g.access_hash.is_none()
+            && g.refresh_hash.is_none()
+            && g.access_expires == 0));
     }
     assert!(
-        auth.authenticate(tokens["access_token"].as_str().unwrap(), APP)
-            .is_ok()
+        auth.authenticate(primary_tokens["access_token"].as_str().unwrap(), APP)
+            .is_err()
     );
+    assert!(
+        auth.authenticate_at(second_tokens["access_token"].as_str().unwrap(), APP, SECOND)
+            .is_err()
+    );
+    assert!(!auth.is_grant_active(primary_tokens["grant_id"].as_str().unwrap()));
+    assert!(!auth.is_grant_active(second_tokens["grant_id"].as_str().unwrap()));
     drop(auth);
     fs::remove_dir_all(&dir).unwrap();
 }
@@ -5354,6 +5455,290 @@ async fn passkey_successes_do_not_spend_the_factor_budget_but_failures_do() {
         statuses.push(refused.text.contains("Too many attempts"));
     }
     assert_eq!(statuses, [false, false, false, false, false, true]);
+    drop(auth);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn security_lists_only_configured_addresses_while_dropped_factors_stay_inert() {
+    const SECOND: &str = "https://second.example";
+    let dir = std::env::temp_dir().join(random("agent-connect-security-configured-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
+    login(&auth, "").await;
+    login_at(&auth, SECOND, Some("second.example"), "").await;
+    drop(auth);
+
+    // Drop SECOND from configuration: Security hides it, and its stored factor stays inert.
+    let auth = AuthService::open(config(dir.clone(), None)).unwrap();
+    let owner = login(&auth, "").await;
+    let page = request(&auth, Method::GET, pages::SECURITY, None, Some(&owner), &[]).await;
+    assert_eq!(page.status, StatusCode::OK, "{}", page.text);
+    assert!(page.text.contains(ISSUER));
+    assert!(!page.text.contains(SECOND), "{}", page.text);
+    assert!(remove_token(&page.text, SECOND).is_none());
+
+    // Even a forged CSRF token for an unconfigured address is refused.
+    let session = hash(owner.split_once('=').unwrap().1);
+    let forged_csrf = csrf(
+        &mut auth.inner.lock().unwrap(),
+        &session,
+        &format!("remove-factor:{SECOND}"),
+        auth.now(),
+    );
+    let credential = assert_passkey(&auth, ISSUER, &page.text);
+    let refused = request(
+        &auth,
+        Method::POST,
+        REMOVE_FACTOR,
+        Some(ISSUER),
+        Some(&owner),
+        &[
+            ("csrf_token", &forged_csrf),
+            ("address", SECOND),
+            ("credential", &credential),
+        ],
+    )
+    .await;
+    assert_eq!(refused.status, StatusCode::BAD_REQUEST, "{}", refused.text);
+    assert!(
+        auth.inner
+            .lock()
+            .unwrap()
+            .stored
+            .factors
+            .contains_key(SECOND)
+    );
+    drop(auth);
+
+    // If SECOND returns to configuration, its factor shows up on Security again.
+    let mut returned = config(dir.clone(), None);
+    returned.entry_points.push(SECOND.into());
+    let auth = AuthService::open(returned).unwrap();
+    let owner = login(&auth, "").await;
+    let page = request(&auth, Method::GET, pages::SECURITY, None, Some(&owner), &[]).await;
+    assert!(page.text.contains(SECOND), "{}", page.text);
+    assert!(remove_token(&page.text, SECOND).is_some());
+    drop(auth);
+
+    // Terminal remove-factor still accepts a stored address even after it leaves config.
+    let removal =
+        AuthService::remove_factor(&dir, &FactorTarget::Address(SECOND.to_string())).unwrap();
+    assert_eq!(removal.removed, vec![SECOND.to_string()]);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn removing_a_factor_on_security_revokes_only_that_addresss_grants_and_codes() {
+    const SECOND: &str = "https://second.example";
+    let dir = std::env::temp_dir().join(random("agent-connect-remove-revokes-grants-test-"));
+    let mut configuration = config(dir.clone(), Some(PASSWORD));
+    configuration.entry_points.push(SECOND.into());
+    let auth = AuthService::open(configuration).unwrap();
+    let owner = login(&auth, "").await;
+    let second_owner = login_at(&auth, SECOND, Some("second.example"), "").await;
+
+    // Pair an app on ISSUER and an app on SECOND.
+    let primary_tokens = pair(&auth, &owner, "3600").await;
+    let primary_principal = auth
+        .authenticate(primary_tokens["access_token"].as_str().unwrap(), APP)
+        .unwrap();
+    let (second_tokens, _) = pair_at(&auth, &second_owner, SECOND, "second.example").await;
+    let second_principal = auth
+        .authenticate_at(second_tokens["access_token"].as_str().unwrap(), APP, SECOND)
+        .unwrap();
+
+    // Also keep an unexchanged authorization code on SECOND and one on ISSUER.
+    let primary_uri = pushed(&auth).await;
+    let primary_code = code(&consent(&auth, &owner, &primary_uri, "approve", "", "3600").await);
+    let details = json!([{"type":"agent_connect","tools":[{"name":"read_book","description":"Read","inputSchema":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}}]}]).to_string();
+    let challenge = hash(VERIFIER);
+    let second_par = request_at(
+        &auth,
+        Method::POST,
+        PAR,
+        Some(APP),
+        None,
+        Some("second.example"),
+        &[
+            ("client_id", APP),
+            ("redirect_uri", "https://app.example/callback"),
+            ("resource", "https://second.example/acp"),
+            ("response_type", "code"),
+            ("scope", "acp"),
+            ("state", "application-state"),
+            ("code_challenge", &challenge),
+            ("code_challenge_method", "S256"),
+            ("authorization_details", &details),
+        ],
+    )
+    .await;
+    assert_eq!(
+        second_par.status,
+        StatusCode::CREATED,
+        "{}",
+        second_par.text
+    );
+    let second_uri = second_par.json()["request_uri"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let second_consent_page = request_at(
+        &auth,
+        Method::GET,
+        &authorize_url(APP, &second_uri),
+        None,
+        Some(&second_owner),
+        Some("second.example"),
+        &[],
+    )
+    .await;
+    let second_cred = assert_passkey(&auth, SECOND, &second_consent_page.text);
+    let second_code = code_at(
+        &request_at(
+            &auth,
+            Method::POST,
+            AUTHORIZE,
+            Some(SECOND),
+            Some(&second_owner),
+            Some("second.example"),
+            &[
+                ("request_uri", &second_uri),
+                (
+                    "csrf_token",
+                    &input(&second_consent_page.text, "csrf_token"),
+                ),
+                ("decision", "approve"),
+                ("duration", "3600"),
+                ("credential", &second_cred),
+                ("profile", "sandboxed"),
+            ],
+        )
+        .await,
+        SECOND,
+    );
+
+    assert!(auth.recheck(&primary_principal));
+    assert!(auth.is_grant_active(&primary_principal.id));
+    assert!(auth.recheck(&second_principal));
+    assert!(auth.is_grant_active(&second_principal.id));
+
+    // Remove SECOND's factor on Security: SECOND's grant and code are revoked; ISSUER's stay active.
+    let page = request(&auth, Method::GET, pages::SECURITY, None, Some(&owner), &[]).await;
+    let credential = assert_passkey(&auth, ISSUER, &page.text);
+    let removed = request(
+        &auth,
+        Method::POST,
+        REMOVE_FACTOR,
+        Some(ISSUER),
+        Some(&owner),
+        &[
+            ("csrf_token", &remove_token(&page.text, SECOND).unwrap()),
+            ("address", SECOND),
+            ("credential", &credential),
+        ],
+    )
+    .await;
+    assert_eq!(removed.status, StatusCode::FOUND, "{}", removed.text);
+    assert!(!auth.recheck(&second_principal));
+    assert!(!auth.is_grant_active(&second_principal.id));
+    assert!(
+        auth.authenticate_at(second_tokens["access_token"].as_str().unwrap(), APP, SECOND)
+            .is_err()
+    );
+    let second_refresh = request_at(
+        &auth,
+        Method::POST,
+        TOKEN,
+        Some(APP),
+        None,
+        Some("second.example"),
+        &[
+            ("grant_type", "refresh_token"),
+            (
+                "refresh_token",
+                second_tokens["refresh_token"].as_str().unwrap(),
+            ),
+            ("client_id", APP),
+            ("resource", "https://second.example/acp"),
+        ],
+    )
+    .await;
+    assert_eq!(second_refresh.status, StatusCode::BAD_REQUEST);
+    assert_eq!(second_refresh.json()["error"], "invalid_grant");
+    let second_exchange = request_at(
+        &auth,
+        Method::POST,
+        TOKEN,
+        Some(APP),
+        None,
+        Some("second.example"),
+        &[
+            ("grant_type", "authorization_code"),
+            ("code", &second_code),
+            ("client_id", APP),
+            ("redirect_uri", "https://app.example/callback"),
+            ("code_verifier", VERIFIER),
+            ("resource", "https://second.example/acp"),
+        ],
+    )
+    .await;
+    assert_eq!(second_exchange.status, StatusCode::BAD_REQUEST);
+    assert_eq!(second_exchange.json()["error"], "invalid_grant");
+
+    // ISSUER's grant and unexchanged code are untouched.
+    assert!(auth.recheck(&primary_principal));
+    assert!(auth.is_grant_active(&primary_principal.id));
+    assert_eq!(
+        exchange(&auth, &primary_code, VERIFIER, APP).await.status,
+        StatusCode::OK
+    );
+
+    // A grant with issuer = None belongs to the canonical public URL (ISSUER):
+    // removing ISSUER's factor revokes it too.
+    {
+        let mut inner = auth.inner.lock().unwrap();
+        let grant = inner
+            .stored
+            .grants
+            .iter_mut()
+            .find(|g| g.id == primary_principal.id)
+            .unwrap();
+        grant.issuer = None;
+    }
+    let page = request(&auth, Method::GET, pages::SECURITY, None, Some(&owner), &[]).await;
+    let credential = assert_passkey(&auth, ISSUER, &page.text);
+    let own = request(
+        &auth,
+        Method::POST,
+        REMOVE_FACTOR,
+        Some(ISSUER),
+        Some(&owner),
+        &[
+            ("csrf_token", &remove_token(&page.text, ISSUER).unwrap()),
+            ("address", ISSUER),
+            ("credential", &credential),
+        ],
+    )
+    .await;
+    assert_eq!(own.status, StatusCode::FOUND, "{}", own.text);
+    assert!(!auth.recheck(&primary_principal));
+    assert!(!auth.is_grant_active(&primary_principal.id));
+    {
+        let inner = auth.inner.lock().unwrap();
+        let grant = inner
+            .stored
+            .grants
+            .iter()
+            .find(|g| g.id == primary_principal.id)
+            .unwrap();
+        assert!(grant.revoked);
+        assert_eq!(grant.revoked_at, Some(auth.now()));
+        assert!(grant.access_hash.is_none());
+        assert!(grant.refresh_hash.is_none());
+        assert_eq!(grant.access_expires, 0);
+    }
     drop(auth);
     fs::remove_dir_all(dir).unwrap();
 }

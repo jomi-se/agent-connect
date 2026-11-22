@@ -442,6 +442,8 @@ try {
   // sign-in keeps the waiting request through the retry link, setup explains
   // the missing passkey, and TOTP set up there leads back to the request.
   const ipOwner = `${ipOrigin}/agent-connect/owner`;
+  let ipTotpSecret = "";
+  let lastIpTotpStep = 0;
   const recoveryContext = await browser.newContext();
   try {
     const recoveryPage = await recoveryContext.newPage();
@@ -521,6 +523,7 @@ try {
       .getByRole("link", { name: "Open in authenticator app" })
       .getAttribute("href");
     const secret = new URL(uri).searchParams.get("secret");
+    ipTotpSecret = secret;
     await recoveryContext.grantPermissions(
       ["clipboard-read", "clipboard-write"],
       { origin: ipOrigin },
@@ -595,6 +598,7 @@ try {
     await capture("factor-error", { compact: true, target: recoveryPage });
     await recoveryPage.goto(await push({ at: ipOrigin }));
     const freshStep = await nextTotpStep(enrollmentStep);
+    lastIpTotpStep = freshStep;
     await recoveryPage
       .getByLabel("Authenticator code")
       .fill(totpCode(secret, freshStep));
@@ -982,11 +986,65 @@ try {
   await capture("long-app-origin-and-tool-names");
   await page.goto(owner);
   await capture("long-pending-origin");
+  // Approve one app on the main address and one on the IP address, then remove
+  // the IP address's factor on Security: only the IP address's grant is revoked.
+  await page.goto(await push());
+  await passkeys.use(page, () =>
+    Promise.all([
+      page.waitForURL(`${appOrigin}/**`),
+      page.getByRole("button", { name: "Approve", exact: true }).click(),
+    ]),
+  );
+  let ipRefreshToken = "";
+  const ipGrantContext = await browser.newContext();
+  try {
+    const ipGrantPage = await ipGrantContext.newPage();
+    ipGrantPage.on("pageerror", (error) => errors.push(error.message));
+    await ipGrantPage.goto(ipOwner);
+    const signInStep = await nextTotpStep(lastIpTotpStep);
+    await ipGrantPage.getByLabel("Owner passphrase").fill(password);
+    await ipGrantPage
+      .getByLabel("Authenticator code")
+      .fill(totpCode(ipTotpSecret, signInStep));
+    await ipGrantPage
+      .getByRole("button", { name: "Sign in", exact: true })
+      .click();
+    await ipGrantPage.waitForURL(ipOwner);
+    await ipGrantPage.goto(await push({ at: ipOrigin }));
+    const approveStep = await nextTotpStep(signInStep);
+    await ipGrantPage
+      .getByLabel("Authenticator code")
+      .fill(totpCode(ipTotpSecret, approveStep));
+    await ipGrantPage
+      .getByRole("button", { name: "Approve", exact: true })
+      .click();
+    await ipGrantPage.waitForURL(`${appOrigin}/**`);
+    const ipCode = new URL(ipGrantPage.url()).searchParams.get("code");
+    assert.ok(ipCode, "IP address approval returns an authorization code");
+    const exchanged = await fetch(`${ipOrigin}/agent-connect/oauth/token`, {
+      method: "POST",
+      headers: { Origin: appOrigin },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: ipCode,
+        client_id: appOrigin,
+        redirect_uri: pendingAuthorization.redirectUri,
+        code_verifier: pendingAuthorization.verifier,
+        resource: `${ipOrigin}/acp`,
+      }),
+    });
+    assert.equal(exchanged.status, 200);
+    ipRefreshToken = (await exchanged.json()).refresh_token;
+  } finally {
+    await ipGrantContext.close();
+  }
   // Security: the IP address now has TOTP. Removing it takes a fresh
-  // passkey assertion here and puts that address back to setup.
+  // passkey assertion here, puts that address back to setup and revokes apps
+  // approved there while keeping grants approved on the main address.
   await page.goto(`${owner}/security`);
   const ipRow = page.locator(".row").filter({ hasText: ipOrigin });
   await ipRow.getByText("Authenticator app", { exact: true }).waitFor();
+  await page.getByText(/2 apps have access/).waitFor();
   await capture("security-addresses");
   await passkeys.use(page, () =>
     Promise.all([
@@ -1000,6 +1058,26 @@ try {
   );
   await page.waitForURL(`${owner}/security`);
   await ipRow.getByText("Not set up", { exact: true }).waitFor();
+  await page.getByText(/1 app has access/).waitFor();
+  const refreshedAfterRemoval = await fetch(
+    `${ipOrigin}/agent-connect/oauth/token`,
+    {
+      method: "POST",
+      headers: { Origin: appOrigin },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: ipRefreshToken,
+        client_id: appOrigin,
+        resource: `${ipOrigin}/acp`,
+      }),
+    },
+  );
+  assert.equal(
+    refreshedAfterRemoval.status,
+    400,
+    "Removing an address's factor revokes grants approved on that address",
+  );
+  assert.equal((await refreshedAfterRemoval.json()).error, "invalid_grant");
   // A real, isolated boxed runtime with no agent sessions exercises health UI.
   // Remove only this runtime's network proxy; no provider credentials or login are used.
   const probeListener = net.createServer();

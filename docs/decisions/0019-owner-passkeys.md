@@ -66,11 +66,12 @@ both.** What an address accepts follows from which one it has:
 
    Changing the passphrase keeps enrolled factors, since the passphrase only
    gates enrollment. It stays on the host, where the owner already types it at
-   a terminal prompt; a console form can come later if it is missed. Grants
-   survive all of these. Host access is owner
-   authority, so the CLI needs no factor. `remove-factor` (an exact address
-   or `--all`) replaces `reset-totp`; a full reset is `remove-factor --all`
-   followed by `reset-passphrase`.
+   a terminal prompt; a console form can come later if it is missed. Host
+   access is owner authority, so the CLI needs no factor. `remove-factor` (an
+   exact address or `--all`) replaces `reset-totp`; a full reset is
+   `remove-factor --all` followed by `reset-passphrase`. Both terminal recovery
+   commands revoke every app grant: recovery cannot know what leaked, and
+   reconnecting an app is cheap (grants last 30 days at most).
 
 8. **Start fresh.** The project is pre-1.0 and keeps nothing compatible. The
    new version does not read the old authorization state: the gateway refuses
@@ -83,10 +84,13 @@ both.** What an address accepts follows from which one it has:
    the script lives only in the gateway's own owner pages, and the OAuth flow
    and browser SDK are untouched. `PRODUCT.md`'s no-JavaScript rule changes
    to match when this ships.
-10. **Sign-outs follow the factor.** Removing an address's factor ends that
-    address's sessions. Changing the passphrase ends every session, since it
-    happens on the host with the gateway stopped. Every session is also gone
-    on restart, as today.
+10. **Sign-outs and app grants follow the factor.** When a sign-in factor goes,
+    what it approved goes with it. Removing an address's factor on Security
+    ends that address's owner sessions and revokes the app grants approved on
+    that address, through the same path as Revoke and Revoke all so live
+    sessions end within a second. Terminal recovery (`remove-factor` and
+    `reset-passphrase`) revokes every app grant while the gateway is stopped;
+    every owner session is also gone on restart, as today.
 11. **One activity view.** The console lists pending requests from every
     address, each linking to the address it belongs to.
 12. **One cookie per address.** Two ports on the same host get different
@@ -101,7 +105,10 @@ change.
 Authorization state stores, per address: which factor it has, the passkey
 credential or TOTP secret, its user handle and enrollment/reset metadata,
 alongside the passphrase hash and grants. Records for an address removed from
-configuration are kept, not erased. Writes stay private and atomic, and fail
+configuration are kept, not erased; Security lists only configured addresses,
+so a dropped address's record stays inert and reappears if the address returns
+to configuration, while `agent-connect remove-factor <address>` in the terminal
+still takes any stored address. Writes stay private and atomic, and fail
 closed.
 
 WebAuthn challenges are server-side, single-use and short-lived, bound to the
