@@ -173,6 +173,10 @@ try {
     join(repo, "deploy/gateway/test/fixtures/mock-model/server.mjs"),
     join(run, "context/mock-model.mjs"),
   );
+  await copyFile(
+    join(repo, "scripts/owner-totp.mjs"),
+    join(run, "context/owner-totp.mjs"),
+  );
   for (const file of ["codex-config.toml", "seed-codex.mjs"])
     await copyFile(
       join(repo, "deploy/gateway/test/fixtures", file),

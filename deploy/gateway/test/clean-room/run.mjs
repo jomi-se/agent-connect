@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { createServer } from "node:net";
 import { chromium } from "playwright";
 import { ownerTerminal } from "./owner-terminal.mjs";
+import { nextTotpStep, setUpTotpInBrowser, totpCode } from "./owner-totp.mjs";
 
 const work = process.env.ACP_CLEAN_WORK;
 const suffix = process.env.ACP_CLEAN_SUFFIX;
@@ -713,11 +714,27 @@ try {
     await page.goto(origin);
     return page;
   }
+  // The gateway is reached by an IP address, so its owner factor is an
+  // authenticator app: set up on the first sign-in, then a fresh code for each
+  // sign-in and approval, since a code's 30-second step can't be used twice.
+  let authenticator = null;
+  async function freshCode() {
+    authenticator.step = await nextTotpStep(authenticator.step);
+    return totpCode(authenticator.secret, authenticator.step);
+  }
   async function ownerSignIn(page) {
     const password = page.locator('input[name="passphrase"]');
     await password.waitFor({ state: "visible" });
     await password.fill(ownerPassphrase);
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    if (authenticator) {
+      await page
+        .getByLabel("Authenticator code", { exact: true })
+        .fill(await freshCode());
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
+      return;
+    }
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    authenticator = await setUpTotpInBrowser(page);
   }
   async function requestApproval(page, decision = "Approve") {
     await page.locator("#gateway-url").fill(publicGateway);
@@ -758,8 +775,12 @@ try {
     for (const tool of ["read_passage", "highlight", "ask_reader"])
       assert.ok(consent.includes(tool), `Gateway consent includes ${tool}`);
     await owner.locator('input[name="duration"][value="3600"]').check();
-    if (decision === "Approve")
+    if (decision === "Approve") {
       await owner.locator('input[name="profile"][value="read-only"]').check();
+      await owner
+        .getByLabel("Authenticator code", { exact: true })
+        .fill(await freshCode());
+    }
     await owner.getByRole("button", { name: decision, exact: true }).click();
     return owner;
   }
@@ -791,7 +812,7 @@ try {
   async function ownerPage(app) {
     const page = await app.context().newPage();
     await page.goto(ownerUrl);
-    if (await page.getByLabel("Owner passphrase", { exact: true }).count())
+    if (await page.getByLabel("Passphrase", { exact: true }).count())
       await ownerSignIn(page);
     await page
       .getByRole("heading", {
@@ -1478,7 +1499,7 @@ try {
   });
   await signOut.focus();
   await ownerGrants.keyboard.press("Enter");
-  await ownerGrants.getByLabel("Owner passphrase", { exact: true }).waitFor();
+  await ownerGrants.getByLabel("Passphrase", { exact: true }).waitFor();
   await ownerSignIn(ownerGrants);
   assert.equal(
     await ownerGrants
@@ -1584,8 +1605,7 @@ try {
   const beforeAllRequests = (await modelRequests()).length;
   await allGrantsOwner.goto(`${ownerUrl}/security`);
   const revokeAll = allGrantsOwner.getByRole("button", {
-    name: "Revoke all",
-    exact: true,
+    name: /^Revoke (all \d+ apps|1 app)$/,
   });
   await revokeAll.focus();
   assert.equal(
@@ -1595,11 +1615,9 @@ try {
   await allGrantsOwner.keyboard.press("Enter");
   await allGrantsOwner.waitForURL(ownerUrl);
   await allGrantsOwner.goto(`${ownerUrl}/security`);
-  assert.ok(
-    await allGrantsOwner
-      .getByRole("button", { name: "Revoke all", exact: true })
-      .isDisabled(),
-  );
+  await allGrantsOwner
+    .getByText("No apps have access.", { exact: true })
+    .waitFor();
   await allGrantsOwner.goto(ownerUrl);
   assert.equal(
     await allGrantsOwner
