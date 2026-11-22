@@ -2,6 +2,16 @@
 members = ["crates/gateway"]
 resolver = "3"
 
+# Full debug info filled target/ by the gigabyte and was never read: a failing
+# test shows its assertion and file:line without it. Line tables keep a
+# backtrace readable. To step through in a debugger, build with
+#   --config 'profile.dev.debug=true' --config 'profile.dev.package."*".debug=true'
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [profile.dist]
 inherits = "release"
 lto = "thin"
