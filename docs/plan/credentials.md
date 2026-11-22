@@ -47,10 +47,15 @@ The risk is accepted, with these bounds:
 - the documentation states the worst case: a consented application could
   obtain this login.
 
-A credential-injecting egress proxy remains a later hardening option.
+A credential-injecting egress proxy is not pursued (2026-11-22): it would
+mean faking each first-party harness's logged-in state and following every
+change to it. Using a harness directly carries the same exposure to prompts
+from untrusted content; here the approved app writes them, which is why the
+approval and a dedicated, separately revocable login are the boundary.
 
 A shared home also lets one application's sessions read another
-application's transcripts through the harness. That is a known limitation of
+application's transcripts through the harness; [separating them](app-conversations.md)
+is planned. That is a known limitation of
 this direction.
 
 ## Gateway owner authentication and application consent (2026-10-03)
