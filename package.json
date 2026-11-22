@@ -45,18 +45,18 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@playwright/test": "^1.63.0",
-    "dependency-cruiser": "18.7.0",
+    "dependency-cruiser": "18.7.2",
     "esbuild": "0.28.2",
-    "eslint": "10.14.0",
+    "eslint": "10.15.0",
     "eslint-plugin-sonarjs": "4.2.2",
-    "globals": "17.13.0",
-    "jscpd": "5.4.2",
-    "knip": "6.44.1",
-    "openai": "7.47.0",
-    "prettier": "3.9.10",
+    "globals": "17.14.0",
+    "jscpd": "5.4.3",
+    "knip": "6.45.1",
+    "openai": "7.57.0",
+    "prettier": "3.10.1",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.72.1",
+    "typescript-eslint": "8.72.2",
     "vitest": "4.1.12",
-    "ws": "8.22.1"
+    "ws": "8.23.0"
   }
 }
