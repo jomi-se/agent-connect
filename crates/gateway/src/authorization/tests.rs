@@ -1340,7 +1340,7 @@ async fn owner_ui_has_labels_empty_states_and_hashed_styles() {
     let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
     assert!(page.text.contains("Books &lt;app&gt;"));
     assert!(page.text.contains(">Review</a>"));
-    assert!(page.text.contains("request expires"));
+    assert!(page.text.contains("· expires <time"));
     assert!(!page.text.contains("Unix seconds"));
     let page = request(
         auth,

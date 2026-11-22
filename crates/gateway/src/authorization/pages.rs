@@ -282,7 +282,7 @@ pub(super) fn console(view: Console) -> Page {
     for (index, request) in view.requests.iter().enumerate() {
         let _ = write!(
             body,
-            "<article class='request' aria-labelledby='request-{0}'><span class='dot' aria-hidden='true'></span><div><h2 id='request-{0}'>{1} <span>wants to use your agent</span></h2><p class='request-origin'>{2}</p><p class='meta'>{3} tool{4} · request expires {5}{7}</p></div><a class='button' href='{6}'>Review</a></article>",
+            "<article class='request' aria-labelledby='request-{0}'><span class='dot' aria-hidden='true'></span><div><h2 id='request-{0}'>{1} <span>wants to use your agent</span></h2><p class='request-origin'>{2}</p><p class='meta'>{3} tool{4} · expires {5}{7}</p></div><a class='button' href='{6}'>Review</a></article>",
             index,
             escape(&request.name),
             origin(&request.origin),
@@ -305,6 +305,7 @@ pub(super) fn console(view: Console) -> Page {
         now,
         &view.sign_in_failures,
         &view.sign_in_pauses,
+        view.addresses.len() > 1,
     ));
     if view.requests.is_empty() && live.is_empty() && view.events.is_empty() {
         let _ = write!(
@@ -327,19 +328,20 @@ pub(super) fn console(view: Console) -> Page {
     if !live.is_empty() {
         body.push_str("<section class='feed' aria-labelledby='feed-now'><h2 class='day' id='feed-now'>Now</h2><ol class='events'>");
         for session in live {
-            let short = session.id.get(..8).unwrap_or(&session.id);
-            let state = if session.state.eq_ignore_ascii_case("connected") {
-                String::new()
-            } else {
-                format!(" · {}", escape(&session.state))
-            };
+            // The origin, then the state when it is not plain "connected".
+            let meta = [
+                session.name.is_some().then(|| origin(&session.origin)),
+                (!session.state.eq_ignore_ascii_case("connected")).then(|| escape(&session.state)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ");
             let _ = write!(
                 body,
-                "<li class='event event--live'>{}<span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'>{} <span class='verb'>is connected</span></p><p class='meta'>{}session {}{state}</p></div><form class='event-action' method=post action='/agent-connect/owner/sessions/end'>{}{}<button class='quiet danger'>End session</button></form></li>",
+                "<li class='event event--live'>{}<span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'>{} <span class='verb'>is connected</span></p><p class='meta'>{meta}</p></div><form class='event-action' method=post action='/agent-connect/owner/sessions/end'>{}{}<button class='quiet danger'>End session</button></form></li>",
                 when(now, Some(session.started)),
                 subject(&session.name, &session.origin),
-                secondary_origin(&session.name, &session.origin),
-                escape(short),
                 hidden("session_id", &session.id),
                 hidden("csrf_token", &session.end_token)
             );
@@ -374,13 +376,20 @@ pub(super) fn console(view: Console) -> Page {
     owner_page("Activity", Tab::Activity, view.logout_token, body, css)
 }
 
-fn sign_in_security(now: u64, failures: &[SignInFailure], pauses: &[SignInPause]) -> String {
+/// Sign-in failures and pauses, newest first. The address shows only when the
+/// gateway has more than one.
+fn sign_in_security(
+    now: u64,
+    failures: &[SignInFailure],
+    pauses: &[SignInPause],
+    several_addresses: bool,
+) -> String {
     let pauses: Vec<_> = pauses.iter().filter(|pause| pause.until > now).collect();
     if failures.is_empty() && pauses.is_empty() {
         return String::new();
     }
     let mut body = String::from(
-        "<section class='sign-in-security' aria-labelledby='sign-in-security-title'><h2 id='sign-in-security-title'>Sign-in security</h2>",
+        "<section class='sign-in-security' aria-labelledby='sign-in-security-title'><h2 id='sign-in-security-title'>Sign-in failures</h2>",
     );
     if !pauses.is_empty() {
         body.push_str("<ul class='sign-in-pauses' aria-label='Active pauses'>");
@@ -394,17 +403,15 @@ fn sign_in_security(now: u64, failures: &[SignInFailure], pauses: &[SignInPause]
         }
         body.push_str("</ul>");
     }
-    body.push_str("<p class='meta'>Latest failures from the last 24 hours, up to 20. This list resets when the gateway restarts.</p>");
-    if failures.is_empty() {
-        body.push_str("<p class='hint'>No recent sign-in failures.</p>");
-    } else {
+    if !failures.is_empty() {
         body.push_str("<ol class='events' aria-label='Recent sign-in failures'>");
         for failure in failures.iter().take(20) {
             let address = failure
                 .entry_point
                 .as_ref()
-                .map(|value| format!("<p class='meta'>Gateway address: {}</p>", origin(value)))
-                .unwrap_or_else(|| "<p class='meta'>Gateway address unavailable.</p>".into());
+                .filter(|_| several_addresses)
+                .map(|value| format!("<p class='meta'>{}</p>", origin(value)))
+                .unwrap_or_default();
             let _ = write!(
                 body,
                 "<li class='event sign-in-failure'>{}<span class='dot' aria-hidden='true'></span><div class='event-main'><p class='event-line'>{}</p>{address}</div></li>",
@@ -1180,7 +1187,10 @@ mod tests {
             requests: vec![],
             live: Some(vec![]),
             events: vec![],
-            addresses: vec![],
+            addresses: vec![
+                "https://gateway.example".into(),
+                "https://other.example".into(),
+            ],
             sign_in_failures: vec![
                 SignInFailure {
                     at: 1_699_999_940,
@@ -1198,15 +1208,14 @@ mod tests {
         assert_eq!(page.body.matches("<h1").count(), 1);
         assert!(page.body.contains("No apps yet"));
         assert!(
-            page.body.find("Sign-in security").unwrap() < page.body.find("No apps yet").unwrap()
+            page.body.find("Sign-in failures").unwrap() < page.body.find("No apps yet").unwrap()
         );
         assert!(page.body.contains("&lt;script&gt;failure&lt;/script&gt;"));
         assert!(page.body.contains("gateway.example/&lt;img src=x&gt;"));
-        assert!(page.body.contains("Gateway address unavailable."));
+        assert!(!page.body.contains("Gateway address"));
         assert!(!page.body.contains("<script>failure"));
         assert!(page.body.contains("datetime='2023-11-14T22:12:20Z'"));
-        assert!(page.body.contains("last 24 hours, up to 20"));
-        assert!(page.body.contains("resets when the gateway restarts"));
+        assert!(!page.body.contains("last 24 hours"));
     }
 
     #[test]
@@ -1218,13 +1227,16 @@ mod tests {
                 entry_point: Some(format!("https://gateway-{index}.example")),
             })
             .collect();
-        let body = sign_in_security(1_700_000_000, &failures, &[]);
+        let body = sign_in_security(1_700_000_000, &failures, &[], true);
         assert_eq!(body.matches("class='event sign-in-failure'").count(), 20);
         assert!(body.contains("gateway-0.example"));
         assert!(body.contains("gateway-19.example"));
         assert!(!body.contains("gateway-20.example"));
         assert!(!body.contains("gateway-63.example"));
-        assert!(sign_in_security(1_700_000_000, &[], &[]).is_empty());
+        assert!(sign_in_security(1_700_000_000, &[], &[], true).is_empty());
+        // One address: the rows don't repeat it.
+        let single = sign_in_security(1_700_000_000, &failures, &[], false);
+        assert!(!single.contains("gateway-0.example"));
     }
 
     #[test]
@@ -1247,15 +1259,14 @@ mod tests {
                 until: 1_700_000_000,
             },
         ];
-        let body = sign_in_security(1_700_000_000, &[], &pauses);
+        let body = sign_in_security(1_700_000_000, &[], &pauses, false);
         assert!(body.contains("Sign-in paused · try again <time"));
         assert!(body.contains("Passkey and code attempts paused · try again <time"));
         assert!(body.contains("New connections paused · try again <time"));
         assert!(body.contains(">in 15 min</time>"));
         assert!(body.contains("datetime='2023-11-14T22:28:20Z'"));
-        assert!(body.contains("No recent sign-in failures."));
         assert!(!body.contains("Expired pause"));
-        assert!(sign_in_security(1_700_000_000, &[], &pauses[3..]).is_empty());
+        assert!(sign_in_security(1_700_000_000, &[], &pauses[3..], false).is_empty());
     }
 
     #[test]

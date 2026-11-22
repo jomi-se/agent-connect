@@ -327,7 +327,7 @@ try {
   assert.ok(signedInCookies[0].value.startsWith("owner_"));
   assert.ok(signedInCookies[0].value !== anonymousCookies[0].value);
   const signInHistory = page.getByRole("region", {
-    name: "Sign-in security",
+    name: "Sign-in failures",
     exact: true,
   });
   await signInHistory.getByText("Wrong passphrase.", { exact: true }).waitFor();
@@ -448,7 +448,7 @@ try {
     await recoveryPage.getByLabel("Passphrase", { exact: true }).waitFor();
     assert.equal(
       await recoveryPage
-        .getByRole("region", { name: "Sign-in security", exact: true })
+        .getByRole("region", { name: "Sign-in failures", exact: true })
         .count(),
       0,
     );
@@ -996,7 +996,7 @@ try {
   await page.getByText("expired", { exact: true }).waitFor();
   assert.equal(
     await page
-      .getByRole("region", { name: "Sign-in security", exact: true })
+      .getByRole("region", { name: "Sign-in failures", exact: true })
       .count(),
     0,
     "Sign-in history resets when the fixture gateway restarts",
@@ -1209,7 +1209,7 @@ try {
     await pausePage.getByLabel("Passphrase", { exact: true }).waitFor();
     assert.equal(
       await pausePage
-        .getByRole("region", { name: "Sign-in security", exact: true })
+        .getByRole("region", { name: "Sign-in failures", exact: true })
         .count(),
       0,
     );
@@ -1218,7 +1218,7 @@ try {
       .getByRole("heading", { name: "No apps yet", exact: true })
       .waitFor();
     const history = problemPage.getByRole("region", {
-      name: "Sign-in security",
+      name: "Sign-in failures",
       exact: true,
     });
     await history
