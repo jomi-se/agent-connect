@@ -26,6 +26,27 @@ updates:
         applies-to: security-updates
         patterns: ["*"]
 
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
+    # Same rule as npm: routine minors and patches; security fixes always.
+    allow:
+      - dependency-type: all
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      routine-cargo:
+        applies-to: version-updates
+        patterns: ["*"]
+      cargo-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
