@@ -691,25 +691,45 @@ pub(crate) fn create_runtime(
             ..Default::default()
         }
         .resolve()?;
-        // Initialize outside the shared harness home; the agent cannot approve apps.
-        crate::authorization::AuthService::open(crate::authorization::AuthConfig {
-            public_url: runtime.public_url.clone(),
-            state_dir: directory.join("state/auth"),
-            policy_fingerprint: "setup".into(),
-            owner_passphrase: Some(owner_passphrase),
-            entry_points: Vec::new(),
-            client_address_policies: Default::default(),
-            profiles: runtime.profiles.clone(),
-            default_profile: runtime.permissions,
-            harness: runtime.harness,
-        })?;
-        Ok(())
+        create_owner_state(
+            &directory.join("state/auth"),
+            &runtime.public_url,
+            &runtime.profiles,
+            runtime.permissions,
+            runtime.harness,
+            owner_passphrase,
+        )
     })();
     if let Err(error) = result {
         // Only the newly-created, owned directory is removed on a failed setup.
         let _ = std::fs::remove_dir_all(&directory);
         return Err(error);
     }
+    Ok(())
+}
+
+/// Writes a fresh owner sign-in: the passphrase's hash, with no factors or app
+/// grants yet. It lives outside the shared harness home, so the agent cannot
+/// approve apps. `state_dir` must not hold one already.
+pub(crate) fn create_owner_state(
+    state_dir: &Path,
+    public_url: &str,
+    profiles: &[PermissionProfile],
+    permissions: PermissionProfile,
+    harness: Harness,
+    owner_passphrase: String,
+) -> anyhow::Result<()> {
+    crate::authorization::AuthService::open(crate::authorization::AuthConfig {
+        public_url: public_url.into(),
+        state_dir: state_dir.into(),
+        policy_fingerprint: "setup".into(),
+        owner_passphrase: Some(owner_passphrase),
+        entry_points: Vec::new(),
+        client_address_policies: Default::default(),
+        profiles: profiles.to_vec(),
+        default_profile: permissions,
+        harness,
+    })?;
     Ok(())
 }
 

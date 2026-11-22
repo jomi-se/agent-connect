@@ -317,6 +317,10 @@ pub struct SetupPlan {
     pub login_command: Vec<String>,
     pub service: bool,
     pub steps: Vec<&'static str>,
+    /// An existing runtime whose owner sign-in was removed (the gateway says to
+    /// after a release changes its format): setup writes a fresh one.
+    #[serde(skip)]
+    owner_state_to_create: Option<PathBuf>,
     pub upgrade: bool,
     pub previous_box_image: Option<String>,
     /// The harness versions this run resolved from npm; absent when npm was
@@ -465,6 +469,7 @@ pub fn setup_plan(
         ..Default::default()
     }
     .resolve()?;
+    let mut owner_state_to_create = None;
     if let Some(previous) = previous {
         if previous.headless_static_bearer == Some(true) {
             return Err(usage(
@@ -498,10 +503,16 @@ pub fn setup_plan(
         private_metadata(&directory, true)?;
         let state = previous
             .state_dir
-            .unwrap_or_else(|| directory.join("state"));
-        private_metadata(&state.join("auth/authorization.json"), false).context(
-            "existing owner authentication state is missing or unsafe; setup never replaces it",
-        )?;
+            .unwrap_or_else(|| directory.join("state"))
+            .join("auth");
+        let owner = state.join("authorization.json");
+        match std::fs::symlink_metadata(&owner) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                owner_state_to_create = Some(state);
+            }
+            _ => private_metadata(&owner, false)
+                .context("existing owner sign-in state is unsafe; setup never replaces it")?,
+        }
     }
     let login_required = !credentials::credential_file_present(&home, harness);
     let login_command = vec![
@@ -546,6 +557,11 @@ pub fn setup_plan(
             } else {
                 "initialize-private-runtime"
             },
+            if owner_state_to_create.is_some() {
+                "create-owner-sign-in"
+            } else {
+                "keep-owner-sign-in"
+            },
             "build-local-box",
             "owner-login-if-requested",
             if cli.no_service {
@@ -554,6 +570,7 @@ pub fn setup_plan(
                 "install-and-start-user-service"
             },
         ],
+        owner_state_to_create,
         upgrade: cli.upgrade,
         previous_box_image,
         harness_versions: harness_versions.cloned(),
@@ -644,7 +661,7 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         print_plan(&plan, cli.json)?;
         return Ok(());
     }
-    if !plan.existing && !std::io::stdin().is_terminal() {
+    if (!plan.existing || plan.owner_state_to_create.is_some()) && !std::io::stdin().is_terminal() {
         return Err(usage(
             "first-time setup needs the owner at a terminal to type the sign-in passphrase",
         ));
@@ -692,8 +709,32 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
         create_private_directory(plan.directory.parent().unwrap())?;
         let runtime = new_runtime(&plan, record_rootful);
         tokio::task::spawn_blocking(move || config::create_runtime(runtime, None)).await??;
-    } else if record_rootful {
-        record_rootful_acceptance(&plan.config)?;
+    } else {
+        if record_rootful {
+            record_rootful_acceptance(&plan.config)?;
+        }
+        if let Some(state) = plan.owner_state_to_create.clone() {
+            let passphrase = config::prompt_owner_passphrase(
+                "Owner sign-in was removed; choose an owner sign-in passphrase (at least 12 characters): ",
+            )?;
+            let (origin, profiles, permissions, harness) = (
+                plan.origin.clone(),
+                plan.profiles.clone(),
+                plan.permissions,
+                plan.harness,
+            );
+            tokio::task::spawn_blocking(move || {
+                config::create_owner_state(
+                    &state,
+                    &origin,
+                    &profiles,
+                    permissions,
+                    harness,
+                    passphrase,
+                )
+            })
+            .await??;
+        }
     }
     if plan.login {
         let status = tokio::process::Command::new(std::env::current_exe()?)
@@ -1020,6 +1061,53 @@ mod tests {
         assert!(setup_plan(&cli, Some(&test_harness())).is_err());
         cli.origin = None;
         assert!(!dir.exists());
+    }
+    #[test]
+    fn setup_creates_a_removed_owner_sign_in_and_never_replaces_one() {
+        let dir = std::env::temp_dir().join(format!("acp-setup-owner-{}", uuid::Uuid::new_v4()));
+        create_private_directory(&dir).unwrap();
+        let cli = options(dir.clone());
+        let plan = setup_plan(&cli, Some(&test_harness())).unwrap();
+        config::create_runtime(
+            new_runtime(&plan, false),
+            Some("fixture-only-owner-passphrase".into()),
+        )
+        .unwrap();
+        let auth = plan.directory.join("state/auth");
+        let owner = auth.join("authorization.json");
+        let kept = setup_plan(&cli, Some(&test_harness())).unwrap();
+        assert!(kept.owner_state_to_create.is_none());
+        assert!(kept.steps.contains(&"keep-owner-sign-in"));
+        // Removed, as the gateway says to after a release changes its format.
+        std::fs::remove_file(&owner).unwrap();
+        let removed = setup_plan(&cli, Some(&test_harness())).unwrap();
+        assert_eq!(
+            removed.owner_state_to_create.as_deref(),
+            Some(auth.as_path())
+        );
+        assert!(removed.steps.contains(&"create-owner-sign-in"));
+        config::create_owner_state(
+            &auth,
+            &removed.origin,
+            &removed.profiles,
+            removed.permissions,
+            removed.harness,
+            "fixture-only-new-passphrase".into(),
+        )
+        .unwrap();
+        private_metadata(&owner, false).unwrap();
+        assert!(
+            setup_plan(&cli, Some(&test_harness()))
+                .unwrap()
+                .owner_state_to_create
+                .is_none()
+        );
+        // Anything but a missing file is still refused, never replaced.
+        std::fs::remove_file(&owner).unwrap();
+        std::os::unix::fs::symlink(dir.join("elsewhere.json"), &owner).unwrap();
+        let refused = setup_plan(&cli, Some(&test_harness())).err().unwrap();
+        assert!(format!("{refused:#}").contains("unsafe; setup never replaces it"));
+        let _ = std::fs::remove_dir_all(dir);
     }
     #[test]
     fn setup_policy_is_persisted_validated_and_preserved_on_reruns() {
