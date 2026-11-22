@@ -349,11 +349,7 @@ try {
   await page.getByRole("link", { name: "Security", exact: true }).click();
   await page.getByText("Passkey · this address", { exact: true }).waitFor();
   await page.getByText("Not set up", { exact: true }).waitFor();
-  assert.ok(
-    await page
-      .getByRole("button", { name: "Revoke all", exact: true })
-      .isDisabled(),
-  );
+  await page.getByText("No apps have access.", { exact: true }).waitFor();
   await capture("security");
   await page.getByRole("link", { name: "Gateway", exact: true }).click();
   await page
@@ -944,18 +940,13 @@ try {
   );
   await page.goto(`${owner}/security`);
   const revokeAll = page.getByRole("button", {
-    name: "Revoke all",
-    exact: true,
+    name: /^Revoke (all \d+ apps|1 app)$/,
   });
   await revokeAll.focus();
   await page.keyboard.press("Enter");
   await page.waitForURL(owner);
   await page.goto(`${owner}/security`);
-  assert.ok(
-    await page
-      .getByRole("button", { name: "Revoke all", exact: true })
-      .isDisabled(),
-  );
+  await page.getByText("No apps have access.", { exact: true }).waitFor();
   await page.goto(owner);
   assert.equal(
     await page.getByRole("button", { name: "Revoke", exact: true }).count(),
@@ -1064,7 +1055,9 @@ try {
   await page.goto(`${owner}/security`);
   const ipRow = page.locator(".row").filter({ hasText: ipOrigin });
   await ipRow.getByText("Authenticator app", { exact: true }).waitFor();
-  await page.getByText(/2 apps have access/).waitFor();
+  await page
+    .getByRole("button", { name: "Revoke all 2 apps", exact: true })
+    .waitFor();
   await capture("security-addresses");
   await passkeys.use(page, () =>
     Promise.all([
@@ -1078,7 +1071,9 @@ try {
   );
   await page.waitForURL(`${owner}/security`);
   await ipRow.getByText("Not set up", { exact: true }).waitFor();
-  await page.getByText(/1 app has access/).waitFor();
+  await page
+    .getByRole("button", { name: "Revoke 1 app", exact: true })
+    .waitFor();
   const refreshedAfterRemoval = await fetch(
     `${ipOrigin}/agent-connect/oauth/token`,
     {

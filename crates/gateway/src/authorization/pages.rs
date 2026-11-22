@@ -623,18 +623,22 @@ pub(super) fn security(view: Security) -> Page {
         })
         .collect::<String>();
     let authenticator = format!(
-        "<section class='section' aria-labelledby='factors-title'><h2 id='factors-title'>Sign-in</h2><div class='list'>{factors}</div><p class='hint below'>Removing one signs that address out and revokes apps approved there; the next sign-in there sets up a new one with the passphrase. Locked out? On the gateway host, stop the gateway and run <code>agent-connect remove-factor &lt;address&gt;</code> (this revokes every app).</p></section>"
+        "<section class='section' aria-labelledby='factors-title'><h2 id='factors-title'>Sign-in</h2><div class='list'>{factors}</div><p class='hint below'>Removing one signs that address out and disconnects its apps.</p></section>"
     );
-    let apps = view.active_grants;
+    let revoke = match view.active_grants {
+        0 => "<p class='meta'>No apps have access.</p>".to_string(),
+        n => format!(
+            "<form class='actions' method=post action='/agent-connect/owner/grants/revoke-all'>{}<button class='secondary danger'>{}</button></form>",
+            hidden("csrf_token", &view.revoke_all_token),
+            if n == 1 {
+                "Revoke 1 app".to_string()
+            } else {
+                format!("Revoke all {n} apps")
+            }
+        ),
+    };
     let body = format!(
-        "<h1>Security</h1>{authenticator}<section class='section' aria-labelledby='apps-title'><h2 id='apps-title'>Apps</h2><div class='list'><div class='row'><div class='row-main'><p class='row-title'>Revoke every app’s access</p><p class='meta'>{}. Revoking can’t undo what they already did.</p></div><form method=post action='/agent-connect/owner/grants/revoke-all'>{}<button class='secondary danger'{}>Revoke all</button></form></div></div></section>",
-        match apps {
-            0 => "No app has access right now".to_string(),
-            1 => "1 app has access".to_string(),
-            n => format!("{n} apps have access"),
-        },
-        hidden("csrf_token", &view.revoke_all_token),
-        if apps == 0 { " disabled" } else { "" }
+        "<h1>Security</h1>{authenticator}<section class='section' aria-labelledby='apps-title'><h2 id='apps-title'>Apps</h2>{revoke}</section>"
     );
     let mut page = owner_page(
         "Security",
