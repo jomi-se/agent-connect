@@ -28,6 +28,19 @@ from runs two days apart, including that run's. The `aardvark-dns` process
 itself was alive. So removing a network does not always remove its
 `aardvark-dns` entry, and stale entries may be what later joins trip over.
 
+## 2026-11-22
+
+Three local boxed runs in a row left an `aardvark-dns` entry for their
+test-model network after a scenario failed and its cleanup reported
+`unable to find network … acp-sess-net-…: network not found`. The run after
+the first one failed its preflight with `network inspection mismatch … internal
+libpod error`. With the stale entries removed by hand (their networks no
+longer existed), the next run got past preflight, but later runs hit the same
+mismatch with no stale entry at all. What they share: within one run, a
+scenario's cleanup fails with that `network not found`, and the next gateway's
+preflight then fails on the egress. A session network removed while the egress
+was still recorded as joined to it fits both.
+
 ## Next step
 
 Find what leaves the entry behind: a network removed while a container still

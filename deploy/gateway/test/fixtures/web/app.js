@@ -17,7 +17,7 @@ function log(kind, detail = "") {
   const entry = {
     ms: Math.round(performance.now() - t0),
     kind,
-    detail: String(detail).slice(0, 160),
+    detail: String(detail).slice(0, 600),
   };
   events.push(entry);
   $("events").textContent += `${entry.ms}ms ${kind} ${entry.detail}\n`;
@@ -85,9 +85,16 @@ function onUpdate({ update }) {
   const kind = update.sessionUpdate;
   if (kind === "agent_message_chunk" && update.content?.type === "text")
     $("answer").textContent += update.content.text;
+  // A failed tool call keeps its reason, such as an MCP server's startup error.
+  const reason =
+    update.status === "failed"
+      ? (update.content ?? [])
+          .map((item) => item.content?.text ?? item.text ?? "")
+          .join(" ")
+      : "";
   const detail =
     kind === "tool_call" || kind === "tool_call_update"
-      ? `${update.toolCallId} ${update.title ?? ""} ${update.status ?? ""}`
+      ? `${update.toolCallId} ${update.title ?? ""} ${update.status ?? ""} ${reason}`.trim()
       : (update.content?.text ?? "");
   log(`update:${kind}`, detail);
 }

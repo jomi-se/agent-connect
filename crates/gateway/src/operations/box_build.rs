@@ -20,6 +20,19 @@ const CODEX: &str = "@openai/codex";
 // owner pins it, so a new harness release reaches owners without a gateway release.
 const HARNESS_PACKAGES: [&str; 4] = [CODEX_ACP, CLAUDE_ACP, CLAUDE_CODE, CODEX];
 const NPM_REGISTRY: &str = "https://registry.npmjs.org";
+/// Both adapters are held on ACP SDK 2.6 until the gateway and the browser SDK
+/// speak the MCP-over-ACP binding that came after it: it wants inner MCP errors in
+/// a response carrier, and the harnesses open with MCP `server/discover`, so app
+/// tools fail to start. An owner pin still wins. See
+/// docs/issues/mcp-over-acp-binding.md; install-harnesses.sh holds the same.
+const ADAPTER_CEILINGS: [(&str, &str); 2] = [(CODEX_ACP, "<2.8.0"), (CLAUDE_ACP, "<0.107.1")];
+
+fn ceiling(name: &str) -> Option<&'static str> {
+    ADAPTER_CEILINGS
+        .iter()
+        .find(|(package, _)| *package == name)
+        .map(|(_, range)| *range)
+}
 const INSTALL_HARNESSES: &str = "/usr/local/lib/agent-connect/install-harnesses.sh";
 
 /// Exact harness versions by npm package name, as installed in the box layer.
@@ -198,7 +211,10 @@ pub(super) async fn resolve_harness() -> anyhow::Result<HarnessVersions> {
     let mut codex_range = None;
     for name in [CODEX_ACP, CLAUDE_ACP, CLAUDE_CODE] {
         let metadata = packument(&client, name).await?;
-        let version = metadata.select(name, spec(name))?;
+        let version = match ceiling(name) {
+            Some(range) if !pins.contains_key(name) => metadata.newest_matching(name, range)?,
+            _ => metadata.select(name, spec(name))?,
+        };
         if name == CODEX_ACP {
             codex_range = metadata.versions[&version].dependencies.get(CODEX).cloned();
         }
@@ -578,6 +594,18 @@ mod tests {
             "0.164.0"
         );
         assert!(metadata.newest_matching(CODEX, "^0.162.0").is_err());
+        // The codex-acp ceiling takes the newest stable release below it, never a preview.
+        let adapter: Packument = serde_json::from_value(serde_json::json!({
+            "dist-tags": { "latest": "2.9.0" },
+            "versions": { "2.6.0": {}, "2.7.0": {}, "2.7.1-preview.7": {}, "2.8.0": {}, "2.9.0": {} }
+        }))
+        .unwrap();
+        assert_eq!(
+            adapter
+                .newest_matching(CODEX_ACP, ceiling(CODEX_ACP).unwrap())
+                .unwrap(),
+            "2.7.0"
+        );
     }
 
     #[test]

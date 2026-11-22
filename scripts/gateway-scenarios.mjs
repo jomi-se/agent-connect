@@ -234,7 +234,13 @@ try {
       "/app/server.mjs",
     ]);
   }
-  for (const harness of ["codex", "claude"]) {
+  // ACP_HARNESSES=claude narrows a run the way ACP_SCENARIOS does.
+  const harnesses = ["codex", "claude"].filter(
+    (harness) =>
+      !process.env.ACP_HARNESSES ||
+      process.env.ACP_HARNESSES.split(",").includes(harness),
+  );
+  for (const harness of harnesses) {
     const harnessHome = join(run, `boxed-home-${harness}`);
     if (boxed) {
       await mkdir(harnessHome, { mode: 0o700 });

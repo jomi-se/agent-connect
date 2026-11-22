@@ -37,3 +37,8 @@ Trade-off accepted: two owners installing the same gateway on different days
 can run different harnesses, and an upstream release can break a box without
 any change here. The recovery is a pin in `versions.json`, not a gateway
 release.
+
+Held back (2026-11-22): codex-acp stays below 2.8 and claude-agent-acp below
+0.107.1, the last releases on ACP SDK 2.6, in setup and in checkout
+verification alike, until the gateway speaks the MCP-over-ACP binding that came
+after it ([issue](../issues/mcp-over-acp-binding.md)). An owner pin still wins.
