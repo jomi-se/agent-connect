@@ -1424,7 +1424,6 @@ impl AuthService {
                 Some(Factor::Totp { .. }) => pages::ApprovalFactor::Totp,
                 None => bail!("owner_login_required"),
             };
-            let harness = self.config.harness;
             let page = pages::consent(pages::Consent {
                 name: pending.client_name.clone(),
                 origin: pending.client.clone(),
@@ -1438,7 +1437,6 @@ impl AuthService {
                         value: profile.as_str(),
                         label: profile_label(*profile),
                         summary: profile_summary(*profile),
-                        detail: profile_description(*profile, harness),
                         selected: *profile == self.config.default_profile,
                     })
                     .collect(),

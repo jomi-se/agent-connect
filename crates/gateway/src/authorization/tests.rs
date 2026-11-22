@@ -2742,14 +2742,8 @@ async fn profile_choice_is_fixed_in_grant_and_unoffered_profiles_are_rejected() 
     )
     .await;
     assert!(page.text.contains("name=profile"));
-    assert!(
-        page.text
-            .contains("Approved app tools still work and other permission requests are denied")
-    );
-    assert!(
-        page.text
-            .contains("sessions refuse to run instead of running unrestricted")
-    );
+    // The choice carries its one-line summary; the long explanation lives in the docs.
+    assert!(!page.text.contains("What this means"));
     let invalid = request(
         &auth,
         Method::POST,

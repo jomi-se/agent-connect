@@ -769,7 +769,6 @@ pub(super) struct ProfileChoice {
     pub value: &'static str,
     pub label: &'static str,
     pub summary: &'static str,
-    pub detail: &'static str,
     pub selected: bool,
 }
 
@@ -804,17 +803,6 @@ pub(super) fn consent(view: Consent) -> Page {
             )
         })
         .collect::<String>();
-    let details = view
-        .profiles
-        .iter()
-        .map(|profile| {
-            format!(
-                "<p><strong>{}.</strong> {}</p>",
-                escape(profile.label),
-                escape(profile.detail)
-            )
-        })
-        .collect::<String>();
     let (factor, passkey) = match &view.factor {
         ApprovalFactor::Totp => (
             format!(
@@ -823,21 +811,18 @@ pub(super) fn consent(view: Consent) -> Page {
             String::new(),
         ),
         ApprovalFactor::Passkey(options) => (
-            "<input type=hidden name=credential value=''><p class='passkey-status hint' role='status' aria-live='polite'>Approving asks for your passkey.</p>".to_string(),
+            "<input type=hidden name=credential value=''><p class='passkey-status hint' role='status' aria-live='polite'></p>".to_string(),
             format!(" data-passkey='{}' data-ceremony=get", escape(options)),
         ),
     };
-    let count = view.tools.len();
     let mut page = plain(
         &format!("Allow {}?", view.name),
         Width::Full,
         format!(
-            "<header class='consent-head'><h1>Allow <span class='app' title='{}'>{}</span> to use your agent?</h1><p class='from'>from <span class='origin-chip'>{}</span></p></header><section class='block' aria-labelledby='tools-title'><h2 id='tools-title'>It can call only these {} tool{}</h2>{}</section><form class='decision' method=post action='{AUTHORIZE}'{passkey}>{}<fieldset class='segmented'><legend>Access lasts</legend><div class='opts'>{durations}</div></fieldset><fieldset class='options'><legend>Your agent’s own tools</legend>{profiles}</fieldset><div class='fineprint'><p>An app you approve could obtain your agent’s login and read other apps’ conversations with it. Revoking stops future use; it can’t undo what’s already done.</p><details><summary>What this means</summary><p>Each session runs in a disposable box with restricted network access. The option you pick limits the agent’s own tools there; this app’s tools follow this approval.</p><p>All approved apps share one dedicated login for your agent.</p>{details}<p>Agent Connect uses ACP and MCP-over-ACP, which are still unstable protocols.</p></details></div><div class='decide'>{factor}<div class='decide-actions'><button name=decision value=approve>Approve</button><button class='secondary' name=decision value=deny>Deny</button></div></div></form>",
+            "<header class='consent-head'><h1>Allow <span class='app' title='{}'>{}</span> to use your agent?</h1><p class='from'>from <span class='origin-chip'>{}</span></p></header><section class='block' aria-labelledby='tools-title'><h2 id='tools-title'>Tools</h2>{}</section><form class='decision' method=post action='{AUTHORIZE}'{passkey}>{}<fieldset class='segmented'><legend>Access lasts</legend><div class='opts'>{durations}</div></fieldset><fieldset class='options'><legend>Your agent’s own tools</legend>{profiles}</fieldset><div class='fineprint'><p>An app you approve could obtain your agent’s login and read other apps’ conversations with it. Revoking stops future use; it can’t undo what’s already done.</p></div><div class='decide'>{factor}<div class='decide-actions'><button name=decision value=approve>Approve</button><button class='secondary' name=decision value=deny>Deny</button></div></div></form>",
             escape(&view.name),
             escape(&shorten(&view.name, 48)),
             escape(&view.origin),
-            count,
-            if count == 1 { "" } else { "s" },
             tool_list(&view.tools),
             view.fields
         ),
