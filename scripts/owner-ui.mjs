@@ -292,9 +292,7 @@ try {
   const wrongPassphrase = "deliberately-wrong-test-passphrase";
   await page.getByLabel("Owner passphrase").fill(wrongPassphrase);
   await page.getByRole("button", { name: "Continue" }).click();
-  await page
-    .getByRole("heading", { name: "Sign-in did not complete" })
-    .waitFor();
+  await page.getByRole("heading", { name: "Sign-in failed" }).waitFor();
   await capture("sign-in-error", { compact: true });
   await page.goto(owner);
   await page.getByLabel("Owner passphrase").fill(password);
@@ -332,9 +330,7 @@ try {
     name: "Sign-in security",
     exact: true,
   });
-  await signInHistory
-    .getByText("The passphrase or passkey was not accepted.", { exact: true })
-    .waitFor();
+  await signInHistory.getByText("Wrong passphrase.", { exact: true }).waitFor();
   assert.ok((await signInHistory.innerText()).includes(origin));
   const auditPrivateValues = [
     password,
@@ -479,7 +475,7 @@ try {
     ]);
     assert.equal(failedSignIn.status(), 401);
     await recoveryPage
-      .getByRole("heading", { name: "Sign-in did not complete", exact: true })
+      .getByRole("heading", { name: "Sign-in failed", exact: true })
       .waitFor();
     const retry = recoveryPage.getByRole("link", {
       name: "Return to sign-in",
@@ -1231,7 +1227,7 @@ try {
   }
   await problemContext.close();
   for (const code of [
-    "invalid_credentials",
+    "invalid_passphrase",
     "missing_session_cookie",
     "invalid_request",
   ])

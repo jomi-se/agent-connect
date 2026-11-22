@@ -461,7 +461,7 @@ export async function verifyClientAddressPolicy({
       "Each failed POST must produce exactly one audit event",
     );
     assert.equal(
-      auditLines.filter((line) => line.includes("invalid_credentials")).length,
+      auditLines.filter((line) => line.includes("invalid_passphrase")).length,
       30,
     );
     assert.equal(

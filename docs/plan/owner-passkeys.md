@@ -76,6 +76,12 @@ before release:
 
 ### Settled
 
+- **A failed sign-in says only "Sign-in failed".** A wrong passphrase, passkey
+  or authenticator code, and a paused code budget, all get the same 401 page:
+  the code is checked after the passphrase, so a separate answer for it would
+  confirm the passphrase. The owner's sign-in history and the journal keep the
+  real reason (`invalid_passphrase`, `invalid_passkey`, `invalid_factor`,
+  `factor_rate_limited`). Approvals, already signed in, still name the code.
 - **Remove asks for a fresh passkey tap, but the tap doesn't say which
   address.** Kept: one passkey challenge on the Security page covers every
   Remove button, with the address in a form field under CSRF. Same reasoning as
@@ -102,8 +108,6 @@ before release:
 
 ### Still to review
 
-- **Error and audit wording** now says "passphrase or passkey" where sign-in
-  can fail either way.
 - **Missing WebAuthn shows a sentence, not a page.** A browser without
   WebAuthn sees "This browser can't use passkeys" in the form's status line;
   no separate page, and the passkey form stays visible.

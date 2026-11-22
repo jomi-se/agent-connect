@@ -1008,7 +1008,7 @@ async fn authenticator_enrollment_login_approval_and_replay() {
         ],
     )
     .await;
-    assert_eq!(rejected.status, StatusCode::BAD_REQUEST);
+    assert_eq!(rejected.status, StatusCode::UNAUTHORIZED);
     advance(auth, 30);
     let factor = totp(&secret, auth.now() / 30).unwrap();
     let _ = login(auth, &factor).await;
@@ -1334,7 +1334,7 @@ async fn owner_post_errors_are_safe_html_and_api_errors_remain_json() {
         response.headers[header::CONTENT_TYPE],
         "text/html; charset=utf-8"
     );
-    assert!(response.text.contains("Sign-in did not complete"));
+    assert!(response.text.contains("Sign-in failed"));
     assert!(response.text.contains("role='alert'"));
     assert!(response.text.contains(&format!("href='{LOGIN}'")));
     assert!(!response.text.contains("private-password"));
@@ -1604,14 +1604,10 @@ async fn failed_sign_in_factor_and_budgets_preserve_only_valid_retry() {
     );
     let peer = IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED);
     for (login_count, factor_count, status, message) in [
-        (
-            0,
-            0,
-            StatusCode::BAD_REQUEST,
-            "Authenticator code not accepted",
-        ),
+        // A wrong code, or a paused code budget, must not confirm the passphrase.
+        (0, 0, StatusCode::UNAUTHORIZED, "Sign-in failed"),
         (10, 0, StatusCode::TOO_MANY_REQUESTS, "Too many attempts"),
-        (0, 5, StatusCode::TOO_MANY_REQUESTS, "Too many attempts"),
+        (0, 5, StatusCode::UNAUTHORIZED, "Sign-in failed"),
     ] {
         let page = request(auth, Method::GET, &target, None, Some(&anonymous), &[]).await;
         {
@@ -1654,6 +1650,61 @@ async fn failed_sign_in_factor_and_budgets_preserve_only_valid_retry() {
         assert!(inner.stored.grants.is_empty());
         assert!(inner.sessions.is_empty());
     }
+}
+
+#[tokio::test]
+async fn failed_sign_in_answers_alike_whichever_part_was_wrong() {
+    let fixture = Fixture::new();
+    let auth = &fixture.auth;
+    auth.inner.lock().unwrap().stored.factors.insert(
+        ISSUER.into(),
+        Factor::Totp {
+            secret: base32(&[9; 20]),
+            last_step: None,
+        },
+    );
+    let mut replies = Vec::new();
+    for passphrase in ["wrong-passphrase-for-this", PASSWORD] {
+        let (_, _, page) = pending_sign_in(auth).await;
+        let reply = request(
+            auth,
+            Method::POST,
+            LOGIN,
+            Some(ISSUER),
+            Some(&cookie(&page)),
+            &[
+                ("continue", &input(&page.text, "continue")),
+                ("csrf_token", &input(&page.text, "csrf_token")),
+                ("passphrase", passphrase),
+                ("totp", "000000"),
+            ],
+        )
+        .await;
+        // The retry link carries each request's own continuation; the rest is the same.
+        let (before, link) = reply
+            .text
+            .split_once(" href='/agent-connect/owner/login")
+            .unwrap();
+        let after = link.split_once('\'').unwrap().1;
+        replies.push((reply.status, format!("{before}{after}")));
+    }
+    let pages = replies;
+    assert_eq!(pages[0].0, StatusCode::UNAUTHORIZED);
+    assert_eq!(pages[0], pages[1]);
+    let mut reasons: Vec<_> = auth
+        .sign_in_audit
+        .lock()
+        .unwrap()
+        .recent(auth.now())
+        .into_iter()
+        .map(|failure| failure.reason)
+        .collect();
+    reasons.sort_unstable();
+    assert_eq!(
+        reasons,
+        ["Wrong authenticator code.", "Wrong passphrase."],
+        "The owner's history keeps the real reason"
+    );
 }
 
 #[tokio::test]
@@ -3578,12 +3629,8 @@ mod sign_in_audit_tests {
             ("origin", StatusCode::FORBIDDEN, "invalid_owner_origin"),
             ("form", StatusCode::BAD_REQUEST, "invalid_request"),
             ("query", StatusCode::BAD_REQUEST, "invalid_request"),
-            (
-                "passphrase",
-                StatusCode::UNAUTHORIZED,
-                "invalid_credentials",
-            ),
-            ("factor", StatusCode::BAD_REQUEST, "invalid_factor"),
+            ("passphrase", StatusCode::UNAUTHORIZED, "invalid_passphrase"),
+            ("factor", StatusCode::UNAUTHORIZED, "invalid_factor"),
             (
                 "login_budget",
                 StatusCode::TOO_MANY_REQUESTS,
@@ -3591,7 +3638,7 @@ mod sign_in_audit_tests {
             ),
             (
                 "factor_budget",
-                StatusCode::TOO_MANY_REQUESTS,
+                StatusCode::UNAUTHORIZED,
                 "factor_rate_limited",
             ),
         ] {
@@ -4694,7 +4741,7 @@ mod client_address_tests {
         );
         for (ip, expected, reason) in [
             (CLIENT, StatusCode::TOO_MANY_REQUESTS, "login_rate_limited"),
-            (OTHER, StatusCode::UNAUTHORIZED, "invalid_credentials"),
+            (OTHER, StatusCode::UNAUTHORIZED, "invalid_passphrase"),
         ] {
             let page = get(auth, LOGIN, ISSUER, ip, None).await;
             let (reply, events) = sign_in_audit_tests::captured(send(
@@ -4819,7 +4866,8 @@ mod client_address_tests {
                 assert_eq!(reply.status, expected, "{path}: {}", reply.text);
             }
         }
-        // Login factor verification uses that same bucket after passphrase success.
+        // Login factor verification uses that same bucket after passphrase success,
+        // and says only that sign-in failed.
         let page = get(auth, LOGIN, ISSUER, CLIENT, None).await;
         let response = send(
             auth,
@@ -4837,7 +4885,7 @@ mod client_address_tests {
             ],
         )
         .await;
-        assert_eq!(response.status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.status, StatusCode::UNAUTHORIZED);
         assert!(auth.inner.lock().unwrap().stored.grants.is_empty());
         assert_eq!(
             auth.inner.lock().unwrap().factor_budgets[&source(ISSUER, OTHER)].count,

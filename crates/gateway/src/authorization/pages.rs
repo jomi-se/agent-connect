@@ -1244,7 +1244,7 @@ mod tests {
         let failures: Vec<_> = (0..64)
             .map(|index| SignInFailure {
                 at: 1_700_000_000 - index,
-                reason: "The passphrase or passkey was not accepted.",
+                reason: "Wrong passphrase.",
                 entry_point: Some(format!("https://gateway-{index}.example")),
             })
             .collect();

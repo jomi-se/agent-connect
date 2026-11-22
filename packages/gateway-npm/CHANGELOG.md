@@ -19,6 +19,11 @@
   pair applications again.
 - Each address gets its own owner cookie, named with its port, so signing in
   on one port no longer replaces another's session.
+- A failed sign-in says only "Sign-in failed", whichever part was wrong. A
+  wrong authenticator code used to get its own answer, which showed the
+  passphrase was right. The sign-in history on Activity and the
+  `owner_sign_in_failed` log event keep the real reason, now split into
+  `invalid_passphrase` and `invalid_passkey` instead of `invalid_credentials`.
 
 - The box is built on Node 26.13.0, the current LTS, instead of Node 24.
   The launcher still runs on Node 24.15 or newer.

@@ -962,14 +962,14 @@ impl AuthService {
                 // A passkey stands alone; TOTP and setup start from the passphrase.
                 if factor != Some(FactorKind::Passkey) {
                     let passphrase = required(&form, "passphrase")?;
-                    ensure!(passphrase.len() <= 1024, "invalid_credentials");
+                    ensure!(passphrase.len() <= 1024, "invalid_passphrase");
                     let parsed = PasswordHash::new(&inner.stored.password_hash)
-                        .map_err(|_| anyhow!("invalid_credentials"))?;
+                        .map_err(|_| anyhow!("invalid_passphrase"))?;
                     ensure!(
                         Argon2::default()
                             .verify_password(passphrase.as_bytes(), &parsed)
                             .is_ok(),
-                        "invalid_credentials"
+                        "invalid_passphrase"
                     );
                 }
                 match factor {
@@ -1788,18 +1788,18 @@ impl AuthService {
         let now = self.now();
         let (state, expires) = session_mut(inner, session)
             .and_then(|session| session.ceremonies.remove(purpose))
-            .ok_or_else(|| anyhow!("invalid_credentials"))?;
-        ensure!(expires > now, "invalid_credentials");
+            .ok_or_else(|| anyhow!("invalid_passkey"))?;
+        ensure!(expires > now, "invalid_passkey");
         ensure!(
             !credential.is_empty() && credential.len() <= MAX_CREDENTIAL,
-            "invalid_credentials"
+            "invalid_passkey"
         );
         let credential: PublicKeyCredential =
-            serde_json::from_str(credential).map_err(|_| anyhow!("invalid_credentials"))?;
+            serde_json::from_str(credential).map_err(|_| anyhow!("invalid_passkey"))?;
         let result = webauthn(origin)?
             .finish_passkey_authentication(&credential, &state)
-            .map_err(|_| anyhow!("invalid_credentials"))?;
-        ensure!(result.user_verified(), "invalid_credentials");
+            .map_err(|_| anyhow!("invalid_passkey"))?;
+        ensure!(result.user_verified(), "invalid_passkey");
         let mut next = inner.stored.clone();
         if let Some(Factor::Passkey { passkey, .. }) = next.factors.get_mut(origin)
             && passkey.update_credential(&result) == Some(true)
@@ -1917,12 +1917,12 @@ impl AuthService {
                 ) => {
                     ensure!(expires > now, "invalid_enrollment");
                     let credential = required(&form, "credential")?;
-                    ensure!(credential.len() <= MAX_CREDENTIAL, "invalid_credentials");
-                    let credential: RegisterPublicKeyCredential = serde_json::from_str(credential)
-                        .map_err(|_| anyhow!("invalid_credentials"))?;
+                    ensure!(credential.len() <= MAX_CREDENTIAL, "invalid_passkey");
+                    let credential: RegisterPublicKeyCredential =
+                        serde_json::from_str(credential).map_err(|_| anyhow!("invalid_passkey"))?;
                     let passkey = webauthn(&origin)?
                         .finish_passkey_registration(&credential, &state)
-                        .map_err(|_| anyhow!("invalid_credentials"))?;
+                        .map_err(|_| anyhow!("invalid_passkey"))?;
                     Factor::Passkey {
                         user,
                         passkey: Box::new(passkey),
@@ -2304,8 +2304,21 @@ async fn endpoint(State(service): State<Arc<AuthService>>, request: Request) -> 
         }
     };
     let mut response = result.unwrap_or_else(|error| {
-        let message = error.to_string();
+        let mut message = error.to_string();
         sign_in_reason.get_or_insert_with(|| sign_in_audit::Reason::from_error(&message));
+        // A failed sign-in never says which part failed: a separate answer for
+        // the code would confirm the passphrase. The audit keeps the real reason.
+        if error.is::<SignInRetry>()
+            && [
+                "invalid_passphrase",
+                "invalid_passkey",
+                "invalid_factor",
+                "factor_rate_limited",
+            ]
+            .contains(&message.as_str())
+        {
+            message = "invalid_credentials".to_string();
+        }
         let code = if [
             "invalid_client",
             "invalid_target",
@@ -2334,7 +2347,7 @@ async fn endpoint(State(service): State<Arc<AuthService>>, request: Request) -> 
         .contains(&message.as_str())
         {
             StatusCode::FORBIDDEN
-        } else if message == "invalid_credentials" {
+        } else if ["invalid_credentials", "invalid_passkey"].contains(&message.as_str()) {
             StatusCode::UNAUTHORIZED
         } else if message.ends_with("rate_limited") || message == "slow_down" {
             StatusCode::TOO_MANY_REQUESTS
@@ -2842,10 +2855,8 @@ fn webauthn(origin: &str) -> Result<Webauthn> {
 
 fn owner_error(status: StatusCode, reason: &str, path: &str, retry: Option<&str>) -> Response {
     let (title, message) = match reason {
-        "invalid_credentials" => (
-            "Sign-in did not complete",
-            "The passphrase or passkey was not accepted. Try again with the passphrase you chose during setup, or your passkey for this address.",
-        ),
+        "invalid_credentials" => ("Sign-in failed", "Try again."),
+        "invalid_passkey" => ("Passkey not accepted", "Try again."),
         "invalid_factor" => (
             "Authenticator code not accepted",
             "Enter a fresh six-digit code from your enrolled authenticator. A code already used for sign-in or approval cannot be reused.",
