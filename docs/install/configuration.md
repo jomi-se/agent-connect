@@ -483,7 +483,7 @@ share one fallback group per entry point. Trusted addresses, fallback groups,
 and direct transport peers have separate budgets. Forwarding headers do not
 change gateway authority, origin, session, cookie, CSRF, or grant binding.
 Client addresses and header values are not included in sign-in audit history
-or Activity; counts describe request source groups rather than unique people.
+or Activity.
 
 With any policy configured, the whole hosted authorization runtime rejects
 unknown or ambiguous `Host` values before admission and adds a limit of **60

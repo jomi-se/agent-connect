@@ -275,9 +275,9 @@ export async function verifyOwnerCookies({
     const page = await context.newPage();
     const owner = `${origin}${ownerPath}`;
     const signIn = await page.goto(owner);
-    await page.getByLabel("Owner passphrase").waitFor();
+    await page.getByLabel("Passphrase", { exact: true }).waitFor();
     await assertSetCookie(signIn, 43200);
-    await page.getByLabel("Owner passphrase").fill(password);
+    await page.getByLabel("Passphrase", { exact: true }).fill(password);
     const [signedIn] = await Promise.all([
       page.waitForResponse(
         (reply) =>
@@ -415,7 +415,7 @@ export async function verifyOwnerCookies({
       await assertSetCookie(signedOut, 0),
       `${selectedName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`,
     );
-    await page.getByLabel("Owner passphrase").waitFor();
+    await page.getByLabel("Passphrase", { exact: true }).waitFor();
     const afterLogout = forwarded
       .slice(beforeLogout)
       .find(({ method, path }) => method === "GET" && path === loginPath);
@@ -432,7 +432,7 @@ export async function verifyOwnerCookies({
     assert.equal(anonymous.length, 1);
     assert.ok(anonymous[0].value.startsWith("anonymous_"));
     await page.goto(owner);
-    await page.getByLabel("Owner passphrase").waitFor();
+    await page.getByLabel("Passphrase", { exact: true }).waitFor();
     assert.equal(page.url(), `${origin}${loginPath}`);
     assert.deepEqual(proxyErrors, []);
     return {

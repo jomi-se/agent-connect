@@ -140,10 +140,15 @@ impl Audit {
 pub(super) fn pauses(inner: &Inner, now: u64) -> Vec<pages::SignInPause> {
     let mut pauses = Vec::new();
     for (label, budgets, limit, period) in [
-        ("Sign-in attempts", &inner.login_budgets, 10, 900),
-        ("Authenticator attempts", &inner.factor_budgets, 5, 60),
+        ("Sign-in paused", &inner.login_budgets, 10, 900),
         (
-            "Unauthenticated requests by source",
+            "Passkey and code attempts paused",
+            &inner.factor_budgets,
+            5,
+            60,
+        ),
+        (
+            "Some connections paused",
             &inner.request_budgets,
             super::CLIENT_REQUEST_LIMIT,
             60,
@@ -158,7 +163,6 @@ pub(super) fn pauses(inner: &Inner, now: u64) -> Vec<pages::SignInPause> {
         if let Some(until) = resets.iter().max() {
             pauses.push(pages::SignInPause {
                 label,
-                affected_clients: Some(resets.len()),
                 until: *until,
             });
         }
@@ -168,8 +172,7 @@ pub(super) fn pauses(inner: &Inner, now: u64) -> Vec<pages::SignInPause> {
     // an existing owner session is exempt from this global rejection.
     if inner.rate_count >= 600 && until > now {
         pauses.push(pages::SignInPause {
-            label: "Unauthenticated requests",
-            affected_clients: None,
+            label: "New connections paused",
             until,
         });
     }

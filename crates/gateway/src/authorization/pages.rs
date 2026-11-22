@@ -81,7 +81,7 @@ pub(super) fn document(page: &Page) -> String {
         format!("<script>{}</script>", page.script)
     };
     format!(
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='color-scheme' content='light'><title>{} · Agent Connect</title><style>{STYLES}</style>{dynamic}</head><body><header class='bar'><div class='bar-inner'><a class='brand' href='{OWNER}'><span class='brand-mark' aria-hidden='true'></span>Agent Connect</a>{nav}</div></header><main class='{width}'>{}</main><footer class='foot'>Served by your own Agent Connect gateway.</footer>{script}</body></html>",
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='color-scheme' content='light'><title>{} · Agent Connect</title><style>{STYLES}</style>{dynamic}</head><body><header class='bar'><div class='bar-inner'><a class='brand' href='{OWNER}'><span class='brand-mark' aria-hidden='true'></span>Agent Connect</a>{nav}</div></header><main class='{width}'>{}</main>{script}</body></html>",
         escape(&page.title),
         page.body
     )
@@ -108,7 +108,7 @@ pub(super) enum SignIn {
     Setup,
 }
 
-const PASSPHRASE_INPUT: &str = "<div class='field'><label for='owner-passphrase'>Owner passphrase</label><input id='owner-passphrase' type=password name=passphrase autocomplete=current-password required maxlength=1024></div>";
+const PASSPHRASE_INPUT: &str = "<div class='field'><label for='owner-passphrase'>Passphrase</label><input id='owner-passphrase' type=password name=passphrase autocomplete=current-password required maxlength=1024></div>";
 
 pub(super) fn sign_in(fields: &str, method: SignIn, waiting: Option<&str>) -> Page {
     // A passkey sign-in needs no words beyond its button.
@@ -118,7 +118,7 @@ pub(super) fn sign_in(fields: &str, method: SignIn, waiting: Option<&str>) -> Pa
             "<p class='lede'>Sign in to review the request from <strong>{}</strong>.</p>",
             escape(name)
         ),
-        (_, None) => "<p class='lede'>Manage the apps that use your agent.</p>".into(),
+        (_, None) => String::new(),
     };
     let (form, script) = match method {
         SignIn::Passkey(options) => (
@@ -136,7 +136,7 @@ pub(super) fn sign_in(fields: &str, method: SignIn, waiting: Option<&str>) -> Pa
         ),
         SignIn::Setup => (
             format!(
-                "<p class='hint'>This address has no passkey yet. Your passphrase lets you set one up, and nothing else.</p><form method=post action='{LOGIN}'>{fields}{PASSPHRASE_INPUT}<div class='actions'><button class='wide'>Continue</button></div></form>"
+                "<form method=post action='{LOGIN}'>{fields}{PASSPHRASE_INPUT}<div class='actions'><button class='wide'>Continue</button></div></form>"
             ),
             "",
         ),
@@ -154,11 +154,11 @@ pub(super) fn sign_in(fields: &str, method: SignIn, waiting: Option<&str>) -> Pa
 pub(super) fn setup(fields: &str, options: Option<&str>) -> Page {
     let body = match options {
         Some(options) => format!(
-            "<div class='panel'><h1>Set up a passkey</h1><p class='lede'>From now on, your passkey alone signs in and approves apps on this address.</p><form method=post action='/agent-connect/owner/passkey/enroll' data-passkey='{}' data-ceremony=create>{fields}<input type=hidden name=credential value=''><p class='passkey-status hint' role='status' aria-live='polite'></p><div class='actions'><button class='wide'>Create a passkey</button><a class='button secondary wide' href='{TOTP}'>Use an authenticator app instead</a></div></form></div>",
+            "<div class='panel'><h1>Set up a passkey</h1><form method=post action='/agent-connect/owner/passkey/enroll' data-passkey='{}' data-ceremony=create>{fields}<input type=hidden name=credential value=''><p class='passkey-status hint' role='status' aria-live='polite'></p><div class='actions'><button class='wide'>Create a passkey</button><a class='button secondary wide' href='{TOTP}'>Use an authenticator app</a></div></form></div>",
             escape(options)
         ),
         None => format!(
-            "<div class='panel'><h1>Set up an authenticator</h1><p class='lede'>Passkeys need a name, and you opened the gateway by a bare IP address, where browsers don’t allow them.</p><p>For a passkey, open the gateway by a name instead: <code>localhost</code> on the same machine, your tailnet’s name for it, or a domain or tunnel you control.</p><p>Or set up an authenticator app for this address: sign-in will take your passphrase and a code.</p><div class='actions'><a class='button wide' href='{TOTP}'>Use an authenticator app</a></div></div>"
+            "<div class='panel'><h1>Set up an authenticator</h1><p class='lede'>Passkeys only work on a real domain, not a raw IP address. Open this gateway through its domain, or use an authenticator app.</p><div class='actions'><a class='button wide' href='{TOTP}'>Use an authenticator app</a></div></div>"
         ),
     };
     let mut page = plain("Set up sign-in", Width::Compact, body);
@@ -218,7 +218,6 @@ pub(super) struct SignInFailure {
 
 pub(super) struct SignInPause {
     pub label: &'static str,
-    pub affected_clients: Option<usize>,
     pub until: u64,
 }
 
@@ -384,24 +383,11 @@ fn sign_in_security(now: u64, failures: &[SignInFailure], pauses: &[SignInPause]
         "<section class='sign-in-security' aria-labelledby='sign-in-security-title'><h2 id='sign-in-security-title'>Sign-in security</h2>",
     );
     if !pauses.is_empty() {
-        body.push_str("<p class='meta'>Several clients can share one group: they may share an address, or a trusted proxy may not provide a usable client address.</p>");
         body.push_str("<ul class='sign-in-pauses' aria-label='Active pauses'>");
         for pause in pauses {
-            let scope = match pause.affected_clients {
-                Some(count) => format!(
-                    "Paused for {count} request source group{}. Latest reset:",
-                    if count == 1 { "" } else { "s" }
-                ),
-                None => "Paused for unauthenticated requests across the gateway. Resets:".into(),
-            };
-            let (year, month, day, hour, minute, second) = civil(pause.until);
-            let deadline = stamp(
-                pause.until,
-                &format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC"),
-            );
             let _ = write!(
                 body,
-                "<li class='sign-in-pause'><p class='event-line'>{}</p><p class='meta'>{scope} {deadline} ({}).</p></li>",
+                "<li class='sign-in-pause'><p class='event-line'>{} · try again {}</p></li>",
                 escape(pause.label),
                 until(now, pause.until)
             );
@@ -725,10 +711,10 @@ pub(super) fn totp_scan(secret: &str, uri: &str, fields: &str) -> Page {
         .map(|chunk| format!("<span>{}</span>", escape(&String::from_utf8_lossy(chunk))))
         .collect::<String>();
     let mut page = plain(
-        "Add to your authenticator",
+        "Set up an authenticator",
         Width::Medium,
         format!(
-            "<div class='panel'><h1>Add Agent Connect to your authenticator</h1><p class='lede'><span class='on-wide'>Scan this code with your phone’s authenticator app.</span><span class='on-narrow'>Open it in your authenticator app on this phone, or scan the code from another device.</span> This setup expires in 10 minutes.</p><div class='enroll'><figure class='qr'>{}<figcaption>Scan with your authenticator</figcaption></figure><div class='enroll-other'><a class='open-app' href='{}'>Open in authenticator app</a><details class='manual'><summary>Enter the key by hand<span class='copy-status' role='status' aria-live='polite'></span></summary><p class='key' aria-label='Setup key'>{key}</p><p class='hint'>Time-based · 6 digits · 30 seconds</p></details></div></div><form method=post action='/agent-connect/owner/totp/verify'>{fields}<div class='field'><label for='enrollment-totp'>Code shown in your authenticator</label><input id='enrollment-totp' name=totp {CODE_INPUT} required></div><div class='actions actions--end'><button>Turn on</button><a class='button secondary' href='{SETUP}'>Back</a></div></form><p class='hint below'>If you lose the authenticator, recovery needs a command on the gateway host.</p></div>",
+            "<div class='panel'><h1>Set up an authenticator</h1><p class='lede'>Scan, or open it in your authenticator app.</p><div class='enroll'><figure class='qr'>{}</figure><div class='enroll-other'><a class='open-app' href='{}'>Open in authenticator app</a><details class='manual'><summary>Enter the key by hand<span class='copy-status' role='status' aria-live='polite'></span></summary><p class='key' aria-label='Setup key'>{key}</p><p class='hint'>Time-based · 6 digits · 30 seconds</p></details></div></div><form method=post action='/agent-connect/owner/totp/verify'>{fields}<div class='field'><label for='enrollment-totp'>Code</label><input id='enrollment-totp' name=totp {CODE_INPUT} required></div><div class='actions actions--end'><button>Turn on</button><a class='button secondary' href='{SETUP}'>Back</a></div></form></div>",
             qr(uri),
             escape(uri)
         ),
@@ -1020,7 +1006,6 @@ time{font-variant-numeric:tabular-nums}
 .page{flex:1;width:100%;max-width:46rem;margin:0 auto;padding:2rem 1rem 3.5rem}
 .page--compact{max-width:28rem;padding-top:clamp(2rem,9vh,4.5rem)}
 .page--medium{max-width:38rem;padding-top:clamp(2rem,7vh,3.5rem)}
-.foot{padding:0 1rem 1.5rem;text-align:center;color:var(--muted);font-size:.8125rem}
 .panel{padding:1.75rem;background:var(--paper);border:1px solid var(--line);border-radius:.9rem;box-shadow:0 1px 2px #202d2c0d,0 12px 32px -18px #202d2c33}
 .lede{margin-top:.5rem;color:var(--muted)}
 .panel>p+p{margin-top:.75rem}
@@ -1116,7 +1101,6 @@ pre{max-height:22rem;margin:0 .9rem .9rem;padding:.8rem .9rem;overflow:auto;font
 .addresses+.list{margin-top:0;border-top:0}
 .list .row{padding:1rem 0;border-bottom:1px solid var(--line)}
 .hint code,.alert code{white-space:nowrap}
-.on-narrow{display:none}
 .section>h2{margin-bottom:.75rem}
 .row{display:flex;align-items:center;gap:.9rem;padding:1rem 1.15rem}
 .row-main{flex:1;min-width:0}
@@ -1125,7 +1109,6 @@ pre{max-height:22rem;margin:0 .9rem .9rem;padding:.8rem .9rem;overflow:auto;font
 .enroll{display:grid;grid-template-columns:auto 1fr;align-items:start;gap:1.25rem 1.75rem;margin-top:1.5rem;padding-bottom:1.5rem;border-bottom:1px solid var(--line)}
 .qr{display:grid;justify-items:center;gap:.5rem;width:12rem}
 .qr svg{display:block;width:12rem;height:12rem;padding:.35rem;background:#fff;border:1px solid var(--line);border-radius:.6rem}
-.qr figcaption{color:var(--muted);font-size:.8125rem;text-align:center}
 .enroll-other{display:grid;gap:.75rem;align-content:start;padding-top:.25rem}
 .open-app{order:2;display:flex;align-items:center;min-height:2rem;font-size:.875rem;font-weight:600}
 .copy-status{margin-left:auto;padding-left:.5rem;font-size:.75rem;font-weight:500}
@@ -1177,8 +1160,6 @@ h1{font-size:1.5rem}
 .setup span{flex:1 1 calc(100% - 2rem)}
 .origin-chip{font-size:1.0625rem}
 .setup a{display:flex;align-items:center;min-height:2.75rem;padding-left:1.85rem}
-.on-wide{display:none}
-.on-narrow{display:inline}
 .open-app{order:0;justify-content:center;min-height:2.75rem;padding:.6rem 1.15rem;font-size:1rem;font-weight:650;color:var(--ink);text-decoration:none;background:var(--paper);border:1px solid var(--line-strong);border-radius:.5rem}
 .open-app:hover{color:var(--ink);background:var(--ground)}
 .request{grid-template-columns:auto 1fr;padding:1rem}
@@ -1262,34 +1243,30 @@ mod tests {
     }
 
     #[test]
-    fn sign_in_security_pauses_show_scope_and_exact_reset_deadlines() {
+    fn sign_in_security_pauses_say_what_is_paused_and_when_it_resumes() {
         let pauses = [
             SignInPause {
-                label: "Sign-in attempts",
-                affected_clients: Some(1),
+                label: "Sign-in paused",
                 until: 1_700_000_900,
             },
             SignInPause {
-                label: "Authenticator attempts",
-                affected_clients: Some(2),
+                label: "Passkey and code attempts paused",
                 until: 1_700_000_060,
             },
             SignInPause {
-                label: "Unauthenticated requests",
-                affected_clients: None,
+                label: "New connections paused",
                 until: 1_700_000_030,
             },
             SignInPause {
                 label: "Expired pause",
-                affected_clients: Some(1),
                 until: 1_700_000_000,
             },
         ];
         let body = sign_in_security(1_700_000_000, &[], &pauses);
-        assert!(body.contains("Paused for 1 request source group. Latest reset:"));
-        assert!(body.contains("Paused for 2 request source groups. Latest reset:"));
-        assert!(body.contains("Paused for unauthenticated requests across the gateway. Resets:"));
-        assert!(body.contains("2023-11-14 22:28:20 UTC"));
+        assert!(body.contains("Sign-in paused · try again <time"));
+        assert!(body.contains("Passkey and code attempts paused · try again <time"));
+        assert!(body.contains("New connections paused · try again <time"));
+        assert!(body.contains(">in 15 min</time>"));
         assert!(body.contains("datetime='2023-11-14T22:28:20Z'"));
         assert!(body.contains("No recent sign-in failures."));
         assert!(!body.contains("Expired pause"));

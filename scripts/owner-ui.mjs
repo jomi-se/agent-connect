@@ -265,7 +265,7 @@ try {
   await capture("sign-in", { compact: true });
   await page.keyboard.press("Tab");
   await page.keyboard.press("Tab");
-  await page.getByLabel("Owner passphrase").evaluate((input) => {
+  await page.getByLabel("Passphrase", { exact: true }).evaluate((input) => {
     assertBrowser(
       input === document.activeElement,
       "Passphrase follows the brand link in keyboard order",
@@ -290,12 +290,12 @@ try {
     .locator('input[name="csrf_token"]')
     .inputValue();
   const wrongPassphrase = "deliberately-wrong-test-passphrase";
-  await page.getByLabel("Owner passphrase").fill(wrongPassphrase);
+  await page.getByLabel("Passphrase", { exact: true }).fill(wrongPassphrase);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("heading", { name: "Sign-in failed" }).waitFor();
   await capture("sign-in-error", { compact: true });
   await page.goto(owner);
-  await page.getByLabel("Owner passphrase").fill(password);
+  await page.getByLabel("Passphrase", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Continue" }).click();
   // No factor yet: the passphrase opens setup only, and setup offers a passkey.
   const createPasskey = page.getByRole("button", {
@@ -445,7 +445,7 @@ try {
     const recoveryPage = await recoveryContext.newPage();
     recoveryPage.on("pageerror", (error) => errors.push(error.message));
     await recoveryPage.goto(ipOwner);
-    await recoveryPage.getByLabel("Owner passphrase").waitFor();
+    await recoveryPage.getByLabel("Passphrase", { exact: true }).waitFor();
     assert.equal(
       await recoveryPage
         .getByRole("region", { name: "Sign-in security", exact: true })
@@ -461,7 +461,7 @@ try {
     await recoveryPage.goto(originalRequest.href);
     await recoveryPage.getByText(waitingApp, { exact: true }).waitFor();
     await recoveryPage
-      .getByLabel("Owner passphrase")
+      .getByLabel("Passphrase", { exact: true })
       .fill("deliberately-wrong-recovery-passphrase");
     const [failedSignIn] = await Promise.all([
       recoveryPage.waitForResponse(
@@ -492,7 +492,7 @@ try {
     // Follow the rendered recovery link, rather than reconstructing the request.
     await retry.click();
     await recoveryPage.getByText(waitingApp, { exact: true }).waitFor();
-    await recoveryPage.getByLabel("Owner passphrase").fill(password);
+    await recoveryPage.getByLabel("Passphrase", { exact: true }).fill(password);
     await recoveryPage
       .getByRole("button", { name: "Continue", exact: true })
       .click();
@@ -501,7 +501,7 @@ try {
       .waitFor();
     assert.match(
       await recoveryPage.locator("main").innerText(),
-      /bare IP address[\s\S]*localhost/,
+      /raw IP address/,
       "The IP address page says why there is no passkey and where to get one",
     );
     await capture("setup-ip-address", { compact: true, target: recoveryPage });
@@ -553,7 +553,7 @@ try {
     await recoveryPage.emulateMedia({ reducedMotion: "no-preference" });
     const enrollmentStep = totpStep();
     await recoveryPage
-      .getByLabel("Code shown in your authenticator")
+      .getByLabel("Code", { exact: true })
       .fill(totpCode(secret, enrollmentStep));
     await recoveryPage.getByRole("button", { name: "Turn on" }).click();
     // Enrolling leads back to the request that was waiting.
@@ -1022,7 +1022,7 @@ try {
     ipGrantPage.on("pageerror", (error) => errors.push(error.message));
     await ipGrantPage.goto(ipOwner);
     const signInStep = await nextTotpStep(lastIpTotpStep);
-    await ipGrantPage.getByLabel("Owner passphrase").fill(password);
+    await ipGrantPage.getByLabel("Passphrase", { exact: true }).fill(password);
     await ipGrantPage
       .getByLabel("Authenticator code")
       .fill(totpCode(ipTotpSecret, signInStep));
@@ -1155,7 +1155,7 @@ try {
   const problemPage = await problemContext.newPage();
   problemPage.on("pageerror", (error) => errors.push(error.message));
   await problemPage.goto(`${probeOrigin}/agent-connect/owner`);
-  await problemPage.getByLabel("Owner passphrase").fill(password);
+  await problemPage.getByLabel("Passphrase", { exact: true }).fill(password);
   await problemPage
     .getByRole("button", { name: "Continue", exact: true })
     .click();
@@ -1193,7 +1193,7 @@ try {
       submittedSecrets.push(
         await pausePage.locator('input[name="csrf_token"]').inputValue(),
       );
-      await pausePage.getByLabel("Owner passphrase").fill(marker);
+      await pausePage.getByLabel("Passphrase", { exact: true }).fill(marker);
       await pausePage.getByLabel("Authenticator code").fill("000000");
       const [failed] = await Promise.all([
         pausePage.waitForResponse(
@@ -1206,7 +1206,7 @@ try {
       assert.equal(failed.status(), attempt < 10 ? 401 : 429);
     }
     await pausePage.goto(probeOwner);
-    await pausePage.getByLabel("Owner passphrase").waitFor();
+    await pausePage.getByLabel("Passphrase", { exact: true }).waitFor();
     assert.equal(
       await pausePage
         .getByRole("region", { name: "Sign-in security", exact: true })
@@ -1226,10 +1226,10 @@ try {
       .waitFor();
     const pause = history
       .locator(".sign-in-pause")
-      .filter({ hasText: "Sign-in attempts" });
+      .filter({ hasText: "Sign-in paused" });
     assert.match(
       await pause.innerText(),
-      /Paused for 1 request source group\. Latest reset:/,
+      /^Sign-in paused · try again in \d+ min$/,
     );
     const reset = Date.parse(
       await pause.locator("time").first().getAttribute("datetime"),

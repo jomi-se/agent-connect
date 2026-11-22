@@ -6,7 +6,7 @@
   second factor: a passkey, which alone signs in and approves each app, or an
   authenticator app (TOTP), which needs the passphrase to sign in and a fresh
   code for each approval. TOTP is for addresses where a passkey cannot work,
-  such as a bare IP address; the page says so and how to get a name instead.
+  such as a raw IP address; the page says so.
   On an address with neither, the passphrase only opens setup. See ADR 0019.
 - Security lists each configured address with its factor and removes one with a
   fresh passkey or code, signing that address out and revoking apps approved

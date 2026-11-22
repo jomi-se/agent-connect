@@ -46,9 +46,7 @@ export async function setUpTotpInBrowser(page) {
     .getAttribute("href");
   const secret = new URL(uri).searchParams.get("secret");
   const step = totpStep();
-  await page
-    .getByLabel("Code shown in your authenticator")
-    .fill(totpCode(secret, step));
+  await page.getByLabel("Code", { exact: true }).fill(totpCode(secret, step));
   await page.getByRole("button", { name: "Turn on", exact: true }).click();
   await page.waitForURL((url) => !url.pathname.includes("/totp"));
   return { secret, step };

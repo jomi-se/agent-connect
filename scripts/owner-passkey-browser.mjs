@@ -81,7 +81,7 @@ export async function passkeySignIn(page, passkeys, { owner, password }) {
     name: "Sign in with your passkey",
     exact: true,
   });
-  const passphrase = page.getByLabel("Owner passphrase");
+  const passphrase = page.getByLabel("Passphrase", { exact: true });
   await passkeyButton.or(passphrase).first().waitFor();
   if (await passkeyButton.isVisible()) {
     await passkeys.use(page, () =>

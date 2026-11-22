@@ -1306,7 +1306,7 @@ async fn owner_ui_has_labels_empty_states_and_hashed_styles() {
     let page = request(auth, Method::GET, LOGIN, None, None, &[]).await;
     assert!(
         page.text
-            .contains("<label for='owner-passphrase'>Owner passphrase</label>")
+            .contains("<label for='owner-passphrase'>Passphrase</label>")
     );
     assert!(
         page.text
@@ -4117,16 +4117,16 @@ mod sign_in_audit_tests {
             let pauses = sign_in_audit::pauses(&inner, now);
             assert_eq!(pauses.len(), 3);
             assert_eq!(
-                (pauses[0].label, pauses[0].affected_clients, pauses[0].until),
-                ("Sign-in attempts", Some(2), now + 890)
+                (pauses[0].label, pauses[0].until),
+                ("Sign-in paused", now + 890)
             );
             assert_eq!(
-                (pauses[1].label, pauses[1].affected_clients, pauses[1].until),
-                ("Authenticator attempts", Some(2), now + 55)
+                (pauses[1].label, pauses[1].until),
+                ("Passkey and code attempts paused", now + 55)
             );
             assert_eq!(
-                (pauses[2].label, pauses[2].affected_clients, pauses[2].until),
-                ("Unauthenticated requests", None, now + 40)
+                (pauses[2].label, pauses[2].until),
+                ("New connections paused", now + 40)
             );
         }
         let (page, events) =
@@ -4837,7 +4837,7 @@ mod client_address_tests {
         }
         let owner = owner(auth);
         let page = get(auth, OWNER, ISSUER, CLIENT, Some(&owner)).await;
-        assert!(page.text.contains("1 request source group"));
+        assert!(page.text.contains("Sign-in paused · try again"));
         for secret in [
             PROXY,
             CLIENT,
@@ -5249,8 +5249,8 @@ async fn ip_literal_address_explains_why_there_is_no_passkey_and_offers_totp() {
     .await;
     assert_eq!(page.status, StatusCode::OK, "{}", page.text);
     assert!(!page.text.contains("data-passkey="));
-    assert!(page.text.contains("bare IP address"));
-    assert!(page.text.contains("<code>localhost</code>"));
+    assert!(page.text.contains("raw IP address"));
+    assert!(!page.text.contains("localhost"));
     assert!(page.text.contains(&format!("href='{}'", pages::TOTP)));
     drop(auth);
     fs::remove_dir_all(dir).unwrap();

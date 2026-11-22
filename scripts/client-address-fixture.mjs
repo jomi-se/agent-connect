@@ -450,8 +450,8 @@ export async function verifyClientAddressPolicy({
       "Existing owner session must bypass this source's exhausted request budget",
     );
     assert.ok(
-      owner.text.includes("Paused for 3 request source groups"),
-      "Activity must show trusted, transport and fallback groups separately",
+      owner.text.includes("Some connections paused · try again"),
+      "Activity must show that some sources are paused",
     );
     for (let index = 0; index < 40 && auditLines.length < 33; index++)
       await delay(50);
