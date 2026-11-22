@@ -13,7 +13,7 @@
   there. `agent-connect remove-factor` replaces `reset-totp`: at a terminal it
   lists each stored passkey and authenticator to filter and choose from, or
   takes an address or `--all`; both `remove-factor` and `reset-passphrase` revoke every app
-  grant.
+  grant, and stop a running user service for the change and start it again.
 - After upgrading, the gateway refuses the earlier owner state: remove the
   file it names and run `agent-connect setup` again, then set up each address
   and pair applications again.

@@ -3004,7 +3004,7 @@ async fn host_removal_takes_one_exact_address_or_all_and_revokes_every_grant() {
         remove_offline(&dir, one.clone())
             .unwrap_err()
             .to_string()
-            .contains("stop the gateway")
+            .contains("the gateway is running")
     );
     drop(auth);
     // A trailing slash is still the same address; removing one factor offline
@@ -3078,7 +3078,7 @@ async fn reset_passphrase_requires_stopped_gateway_keeps_factors_and_revokes_gra
         AuthService::reset_passphrase(&dir, REPLACEMENT)
             .unwrap_err()
             .to_string()
-            .contains("stop the gateway")
+            .contains("the gateway is running")
     );
     drop(auth);
     assert!(AuthService::reset_passphrase(&dir, "too short").is_err());

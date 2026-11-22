@@ -2497,7 +2497,7 @@ fn authorization_lock(directory: &PathBuf) -> Result<File> {
     #[cfg(unix)]
     ensure!(
         unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
-        "authorization state is already open; stop the gateway before recovery"
+        "the gateway is running; stop it, then run this again"
     );
     Ok(lock)
 }

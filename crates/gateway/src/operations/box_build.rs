@@ -336,9 +336,7 @@ async fn build(
     image: &str,
     platform: &str,
 ) -> anyhow::Result<()> {
-    eprintln!(
-        "Building {image} locally for {platform} from the gateway package (about 1 GB; owner tools add to this). Build steps have normal network access."
-    );
+    eprintln!("Building the box (about 1 GB)…");
     let status = tokio::process::Command::new(crate::engine::program())
         .args(["build", "--platform", platform, "--tag", image])
         .args(

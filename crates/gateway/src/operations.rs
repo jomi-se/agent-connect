@@ -90,7 +90,7 @@ pub async fn remove_factor(cli: RemoveFactorCli) -> anyhow::Result<()> {
         Ok::<_, anyhow::Error>(default_runtime_directory()?.join("config.json"))
     })?;
     let configured = config::ServeOptions {
-        config: Some(path),
+        config: Some(path.clone()),
         ..Default::default()
     }
     .resolve()?;
@@ -103,7 +103,7 @@ pub async fn remove_factor(cli: RemoveFactorCli) -> anyhow::Result<()> {
     }
     if !cli.yes && !interactive {
         return Err(usage(
-            "remove-factor needs a terminal, or an address or --all with --yes; stop the gateway first",
+            "remove-factor needs a terminal, or an address or --all with --yes",
         ));
     }
     let addresses: Vec<String> = configured
@@ -114,53 +114,85 @@ pub async fn remove_factor(cli: RemoveFactorCli) -> anyhow::Result<()> {
         .collect();
     let mut chosen = String::new();
     let state = configured.state_dir.join("auth");
-    let removal = tokio::task::spawn_blocking(move || {
-        AuthService::remove_factor(&state, |stored: &StoredFactors| {
-            if stored.factors.is_empty() {
-                eprintln!("No address has a passkey or authenticator.");
-                return Ok(None);
-            }
-            let named = cli.address.as_deref().map(|address| {
-                factor_address(address)
-                    .filter(|origin| stored.factors.iter().any(|f| &f.address == origin))
-                    .ok_or(address)
-            });
-            let target = match named {
-                _ if cli.all => FactorTarget::All,
-                Some(Ok(origin)) => FactorTarget::Address(origin),
-                // Without a prompt, the store names the addresses that have one.
-                Some(Err(address)) if cli.yes => FactorTarget::Address(address.to_string()),
-                Some(Err(address)) => {
-                    eprintln!("No passkey or authenticator for {address}.");
-                    match pick_factor(stored, &addresses)? {
+    let removal = with_gateway_stopped(&path, async move {
+        tokio::task::spawn_blocking(move || {
+            AuthService::remove_factor(&state, |stored: &StoredFactors| {
+                if stored.factors.is_empty() {
+                    eprintln!("No address has a passkey or authenticator.");
+                    return Ok(None);
+                }
+                let named = cli.address.as_deref().map(|address| {
+                    factor_address(address)
+                        .filter(|origin| stored.factors.iter().any(|f| &f.address == origin))
+                        .ok_or(address)
+                });
+                let target = match named {
+                    _ if cli.all => FactorTarget::All,
+                    Some(Ok(origin)) => FactorTarget::Address(origin),
+                    // Without a prompt, the store names the addresses that have one.
+                    Some(Err(address)) if cli.yes => FactorTarget::Address(address.to_string()),
+                    Some(Err(address)) => {
+                        eprintln!("No passkey or authenticator for {address}.");
+                        match pick_factor(stored, &addresses)? {
+                            Some(target) => target,
+                            None => return Ok(None),
+                        }
+                    }
+                    None => match pick_factor(stored, &addresses)? {
                         Some(target) => target,
                         None => return Ok(None),
-                    }
+                    },
+                };
+                chosen = describe_factor(stored, &target);
+                if !cli.yes && !confirm_removal(&chosen, stored.apps_with_access)? {
+                    return Ok(None);
                 }
-                None => match pick_factor(stored, &addresses)? {
-                    Some(target) => target,
-                    None => return Ok(None),
-                },
-            };
-            chosen = describe_factor(stored, &target);
-            if !cli.yes && !confirm_removal(&chosen, stored.apps_with_access)? {
-                return Ok(None);
-            }
-            Ok(Some(target))
+                Ok(Some(target))
+            })
+            .map(|removal| (removal, chosen))
         })
-        .map(|removal| (removal, chosen))
+        .await?
     })
-    .await?;
+    .await;
     let (Some(removal), chosen) = removal? else {
         return Ok(());
     };
-    println!(
-        "Removed {chosen}. Restart the gateway, then sign in with the owner passphrase to set up a new one."
-    );
+    println!("Removed {chosen}. Sign in to set up a new one.");
     if removal.revoked_grants > 0 {
-        println!("{}", apps_reconnect(removal.revoked_grants));
+        println!("{}", apps_disconnected(removal.revoked_grants));
     }
     Ok(())
+}
+
+/// Recovery changes the owner state with the gateway stopped: a running user
+/// service is stopped first and started again afterwards, whatever the outcome.
+/// A gateway running some other way keeps the state locked, and the change
+/// asks for it to be stopped.
+async fn with_gateway_stopped<T>(
+    config: &std::path::Path,
+    change: impl std::future::Future<Output = anyhow::Result<T>>,
+) -> anyhow::Result<T> {
+    let running = service::stop_running_service(config).await?;
+    if running {
+        eprintln!("Stopping the gateway for this; it starts again after.");
+    }
+    let result = change.await;
+    if running && let Err(error) = service::start_service(config).await {
+        let error =
+            error.context("the gateway could not start again; run agent-connect service start");
+        if result.is_ok() {
+            return Err(error);
+        }
+        eprintln!("{error:#}");
+    }
+    result
+}
+
+fn apps_disconnected(apps: usize) -> String {
+    match apps {
+        1 => "1 app was disconnected.".into(),
+        n => format!("{n} apps were disconnected."),
+    }
 }
 
 /// "the passkey for https://agent.example.com", or every factor.
@@ -273,7 +305,7 @@ pub async fn reset_passphrase(cli: ResetPassphraseCli) -> anyhow::Result<()> {
         Ok::<_, anyhow::Error>(default_runtime_directory()?.join("config.json"))
     })?;
     let configured = config::ServeOptions {
-        config: Some(path),
+        config: Some(path.clone()),
         ..Default::default()
     }
     .resolve()?;
@@ -281,16 +313,17 @@ pub async fn reset_passphrase(cli: ResetPassphraseCli) -> anyhow::Result<()> {
         return Err(usage("headless runtimes have no owner passphrase"));
     }
     let passphrase = config::prompt_owner_passphrase(
-        "New owner sign-in passphrase (at least 12 characters; stop the gateway first; revokes every app grant): ",
+        "New passphrase (at least 12 characters; disconnects every app): ",
     )?;
     let state = configured.state_dir.join("auth");
-    tokio::task::spawn_blocking(move || {
-        crate::authorization::AuthService::reset_passphrase(&state, &passphrase)
+    with_gateway_stopped(&path, async move {
+        tokio::task::spawn_blocking(move || {
+            crate::authorization::AuthService::reset_passphrase(&state, &passphrase)
+        })
+        .await?
     })
-    .await??;
-    println!(
-        "Owner passphrase replaced and every app grant was revoked. Restart the gateway; passkeys and authenticators are kept, and apps will need to connect again. The new passphrase is what sets up an address that has neither."
-    );
+    .await?;
+    println!("Passphrase changed. Every app was disconnected.");
     Ok(())
 }
 
@@ -879,7 +912,11 @@ fn print_plan(plan: &SetupPlan, json: bool) -> anyhow::Result<()> {
             if plan.existing { "resumes" } else { "creates" },
             plan.directory.display(),
             plan.origin,
-            plan.steps.join(" → ")
+            plan.steps
+                .iter()
+                .map(|step| step_label(step))
+                .collect::<Vec<_>>()
+                .join(" → ")
         );
         if plan.login_required && !plan.login {
             println!(
@@ -896,6 +933,22 @@ fn print_plan(plan: &SetupPlan, json: bool) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Setup's steps in words; `--json` keeps the step IDs.
+fn step_label(step: &str) -> &str {
+    match step {
+        "upgrade-box-preserve-private-state" => "upgrade the box",
+        "preserve-private-runtime" => "keep the runtime",
+        "initialize-private-runtime" => "create the runtime",
+        "create-owner-sign-in" => "create owner sign-in",
+        "keep-owner-sign-in" => "keep owner sign-in",
+        "build-local-box" => "build the box",
+        "owner-login-if-requested" => "log in, if asked",
+        "foreground-serve" => "serve in this terminal",
+        "install-and-start-user-service" => "start the service",
+        other => other,
+    }
 }
 
 pub(super) fn validate_argument(value: &str) -> anyhow::Result<()> {

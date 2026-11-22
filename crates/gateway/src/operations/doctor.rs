@@ -113,8 +113,29 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
     } else {
         let auth = configured.state_dir.join("auth/authorization.json");
         match private_metadata(&auth, false) {
-            Ok(()) => report.add("owner_state", CheckStatus::Pass, "Private owner authentication file is present (contents not read)", None),
-            Err(_) => report.add("owner_state", CheckStatus::Fail, "Private owner authentication file is missing or unsafe", Some("Restore the existing private owner state or create a fresh runtime; setup will never overwrite an existing owner identity")),
+            Ok(()) => report.add(
+                "owner_state",
+                CheckStatus::Pass,
+                "Owner sign-in is present (contents not read)",
+                None,
+            ),
+            Err(_)
+                if std::fs::symlink_metadata(&auth)
+                    .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+            {
+                report.add(
+                    "owner_state",
+                    CheckStatus::Fail,
+                    "Owner sign-in is missing",
+                    Some("Run agent-connect setup"),
+                )
+            }
+            Err(_) => report.add(
+                "owner_state",
+                CheckStatus::Fail,
+                "Owner sign-in file is unsafe",
+                Some("It must be yours and private (mode 600)"),
+            ),
         }
     }
     if crate::engine::for_runtime(configured.container_engine).is_err() {

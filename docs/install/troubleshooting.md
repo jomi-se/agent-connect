@@ -19,7 +19,7 @@ credential contents or owner authentication secrets.
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `config_valid`        | Config is missing, invalid or unsafe. Run setup for a fresh runtime, or repair the existing private config without replacing owner state.                                                                                                                                                                                                             |
 | `runtime_permissions` | Runtime/state directories must be owned by the invoking user, private (0700), and not symlinks. Use the account that created them.                                                                                                                                                                                                                    |
-| `owner_state`         | Owner-state file must exist and be private (0600). Restore its protected backup or deliberately start a new runtime and pair again. Headless mode reports a warning because it has no hosted owner flow.                                                                                                                                              |
+| `owner_state`         | Owner sign-in must exist and be private (0600). If it is missing, `agent-connect setup` creates a new one: you choose the passphrase, set up each address and pair apps again. Headless mode reports a warning because it has no hosted owner flow.                                                                                                   |
 | `engine_available`    | Start the configured engine and ensure `docker info` or `podman info` works as the gateway user. Running the gateway as root is not the repair.                                                                                                                                                                                                       |
 | `engine_rootless`     | Fails on a rootful engine, where the gateway can start host root, until setup records `--allow-rootful-engine`; then it warns. Run Docker in rootless mode to pass. Docker Desktop passes.                                                                                                                                                            |
 | `box_current`         | Passes when the box is current, or behind while the serving gateway refreshes it. Warns when the last refresh failed (the message carries the error), the gateway has not checked in over a day (is the service running?), a built box has waited over two days for sessions to end, or `box_refresh` is off. `agent-connect setup` rebuilds by hand. |
@@ -93,20 +93,18 @@ that signs the address out and revokes apps approved on it. Otherwise remove it
 on the host; there is no web recovery endpoint:
 
 ```sh
-agent-connect service stop
 agent-connect remove-factor
-agent-connect service start
 ```
 
 At a terminal, `remove-factor` lists each stored passkey and authenticator,
 including one whose address has left the configuration; type to filter, choose
 one or all of them, and confirm. Naming an address skips the list (a path or
 trailing slash is dropped). For a script, name the address or pass `--all`,
-with `--yes` to confirm without a prompt. For a non-default runtime, pass the
-same `--config` to all three commands.
+with `--yes` to confirm without a prompt. For a non-default runtime, pass its
+`--config`. A running user service is stopped for the change and started again
+afterwards; a gateway run any other way has to be stopped first.
 `remove-factor` requires the private authorization state to be owned by the
-invoking user and refuses to proceed while the gateway holds its exclusive
-state lock. It keeps the owner passphrase and revokes every application grant.
+invoking user. It keeps the owner passphrase and revokes every application grant.
 Sign in on that address with the passphrase and set up a new passkey or
 authenticator; applications will need to connect again. A full reset is
 `remove-factor --all` followed by `reset-passphrase`.
@@ -116,13 +114,13 @@ authenticator; applications will need to connect again. A full reset is
 Replace it locally at a terminal; the gateway keeps no copy to recover:
 
 ```sh
-agent-connect service stop
-agent-connect reset-passphrase --config <config>
-agent-connect service start
+agent-connect reset-passphrase
 ```
 
-It prompts twice for the new passphrase and refuses to proceed while the gateway
-holds its state lock. Passkeys and authenticators are kept, and every
+It prompts twice for the new passphrase, then stops a running user service for
+the change and starts it again (pass `--config` for a non-default runtime; a
+gateway run any other way has to be stopped first). Passkeys and authenticators
+are kept, and every
 application grant is revoked; applications will need to connect again. The new
 passphrase is what sets up an address that has neither.
 

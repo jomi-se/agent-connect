@@ -130,26 +130,15 @@ before release:
 
 ### Still to review
 
-- **Every owner surface gets a design pass together**: labels, not
-  explanations; explanation stays only for a decision that can't be taken
-  back and for an uncommon dead end. Reviewed page by page with the owner,
-  each with its own screenshot.
-  - Done: no footer; passphrase sign-in, passkey setup, the IP address page,
-    authenticator setup and the sign-in pause; the approval page's "Tools",
-    no fold-out, no passkey reminder.
-  - Approval page: the risk sentence reads "An approved app can use your
-    agent's login and see other apps' conversations." When
-    [per-app conversations](app-conversations.md) land, it becomes "An
-    approved app can use your agent's login."
-  - Next, one at a time: Activity (move sign-in failures to Security; cut the
-    session ID and the history's explanation), Security, Gateway, the error
-    pages, the CLI messages.
-- **A stale doctor hint:** "setup will never overwrite an existing owner
-  identity" still shows for a missing owner file, which setup now creates.
+Nothing. The design pass is done: every owner page, the error pages and the
+terminal messages now use labels, with explanation kept for a decision that
+can't be taken back and for an uncommon dead end. The approval page's risk
+sentence reads "An approved app can use your agent's login and see other
+apps' conversations." until [per-app conversations](app-conversations.md)
+land. The recovery commands stop and start a running user service themselves.
 
 ## Before release
 
-- The design pass above.
 - Step 9, real devices: a phone and a desktop password manager against a live
   dev build, which doubles as the owner's click-through of the redesigned
   pages.

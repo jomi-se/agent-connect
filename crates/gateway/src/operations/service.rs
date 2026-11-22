@@ -225,6 +225,42 @@ pub(super) async fn stop_service_for_upgrade(config: &Path) -> anyhow::Result<()
     })?;
     stop_installed_for_upgrade(&paths, &mut NativeRunner).await
 }
+/// Stops this runtime's user service when it is running, so a recovery command
+/// can change the owner state; says whether it was running. A gateway that is
+/// not under the user service manager is left alone.
+pub(super) async fn stop_running_service(config: &Path) -> anyhow::Result<bool> {
+    let Ok(paths) = ServicePaths::from_cli(&ServiceCli {
+        config: Some(config.to_owned()),
+        manager: None,
+        command: ServiceAction::Status,
+    }) else {
+        return Ok(false);
+    };
+    stop_if_running(&paths, &mut NativeRunner).await
+}
+
+async fn stop_if_running(paths: &ServicePaths, runner: &mut impl Runner) -> anyhow::Result<bool> {
+    if !(paths.unit.exists() || paths.unit.is_symlink()) {
+        return Ok(false);
+    }
+    let status = service_with(&ServiceAction::Status, paths, runner).await?;
+    let running = status.contains("ActiveState=active") || status.contains("state = running");
+    if running {
+        service_with(&ServiceAction::Stop, paths, runner).await?;
+    }
+    Ok(running)
+}
+
+pub(super) async fn start_service(config: &Path) -> anyhow::Result<()> {
+    let paths = ServicePaths::from_cli(&ServiceCli {
+        config: Some(config.to_owned()),
+        manager: None,
+        command: ServiceAction::Start,
+    })?;
+    service_with(&ServiceAction::Start, &paths, &mut NativeRunner).await?;
+    Ok(())
+}
+
 async fn stop_installed_for_upgrade(
     paths: &ServicePaths,
     runner: &mut impl Runner,
@@ -644,6 +680,58 @@ mod tests {
         assert!(fixture.commands.is_empty());
         std::fs::remove_dir_all(paths.unit.parent().unwrap()).unwrap();
     }
+    #[tokio::test]
+    async fn recovery_stops_only_a_running_service() {
+        struct Service {
+            commands: Vec<CommandSpec>,
+            running: bool,
+        }
+        impl Runner for Service {
+            async fn run(&mut self, command: CommandSpec) -> anyhow::Result<CommandOutput> {
+                let output = match (command.program.as_str(), self.running) {
+                    ("systemctl", true) => "ActiveState=active",
+                    ("systemctl", false) => "ActiveState=inactive",
+                    (_, true) => "state = running",
+                    (_, false) => "state = not running",
+                };
+                if command
+                    .args
+                    .iter()
+                    .any(|arg| arg == "stop" || arg == "bootout")
+                {
+                    self.running = false;
+                }
+                self.commands.push(command);
+                Ok(CommandOutput {
+                    code: 0,
+                    output: output.into(),
+                })
+            }
+        }
+        for manager in [ServiceManager::Systemd, ServiceManager::Launchd] {
+            let paths = paths(manager);
+            let mut runner = Service {
+                commands: Vec::new(),
+                running: true,
+            };
+            // Nothing installed: nothing to stop, and no manager command runs.
+            assert!(!stop_if_running(&paths, &mut runner).await.unwrap());
+            assert!(runner.commands.is_empty());
+            service_with(
+                &ServiceAction::Install { offline: true },
+                &paths,
+                &mut runner,
+            )
+            .await
+            .unwrap();
+            assert!(stop_if_running(&paths, &mut runner).await.unwrap());
+            assert!(!runner.running);
+            // Stopped already: it is left as it is, and reported as not running.
+            assert!(!stop_if_running(&paths, &mut runner).await.unwrap());
+            std::fs::remove_dir_all(paths.unit.parent().unwrap()).unwrap();
+        }
+    }
+
     #[tokio::test]
     async fn upgrade_restarts_owned_running_service_when_only_executable_changes() {
         struct RunningService {
