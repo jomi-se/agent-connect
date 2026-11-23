@@ -37,19 +37,19 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "2.9.1",
-    "@cfworker/json-schema": "4.1.4",
-    "ai": "7.0.159",
+    "@cfworker/json-schema": "4.1.6",
+    "ai": "7.0.179",
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@ai-sdk/react": "4.0.163",
+    "@ai-sdk/react": "4.0.184",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "typescript": "6.0.3",
-    "vite": "7.3.7",
-    "vitest": "4.1.12"
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
   },
   "engines": {
     "node": ">=22"

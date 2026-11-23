@@ -13,11 +13,11 @@
   },
   "dependencies": {
     "@open-agent-connect/web": "0.0.10",
-    "@ai-sdk/react": "4.0.96",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "@ai-sdk/react": "4.0.184",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "vite": "7.3.7"
+    "vite": "8.3.8"
   }
 }

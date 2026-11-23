@@ -12,6 +12,10 @@
   carries the binding. `SingleMcpServer.handle` answers one MCP request in
   place of `message`, tool handlers get the request's `signal` and `notify`,
   and `McpOverAcpError` is gone.
+- `createWebMcpToolSnapshot` follows Chromium 159's native WebMCP binding,
+  which passes schemas and arguments as objects like the WebMCP draft. Chrome
+  153's JSON-string binding is no longer supported.
+- Depend on ai 7.0.179 and @cfworker/json-schema 4.1.6.
 - Depend on zod 4.6.7, which fixes unbounded memory use while validating
   oversized constrained collections (GHSA-mrhx-c7xc-m3w5).
 - Depend on AI SDK `ai` 7.0.143.

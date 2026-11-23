@@ -30,7 +30,8 @@ owned by the current document, optionally selects names, and returns ordinary
 `createAcpChatTransport`. Explicit application tools remain supported.
 
 Definitions are cloned and frozen before consent. Execution stays local through
-native `executeTool(registeredTool, JSON.stringify(inputObject), { signal })`.
+native `executeTool(registeredTool, inputObject, { signal })`, passing the
+browser's own `Tool` object (a copy is refused).
 The native string result is returned unchanged; invocation rejection follows
 the existing application error path. A tool's JSON payload is not interpreted
 as a new protocol envelope.
@@ -50,12 +51,13 @@ Primary reference: the
 4.2. Browser availability is experimental and unsupported contexts fail clearly
 with `webmcp_unavailable`.
 
-The measured native binding (Chrome 153 with experimental web platform
-features) differs from the draft: schema and invocation arguments are JSON
-strings, not objects. Only this measured binding is implemented; an execution
-is never retried in a second format. An absent schema defaults to an object
-schema; a present schema must parse to an object. A future draft binding needs
-its own evidence before support is claimed.
+The measured native binding (Chromium 159 with experimental web platform
+features) matches the draft: schema and invocation arguments are objects, and
+the result is a string. Chrome 153 passed JSON strings instead; that binding is
+no longer supported. Only the measured binding is implemented; an execution is
+never retried in a second format. An absent schema defaults to an object
+schema; a present schema must be an object. A future binding needs its own
+evidence before support is claimed.
 
 The draft resolves execution by document and name, not registration ID. Fast
 unregister/re-register can race execution before `toolchange` delivery. The

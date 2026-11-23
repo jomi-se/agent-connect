@@ -28,7 +28,7 @@ export interface WebMcpToolSnapshotOptions {
 interface RegisteredTool {
   readonly name: string;
   readonly description: string;
-  readonly inputSchema?: string;
+  readonly inputSchema?: unknown;
   readonly window: Window;
   readonly origin: string;
 }
@@ -37,7 +37,7 @@ interface ChromiumModelContext extends EventTarget {
   getTools(): Promise<RegisteredTool[]>;
   executeTool(
     tool: RegisteredTool,
-    inputArguments: string,
+    inputArguments: JsonObject,
     options: { signal: AbortSignal },
   ): Promise<string>;
 }
@@ -45,9 +45,10 @@ interface ChromiumModelContext extends EventTarget {
 /**
  * Discover tools before consent, then pass `.tools` to
  * connectAgent and createAcpChatTransport. Validated with
- * Chrome 153's native JSON-string binding.
- * The current CG draft uses objects instead; do not auto-retry an invocation
- * in a second format, because the first call may already have side effects.
+ * Chromium 159's native binding, which passes schemas and arguments as
+ * objects like the CG draft (Chrome 153 passed JSON text). Do not auto-retry
+ * an invocation in a second format: the first call may already have side
+ * effects.
  * Any observed registry change invalidates this snapshot rather than expanding
  * authority. Native WebMCP does not guarantee immutable registration identity.
  * @experimental Unstable native WebMCP browser API.
@@ -131,18 +132,18 @@ export async function createWebMcpToolSnapshot(
         throw new TypeError("Invalid or duplicate WebMCP tool definition");
       }
       names.add(tool.name);
-      // Chrome returns JSON text here. Refuse other bindings before approval.
-      if (
-        tool.inputSchema !== undefined &&
-        typeof tool.inputSchema !== "string"
-      ) {
+      // Chromium returns an object, or null without a schema. Refuse other
+      // bindings before approval.
+      if (tool.inputSchema != null && typeof tool.inputSchema !== "object") {
         throw new AgentConnectError(
           "webmcp_unavailable",
-          "Unsupported WebMCP schema binding; expected Chromium JSON text",
+          "Unsupported WebMCP schema binding; expected a Chromium schema object",
         );
       }
+      // A JSON copy: only JSON reaches consent, and later changes to the
+      // browser's object cannot reach the approved schema.
       const inputSchema: unknown = JSON.parse(
-        tool.inputSchema ?? '{"type":"object"}',
+        JSON.stringify(tool.inputSchema ?? { type: "object" }),
       );
       if (
         !inputSchema ||
@@ -158,7 +159,6 @@ export async function createWebMcpToolSnapshot(
       // Match AcpToolExecutor's preflight before disclosing a candidate to consent.
       createToolValidator(schema);
       freezeJson(inputSchema);
-      const handle = Object.freeze({ ...tool });
       return Object.freeze({
         name: tool.name,
         description: tool.description,
@@ -169,8 +169,9 @@ export async function createWebMcpToolSnapshot(
         ) {
           assertActive();
           const result = await context.executeTool(
-            handle,
-            JSON.stringify(arguments_),
+            // Only the browser's own Tool object is accepted, not a copy.
+            tool,
+            arguments_,
             {
               signal: invocation.signal
                 ? AbortSignal.any([controller.signal, invocation.signal])

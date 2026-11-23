@@ -44,18 +44,18 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@playwright/test": "^1.63.0",
-    "dependency-cruiser": "18.7.0",
+    "@playwright/test": "1.65.1",
+    "dependency-cruiser": "18.9.0",
     "esbuild": "0.28.2",
     "eslint": "10.15.0",
-    "globals": "17.13.0",
-    "jscpd": "5.4.2",
-    "knip": "6.44.1",
-    "openai": "7.47.0",
-    "prettier": "3.9.10",
+    "globals": "17.14.0",
+    "jscpd": "5.4.3",
+    "knip": "6.48.0",
+    "openai": "7.62.0",
+    "prettier": "3.10.1",
     "typescript": "6.0.3",
     "typescript-eslint": "8.73.0",
-    "vitest": "4.1.12",
-    "ws": "8.22.1"
+    "vitest": "5.1.1",
+    "ws": "8.23.0"
   }
 }

@@ -2,7 +2,7 @@ import type { AcpTaskSource, AcpTaskRequest } from "../src/types.js";
 import { expect, test } from "@playwright/test";
 import type { ApplicationToolContext, JsonObject } from "../src/index.js";
 
-// The native Chromium 153 binding is intentionally distinct from the CG draft.
+// The native Chromium 159 binding: schemas and arguments are objects, results are strings.
 interface NativeTool {
   name: string;
   description: string;
@@ -18,7 +18,7 @@ interface NativeContext extends EventTarget {
     options?: { signal: AbortSignal },
   ): Promise<void>;
   getTools(): Promise<
-    Array<{ name: string; inputSchema?: string; window: Window }>
+    Array<{ name: string; inputSchema?: object; window: Window }>
   >;
 }
 type NativeDocument = Document & { modelContext: NativeContext };

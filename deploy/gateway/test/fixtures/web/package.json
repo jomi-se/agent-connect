@@ -6,6 +6,6 @@
     "build": "esbuild app.js --bundle --format=esm --platform=browser --outfile=dist/app.js"
   },
   "devDependencies": {
-    "esbuild": "0.25.10"
+    "esbuild": "0.28.2"
   }
 }

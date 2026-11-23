@@ -3,7 +3,7 @@ import { createWebMcpToolSnapshot } from "../src/index.js";
 
 // These fixtures control adapter-owned faults and exact discovery schedules.
 // Native browser compatibility lives in e2e/webmcp.spec.ts, never in this double.
-function fixture(schema: unknown = '{"type":"object"}') {
+function fixture(schema: unknown = { type: "object" }) {
   const window = new EventTarget();
   const context = Object.assign(new EventTarget(), {
     getTools: vi.fn(),
@@ -60,16 +60,19 @@ describe("WebMCP adapter faults", () => {
   });
 
   it.each([
-    "not json",
-    "null",
-    "[]",
-    '{"type":"string"}',
-    '{"type":"object","required":42}',
-    '{"type":"object","properties":{"x":{"$ref":"#/missing"}}}',
-    '{"type":"object","properties":{"x":{"pattern":"["}}}',
-    '{"type":"object","$schema":"https://json-schema.org/draft/2020-12/schema"}',
+    [[]],
+    [{ type: "string" }],
+    [{ type: "object", required: 42 }],
+    [{ type: "object", properties: { x: { $ref: "#/missing" } } }],
+    [{ type: "object", properties: { x: { pattern: "[" } } }],
+    [
+      {
+        type: "object",
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+      },
+    ],
   ])(
-    "rejects malformed/unsupported schema before consent: %s",
+    "rejects malformed/unsupported schema before consent: %j",
     async (schema) => {
       const f = fixture(schema);
       await expect(
@@ -79,8 +82,8 @@ describe("WebMCP adapter faults", () => {
     },
   );
 
-  it("refuses the unvalidated draft object binding without dispatch or retry", async () => {
-    const f = fixture({ type: "object" });
+  it("refuses the old JSON-text binding without dispatch or retry", async () => {
+    const f = fixture('{"type":"object"}');
     await expect(
       createWebMcpToolSnapshot({ document: f.document }),
     ).rejects.toMatchObject({ code: "webmcp_unavailable" });
@@ -115,21 +118,26 @@ describe("WebMCP adapter faults", () => {
     expect(f.context.getTools).not.toHaveBeenCalled();
   });
 
-  it("clones metadata and schema so later caller mutations do not change approval", async () => {
-    const f = fixture('{"type":"object","properties":{"x":{"type":"string"}}}');
+  it("copies metadata and schema so later changes do not alter approval, and executes the browser's own tool", async () => {
+    const schema = { type: "object", properties: { x: { type: "string" } } };
+    const f = fixture(schema);
     const snapshot = await createWebMcpToolSnapshot({ document: f.document });
     f.descriptor.description = "Changed";
-    f.descriptor.inputSchema = '{"type":"object"}';
+    schema.properties.x.type = "number";
     const tool = snapshot.tools[0]!;
     expect(tool.description).toBe("Read");
+    expect(tool.inputSchema).toEqual({
+      type: "object",
+      properties: { x: { type: "string" } },
+    });
     expect(Object.isFrozen(tool.inputSchema.properties)).toBe(true);
     await tool.execute(
       {},
       { requestId: "test", toolName: "read", actionId: "a", meta: null },
     );
     expect(f.context.executeTool).toHaveBeenCalledWith(
-      expect.objectContaining({ description: "Read" }),
-      "{}",
+      f.descriptor,
+      {},
       { signal: snapshot.signal },
     );
     snapshot.dispose();
