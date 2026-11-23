@@ -8,6 +8,10 @@
   result or error in the response carrier. There is no `mcp/connect` or
   `mcp/disconnect` any more. Tool handlers get the MCP `requestId` in place of
   `connectionId`, and `SingleMcpServerOptions` loses `createConnectionId`.
+- Built on the ACP TypeScript SDK 2.9.1, whose MCP-over-ACP provider now
+  carries the binding. `SingleMcpServer.handle` answers one MCP request in
+  place of `message`, tool handlers get the request's `signal` and `notify`,
+  and `McpOverAcpError` is gone.
 - Depend on zod 4.6.7, which fixes unbounded memory use while validating
   oversized constrained collections (GHSA-mrhx-c7xc-m3w5).
 - Depend on AI SDK `ai` 7.0.143.

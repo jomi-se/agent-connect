@@ -1,4 +1,4 @@
-import type { Stream } from "@agentclientprotocol/sdk";
+import type { Stream } from "@agentclientprotocol/sdk/unstable";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | readonly JsonValue[];
@@ -32,6 +32,11 @@ export interface ApplicationToolResult {
 export interface ApplicationToolContext {
   /** Cooperative cancellation; handlers remain responsible for their side effects. */
   readonly signal?: AbortSignal;
+  /** Sends an MCP notification, such as progress, belonging to this call. */
+  readonly notify?: (
+    method: string,
+    params?: Record<string, unknown> | null,
+  ) => Promise<void>;
   /** The MCP request this call arrived in. */
   readonly requestId: string;
   readonly toolName: string;

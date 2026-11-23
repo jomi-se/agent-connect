@@ -1,9 +1,10 @@
 import {
   client,
+  McpOverAcpProvider,
   RequestError,
   type ClientConnection,
   type SessionNotification,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import {
   AcpPairingError,
   createAcpPairing,
@@ -12,7 +13,7 @@ import {
 } from "./acp-pairing.js";
 import { AgentConnectError } from "./errors.js";
 import { SDK_VERSION } from "./version.js";
-import { SingleMcpServer, McpBindingError } from "./single-mcp-server.js";
+import { SingleMcpServer } from "./single-mcp-server.js";
 import {
   createResumableAcpStream,
   type ResumableAcpStream,
@@ -276,16 +277,11 @@ export class AcpProvider implements AcpTaskSource {
             ) {
               let progress = 0;
               pending.timer = setInterval(() => {
-                void this.connection.agent
-                  .notify("mcp/message", {
-                    serverId: this.server.serverId,
-                    requestId: ctx.requestId,
-                    method: "notifications/progress",
-                    params: {
-                      progressToken,
-                      progress: ++progress,
-                      message: "Waiting for application result",
-                    },
+                void ctx
+                  .notify?.("notifications/progress", {
+                    progressToken,
+                    progress: ++progress,
+                    message: "Waiting for application result",
                   })
                   .catch(() => {});
               }, 15000);
@@ -303,15 +299,6 @@ export class AcpProvider implements AcpTaskSource {
         },
       })),
     });
-    const wrap = async <T>(fn: () => T | Promise<T>) => {
-      try {
-        return await fn();
-      } catch (error) {
-        if (error instanceof McpBindingError)
-          throw new RequestError(error.code, error.message, error.data);
-        throw error;
-      }
-    };
     this.link = createResumableAcpStream(this.options.grant.gatewayUrl, {
       ...this.options.transport,
       token: this.managed
@@ -326,23 +313,20 @@ export class AcpProvider implements AcpTaskSource {
         observe(() => this.options.transport?.onState?.(state, reason));
       },
     });
+    const mcp = new McpOverAcpProvider();
     const app = client({ name: "agent-connect-web" })
-      .onRequest(
-        "mcp/message",
-        (p: unknown) => p as Parameters<SingleMcpServer["message"]>[0],
-        (ctx) => wrap(() => this.server.message(ctx.params)),
-      )
-      .onNotification(
-        "mcp/message",
-        (p: unknown) => p,
-        () => {},
-      )
+      .onRequest("mcp/message", mcp.handleRequest)
       .onRequest("session/request_permission", () => ({
         outcome: { outcome: "cancelled" },
       }))
       .onNotification("session/update", (ctx) => this.update(ctx.params));
     const connection = app.connect(this.link.stream);
     this.connection = connection;
+    mcp.registerServer(connection.agent, {
+      name: this.server.descriptor.name,
+      serverId: this.server.serverId,
+      handler: this.server.handle,
+    });
     void connection.closed.then(() => {
       if (
         this.connection !== connection ||

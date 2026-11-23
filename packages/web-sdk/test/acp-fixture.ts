@@ -1,5 +1,5 @@
 // Controlled Agent Connect contract fixture, not provider compatibility evidence.
-import type { AnyMessage } from "@agentclientprotocol/sdk";
+import type { AnyMessage } from "@agentclientprotocol/sdk/unstable";
 export class Socket {
   readyState = 0;
   onopen: (() => void) | null = null;

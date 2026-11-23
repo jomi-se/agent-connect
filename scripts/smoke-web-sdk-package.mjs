@@ -116,7 +116,7 @@ try {
     join(consumer, "check.mjs"),
     `import assert from "node:assert/strict";
 import * as api from "@open-agent-connect/web";
-const expected = ${JSON.stringify(["connectAgent", "AcpProvider", "createAcpChatTransport", "createAcpPairing", "AcpPairing", "AcpPairingError", "captureAcpPairingCallback", "createResumableAcpStream", "AcpTransportError", "createBrowserAcpStream", "McpOverAcpError", "SingleMcpServer", "defineTool", "AgentConnectError", "createWebMcpToolSnapshot"])};
+const expected = ${JSON.stringify(["connectAgent", "AcpProvider", "createAcpChatTransport", "createAcpPairing", "AcpPairing", "AcpPairingError", "captureAcpPairingCallback", "createResumableAcpStream", "AcpTransportError", "createBrowserAcpStream", "SingleMcpServer", "defineTool", "AgentConnectError", "createWebMcpToolSnapshot"])};
 assert.deepEqual(Object.keys(api).sort(), expected.sort());
 assert.ok(import.meta.resolve("@open-agent-connect/web").endsWith("/dist/index.js"));
 assert.throws(() => import.meta.resolve("@open-agent-connect/web/acp"), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });

@@ -1,79 +1,26 @@
-import type { McpServer } from "@agentclientprotocol/sdk";
+import {
+  MCP_PROTOCOL_VERSION,
+  McpProtocolError,
+  type McpOperationContext,
+  type McpOutcome,
+  type McpServer,
+} from "@agentclientprotocol/sdk/unstable";
 
 import type {
   ApplicationTool,
   ApplicationToolResult,
   JsonObject,
-  JsonValue,
   McpContent,
   SingleMcpServerOptions,
 } from "./types.js";
 
-/** The MCP revision the MCP-over-ACP binding carries. */
-export const MCP_PROTOCOL_VERSION = "2026-07-28";
-const PROTOCOL_VERSION_META = "io.modelcontextprotocol/protocolVersion";
-const CLIENT_CAPABILITIES_META = "io.modelcontextprotocol/clientCapabilities";
+export { MCP_PROTOCOL_VERSION };
 const SERVER_INFO_META = "io.modelcontextprotocol/serverInfo";
 const ACTION_ID_META_KEY = "agent-connect/actionId";
 const INVALID_REQUEST = -32600;
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
 const INTERNAL_ERROR = -32603;
-const UNSUPPORTED_PROTOCOL_VERSION = -32022;
-/** Outer binding error: no server is registered under the requested ID. */
-const SERVER_UNAVAILABLE = -33001;
-
-/** @experimental One `mcp/message` request of the MCP-over-ACP binding. */
-export interface McpMessageRequest {
-  readonly serverId: string;
-  readonly requestId: string | number;
-  readonly method: string;
-  readonly params?: Record<string, unknown> | null;
-  readonly _meta?: Record<string, unknown> | null;
-}
-
-/** @experimental The response carrier: an inner MCP result or error, never both. */
-export type McpMessageResponse =
-  | { readonly result: JsonObject }
-  | {
-      readonly error: {
-        readonly code: number;
-        readonly message: string;
-        readonly data?: JsonValue;
-      };
-    };
-
-/**
- * @experimental An inner MCP error. It travels inside a successful
- * `mcp/message` response, so the agent's MCP client sees an ordinary MCP error.
- */
-export class McpOverAcpError extends Error {
-  readonly code: number;
-  readonly data: JsonValue | undefined;
-
-  constructor(code: number, message: string, data?: JsonValue) {
-    super(message);
-    this.name = "McpOverAcpError";
-    this.code = code;
-    this.data = data;
-  }
-}
-
-/**
- * A failure of the binding itself, answered as an ACP error rather than an
- * inner MCP one.
- */
-export class McpBindingError extends Error {
-  readonly code: number;
-  readonly data: JsonValue | undefined;
-
-  constructor(code: number, message: string, data?: JsonValue) {
-    super(message);
-    this.name = "McpBindingError";
-    this.code = code;
-    this.data = data;
-  }
-}
 
 export function defineTool<Arguments extends JsonObject>(
   tool: ApplicationTool<Arguments>,
@@ -123,53 +70,21 @@ export class SingleMcpServer {
     };
   }
 
-  message = async (request: McpMessageRequest): Promise<McpMessageResponse> => {
-    if (request.serverId !== this.serverId) {
-      throw new McpBindingError(
-        SERVER_UNAVAILABLE,
-        "MCP server registration unavailable",
-        { serverId: request.serverId },
-      );
-    }
+  /**
+   * Answers one MCP request routed here by the ACP SDK's MCP-over-ACP
+   * provider, which has already checked the server ID and the request's MCP
+   * version and capabilities.
+   */
+  handle = async (request: McpOperationContext): Promise<McpOutcome> => {
     try {
       return { result: await this.dispatch(request) };
     } catch (error) {
-      if (!(error instanceof McpOverAcpError)) throw error;
-      return {
-        error: {
-          code: error.code,
-          message: error.message,
-          ...(error.data === undefined ? {} : { data: error.data }),
-        },
-      };
+      if (!(error instanceof McpProtocolError)) throw error;
+      return { error: error.toMcpError() };
     }
   };
 
-  private async dispatch(request: McpMessageRequest): Promise<JsonObject> {
-    const meta = request.params?.["_meta"];
-    const version = isJsonObject(meta)
-      ? meta[PROTOCOL_VERSION_META]
-      : undefined;
-    if (typeof version !== "string") {
-      throw new McpOverAcpError(
-        INVALID_PARAMS,
-        `Invalid params: missing ${PROTOCOL_VERSION_META} in params._meta`,
-      );
-    }
-    if (version !== MCP_PROTOCOL_VERSION) {
-      throw new McpOverAcpError(
-        UNSUPPORTED_PROTOCOL_VERSION,
-        "Unsupported protocol version",
-        { supported: [MCP_PROTOCOL_VERSION], requested: version },
-      );
-    }
-    if (!isJsonObject(meta) || !isJsonObject(meta[CLIENT_CAPABILITIES_META])) {
-      throw new McpOverAcpError(
-        INVALID_PARAMS,
-        `Invalid params: missing ${CLIENT_CAPABILITIES_META} in params._meta`,
-      );
-    }
-
+  private async dispatch(request: McpOperationContext): Promise<JsonObject> {
     switch (request.method) {
       case "server/discover":
         // Discovery results are cacheable since MCP's caching fields arrived;
@@ -192,7 +107,7 @@ export class SingleMcpServer {
       case "tools/call":
         return this.callTool(request, toolMeta(request));
       default:
-        throw new McpOverAcpError(
+        throw new McpProtocolError(
           METHOD_NOT_FOUND,
           `Method not found: ${request.method}`,
         );
@@ -210,19 +125,19 @@ export class SingleMcpServer {
   }
 
   private async callTool(
-    request: McpMessageRequest,
+    request: McpOperationContext,
     meta: Readonly<Record<string, unknown>> | null,
   ): Promise<JsonObject> {
     const name = request.params?.["name"];
     const arguments_ = request.params?.["arguments"];
     if (typeof name !== "string" || name.length === 0) {
-      throw new McpOverAcpError(
+      throw new McpProtocolError(
         INVALID_PARAMS,
         "MCP tools/call requires a tool name",
       );
     }
     if (!isJsonObject(arguments_)) {
-      throw new McpOverAcpError(
+      throw new McpProtocolError(
         INVALID_PARAMS,
         "MCP tools/call arguments must be an object",
       );
@@ -230,12 +145,14 @@ export class SingleMcpServer {
 
     const tool = this.tools.get(name);
     if (!tool) {
-      throw new McpOverAcpError(INVALID_PARAMS, `Unknown tool: ${name}`);
+      throw new McpProtocolError(INVALID_PARAMS, `Unknown tool: ${name}`);
     }
 
     try {
       const result = await tool.execute(arguments_, {
-        requestId: String(request.requestId),
+        signal: request.signal,
+        notify: request.notify,
+        requestId: request.requestId,
         toolName: name,
         meta,
         actionId: actionIdFromMeta(meta),
@@ -270,12 +187,12 @@ function actionIdFromMeta(
 }
 
 function toolMeta(
-  request: McpMessageRequest,
+  request: McpOperationContext,
 ): Readonly<Record<string, unknown>> {
   const inner = isJsonObject(request.params?.["_meta"])
     ? request.params["_meta"]
     : {};
-  const outer = request._meta ?? {};
+  const outer = request.envelopeMeta ?? {};
   const meta: Record<string, unknown> = { ...inner, ...outer };
   // The binding's own request metadata is not for tools.
   for (const key of Object.keys(meta))

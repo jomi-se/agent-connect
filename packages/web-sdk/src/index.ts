@@ -24,11 +24,7 @@ export type {
   AcpTransportSnapshot,
 } from "./resumable-acp-stream.js";
 export { createBrowserAcpStream } from "./transport.js";
-export {
-  McpOverAcpError,
-  SingleMcpServer,
-  defineTool,
-} from "./single-mcp-server.js";
+export { SingleMcpServer, defineTool } from "./single-mcp-server.js";
 export { AgentConnectError } from "./errors.js";
 export { createWebMcpToolSnapshot } from "./webmcp.js";
 export type {

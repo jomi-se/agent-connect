@@ -1,5 +1,5 @@
 import { createWebSocketStream } from "@agentclientprotocol/sdk/experimental/ws-client";
-import type { Stream } from "@agentclientprotocol/sdk";
+import type { Stream } from "@agentclientprotocol/sdk/unstable";
 
 import type { BrowserAcpStreamOptions } from "./types.js";
 

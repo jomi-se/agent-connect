@@ -1,12 +1,10 @@
+import type { McpOperationContext } from "@agentclientprotocol/sdk/unstable";
 import { describe, expect, it, vi } from "vitest";
 
-import { McpBindingError } from "../src/single-mcp-server.js";
 import { SingleMcpServer, defineTool } from "../src/index.js";
 
-const VERSION_META = {
-  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-  "io.modelcontextprotocol/clientCapabilities": {},
-};
+const signal = new AbortController().signal;
+const notify = vi.fn(async () => {});
 
 function createServer() {
   const execute = vi.fn(
@@ -34,24 +32,26 @@ function createServer() {
   return { execute, server };
 }
 
-/** One MCP 2026-07-28 request over the binding. */
+/**
+ * One MCP 2026-07-28 operation as the ACP SDK's MCP-over-ACP provider hands
+ * it over, after checking the server ID, version and capabilities.
+ */
 function request(
   method: string,
   params: Record<string, unknown> = {},
-  extra: Record<string, unknown> = {},
-) {
+  extra: { readonly _meta?: Record<string, unknown> } = {},
+): McpOperationContext {
   return {
     serverId: "spreadsheet",
     requestId: "request-1",
     method,
-    params: {
-      ...params,
-      _meta: {
-        ...VERSION_META,
-        ...((params["_meta"] as Record<string, unknown>) ?? {}),
-      },
-    },
-    ...extra,
+    params,
+    protocolVersion: "2026-07-28",
+    clientCapabilities: {},
+    clientInfo: undefined,
+    envelopeMeta: extra._meta,
+    signal,
+    notify,
   };
 }
 
@@ -64,7 +64,7 @@ describe("SingleMcpServer", () => {
       name: "Spreadsheet",
       serverId: "spreadsheet",
     });
-    await expect(server.message(request("server/discover"))).resolves.toEqual({
+    await expect(server.handle(request("server/discover"))).resolves.toEqual({
       result: {
         resultType: "complete",
         supportedVersions: ["2026-07-28"],
@@ -80,10 +80,10 @@ describe("SingleMcpServer", () => {
         },
       },
     });
-    await expect(server.message(request("ping"))).resolves.toEqual({
+    await expect(server.handle(request("ping"))).resolves.toEqual({
       result: {},
     });
-    await expect(server.message(request("tools/list"))).resolves.toEqual({
+    await expect(server.handle(request("tools/list"))).resolves.toEqual({
       result: {
         tools: [
           {
@@ -99,7 +99,7 @@ describe("SingleMcpServer", () => {
       },
     });
     await expect(
-      server.message(
+      server.handle(
         request(
           "tools/call",
           { name: "read_range", arguments: { range: "A1:B2" } },
@@ -112,6 +112,8 @@ describe("SingleMcpServer", () => {
     expect(execute).toHaveBeenCalledWith(
       { range: "A1:B2" },
       {
+        signal,
+        notify,
         requestId: "request-1",
         toolName: "read_range",
         meta: { "agent-connect/actionId": "action-123" },
@@ -123,45 +125,12 @@ describe("SingleMcpServer", () => {
   it("answers MCP errors inside the carrier, so clients can fall back", async () => {
     const { server } = createServer();
     // The pre-2026 handshake is just an unknown method now.
-    await expect(server.message(request("initialize"))).resolves.toEqual({
+    await expect(server.handle(request("initialize"))).resolves.toEqual({
       error: { code: -32601, message: "Method not found: initialize" },
     });
     await expect(
-      server.message(request("tools/call", { name: "missing", arguments: {} })),
+      server.handle(request("tools/call", { name: "missing", arguments: {} })),
     ).resolves.toMatchObject({ error: { code: -32602 } });
-    await expect(
-      server.message({
-        serverId: "spreadsheet",
-        requestId: 2,
-        method: "tools/list",
-        params: {
-          _meta: { "io.modelcontextprotocol/protocolVersion": "2025-06-18" },
-        },
-      }),
-    ).resolves.toEqual({
-      error: {
-        code: -32022,
-        message: "Unsupported protocol version",
-        data: { supported: ["2026-07-28"], requested: "2025-06-18" },
-      },
-    });
-    await expect(
-      server.message({
-        serverId: "spreadsheet",
-        requestId: 3,
-        method: "tools/list",
-      }),
-    ).resolves.toMatchObject({ error: { code: -32602 } });
-  });
-
-  it("refuses another server ID as a binding failure, not an MCP error", async () => {
-    const { server } = createServer();
-    await expect(
-      server.message({ ...request("tools/list"), serverId: "other" }),
-    ).rejects.toBeInstanceOf(McpBindingError);
-    await expect(
-      server.message({ ...request("tools/list"), serverId: "other" }),
-    ).rejects.toMatchObject({ code: -33001 });
   });
 
   it("returns handler failures as MCP tool errors without leaking stacks", async () => {
@@ -181,7 +150,7 @@ describe("SingleMcpServer", () => {
       ],
     });
     await expect(
-      server.message(
+      server.handle(
         request("tools/call", { name: "write_range", arguments: {} }),
       ),
     ).resolves.toEqual({
@@ -214,7 +183,7 @@ describe("SingleMcpServer", () => {
 
 it("preserves inner MCP progress tokens while the gateway supplies the authoritative action ID", async () => {
   const { server, execute } = createServer();
-  await server.message(
+  await server.handle(
     request(
       "tools/call",
       {
@@ -249,7 +218,7 @@ it("preserves inner MCP progress tokens while the gateway supplies the authorita
 
 it("ignores outer-only progress tokens and inner-only action IDs", async () => {
   const { server, execute } = createServer();
-  await server.message(
+  await server.handle(
     request(
       "tools/call",
       {

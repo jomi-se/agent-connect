@@ -1,4 +1,4 @@
-import type { AnyMessage, Stream } from "@agentclientprotocol/sdk";
+import type { AnyMessage, Stream } from "@agentclientprotocol/sdk/unstable";
 import { AgentConnectError } from "./errors.js";
 import type { AgentConnectErrorCode } from "./types.js";
 

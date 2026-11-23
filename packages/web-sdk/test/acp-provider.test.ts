@@ -98,6 +98,40 @@ describe("ACP provider-owned contracts", () => {
       ).toHaveLength(1);
     },
   );
+  it("leaves the MCP-over-ACP binding checks to the ACP SDK", async () => {
+    const peer = new Peer();
+    const answers: unknown[] = [];
+    peer.onPrompt = (socket, _params, reply) => {
+      void (async () => {
+        answers.push(
+          await peer.request(socket, "mcp/message", {
+            serverId: "other",
+            requestId: "unknown-server",
+            method: "tools/list",
+          }),
+          await peer.request(socket, "mcp/message", {
+            serverId: "application-tools",
+            requestId: "old-mcp",
+            method: "tools/list",
+            params: {
+              _meta: {
+                "io.modelcontextprotocol/protocolVersion": "2025-06-18",
+              },
+            },
+          }),
+        );
+        reply({ stopReason: "end_turn" });
+      })();
+    };
+    await collect(await connect(peer));
+    expect(answers[0]).toMatchObject({ code: -33001 });
+    expect(answers[1]).toMatchObject({
+      error: {
+        code: -32022,
+        data: { supported: ["2026-07-28"], requested: "2025-06-18" },
+      },
+    });
+  });
   it("allows a new explicit prompt after session creation is definitively rejected", async () => {
     const peer = new Peer();
     let attempts = 0;
