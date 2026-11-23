@@ -45,7 +45,7 @@ interface ChromiumModelContext extends EventTarget {
 /**
  * Discover tools before consent, then pass `.tools` to
  * connectAgent and createAcpChatTransport. Validated with
- * Chromium 159's native binding, which passes schemas and arguments as
+ * the native binding of Chrome 156 to 159, which passes schemas and arguments as
  * objects like the CG draft (Chrome 153 passed JSON text). Do not auto-retry
  * an invocation in a second format: the first call may already have side
  * effects.

@@ -51,7 +51,7 @@ Primary reference: the
 4.2. Browser availability is experimental and unsupported contexts fail clearly
 with `webmcp_unavailable`.
 
-The measured native binding (Chromium 159 with experimental web platform
+The measured native binding (Chrome 156 to 159 with experimental web platform
 features) matches the draft: schema and invocation arguments are objects, and
 the result is a string. Chrome 153 passed JSON strings instead; that binding is
 no longer supported. Only the measured binding is implemented; an execution is

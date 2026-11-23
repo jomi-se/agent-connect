@@ -2,7 +2,7 @@ import type { AcpTaskSource, AcpTaskRequest } from "../src/types.js";
 import { expect, test } from "@playwright/test";
 import type { ApplicationToolContext, JsonObject } from "../src/index.js";
 
-// The native Chromium 159 binding: schemas and arguments are objects, results are strings.
+// The native binding since Chrome 156: schemas and arguments are objects, results are strings.
 interface NativeTool {
   name: string;
   description: string;
