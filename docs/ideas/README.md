@@ -11,3 +11,4 @@ accept it first, then move it into [plans](../plan/), with an
   (needs-triage)
 - [Persistent workspaces an application can request](persistent-app-workspaces.md)
   (needs-triage)
+- [Lint and format with the Oxc toolchain](oxc-toolchain.md) (needs-triage)
