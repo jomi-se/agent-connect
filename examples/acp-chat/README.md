@@ -19,8 +19,8 @@ the user service.
 
 Enter the gateway's HTTP or HTTPS address and choose **Connect**. The gateway's
 owner sign-in and consent pages show the application origin and its exact three
-tools. Approve there, choosing the grant duration; an enabled owner TOTP factor
-is also required there. The application receives its scoped grant through a
+tools. Approve there with a passkey, or with an authenticator code, choosing
+the grant duration. The application receives its scoped grant through a
 PKCE callback. There is no grant file upload or token entry. Desktop consent
 opens a popup; touch devices use a redirect back to this application. Use
 HTTPS/WSS when hosting remotely.
