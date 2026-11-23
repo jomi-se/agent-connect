@@ -47,7 +47,7 @@
     "@playwright/test": "^1.63.0",
     "dependency-cruiser": "18.7.0",
     "esbuild": "0.28.2",
-    "eslint": "10.14.0",
+    "eslint": "10.15.0",
     "eslint-plugin-sonarjs": "4.2.2",
     "globals": "17.13.0",
     "jscpd": "5.4.2",
@@ -55,8 +55,13 @@
     "openai": "7.47.0",
     "prettier": "3.9.10",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.72.1",
+    "typescript-eslint": "8.73.0",
     "vitest": "4.1.12",
     "ws": "8.22.1"
+  },
+  "overrides": {
+    "eslint-plugin-sonarjs": {
+      "minimatch": "11.0.9"
+    }
   }
 }
