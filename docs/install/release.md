@@ -18,10 +18,10 @@ before building. Releases carry no harness or adapter pins: setup installs the
 latest at build time and owners can pin them
 ([ADR 0018](../decisions/0018-floating-harness-versions.md)).
 
-`rust-toolchain.toml` selects Rust `1.98.1` with both Linux musl targets;
+`rust-toolchain.toml` selects Rust `1.100.0` with both Linux musl targets;
 rustup installs it on first use. `mise.toml` lists the other build tools: Zig
-`0.14`, which is only the C cross-compiler and linker for static musl binaries,
-cargo-zigbuild `0.23` and cargo-dist `0.33.0`. `mise.lock` records their exact
+`0.15`, which is only the C cross-compiler and linker for static musl binaries,
+cargo-zigbuild `0.24` and cargo-dist `0.34.0`. `mise.lock` records their exact
 versions and SHA-256 checksums. In a checkout, run `mise trust && mise install`,
 or install the same versions another way. CI installs them with `mise-action`;
 `scripts/ci-build-env.sh` then exports the musl compiler wrappers and path

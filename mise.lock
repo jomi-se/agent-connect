@@ -3,121 +3,122 @@
 lockfile_version = 3
 
 [[tools."aqua:rust-cross/cargo-zigbuild"]]
-version = "0.23.4"
+version = "0.24.1"
 backend = "aqua:rust-cross/cargo-zigbuild"
-specifiers = ["0.23"]
+specifiers = ["0.24"]
 
 [tools."aqua:rust-cross/cargo-zigbuild"."platforms.linux-arm64"]
-checksum = "sha256:25cf2cdc6cde848b33a761ff2cf46d1efe6ba7e1adfc4b6f3ee2d570cacb5419"
-url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.23.4/cargo-zigbuild-aarch64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/541272860"
+checksum = "sha256:70bb4c9cc71a6d16211b9079996e3cd588671053312adeff4d043499ed887601"
+url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.24.1/cargo-zigbuild-aarch64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/709674761"
 
 [tools."aqua:rust-cross/cargo-zigbuild"."platforms.linux-arm64-musl"]
-checksum = "sha256:25cf2cdc6cde848b33a761ff2cf46d1efe6ba7e1adfc4b6f3ee2d570cacb5419"
-url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.23.4/cargo-zigbuild-aarch64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/541272860"
+checksum = "sha256:70bb4c9cc71a6d16211b9079996e3cd588671053312adeff4d043499ed887601"
+url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.24.1/cargo-zigbuild-aarch64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/709674761"
 
 [tools."aqua:rust-cross/cargo-zigbuild"."platforms.linux-x64"]
-checksum = "sha256:6b69963040818ca1ef573d8135a95aa902e17cf7f873c32c6426642dadfe7f59"
-url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.23.4/cargo-zigbuild-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/541272889"
+checksum = "sha256:32581c8e13f27a807bb244aaaac870522f5b51263c766cf77b1a99771ce9fa5c"
+url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.24.1/cargo-zigbuild-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/709674861"
 
 [tools."aqua:rust-cross/cargo-zigbuild"."platforms.linux-x64-musl"]
-checksum = "sha256:6b69963040818ca1ef573d8135a95aa902e17cf7f873c32c6426642dadfe7f59"
-url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.23.4/cargo-zigbuild-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/541272889"
+checksum = "sha256:32581c8e13f27a807bb244aaaac870522f5b51263c766cf77b1a99771ce9fa5c"
+url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.24.1/cargo-zigbuild-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/709674861"
 
 [tools."aqua:rust-cross/cargo-zigbuild"."platforms.macos-arm64"]
-checksum = "sha256:ca2369ae1a9995542206a6c18dd372acff94dddeb9d7c07e09bfb7594197cea3"
-url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.23.4/cargo-zigbuild-aarch64-apple-darwin.tar.xz"
-url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/541272865"
+checksum = "sha256:e38d2a30aa8f4c27bf9e3ced266aae1f47e4dbd6be939852ec07d8662eec408e"
+url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.24.1/cargo-zigbuild-aarch64-apple-darwin.tar.xz"
+url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/709674719"
 
 [tools."aqua:rust-cross/cargo-zigbuild"."platforms.macos-x64"]
-checksum = "sha256:79463de3b10811fcebe91a3771f9658a2e40178eb6de66a2d379d12fe5317b6c"
-url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.23.4/cargo-zigbuild-x86_64-apple-darwin.tar.xz"
-url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/541272875"
+checksum = "sha256:9f047b1a0f97efbfef64919d7c25e33304a4448b832cde12f6588c4f11489877"
+url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.24.1/cargo-zigbuild-x86_64-apple-darwin.tar.xz"
+url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/709674794"
 
 [tools."aqua:rust-cross/cargo-zigbuild"."platforms.windows-x64"]
-checksum = "sha256:cd1226091f9f99ac7b46fb413968fb0b46edbe3ea961817d31b968352de4d4a6"
-url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.23.4/cargo-zigbuild-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/541272877"
+checksum = "sha256:7f660482f8dada6dfcd495bfc52a4c4f0cf6b2e01ac9740811855a1de7c4f60a"
+url = "https://github.com/rust-cross/cargo-zigbuild/releases/download/v0.24.1/cargo-zigbuild-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/rust-cross/cargo-zigbuild/releases/assets/709674833"
 
 [[tools.cargo-dist]]
-version = "0.33.0"
+version = "0.34.0"
 backend = "aqua:axodotdev/cargo-dist"
-specifiers = ["0.33.0"]
+specifiers = ["0.34.0"]
 
 [tools.cargo-dist."platforms.linux-arm64"]
-checksum = "sha256:9c554ab21a58ad46eb9b6710f89633ccb26bc2577cf4b0c2d18a5b826a31913e"
-url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/cargo-dist-aarch64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/556576962"
+checksum = "sha256:58efb33edf01342875bfd0c3ce2befa9d73075579ca1b3e5dd75b98c88f92e83"
+url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.34.0/cargo-dist-aarch64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/700690547"
 provenance = "github-attestations"
 
 [tools.cargo-dist."platforms.linux-arm64-musl"]
-checksum = "sha256:4761cff5fc547ad66d1449abbf321380b0e6bd8093b1fe6593852a3314fd0c19"
-url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/cargo-dist-aarch64-unknown-linux-musl.tar.xz"
-url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/556576967"
+checksum = "sha256:aac7d48901f5283b53e136dd0498782c88a3350dfa4a5e88f4c3e0ba7e486eea"
+url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.34.0/cargo-dist-aarch64-unknown-linux-musl.tar.xz"
+url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/700690545"
 provenance = "github-attestations"
 
 [tools.cargo-dist."platforms.linux-x64"]
-checksum = "sha256:4b3f0a5f0ebbdb798f6db649d01b32ba1518376b6f7a0502b7d92b75cc2c8293"
-url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/cargo-dist-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/556576992"
+checksum = "sha256:7fee44ff3ff71ed0064b32d4ec62fee6b58bd37c5887b12a86aedddc5af0c7b5"
+url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.34.0/cargo-dist-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/700690609"
 provenance = "github-attestations"
 
 [tools.cargo-dist."platforms.linux-x64-musl"]
-checksum = "sha256:b8e95bc76c63375958173ef5ae2dbd8e9211cc1ed03cdee0899702766b4c2a2e"
-url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/cargo-dist-x86_64-unknown-linux-musl.tar.xz"
-url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/556576998"
+checksum = "sha256:f274b9889e93333a52cdcab86b93ab04b875b8ef4eebc7f8589514e0aff827e6"
+url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.34.0/cargo-dist-x86_64-unknown-linux-musl.tar.xz"
+url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/700690624"
 provenance = "github-attestations"
 
 [tools.cargo-dist."platforms.macos-arm64"]
-checksum = "sha256:7b3cbe25511de01d74c0f5fcb7909edabd379bea9cfa284d93af5a3cdfa3247c"
-url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/cargo-dist-aarch64-apple-darwin.tar.xz"
-url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/556576963"
+checksum = "sha256:d1eec30e63eed23e5a5bd48fe96eae314799811bffca254ec1d2264638ba1890"
+url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.34.0/cargo-dist-aarch64-apple-darwin.tar.xz"
+url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/700690549"
 provenance = "github-attestations"
 
 [tools.cargo-dist."platforms.macos-x64"]
-checksum = "sha256:6a49bfb61bd86770d79c27f3d2b40c6b2e71cde940d3d31a6ccaaffc124d7a29"
-url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/cargo-dist-x86_64-apple-darwin.tar.xz"
-url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/556576979"
+checksum = "sha256:6aa89bb1e7c18f51ae8b148ce2fc6ab00ac46ed8173d4f2ed9afa12101218773"
+url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.34.0/cargo-dist-x86_64-apple-darwin.tar.xz"
+url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/700690592"
 provenance = "github-attestations"
 
 [tools.cargo-dist."platforms.windows-x64"]
-checksum = "sha256:9a36d70795e14326a5ec4bf17aee085df00ab85a322739291ea5d4b1b5f693cd"
-url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.33.0/cargo-dist-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/556576987"
+checksum = "sha256:7bb53fbc998321f77a3bbb044084a52747c8ed041cf6d6a604802aa57b9c80c6"
+url = "https://github.com/axodotdev/cargo-dist/releases/download/v0.34.0/cargo-dist-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/axodotdev/cargo-dist/releases/assets/700690601"
 provenance = "github-attestations"
 
 [[tools.zig]]
-version = "0.14.1"
+version = "0.15.2"
 backend = "core:zig"
-specifiers = ["0.14"]
+specifiers = ["0.15"]
 
 [tools.zig."platforms.linux-arm64"]
-checksum = "sha256:f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b"
-url = "https://ziglang.org/download/0.14.1/zig-aarch64-linux-0.14.1.tar.xz"
+checksum = "sha256:958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f"
+url = "https://ziglang.org/download/0.15.2/zig-aarch64-linux-0.15.2.tar.xz"
+provenance = "minisign"
 
 [tools.zig."platforms.linux-arm64-musl"]
-checksum = "sha256:f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b"
-url = "https://ziglang.org/download/0.14.1/zig-aarch64-linux-0.14.1.tar.xz"
+checksum = "sha256:958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f"
+url = "https://ziglang.org/download/0.15.2/zig-aarch64-linux-0.15.2.tar.xz"
 
 [tools.zig."platforms.linux-x64"]
-checksum = "sha256:24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c"
-url = "https://ziglang.org/download/0.14.1/zig-x86_64-linux-0.14.1.tar.xz"
+checksum = "sha256:02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239"
+url = "https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz"
 
 [tools.zig."platforms.linux-x64-musl"]
-checksum = "sha256:24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c"
-url = "https://ziglang.org/download/0.14.1/zig-x86_64-linux-0.14.1.tar.xz"
+checksum = "sha256:02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239"
+url = "https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz"
 
 [tools.zig."platforms.macos-arm64"]
-checksum = "sha256:39f3dc5e79c22088ce878edc821dedb4ca5a1cd9f5ef915e9b3cc3053e8faefa"
-url = "https://ziglang.org/download/0.14.1/zig-aarch64-macos-0.14.1.tar.xz"
+checksum = "sha256:3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b"
+url = "https://ziglang.org/download/0.15.2/zig-aarch64-macos-0.15.2.tar.xz"
 
 [tools.zig."platforms.macos-x64"]
-checksum = "sha256:b0f8bdfb9035783db58dd6c19d7dea89892acc3814421853e5752fe4573e5f43"
-url = "https://ziglang.org/download/0.14.1/zig-x86_64-macos-0.14.1.tar.xz"
+checksum = "sha256:375b6909fc1495d16fc2c7db9538f707456bfc3373b14ee83fdd3e22b3d43f7f"
+url = "https://ziglang.org/download/0.15.2/zig-x86_64-macos-0.15.2.tar.xz"
 
 [tools.zig."platforms.windows-x64"]
-checksum = "sha256:554f5378228923ffd558eac35e21af020c73789d87afeabf4bfd16f2e6feed2c"
-url = "https://ziglang.org/download/0.14.1/zig-x86_64-windows-0.14.1.zip"
+checksum = "sha256:3a0ed1e8799a2f8ce2a6e6290a9ff22e6906f8227865911fb7ddedc3cc14cb0c"
+url = "https://ziglang.org/download/0.15.2/zig-x86_64-windows-0.15.2.zip"
