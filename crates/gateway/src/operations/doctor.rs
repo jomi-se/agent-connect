@@ -291,7 +291,7 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
         );
     }
     if let Some(origin) = &configured.public_url {
-        match reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(5)).connect_timeout(Duration::from_secs(3)).build() {
+        match super::http_client().redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(5)).connect_timeout(Duration::from_secs(3)).build() {
             Ok(client) => match client.get(format!("{origin}/healthz")).send().await {
                 Ok(response) if response.status().is_success() => {
                     if health_ready(response).await {
@@ -420,7 +420,7 @@ async fn ready_gateway_version(listen: std::net::SocketAddr) -> Option<String> {
             std::net::Ipv6Addr::LOCALHOST.into()
         });
     }
-    let Ok(client) = reqwest::Client::builder()
+    let Ok(client) = super::http_client()
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
         .timeout(Duration::from_secs(3))

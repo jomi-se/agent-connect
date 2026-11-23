@@ -8,7 +8,7 @@ use crate::{
     policy::PermissionProfile,
 };
 use anyhow::{Result, anyhow, bail, ensure};
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -18,8 +18,8 @@ use axum::{
     routing::any,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use hmac::{Hmac, Mac};
-use rand::{RngCore, rngs::OsRng};
+use hmac::{Hmac, KeyInit, Mac};
+use rand::{Rng, rand_core::UnwrapErr, rngs::SysRng};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -1032,7 +1032,7 @@ impl AuthService {
             );
             if path == pages::TOTP {
                 let mut bytes = [0u8; 20];
-                OsRng.fill_bytes(&mut bytes);
+                UnwrapErr(SysRng).fill_bytes(&mut bytes);
                 let secret = base32(&bytes);
                 inner.sessions.get_mut(&session).unwrap().enrollment = Some(Enrollment::Totp {
                     secret: secret.clone(),
@@ -2410,9 +2410,8 @@ fn hash_passphrase(passphrase: &str) -> Result<String> {
         passphrase.chars().count() >= 12 && passphrase.len() <= 1024,
         "owner passphrase must contain at least 12 characters and at most 1024 bytes"
     );
-    let salt = SaltString::generate(&mut OsRng);
     Ok(Argon2::default()
-        .hash_password(passphrase.as_bytes(), &salt)
+        .hash_password(passphrase.as_bytes())
         .map_err(|_| anyhow!("password hashing failed"))?
         .to_string())
 }
@@ -2680,7 +2679,7 @@ fn active(g: &Grant, now: u64, fingerprint: &str) -> bool {
 }
 fn random(prefix: &str) -> String {
     let mut bytes = [0u8; 32];
-    OsRng.fill_bytes(&mut bytes);
+    UnwrapErr(SysRng).fill_bytes(&mut bytes);
     format!("{prefix}{}", URL_SAFE_NO_PAD.encode(bytes))
 }
 fn hash(value: &str) -> String {

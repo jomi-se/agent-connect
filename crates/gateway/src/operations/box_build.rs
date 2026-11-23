@@ -69,7 +69,11 @@ fn hash_directory(root: &Path) -> anyhow::Result<String> {
     }
     let mut hash = Sha256::new();
     visit(root, root, &mut hash)?;
-    Ok(format!("{:x}", hash.finalize()))
+    Ok(hex(&hash.finalize()))
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn owner_hash(directory: &Path) -> anyhow::Result<Option<String>> {
@@ -190,7 +194,7 @@ async fn packument(client: &reqwest::Client, name: &str) -> anyhow::Result<Packu
 pub(super) async fn resolve_harness() -> anyhow::Result<HarnessVersions> {
     let pins = owner_pins(&owner_directory()?)?;
     let spec = |name: &str| pins.get(name).map_or("latest", String::as_str);
-    let client = reqwest::Client::builder()
+    let client = super::http_client()
         .timeout(Duration::from_secs(60))
         .connect_timeout(Duration::from_secs(10))
         .build()?;
@@ -262,10 +266,7 @@ fn layer_image(
     hash.update(serde_json::to_vec(harness)?);
     hash.update([0]);
     hash.update(owner.unwrap_or_default());
-    Ok(format!(
-        "{base}-{}",
-        &format!("{:x}", hash.finalize())[..16]
-    ))
+    Ok(format!("{base}-{}", &hex(&hash.finalize())[..16]))
 }
 
 struct Scratch(PathBuf);

@@ -20,6 +20,17 @@ use std::{
 };
 use tokio::io::AsyncReadExt;
 
+/// An HTTP client builder on ring with Mozilla's roots bundled in the binary.
+fn http_client() -> reqwest::ClientBuilder {
+    // Errs only when a provider is already installed, which is just as good.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    reqwest::Client::builder().tls_certs_only(
+        webpki_root_certs::TLS_SERVER_ROOT_CERTS
+            .iter()
+            .filter_map(|der| reqwest::Certificate::from_der(der).ok()),
+    )
+}
+
 #[derive(Args)]
 pub struct SetupCli {
     /// Private runtime directory (defaults to the platform Agent Connect state directory).

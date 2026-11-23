@@ -459,7 +459,10 @@ async fn run() -> anyhow::Result<()> {
             "boxed": cli.boxed, "image": image, "home": cli.harness_home,
             "egress": cli.egress_container, "public_url": public_url,
         });
-        let fingerprint = format!("{:x}", Sha256::digest(serde_json::to_vec(&profile)?));
+        let fingerprint: String = Sha256::digest(serde_json::to_vec(&profile)?)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
         Some(AuthService::open(AuthConfig {
             public_url: public_url.clone(),
             state_dir: cli.state_dir.join("auth"),
