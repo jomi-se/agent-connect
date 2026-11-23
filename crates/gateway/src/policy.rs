@@ -9,14 +9,17 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use agent_client_protocol::schema::METHOD_INITIALIZE_PROXY;
 use agent_client_protocol::util::MatchDispatchFrom;
+use agent_client_protocol::v1::schema::PROXY_METHOD_NAMES;
 use agent_client_protocol::{
     Agent, Client, Conductor, ConnectTo, ConnectionTo, Dispatch, HandleDispatchFrom, Handled,
     Proxy, Responder, UntypedMessage,
 };
 use serde_json::{Value, json};
 use tracing::Instrument;
+
+/// What the conductor calls the application's `initialize` when it reaches a proxy.
+const METHOD_INITIALIZE_PROXY: &str = PROXY_METHOD_NAMES.proxy_initialize;
 
 /// How the gateway answers harness permission prompts. Prompts are never shown
 /// to the application: the application is not the approver for host authority.
@@ -160,7 +163,7 @@ impl ConnectTo<Conductor> for PolicyProxy {
             state: Arc::new(Mutex::new(PolicyState::default())),
         };
         Proxy
-            .builder()
+            .v1()
             .name("agent-connect-policy")
             .with_handler(handler)
             .connect_to(client)
@@ -816,7 +819,7 @@ impl ConnectTo<Conductor> for SpyProxy {
         client: impl ConnectTo<Proxy>,
     ) -> Result<(), agent_client_protocol::Error> {
         Proxy
-            .builder()
+            .v1()
             .name("spy")
             .with_handler(SpyHandler)
             .connect_to(client)

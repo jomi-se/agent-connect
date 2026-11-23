@@ -15,7 +15,7 @@ impl ConnectTo<Client> for ProbeAgent {
         client: impl ConnectTo<Agent>,
     ) -> Result<(), agent_client_protocol::Error> {
         Agent
-            .builder()
+            .v1()
             .name("policy-contract-agent")
             .with_handler(self)
             .connect_to(client)
@@ -165,7 +165,7 @@ async fn run(
         "policy-contract",
         ProxiesAndAgent::new(agent).proxy(PolicyProxy::new(config)),
     );
-    let task = Client.builder().name("policy-contract-app").with_handler(app).connect_with(chain, async move |cx: ConnectionTo<Agent>| {
+    let task = Client.v1().name("policy-contract-app").with_handler(app).connect_with(chain, async move |cx: agent_client_protocol::v1::ConnectionTo<Agent>| {
         cx.send_request(UntypedMessage::new("initialize", json!({"protocolVersion":1}))?).block_task().await?;
         cx.send_request(UntypedMessage::new("session/new", json!({"cwd":"/secret","mcpServers":[{"type":"stdio","name":"foreign","command":"bad","args":[],"env":[]},{"type":"acp","name":"app","serverId":"declared"}]}))?).block_task().await?;
         for method in denied {
@@ -229,7 +229,7 @@ async fn actual_handlers_deny_authority_and_filter_changed_tools() {
     assert!(results[..8].iter().all(Result::is_err));
     assert_eq!(
         results[0].as_ref().unwrap_err().code,
-        agent_client_protocol::ErrorCode::Other(-33001)
+        agent_client_protocol::ErrorCode::new(-33001)
     );
     // An unapproved tool and an unlisted method are inner MCP errors.
     assert_eq!(results[8].as_ref().unwrap()["error"]["code"], -32602);

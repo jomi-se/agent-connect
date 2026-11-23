@@ -3361,6 +3361,7 @@ async fn entry_points_pair_with_exact_issuer_and_bind_owner_sessions_to_origin()
         &[],
     )
     .await;
+    assert_eq!(page.status, StatusCode::OK, "{}", page.text);
     let page = request_at(
         &auth,
         Method::GET,
