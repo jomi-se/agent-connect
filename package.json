@@ -48,7 +48,6 @@
     "dependency-cruiser": "18.7.0",
     "esbuild": "0.28.2",
     "eslint": "10.15.0",
-    "eslint-plugin-sonarjs": "4.2.2",
     "globals": "17.13.0",
     "jscpd": "5.4.2",
     "knip": "6.44.1",
@@ -58,10 +57,5 @@
     "typescript-eslint": "8.73.0",
     "vitest": "4.1.12",
     "ws": "8.22.1"
-  },
-  "overrides": {
-    "eslint-plugin-sonarjs": {
-      "minimatch": "11.0.9"
-    }
   }
 }

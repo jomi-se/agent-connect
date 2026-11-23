@@ -1,5 +1,4 @@
 import eslint from "@eslint/js";
-import sonarjs from "eslint-plugin-sonarjs";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
@@ -76,7 +75,6 @@ export default tseslint.config(
   },
   {
     files: productionFiles,
-    plugins: { sonarjs },
     rules: {
       complexity: ["warn", 15],
       "max-depth": ["warn", 4],
@@ -90,7 +88,6 @@ export default tseslint.config(
       ],
       "max-params": ["warn", 5],
       "max-statements": ["warn", 50],
-      "sonarjs/cognitive-complexity": ["warn", 20],
     },
   },
 );
