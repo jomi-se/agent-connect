@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-11-07
+Updated: 2026-11-24
 
 Where the project stands. What comes next is in [plans](README.md), what is
 broken in [issues](../issues/), and what nobody has accepted yet in
@@ -10,12 +10,19 @@ broken in [issues](../issues/), and what nobody has accepted yet in
 
 ## Releases
 
-On npm: the browser SDK `@open-agent-connect/web` **0.0.10**, and the gateway,
-its native platform packages and the box **0.0.6** (2026-11-06). Versions are
-independent and stay on 0.0.x until the shape is final; nothing an owner
-installed is kept compatible before 1.0.
+On npm: the browser SDK `@open-agent-connect/web` **0.0.11**, and the gateway,
+its native platform packages and the box **0.0.7**. Versions are independent
+and stay on 0.0.x until the shape is final; nothing an owner installed is kept
+compatible before 1.0.
 
-0.0.6 gives Podman session networks no DNS, so the egress resolves names again;
+0.0.7 signs the owner in with a passkey, or with an authenticator code where a
+passkey cannot work, one per address
+([ADR 0019](../decisions/0019-owner-passkeys.md)); logs what the owner does as
+`owner_audit` events; and speaks MCP 2026-07-28 over ACP, as current Codex and
+Claude Code adapters do, which is why it needs SDK 0.0.11. The SDK takes `ai`
+as an optional peer dependency, so an app keeps its own. Before release, an
+app's real end-to-end test passed with both harnesses through the packed
+gateway and SDK. 0.0.6 gave Podman session networks no DNS, so the egress resolves names again;
 logs OpenTelemetry-shaped JSON with no session content
 ([ADR 0021](../decisions/0021-structured-logs.md)); adds a live canary that
 runs real Codex turns through a boxed gateway; and keeps Claude Code out of

@@ -1,13 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.0.7
 
 - Application tools work with current Codex and Claude Code adapters again.
   They speak MCP 2026-07-28 over ACP, and the gateway now does too: it
   admits `server/discover`, checks the declared server on every
   `mcp/message`, and answers anything else with an MCP error the harness can
-  handle. The box no longer holds the adapters back. Needs the browser SDK from
-  the same release.
+  handle. The box no longer holds the adapters back. Needs browser SDK
+  0.0.11.
 - Owner sign-in takes a passkey. Each address the gateway is opened by has one
   second factor: a passkey, which alone signs in and approves each app, or an
   authenticator app (TOTP), which needs the passphrase to sign in and a fresh

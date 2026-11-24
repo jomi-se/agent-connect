@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.0.11
 
 - Application tools speak MCP 2026-07-28 over ACP, as current Codex and
   Claude Code adapters do: each `mcp/message` names its server and carries one

@@ -1,6 +1,6 @@
 {
   "name": "@open-agent-connect/web",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "Browser ACP SDK for lending application tools to user-owned agents",
   "license": "MIT",
   "repository": {
