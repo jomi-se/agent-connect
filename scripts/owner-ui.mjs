@@ -204,6 +204,14 @@ try {
     password,
   });
   const context = await browser.newContext();
+  // A password manager extension can stand in for the browser's credential
+  // with a toJSON() that leaves the bytes unencoded; the pages must not use it.
+  await context.addInitScript(() => {
+    if (window.PublicKeyCredential)
+      PublicKeyCredential.prototype.toJSON = function () {
+        return { id: this.id, response: {} };
+      };
+  });
   const passkeys = ownerPasskeys();
   // Both owner pages and the synthetic app callback are served by real local HTTP.
   const page = await context.newPage();

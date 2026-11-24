@@ -14,7 +14,10 @@
   code for each approval. TOTP is for addresses where a passkey cannot work,
   such as a raw IP address; the page says so. The passkey is a discoverable
   one, so the password manager you use saves it and can sync it to your other
-  devices. On an address with neither, the passphrase only opens setup. See ADR 0019.
+  devices. The owner pages encode the passkey response themselves, so a
+  password manager extension whose stand-in `toJSON()` leaves bytes
+  unencoded still signs in. A rejected passkey is logged with its cause.
+  On an address with neither, the passphrase only opens setup. See ADR 0019.
 - Security lists each configured address with its factor and removes one with a
   fresh passkey or code, signing that address out and revoking apps approved
   there. `agent-connect remove-factor` replaces `reset-totp`: at a terminal it

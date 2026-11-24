@@ -1813,20 +1813,28 @@ impl AuthService {
         credential: &str,
     ) -> Result<()> {
         let now = self.now();
+        // Each rejection says why in the log; the page only says it failed.
+        let rejected = |cause: &str| {
+            tracing::info!(error.type = cause, "Passkey assertion rejected");
+            anyhow!("invalid_passkey")
+        };
         let (state, expires) = session_mut(inner, session)
             .and_then(|session| session.ceremonies.remove(purpose))
-            .ok_or_else(|| anyhow!("invalid_passkey"))?;
-        ensure!(expires > now, "invalid_passkey");
-        ensure!(
-            !credential.is_empty() && credential.len() <= MAX_CREDENTIAL,
-            "invalid_passkey"
-        );
+            .ok_or_else(|| rejected("no_ceremony"))?;
+        if expires <= now {
+            return Err(rejected("ceremony_expired"));
+        }
+        if credential.is_empty() || credential.len() > MAX_CREDENTIAL {
+            return Err(rejected("credential_size"));
+        }
         let credential: PublicKeyCredential =
-            serde_json::from_str(credential).map_err(|_| anyhow!("invalid_passkey"))?;
+            serde_json::from_str(credential).map_err(|_| rejected("credential_format"))?;
         let result = webauthn(origin)?
             .finish_passkey_authentication(&credential, &state)
-            .map_err(|_| anyhow!("invalid_passkey"))?;
-        ensure!(result.user_verified(), "invalid_passkey");
+            .map_err(|error| rejected(&format!("{error:?}")))?;
+        if !result.user_verified() {
+            return Err(rejected("not_user_verified"));
+        }
         let mut next = inner.stored.clone();
         if let Some(Factor::Passkey { passkey, .. }) = next.factors.get_mut(origin)
             && passkey.update_credential(&result) == Some(true)

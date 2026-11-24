@@ -172,6 +172,32 @@ pub(super) fn setup(fields: &str, options: Option<&str>) -> Page {
 /// the credential with the form. A browser without passkeys hears so when the
 /// button is pressed; without JavaScript the empty credential is refused.
 const PASSKEY_SCRIPT: &str = r#"(() => {
+  // Encoded here rather than with toJSON(): a password manager extension may
+  // stand in for the browser's credential with a toJSON() that leaves the
+  // bytes unencoded.
+  const base64url = (bytes) => bytes && btoa(String.fromCharCode(...new Uint8Array(bytes)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const encode = (credential) => {
+    const { response } = credential;
+    return {
+      id: credential.id,
+      rawId: base64url(credential.rawId),
+      type: credential.type,
+      clientExtensionResults: credential.getClientExtensionResults?.() ?? {},
+      response: response.attestationObject
+        ? {
+          attestationObject: base64url(response.attestationObject),
+          clientDataJSON: base64url(response.clientDataJSON),
+          transports: response.getTransports?.() ?? [],
+        }
+        : {
+          authenticatorData: base64url(response.authenticatorData),
+          clientDataJSON: base64url(response.clientDataJSON),
+          signature: base64url(response.signature),
+          userHandle: base64url(response.userHandle) ?? null,
+        },
+    };
+  };
   for (const form of document.querySelectorAll('form[data-passkey]')) {
     const status = form.querySelector('.passkey-status');
     const field = form.querySelector('input[name=credential]');
@@ -188,7 +214,7 @@ const PASSKEY_SCRIPT: &str = r#"(() => {
         const credential = form.dataset.ceremony === 'create'
           ? await navigator.credentials.create({ publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(options.publicKey) })
           : await navigator.credentials.get({ publicKey: PublicKeyCredential.parseRequestOptionsFromJSON(options.publicKey) });
-        field.value = JSON.stringify(credential.toJSON());
+        field.value = JSON.stringify(encode(credential));
         form.requestSubmit(event.submitter);
       } catch {
         status.textContent = 'The passkey didn’t go through. Try again.';
