@@ -2583,11 +2583,21 @@ fn authorization_lock(directory: &PathBuf) -> Result<File> {
     let lock = options.open(directory.join("authorization.lock"))?;
     #[cfg(unix)]
     lock.set_permissions(fs::Permissions::from_mode(0o600))?;
+    // A running gateway holds the lock for good. A child process started by
+    // another thread holds a copy of a just-closed lock until it runs its own
+    // program, so a busy lock is retried briefly before it counts as running.
     #[cfg(unix)]
-    ensure!(
-        unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
-        "the gateway is running; stop it, then run this again"
-    );
+    {
+        let mut attempts = 0;
+        while unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+            attempts += 1;
+            ensure!(
+                attempts < 20,
+                "the gateway is running; stop it, then run this again"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+    }
     Ok(lock)
 }
 fn private_directory(path: &PathBuf) -> Result<()> {
