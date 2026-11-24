@@ -146,10 +146,7 @@ test(
   "native packing re-executes release-info despite a forged sidecar",
   { skip: !hostTarget },
   async (t) => {
-    const input = await fixture(t, hostTarget, {
-      version,
-      version: "wrong",
-    });
+    const input = await fixture(t, hostTarget, { version: "wrong" });
     await writeFile(
       join(input.directory, releaseInfoFilename(hostTarget)),
       JSON.stringify({

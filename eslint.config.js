@@ -28,7 +28,11 @@ function rulesAsWarnings(rules = {}) {
 
 const eslintRecommendedWarnings = {
   ...eslint.configs.recommended,
-  rules: rulesAsWarnings(eslint.configs.recommended.rules),
+  rules: {
+    ...rulesAsWarnings(eslint.configs.recommended.rules),
+    // Prettier breaks chained calls before `[`, which this rule flags.
+    "no-unexpected-multiline": "off",
+  },
 };
 
 const typescriptRecommendedWarnings = tseslint.configs.recommended.map(
