@@ -3605,7 +3605,7 @@ mod sign_in_audit_tests {
     }
     impl<S: tracing::Subscriber> Layer<S> for Capture {
         fn on_event(&self, event: &tracing::Event<'_>, _: Context<'_, S>) {
-            if event.metadata().target() == "agent_connect_gateway::owner_sign_in" {
+            if event.metadata().target() == AUDIT {
                 let mut fields = Fields(BTreeMap::new());
                 event.record(&mut fields);
                 self.0.lock().unwrap().push(fields.0);
@@ -3650,11 +3650,142 @@ mod sign_in_audit_tests {
         }
         assert_eq!(events[0], expected);
     }
+    /// A successful sign-in logs `owner_signed_in`, never a failure.
+    pub(super) fn assert_no_sign_in_failures(events: &[BTreeMap<String, String>]) {
+        let names: Vec<_> = events.iter().map(|event| event["event"].as_str()).collect();
+        assert!(
+            names.iter().all(|name| *name != "owner_sign_in_failed"),
+            "{names:?}"
+        );
+    }
     fn history(auth: &AuthService) -> Vec<pages::SignInFailure> {
         auth.sign_in_audit
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .recent(auth.now())
+    }
+
+    #[tokio::test]
+    async fn owner_actions_each_log_one_audit_event_without_secrets() {
+        const SECOND: &str = "https://second.example";
+        let dir = std::env::temp_dir().join(random("agent-connect-owner-audit-test-"));
+        let mut configuration = config(dir, Some(PASSWORD));
+        configuration.entry_points.push(SECOND.into());
+        let auth = &AuthService::open(configuration).unwrap();
+        let post = |path: &'static str, owner: String, form: Vec<(&'static str, String)>| async move {
+            let fields: Vec<(&str, &str)> = form.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            let reply = request(
+                auth,
+                Method::POST,
+                path,
+                Some(ISSUER),
+                Some(&owner),
+                &fields,
+            )
+            .await;
+            assert_eq!(reply.status, StatusCode::FOUND, "{}", reply.text);
+        };
+        let (secrets, events) = captured(async {
+            let owner = login(auth, "").await;
+            login_at(auth, SECOND, Some("second.example"), "").await;
+            let uri = pushed(auth).await;
+            consent(auth, &owner, &uri, "deny", "", "3600").await;
+            let first = pair(auth, &owner, "3600").await;
+            let grant = first["grant_id"].as_str().unwrap().to_string();
+            let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+            let token = form_token(&page.text, "/agent-connect/owner/grants/revoke");
+            post(
+                "/agent-connect/owner/grants/revoke",
+                owner.clone(),
+                vec![("csrf_token", token), ("grant_id", grant.clone())],
+            )
+            .await;
+            let second = pair(auth, &owner, "3600").await;
+            let page = request(auth, Method::GET, pages::SECURITY, None, Some(&owner), &[]).await;
+            let token = form_token(&page.text, "/agent-connect/owner/grants/revoke-all");
+            post(
+                "/agent-connect/owner/grants/revoke-all",
+                owner.clone(),
+                vec![("csrf_token", token)],
+            )
+            .await;
+            let page = request(auth, Method::GET, pages::SECURITY, None, Some(&owner), &[]).await;
+            let credential = assert_passkey(auth, ISSUER, &page.text);
+            post(
+                REMOVE_FACTOR,
+                owner.clone(),
+                vec![
+                    ("csrf_token", remove_token(&page.text, SECOND).unwrap()),
+                    ("address", SECOND.into()),
+                    ("credential", credential.clone()),
+                ],
+            )
+            .await;
+            let page = request(auth, Method::GET, OWNER, None, Some(&owner), &[]).await;
+            let token = form_token(&page.text, "/agent-connect/owner/logout");
+            post(
+                "/agent-connect/owner/logout",
+                owner.clone(),
+                vec![("csrf_token", token)],
+            )
+            .await;
+            let mut secrets = vec![PASSWORD.to_string(), owner, credential, grant];
+            for tokens in [first, second] {
+                for key in ["access_token", "refresh_token"] {
+                    secrets.push(tokens[key].as_str().unwrap().to_string());
+                }
+            }
+            secrets
+        })
+        .await;
+        let grant = &secrets[3];
+        let summary: Vec<_> = events
+            .iter()
+            .map(|e| {
+                let field = |key: &str| e.get(key).map(String::as_str).unwrap_or("-");
+                format!(
+                    "{} {} {} {}",
+                    field("event"),
+                    field("factor"),
+                    field("entry_point"),
+                    field("revoked_grants")
+                )
+            })
+            .collect();
+        assert_eq!(
+            summary,
+            [
+                format!("owner_signed_in passphrase {ISSUER} -"),
+                format!("owner_enrolled_factor passkey {ISSUER} -"),
+                format!("owner_signed_in passphrase {SECOND} -"),
+                format!("owner_enrolled_factor passkey {SECOND} -"),
+                format!("owner_denied_app - {ISSUER} -"),
+                format!("owner_approved_app - {ISSUER} -"),
+                "owner_revoked_app - - -".to_string(),
+                format!("owner_approved_app - {ISSUER} -"),
+                "owner_revoked_all_apps - - 1".to_string(),
+                format!("owner_removed_factor passkey {SECOND} 0"),
+                format!("owner_signed_out - {ISSUER} -"),
+            ]
+        );
+        let approved = &events[5];
+        assert_eq!(approved["grant.id"], *grant);
+        assert_eq!(approved["app.origin"], APP);
+        assert_eq!(approved["profile"], "sandboxed");
+        assert_eq!(approved["duration_s"], "3600");
+        assert_eq!(events[6]["grant.id"], *grant);
+        assert_eq!(events[9]["signed_in_at"], ISSUER);
+        // Grant ids are labels, not credentials; everything else must stay out.
+        for event in &events {
+            for value in event.values() {
+                for secret in &secrets[..3] {
+                    assert!(!value.contains(secret.as_str()), "{value}");
+                }
+                for secret in &secrets[4..] {
+                    assert!(!value.contains(secret.as_str()), "{value}");
+                }
+            }
+        }
     }
 
     #[tokio::test]
@@ -4004,7 +4135,7 @@ mod sign_in_audit_tests {
         ))
         .await;
         assert_eq!(signed_in.status, StatusCode::FOUND);
-        assert!(events.is_empty());
+        assert_no_sign_in_failures(&events);
         for (method, path) in [
             (Method::GET, "/agent-connect/owner/login?invalid=secret"),
             (Method::POST, AUTHORIZE),
@@ -4487,7 +4618,7 @@ mod client_address_tests {
         ))
         .await;
         assert_eq!(signed_in.status, StatusCode::FOUND);
-        assert!(events.is_empty());
+        sign_in_audit_tests::assert_no_sign_in_failures(&events);
         let wrong_origin = get(auth, OWNER, SECOND, OTHER, Some(&cookie(&signed_in))).await;
         assert_eq!(wrong_origin.status, StatusCode::FOUND);
         assert_eq!(wrong_origin.headers[header::LOCATION], LOGIN);
@@ -4722,7 +4853,7 @@ mod client_address_tests {
         ))
         .await;
         assert_eq!(reply.status, StatusCode::FOUND);
-        assert!(events.is_empty());
+        sign_in_audit_tests::assert_no_sign_in_failures(&events);
         {
             let inner = auth.inner.lock().unwrap();
             assert!(!inner.login_budgets.contains_key(&released));

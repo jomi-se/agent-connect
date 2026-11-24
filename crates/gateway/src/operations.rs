@@ -609,7 +609,7 @@ pub fn setup_plan(
             "build-local-box",
             "owner-login-if-requested",
             if cli.no_service {
-                "foreground-serve"
+                "owner-starts-serve"
             } else {
                 "install-and-start-user-service"
             },
@@ -956,7 +956,7 @@ fn step_label(step: &str) -> &str {
         "keep-owner-sign-in" => "keep owner sign-in",
         "build-local-box" => "build the box",
         "owner-login-if-requested" => "log in, if asked",
-        "foreground-serve" => "serve in this terminal",
+        "owner-starts-serve" => "you start it",
         "install-and-start-user-service" => "start the service",
         other => other,
     }

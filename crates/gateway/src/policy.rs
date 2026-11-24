@@ -530,7 +530,7 @@ impl PolicyHandler {
                     pass(Dispatch::Notification(notification))
                 }
                 method => {
-                    tracing::warn!(
+                    tracing::info!(
                         rpc.method = %method,
                         inner_method = inner_method(&notification.params).unwrap_or(""),
                         "policy dropped an agent notification"

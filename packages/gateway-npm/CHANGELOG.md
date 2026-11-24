@@ -34,6 +34,16 @@
   per 15 minutes and 5 wrong passkeys or codes a minute. Approving several
   apps in a minute no longer pauses the owner, and a success no longer clears
   earlier wrong guesses.
+- The gateway logs what the owner does, not only failed sign-ins: signing in
+  and out, setting up or removing a passkey or authenticator, approving,
+  denying or revoking an app and ending a session, each as one
+  `agent_connect_gateway::owner_audit` event with no secrets in it. Sign-in
+  failures move to that target too. `session started` names its grant, so an
+  approval joins the sessions it opened.
+- `setup --no-service` lists its last step as "you start it" instead of
+  "serve in this terminal": it prints the `serve` command and exits.
+- An agent notification the gateway does not pass on is logged as info, not a
+  warning: Codex sends its login status that way.
 
 - The box is built on Node 26.13.0, the current LTS, instead of Node 24.
   The launcher still runs on Node 24.15 or newer.

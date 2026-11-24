@@ -192,13 +192,31 @@ security to bypass this error. Local acceptance observes this namespace refusal
 and absence of a filesystem effect; it does not independently qualify the
 native filesystem policy on a namespace-capable host.
 
-Failed owner sign-in emits `owner_sign_in_failed` events with an allowlisted
-`reason`, timestamp and, when recognized, the configured entry-point address.
-These events contain no submitted passphrases, authenticator codes, cookies,
-CSRF tokens, request bodies or client IP addresses. The default diagnostics
-filter enables these warnings while retaining error-level output elsewhere.
-An explicit nonempty `RUST_LOG` overrides that filter; changing it does not
-disable the in-memory Activity history.
+Owner security events are logged with the target
+`agent_connect_gateway::owner_audit` and an `event` field:
+
+| `event`                          | When                                       | Also carries                                                      |
+| -------------------------------- | ------------------------------------------ | ----------------------------------------------------------------- |
+| `owner_sign_in_failed` (warning) | a sign-in attempt is refused               | allowlisted `reason`, `at`                                        |
+| `owner_signed_in`                | sign-in succeeds                           | `factor`: `passkey`, `totp`, or `passphrase` before enrolling one |
+| `owner_enrolled_factor`          | a passkey or TOTP is set up                | `factor`                                                          |
+| `owner_removed_factor`           | an address's factor is removed on Security | `factor`, `signed_in_at`, `revoked_grants`                        |
+| `owner_signed_out`               | the owner signs out                        |                                                                   |
+| `owner_approved_app`             | an app is approved                         | `grant.id`, `app.origin`, `profile`, `duration_s`                 |
+| `owner_denied_app`               | an app is denied                           | `app.origin`                                                      |
+| `owner_revoked_app`              | one app is revoked                         | `grant.id`                                                        |
+| `owner_revoked_all_apps`         | every app is revoked                       | `revoked_grants`                                                  |
+| `owner_ended_session`            | the owner ends a running session           | `session.id`                                                      |
+
+Each names the configured `entry_point` address it happened at, where there is
+one. `grant.id` also appears on `session started`, which joins an approval to
+the sessions it opened. These events contain no submitted passphrases,
+authenticator codes, passkey responses, cookies, CSRF tokens, bearer or refresh
+tokens, request bodies or client IP addresses. The default diagnostics filter
+shows them; an explicit nonempty `RUST_LOG` overrides that filter, and changing
+it does not disable the in-memory Activity history. Host-side `remove-factor`
+and `reset-passphrase` are run by whoever holds the host account and are not
+logged by the gateway.
 
 Activity shows the latest 20 failed sign-ins from the last 24 hours. The gateway
 keeps at most 64 failures in memory and clears them on restart; this is not a

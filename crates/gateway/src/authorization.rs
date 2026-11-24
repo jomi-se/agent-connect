@@ -52,6 +52,8 @@ const REVOKE: &str = "/agent-connect/oauth/revoke";
 const ENROLL_TOTP: &str = "/agent-connect/owner/totp/verify";
 const ENROLL_PASSKEY: &str = "/agent-connect/owner/passkey/enroll";
 const REMOVE_FACTOR: &str = pages::REMOVE_FACTOR;
+/// Owner security events: what happened, never submitted values, tokens or IP addresses.
+pub const AUDIT: &str = "agent_connect_gateway::owner_audit";
 const REQUEST_TTL: u64 = 600;
 const CODE_TTL: u64 = 120;
 const ACCESS_TTL: u64 = 300;
@@ -250,6 +252,14 @@ pub struct FactorRemoval {
 enum FactorKind {
     Passkey,
     Totp,
+}
+impl FactorKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            FactorKind::Passkey => "passkey",
+            FactorKind::Totp => "totp",
+        }
+    }
 }
 impl Factor {
     fn kind(&self) -> FactorKind {
@@ -1017,6 +1027,16 @@ impl AuthService {
                 )
             };
             inner.sessions.insert(hash(&token), fresh);
+            tracing::info!(
+                target: AUDIT,
+                event = "owner_signed_in",
+                factor = match authority {
+                    Authority::Owner(kind) => kind.as_str(),
+                    _ => "passphrase",
+                },
+                entry_point = %origin,
+                "Owner signed in"
+            );
             return Ok(self.with_cookie(redirect(&target)?, Some(token), &origin));
         }
         if method == Method::GET && (path == pages::SETUP || path == pages::TOTP) {
@@ -1286,6 +1306,12 @@ impl AuthService {
                 .clone()
                 .ok_or_else(|| anyhow!("runtime unavailable"))?;
             runtime.end_session(id)?;
+            tracing::info!(
+                target: AUDIT,
+                event = "owner_ended_session",
+                session.id = %id,
+                "Owner ended a session"
+            );
             return redirect(OWNER);
         }
         if method == Method::POST && path.starts_with("/agent-connect/owner/") {
@@ -1472,6 +1498,13 @@ impl AuthService {
             ensure!(["approve", "deny"].contains(&decision), "invalid_request");
             if decision == "deny" {
                 inner.pending.remove(uri);
+                tracing::info!(
+                    target: AUDIT,
+                    event = "owner_denied_app",
+                    app.origin = %pending.client,
+                    entry_point = %pending.issuer,
+                    "Owner denied an app"
+                );
                 return self.callback(&pending, "error", "access_denied");
             }
             let profile = if let Some(value) = form.get("profile") {
@@ -1521,6 +1554,16 @@ impl AuthService {
                 spent: Vec::new(),
             });
             self.commit(&mut inner, next)?;
+            tracing::info!(
+                target: AUDIT,
+                event = "owner_approved_app",
+                grant.id = %id,
+                app.origin = %pending.client,
+                profile = profile.as_str(),
+                duration_s = duration,
+                entry_point = %pending.issuer,
+                "Owner approved an app"
+            );
             let code = random("ac_code_");
             inner.pending.remove(uri);
             inner.codes.insert(
@@ -1809,6 +1852,13 @@ impl AuthService {
         let mut next = inner.stored.clone();
         next.factors.insert(origin.to_string(), factor);
         self.commit(inner, next)?;
+        tracing::info!(
+            target: AUDIT,
+            event = "owner_enrolled_factor",
+            factor = kind.as_str(),
+            entry_point = origin,
+            "Owner enrolled a second factor"
+        );
         let continuation = inner
             .sessions
             .remove(session)
@@ -1938,12 +1988,19 @@ impl AuthService {
                     required(&form, "csrf_token")?,
                     now,
                 )?;
+                let origin = self.request_origin(headers)?;
                 inner.sessions.remove(&session);
                 inner.csrf.retain(|_, token| token.session != session);
+                tracing::info!(
+                    target: AUDIT,
+                    event = "owner_signed_out",
+                    entry_point = %origin,
+                    "Owner signed out"
+                );
                 let mut response = redirect(LOGIN)?;
                 response.headers_mut().insert(
                     header::SET_COOKIE,
-                    OwnerCookiePolicy::for_origin(&self.request_origin(headers)?).header("", 0),
+                    OwnerCookiePolicy::for_origin(&origin).header("", 0),
                 );
                 Ok(response)
             }
@@ -1986,6 +2043,15 @@ impl AuthService {
                     }
                 }
                 self.commit(inner, next)?;
+                tracing::info!(
+                    target: AUDIT,
+                    event = "owner_removed_factor",
+                    factor = target.kind().as_str(),
+                    entry_point = %address,
+                    signed_in_at = %origin,
+                    revoked_grants = revoked_ids.len(),
+                    "Owner removed a second factor"
+                );
                 inner.codes.retain(|_, code| {
                     code.request.issuer != address && !revoked_ids.contains(&code.grant)
                 });
@@ -2021,6 +2087,12 @@ impl AuthService {
                     now,
                 )?;
                 self.revoke_id(inner, id)?;
+                tracing::info!(
+                    target: AUDIT,
+                    event = "owner_revoked_app",
+                    grant.id = %id,
+                    "Owner revoked an app"
+                );
                 redirect(OWNER)
             }
             "/agent-connect/owner/grants/revoke-all" => {
@@ -2033,9 +2105,15 @@ impl AuthService {
                     now,
                 )?;
                 let mut next = inner.stored.clone();
-                revoke_all_grants(&mut next.grants, now);
+                let revoked = revoke_all_grants(&mut next.grants, now);
                 self.commit(inner, next)?;
                 inner.codes.clear();
+                tracing::info!(
+                    target: AUDIT,
+                    event = "owner_revoked_all_apps",
+                    revoked_grants = revoked,
+                    "Owner revoked every app"
+                );
                 redirect(OWNER)
             }
             _ => bail!("invalid_request"),
@@ -2231,7 +2309,7 @@ impl AuthService {
         // Emit after releasing the audit lock. No submitted values or raw errors
         // enter either the event or the history, even when authentication is broken.
         tracing::warn!(
-            target: "agent_connect_gateway::owner_sign_in",
+            target: AUDIT,
             event = "owner_sign_in_failed",
             at,
             reason = reason.code(),
@@ -2286,8 +2364,12 @@ async fn endpoint(State(service): State<Arc<AuthService>>, request: Request) -> 
             Ok(body) => {
                 let service = service.clone();
                 let path = path.clone();
+                // Owner audit events go to whichever subscriber this request has.
+                let logs = tracing::dispatcher::get_default(Clone::clone);
                 tokio::task::spawn_blocking(move || {
-                    service.dispatch(parts.method, &path, &query, &parts.headers, &body, peer)
+                    tracing::dispatcher::with_default(&logs, || {
+                        service.dispatch(parts.method, &path, &query, &parts.headers, &body, peer)
+                    })
                 })
                 .await
                 .unwrap_or_else(|_| Err(anyhow!("authorization unavailable")))

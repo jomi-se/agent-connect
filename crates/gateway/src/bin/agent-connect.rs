@@ -270,7 +270,7 @@ fn diagnostic_filter(directives: Option<&str>) -> tracing_subscriber::EnvFilter 
     tracing_subscriber::EnvFilter::new(
         directives
             .filter(|value| !value.trim().is_empty())
-            .unwrap_or("error,agent_connect=info,agent_connect_gateway::owner_sign_in=warn"),
+            .unwrap_or("error,agent_connect=info"),
     )
 }
 
@@ -1098,8 +1098,8 @@ async fn run_host(
     let session_dir = gateway.cli.state_dir.join("sessions").join(&label);
     std::fs::create_dir_all(&session_dir)?;
     tracing::info!(
-
         session.id = %label,
+        grant.id = %grant.id,
         network.peer.address = %peer,
         resumable,
         live_hosts = gateway.hosts.live_hosts() + 1,
@@ -1298,7 +1298,7 @@ mod tests {
             .with_writer(move || writer.clone())
             .finish();
         tracing::subscriber::with_default(subscriber, || {
-            tracing::warn!(target: "agent_connect_gateway::owner_sign_in", "audit-visible");
+            tracing::info!(target: agent_connect_gateway::authorization::AUDIT, "audit-visible");
             tracing::warn!(target: "other_component", "unrelated-warning");
             tracing::info!("gateway-event");
             tracing::error!(target: "other_component", "ordinary-error");
