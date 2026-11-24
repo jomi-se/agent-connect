@@ -55,8 +55,14 @@ end.
    untrusted test certificate.
 8. **Docs:** `PRODUCT.md`'s owner-page rules, configuration, troubleshooting.
 9. **Real devices**, by the owner: enroll and approve from a phone and from a
-   desktop password manager, and read the IP literal page.
-10. **macOS build**, last.
+   desktop password manager, and read the IP literal page. Done 2026-11-24.
+   It found three bugs, all fixed: enrollment asked for a non-discoverable
+   credential, which Chrome on Android kept on the device instead of offering
+   it to the password manager; a password manager extension's `toJSON()` left
+   the response's bytes unencoded, so the pages now encode it themselves; and
+   an expired sign-in page said "Signed out". The code field became six boxes.
+10. **macOS build**: the release workflow's build, green in CI. There is no
+    macOS machine to test on by hand.
 
 ## Open
 
