@@ -269,6 +269,29 @@ async fn each_permission_profile_is_asserted() {
             "permissions never delegated to app"
         );
     }
+    // claude-agent-acp: a display title beside the machine name. The name
+    // attributes the prompt; the title alone never does.
+    for (tool_call, wanted) in [
+        (
+            json!({"title":"app: approved","name":"mcp__app__approved"}),
+            "yes",
+        ),
+        (json!({"title":"app: approved"}), "no"),
+        (
+            json!({"title":"app: unapproved","name":"mcp__app__unapproved"}),
+            "no",
+        ),
+        (json!({"title":"Bash","name":"Bash"}), "no"),
+    ] {
+        let mut tool_call = tool_call;
+        tool_call["toolCallId"] = json!("call");
+        let (results, _, _) = run(config(PermissionProfile::AppToolsOnly), json!({}), vec![probe("session/request_permission", json!({"sessionId":"owned","toolCall":tool_call,"options":[{"kind":"allow_once","optionId":"yes","name":"Allow"},{"kind":"reject_once","optionId":"no","name":"Reject"}]}))], vec![]).await;
+        assert_eq!(
+            results.lock().unwrap()[0].as_ref().unwrap()["outcome"]["optionId"],
+            wanted,
+            "{tool_call}"
+        );
+    }
 }
 #[tokio::test]
 async fn metadata_and_durable_lifecycle_survive_real_handlers() {

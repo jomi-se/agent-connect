@@ -37,7 +37,8 @@ pub enum PermissionProfile {
     DenyAll,
     /// Allow only prompts attributable to a granted application tool; deny
     /// every harness-native action. Attribution uses the adapters' tool-call
-    /// titles (`mcp.app.*` for codex-acp, `mcp__app__*` for claude-agent-acp),
+    /// titles (`mcp.app.*` for codex-acp) and names (`mcp__app__*` for
+    /// claude-agent-acp),
     /// which is harness-specific: acceptable for a host-run smoke test, not as
     /// a production boundary.
     AppToolsOnly,
@@ -507,9 +508,9 @@ impl PolicyHandler {
                             Some("completed" | "failed")
                         ) {
                             state.tool_titles.remove(id);
-                        } else if let Some(title) = update
-                            .get("title")
-                            .and_then(Value::as_str)
+                        } else if let Some(title) = ["name", "title"]
+                            .iter()
+                            .find_map(|key| update.get(key).and_then(Value::as_str))
                             .filter(|t| !t.is_empty())
                         {
                             if state.tool_titles.len() >= MAX_TOOL_TITLES
@@ -685,23 +686,31 @@ impl PolicyHandler {
             .pointer("/toolCall/title")
             .and_then(Value::as_str)
             .unwrap_or("");
+        // claude-agent-acp titles an app tool for people ("app: name") and
+        // carries the machine name (`mcp__app__name`) beside it.
+        let own_name = params
+            .pointer("/toolCall/name")
+            .and_then(Value::as_str)
+            .unwrap_or("");
         let seen_title = params
             .pointer("/toolCall/toolCallId")
             .and_then(Value::as_str)
             .and_then(|id| self.state.lock().unwrap().tool_titles.get(id).cloned())
             .unwrap_or_default();
         let app = &self.config.app_server_name;
-        let is_app_tool = [own_title, seen_title.as_str()].iter().any(|title| {
-            title
-                .strip_prefix(&format!("mcp.{app}."))
-                .or_else(|| title.strip_prefix(&format!("mcp__{app}__")))
-                .is_some_and(|name| {
-                    self.config
-                        .snapshot
-                        .as_ref()
-                        .is_some_and(|tools| tools.contains_key(name))
-                })
-        });
+        let is_app_tool = [own_name, own_title, seen_title.as_str()]
+            .iter()
+            .any(|title| {
+                title
+                    .strip_prefix(&format!("mcp.{app}."))
+                    .or_else(|| title.strip_prefix(&format!("mcp__{app}__")))
+                    .is_some_and(|name| {
+                        self.config
+                            .snapshot
+                            .as_ref()
+                            .is_some_and(|tools| tools.contains_key(name))
+                    })
+            });
         let wanted = match self.config.permissions {
             PermissionProfile::Sandboxed => ALLOW,
             PermissionProfile::ReadOnly if is_app_tool => ALLOW,

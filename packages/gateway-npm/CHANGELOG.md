@@ -51,6 +51,10 @@
 - Authenticator codes are entered in six boxes, centered, and a pasted code
   keeps only its digits ("123 456" fills all six). Without JavaScript the
   field is a plain box.
+- The `app-tools-only` and `read-only` profiles recognize Claude Code's app
+  tools again. Its adapter now titles them for people (`app: list_items`) and
+  carries the machine name (`mcp__app__list_items`) beside the title; the
+  gateway matches the name. A title alone never counts.
 - A sign-in page left open until its session expired says "This page expired"
   when submitted, instead of "Signed out".
 
