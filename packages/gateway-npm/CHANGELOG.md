@@ -48,6 +48,9 @@
   "serve in this terminal": it prints the `serve` command and exits.
 - An agent notification the gateway does not pass on is logged as info, not a
   warning: Codex sends its login status that way.
+- Authenticator codes are entered in six boxes, centered, and a pasted code
+  keeps only its digits ("123 456" fills all six). Without JavaScript the
+  field is a plain box.
 - A sign-in page left open until its session expired says "This page expired"
   when submitted, instead of "Signed out".
 

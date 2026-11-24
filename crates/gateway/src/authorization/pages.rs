@@ -17,7 +17,7 @@ pub(super) struct Page {
     /// Per-response rules, such as access-time tracks. Hashed into the CSP.
     pub dynamic_css: String,
     /// Static page behavior, authorized by a per-response CSP hash.
-    pub script: &'static str,
+    pub script: String,
 }
 
 #[derive(Clone, Copy)]
@@ -94,11 +94,51 @@ fn plain(title: &str, width: Width, body: String) -> Page {
         bar: Bar::Plain,
         body,
         dynamic_css: String::new(),
-        script: "",
+        script: String::new(),
     }
 }
 
 const CODE_INPUT: &str = "class='code-input' inputmode=numeric pattern='[0-9]{6}' maxlength=6 autocomplete=one-time-code";
+
+/// Draws a form field's code as six boxes over the one real input, which keeps
+/// paste, autofill and screen readers working; anything but digits is dropped,
+/// so a pasted "123 456" fills all six. An inline code field (Security) only
+/// gets the cleanup. Without JavaScript the input is a plain box.
+const CODE_SCRIPT: &str = r#"(() => {
+  for (const input of document.querySelectorAll('input.code-input')) {
+    input.removeAttribute('maxlength');
+    const field = input.closest('.field');
+    let cells = [];
+    if (field) {
+      field.classList.add('field--code');
+      const box = document.createElement('div');
+      box.className = 'code-box';
+      const row = document.createElement('div');
+      row.className = 'code-cells';
+      row.setAttribute('aria-hidden', 'true');
+      cells = Array.from({ length: 6 }, () => row.appendChild(document.createElement('span')));
+      input.replaceWith(box);
+      box.append(row, input);
+    }
+    const show = () => {
+      const digits = input.value.replace(/\D/g, '').slice(0, 6);
+      if (input.value !== digits) input.value = digits;
+      const focused = document.activeElement === input;
+      cells.forEach((cell, index) => {
+        cell.textContent = digits[index] ?? '';
+        cell.classList.toggle('current', focused && index === Math.min(digits.length, 5));
+      });
+    };
+    // The caret always sits after the last digit, where the boxes show it.
+    const toEnd = () => input.setSelectionRange(input.value.length, input.value.length);
+    input.addEventListener('input', show);
+    input.addEventListener('focus', () => { show(); toEnd(); });
+    input.addEventListener('blur', show);
+    input.addEventListener('click', toEnd);
+    input.addEventListener('keyup', toEnd);
+    show();
+  }
+})();"#;
 
 /// How this address signs in: its passkey alone, the passphrase with a TOTP
 /// code, or the passphrase alone to set up a factor.
@@ -132,7 +172,7 @@ pub(super) fn sign_in(fields: &str, method: SignIn, waiting: Option<&str>) -> Pa
             format!(
                 "<form method=post action='{LOGIN}'>{fields}{PASSPHRASE_INPUT}<div class='field'><label for='login-totp'>Authenticator code</label><input id='login-totp' name=totp {CODE_INPUT} required></div><div class='actions'><button class='wide'>Sign in</button></div></form>"
             ),
-            "",
+            CODE_SCRIPT,
         ),
         SignIn::Setup => (
             format!(
@@ -146,7 +186,7 @@ pub(super) fn sign_in(fields: &str, method: SignIn, waiting: Option<&str>) -> Pa
         Width::Compact,
         format!("<div class='panel'><h1>Sign in</h1>{lede}{form}</div>"),
     );
-    page.script = script;
+    page.script = script.into();
     page
 }
 
@@ -163,7 +203,7 @@ pub(super) fn setup(fields: &str, options: Option<&str>) -> Page {
     };
     let mut page = plain("Set up sign-in", Width::Compact, body);
     if options.is_some() {
-        page.script = PASSKEY_SCRIPT;
+        page.script = PASSKEY_SCRIPT.into();
     }
     page
 }
@@ -346,7 +386,7 @@ pub(super) fn console(view: Console) -> Page {
             body,
             String::new(),
         );
-        page.script = COPY_SCRIPT;
+        page.script = COPY_SCRIPT.into();
         return page;
     }
     body.push_str("<h1 class='visually-hidden'>Activity</h1>");
@@ -584,7 +624,7 @@ fn owner_page(title: &str, tab: Tab, logout_token: String, body: String, css: St
         },
         body,
         dynamic_css: css,
-        script: "",
+        script: String::new(),
     }
 }
 
@@ -674,7 +714,10 @@ pub(super) fn security(view: Security) -> Page {
         String::new(),
     );
     if uses_passkey {
-        page.script = PASSKEY_SCRIPT;
+        page.script = PASSKEY_SCRIPT.into();
+    }
+    if page.body.contains("class='code-input'") {
+        page.script += CODE_SCRIPT;
     }
     page
 }
@@ -711,7 +754,7 @@ pub(super) fn gateway(view: Gateway) -> Page {
         body,
         String::new(),
     );
-    page.script = COPY_SCRIPT;
+    page.script = COPY_SCRIPT.into();
     page
 }
 
@@ -743,7 +786,7 @@ pub(super) fn totp_scan(secret: &str, uri: &str, fields: &str) -> Page {
             escape(uri)
         ),
     );
-    page.script = COPY_SCRIPT;
+    page.script = [COPY_SCRIPT, CODE_SCRIPT].concat();
     page
 }
 
@@ -852,9 +895,11 @@ pub(super) fn consent(view: Consent) -> Page {
         ),
     );
     page.width = Width::Full;
-    if matches!(view.factor, ApprovalFactor::Passkey(_)) {
-        page.script = PASSKEY_SCRIPT;
+    page.script = match view.factor {
+        ApprovalFactor::Passkey(_) => PASSKEY_SCRIPT,
+        _ => CODE_SCRIPT,
     }
+    .into();
     page
 }
 
@@ -1030,6 +1075,15 @@ label,legend{font-weight:620}
 input:not([type=radio]){width:100%;min-height:3rem;padding:.65rem .8rem;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line-strong);border-radius:.5rem;transition:border-color .15s ease-out}
 input:not([type=radio]):hover{border-color:var(--muted)}
 .code-input{max-width:11rem;font-family:var(--mono);font-size:1.25rem;letter-spacing:.3em;font-variant-numeric:tabular-nums}
+.field--code{justify-items:center;text-align:center}
+.code-box{position:relative;width:min(100%,21rem)}
+.code-cells{display:flex;gap:.5rem}
+.code-cells span{flex:1;min-width:0;height:3.25rem;display:grid;place-items:center;background:var(--paper);border:1px solid var(--line-strong);border-radius:.6rem;font:600 1.5rem/1 var(--mono);font-variant-numeric:tabular-nums;color:var(--ink);transition:border-color .15s ease-out,box-shadow .15s ease-out}
+.code-cells span:nth-child(4){margin-left:.5rem}
+.code-cells span.current{border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+.code-box .code-input{position:absolute;inset:0;width:100%;max-width:none;height:100%;min-height:0;padding:0;border:0;border-radius:0;background:transparent;color:transparent;caret-color:transparent;font-size:16px;letter-spacing:0;outline:none;box-shadow:none}
+.code-box .code-input::selection{background:transparent}
+.code-box:has(:focus-visible){outline:3px solid var(--purple);outline-offset:4px;border-radius:.7rem}
 button,.button{display:inline-flex;align-items:center;justify-content:center;text-align:center;gap:.5rem;min-height:2.75rem;padding:.6rem 1.15rem;font:inherit;font-weight:650;line-height:1.2;color:#fff;background:var(--teal);border:1px solid transparent;border-radius:.5rem;text-decoration:none;cursor:pointer;transition:background-color .15s ease-out,border-color .15s ease-out,color .15s ease-out}
 button:hover,.button:hover{color:#fff;background:var(--teal-ink)}
 button:active,.button:active{transform:translateY(1px)}

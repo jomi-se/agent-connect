@@ -549,10 +549,17 @@ try {
       "none",
     );
     await recoveryPage.emulateMedia({ reducedMotion: "no-preference" });
+    // A pasted code keeps only its digits and fills the six boxes.
+    const codeField = recoveryPage.getByLabel("Code", { exact: true });
+    await codeField.fill("12 34-56 7");
+    assert.equal(await codeField.inputValue(), "123456");
+    assert.deepEqual(
+      await recoveryPage.locator(".code-cells span").allTextContents(),
+      ["1", "2", "3", "4", "5", "6"],
+    );
+    await capture("totp-code-filled", { target: recoveryPage });
     const enrollmentStep = totpStep();
-    await recoveryPage
-      .getByLabel("Code", { exact: true })
-      .fill(totpCode(secret, enrollmentStep));
+    await codeField.fill(totpCode(secret, enrollmentStep));
     await recoveryPage.getByRole("button", { name: "Turn on" }).click();
     // Enrolling leads back to the request that was waiting.
     await recoveryPage

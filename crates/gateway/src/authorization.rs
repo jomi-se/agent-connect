@@ -2887,7 +2887,7 @@ fn html_for(page: pages::Page, client: Option<&str>) -> Response {
         .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
         .header(
             "content-security-policy",
-            page_csp(client, &page.dynamic_css, page.script),
+            page_csp(client, &page.dynamic_css, &page.script),
         )
         .body(Body::from(pages::document(&page)))
         .unwrap()
