@@ -18,6 +18,8 @@ defects are in [issues](../issues/) and unaccepted proposals in
   recovery and migration still open.
 - [Owner passkeys](owner-passkeys.md) (in-progress): built and through its
   design pass; the real-device check remains before release.
+- [Owner security log](owner-security-log.md) (needs-triage): keep the owner's
+  security events across restarts and show them on Activity.
 - [Each app sees only its own conversations](app-conversations.md)
   (needs-triage): after the MCP-over-ACP binding migration
   ([issue](../issues/mcp-over-acp-binding.md)), which comes first.
