@@ -2026,11 +2026,11 @@ async fn sign_in_cookie_errors_distinguish_missing_duplicates_and_invalid_values
         ),
         (
             Some("__Host-agent_connect_owner_443=".into()),
-            "<h1>Signed out</h1>",
+            "<h1>This page expired</h1>",
         ),
         (
             Some("__Host-agent_connect_owner_443=must-not-be-reflected".into()),
-            "<h1>Signed out</h1>",
+            "<h1>This page expired</h1>",
         ),
     ] {
         let reply = request(
@@ -2084,7 +2084,7 @@ async fn sign_in_cookie_errors_distinguish_missing_duplicates_and_invalid_values
     )
     .await;
     assert_eq!(expired.status, StatusCode::FORBIDDEN);
-    assert!(expired.text.contains("<h1>Signed out</h1>"));
+    assert!(expired.text.contains("<h1>This page expired</h1>"));
     assert_eq!(sign_in_retry(&expired), LOGIN);
 }
 

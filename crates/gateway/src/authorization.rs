@@ -2933,6 +2933,8 @@ fn owner_error(status: StatusCode, reason: &str, path: &str, retry: Option<&str>
         "duplicate_session_cookie" if path == LOGIN => {
             ("Sign in again", "Clear this site’s cookies first.")
         }
+        // The sign-in page outlived its pre-sign-in session; nobody was signed in.
+        "invalid_session" | "owner_login_required" if path == LOGIN => ("This page expired", ""),
         "owner_login_required"
         | "invalid_session"
         | "missing_session_cookie"

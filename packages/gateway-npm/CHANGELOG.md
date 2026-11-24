@@ -45,6 +45,8 @@
   "serve in this terminal": it prints the `serve` command and exits.
 - An agent notification the gateway does not pass on is logged as info, not a
   warning: Codex sends its login status that way.
+- A sign-in page left open until its session expired says "This page expired"
+  when submitted, instead of "Signed out".
 
 - The box is built on Node 26.13.0, the current LTS, instead of Node 24.
   The launcher still runs on Node 24.15 or newer.
