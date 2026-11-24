@@ -205,7 +205,14 @@ fn assert_passkey(auth: &Arc<AuthService>, origin: &str, page: &str) -> String {
     .unwrap()
 }
 fn create_passkey(auth: &Arc<AuthService>, origin: &str, page: &str) -> String {
-    let options: CreationChallengeResponse = serde_json::from_str(&passkey_options(page)).unwrap();
+    let mut options: CreationChallengeResponse =
+        serde_json::from_str(&passkey_options(page)).unwrap();
+    // Enrollment asks for a discoverable credential, which the software
+    // authenticator can't store; the gateway doesn't check which it got.
+    assert!(passkey_options(page).contains(r#""residentKey":"required""#));
+    let selection = options.public_key.authenticator_selection.as_mut().unwrap();
+    assert!(selection.require_resident_key);
+    selection.require_resident_key = false;
     let mut keys = authenticators().lock().unwrap();
     let key = keys
         .entry(auth.config.state_dir.clone())

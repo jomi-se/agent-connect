@@ -39,8 +39,8 @@ use std::{
 };
 use url::Url;
 use webauthn_rs::prelude::{
-    Passkey, PasskeyAuthentication, PasskeyRegistration, PublicKeyCredential,
-    RegisterPublicKeyCredential, Uuid, Webauthn, WebauthnBuilder,
+    CreationChallengeResponse, Passkey, PasskeyAuthentication, PasskeyRegistration,
+    PublicKeyCredential, RegisterPublicKeyCredential, Uuid, Webauthn, WebauthnBuilder,
 };
 
 const OWNER: &str = "/agent-connect/owner";
@@ -1086,7 +1086,7 @@ impl AuthService {
                     state,
                     expires: now + CEREMONY_TTL,
                 });
-                Some(serde_json::to_string(&options)?)
+                Some(discoverable(&options)?)
             } else {
                 None
             };
@@ -2905,6 +2905,20 @@ fn webauthn(origin: &str) -> Result<Webauthn> {
     WebauthnBuilder::new(host, &url)
         .and_then(|builder| builder.rp_name("Agent Connect").build())
         .map_err(|_| anyhow!("passkey_unavailable"))
+}
+/// The registration options as JSON, asking for a discoverable credential.
+/// webauthn-rs asks for a non-discoverable one, which Chrome on Android
+/// stores as a device-bound key instead of offering it to the password
+/// manager the owner chose, so it never syncs to their other devices.
+fn discoverable(options: &CreationChallengeResponse) -> Result<String> {
+    let mut options = serde_json::to_value(options)?;
+    let selection = options
+        .pointer_mut("/publicKey/authenticatorSelection")
+        .and_then(serde_json::Value::as_object_mut)
+        .ok_or_else(|| anyhow!("passkey_unavailable"))?;
+    selection.insert("residentKey".into(), "required".into());
+    selection.insert("requireResidentKey".into(), true.into());
+    Ok(serde_json::to_string(&options)?)
 }
 
 fn owner_error(status: StatusCode, reason: &str, path: &str, retry: Option<&str>) -> Response {

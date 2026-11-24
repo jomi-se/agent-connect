@@ -12,8 +12,9 @@
   second factor: a passkey, which alone signs in and approves each app, or an
   authenticator app (TOTP), which needs the passphrase to sign in and a fresh
   code for each approval. TOTP is for addresses where a passkey cannot work,
-  such as a raw IP address; the page says so.
-  On an address with neither, the passphrase only opens setup. See ADR 0019.
+  such as a raw IP address; the page says so. The passkey is a discoverable
+  one, so the password manager you use saves it and can sync it to your other
+  devices. On an address with neither, the passphrase only opens setup. See ADR 0019.
 - Security lists each configured address with its factor and removes one with a
   fresh passkey or code, signing that address out and revoking apps approved
   there. `agent-connect remove-factor` replaces `reset-totp`: at a terminal it
