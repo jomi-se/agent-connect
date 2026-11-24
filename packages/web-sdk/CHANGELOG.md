@@ -15,7 +15,11 @@
 - `createWebMcpToolSnapshot` follows the native WebMCP binding of Chrome 156
   and later, which passes schemas and arguments as objects like the WebMCP
   draft. Chrome 153's JSON-string binding is no longer supported.
-- Depend on ai 7.0.179 and @cfworker/json-schema 4.1.6.
+- `ai` is an optional peer dependency (`^7.0.0`) instead of a pinned one. The
+  SDK only uses its types, for `createAcpChatTransport`, so the app's own `ai`
+  (the one its `@ai-sdk/react` brings) serves both, and the app updates
+  `@ai-sdk/react` on its own schedule.
+- Depend on @cfworker/json-schema 4.1.6.
 - Depend on zod 4.6.7, which fixes unbounded memory use while validating
   oversized constrained collections (GHSA-mrhx-c7xc-m3w5).
 - Depend on AI SDK `ai` 7.0.143.
