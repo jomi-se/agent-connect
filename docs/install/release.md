@@ -32,7 +32,12 @@ refused, so the service crash-looped on the first upgraded box.
    must sign in. Every refusal must reach the owner at setup's terminal, with
    what to do; one that only shows in the serve log fails the check. Fix the
    gap or the changelog's upgrade note before bumping.
-5. Remove the throwaway HOME, its containers, egress peer and box images.
+5. Run it as the user service once (or under a service-manager fixture) and
+   make the service fail and restart, then recover it. Sessions must still
+   reach the network through the egress afterwards: 0.0.7's crash loop killed
+   the egress inside the service while the engine still reported it running,
+   and the gateway reused the dead proxy.
+6. Remove the throwaway HOME, its containers, egress peer and box images.
 
 Name the release you upgraded from in the bump commit message.
 

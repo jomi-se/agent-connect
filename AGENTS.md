@@ -143,7 +143,9 @@ Run the formatter once, just before final verification and commit.
   which release it upgraded from.
 - The upgrade passes only when the service actually serves and the owner can
   sign in. Setup finishing and `doctor` passing are not enough; a refusal that
-  appears only in the service log is a failure.
+  appears only in the service log is a failure. So is an egress that a
+  failed service start left dead: after a failure and restart, a session must
+  still reach the network.
 
 ## Documentation
 
