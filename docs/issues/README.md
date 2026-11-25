@@ -13,3 +13,5 @@ reproducing it on purpose and checking the fix against that reproduction.
   (needs-info)
 - [The lateask-cut scenario races Codex's tool listing](lateask-cut-races-tool-listing.md)
   (ready-for-agent)
+- [Popup pairing fails under cross-origin isolation and says the user cancelled](popup-pairing-fails-under-cross-origin-isolation.md)
+  (ready-for-agent)
