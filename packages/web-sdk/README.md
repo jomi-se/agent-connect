@@ -95,6 +95,13 @@ ID and returns structured MCP results. Do not add a second AI SDK
 must provide idempotency or action-ID deduplication where needed. Cooperative
 cancellation uses the handler's signal; cancellation cannot undo an effect.
 
+The harness, not the gateway, limits how long one tool call may take. Codex
+gives up after 300 seconds and tells the model the call timed out; Claude Code
+waited ten minutes in the same test (codex-acp and claude-agent-acp as of
+November 2026). A handler that waits for a person counts too. Work that can
+take longer belongs in a job: one tool starts it and returns an ID, others
+report progress or the result. Nothing runs after the page closes.
+
 `createWebMcpToolSnapshot` captures selected native browser tools before consent.
 Definitions remain fixed, registry changes invalidate the snapshot, and disposal
 aborts borrowed execution without unregistering the page's tools. See
