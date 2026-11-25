@@ -1,7 +1,7 @@
 # Each app sees only its own conversations
 
-Status: needs-triage. The MCP-over-ACP binding migration it waited for
-shipped in gateway 0.0.7 (90f550b).
+Status: ready-for-agent. Accepted by the owner on 2026-11-25. The MCP-over-ACP
+binding migration it waited for shipped in gateway 0.0.7 (90f550b).
 
 Every session mounts the same dedicated harness home, which holds the login,
 the harness configuration and every conversation's history. An approved app
@@ -42,21 +42,46 @@ directory.
   that move the databases and logs. No setting was found that moves
   `auth.json` or `sessions/` apart.
 
-## Unknowns to settle first
+## Checked with real turns (2026-11-25, same versions)
 
-1. Claude: a session with `CLAUDE_SECURESTORAGE_CONFIG_DIR` on the shared
-   login and `CLAUDE_CONFIG_DIR` per app signs in and refreshes, and its
-   history lands only in the app's directory.
-2. Codex: the shared `CODEX_HOME` with `sqlite_home`, `log_dir` and per-app
-   directories mounted over `sessions/` (and the session index) keeps every
-   conversation trace per app; list what else it writes while a session runs.
-   The alternative is a per-app `CODEX_HOME` with the gateway carrying
-   `auth.json` between them under its lock, which forks the refresh chain
-   unless only one copy refreshes.
-3. Both: two apps' sessions at once against one login, through a token
-   refresh, without one invalidating the other.
-4. Codex memories (`memories_1.sqlite`): per app, or the owner's across apps?
-   It is history-like, so per app by default.
+1. **Claude: works.** With `CLAUDE_SECURESTORAGE_CONFIG_DIR` on the
+   dedicated login's directory and an empty per-app `CLAUDE_CONFIG_DIR`, a
+   real turn signed in and answered. Its `.claude.json`, `projects/`,
+   `sessions/` and backups landed only in the app's directory; the login
+   directory's history, sessions and credentials were unchanged. No token
+   refresh happened; the code writes the credential to the secure-storage
+   directory, so a refresh should land in the shared one.
+2. **Codex: works.** With the shared `CODEX_HOME`, a per-app directory
+   mounted over `sessions/`, and `-c sqlite_home=… -c log_dir=…` pointing at
+   per-app directories, a real `codex exec` turn answered. The session file
+   and every database (state, memories, thread history, queue, goals, logs)
+   landed only in the app's directories. The shared home gained only caches
+   (`models_cache.json`, app-tool metadata), no conversation content.
+   `session_index.jsonl` and `shell_snapshots/` were not written by this
+   run; check them under codex-acp, which may write both.
+
+Still open:
+
+3. Two apps' sessions at once against one login, through a token refresh,
+   without one invalidating the other. The login stays one shared directory
+   (with Codex's lock files), as today, so this should hold; it needs a refresh
+   to prove.
+4. Codex memories are per app by construction now (`memories_1.sqlite` sits
+   in the app's `sqlite_home`).
+
+## Steps
+
+1. Per-grant state directory beside the shared login: the gateway creates
+   one private directory per grant (Claude config, Codex sessions, Codex
+   SQLite and logs) and removes it with the grant.
+2. Box arguments: mount the shared login and the grant's directory, set
+   `CLAUDE_SECURESTORAGE_CONFIG_DIR`/`CLAUDE_CONFIG_DIR` for Claude and the
+   `sessions/` mount, `sqlite_home` and `log_dir` for Codex.
+3. The test from "Done when": an app's agent lists and reads the home and
+   finds no other app's conversation, under both harnesses.
+4. Session resume and the dropped-socket replay keep working (they read the
+   harness's history, now per grant).
+5. Approval page sentence; docs for the new layout.
 
 ## Done when
 

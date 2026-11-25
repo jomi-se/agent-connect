@@ -19,7 +19,7 @@ defects are in [issues](../issues/) and unaccepted proposals in
 - [Owner security log](owner-security-log.md) (needs-triage): keep the owner's
   security events across restarts and show them on Activity.
 - [Each app sees only its own conversations](app-conversations.md)
-  (needs-triage): the MCP-over-ACP binding migration it waited for shipped in
+  (ready-for-agent): checked with real turns for both harnesses; the MCP-over-ACP binding migration it waited for shipped in
   0.0.7.
 - [Harness credentials for boxed sessions](credentials.md): implemented; the
   credential model the gateway follows, kept current.
