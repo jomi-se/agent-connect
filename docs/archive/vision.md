@@ -281,6 +281,5 @@ context; draft status and provider support must be rechecked before implementati
 - [Device authorization, RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html).
 - [Native application identity investigation](future/native-client-identity.md).
 - [ADR 0010: existing Open Responses boundary](../decisions/0010-open-responses-gateway-pivot.md).
-- [ADR 0012: superseded implementation direction](../decisions/0012-openclaw-policy-gateway.md).
 - [Current mission](../mission.md), [implementation inventory](../README.md),
   and [current work](../plan/current-work.md).

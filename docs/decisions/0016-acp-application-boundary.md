@@ -4,8 +4,8 @@ Status: accepted (2026-10-04); the owner selected ACP as the current product vis
 
 Date: 2026-09-30. The owner selected ACP
 as the product direction and retired the superseded plugin implementation on
-2026-10-03. [ADR 0010](0010-open-responses-gateway-pivot.md) and
-[ADR 0015](0015-openclaw-plugin-host.md) preserve historical context.
+2026-10-03. [ADR 0010](0010-open-responses-gateway-pivot.md) preserves
+historical context.
 The owner accepted the ACP decision on 2026-10-04. Publication remains an owner gate.
 
 Evidence: [ACP gateway spike results](../archive/experiments/acp-gateway.md).
@@ -170,7 +170,7 @@ Costs and risks:
   [release plan](../install/README.md) proposes a prebuilt binary
   through npm and GitHub Releases. The implementation removes the superseded plugin. Owner-only post-publication npm retirement is recorded in the release checklist.
 - **Consent code.** The Rust gateway now implements hosted owner consent,
-  OAuth/PKCE, refresh, revocation and optional TOTP, following ADR 0009/0014/0015
+  OAuth/PKCE, refresh, revocation and optional TOTP, following ADR 0009
   semantics. Automated browser composition and independent security review are
   required; live owner verification remains a release prerequisite.
 - **Session isolation.** A per-session internal network. The dedicated shared harness home restores conversations after a

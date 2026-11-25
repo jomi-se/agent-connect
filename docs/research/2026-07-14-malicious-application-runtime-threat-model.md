@@ -1,4 +1,4 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../install/README.md).
+> Superseded. Historical evidence only; use the [ACP install guide](../install/README.md).
 
 # Malicious application to user-owned agent threat model
 

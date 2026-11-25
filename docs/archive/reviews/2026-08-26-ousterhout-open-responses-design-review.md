@@ -1,4 +1,4 @@
-> Superseded — OpenClaw plugin removed. Historical evidence only; use the [ACP install guide](../../install/README.md).
+> Superseded. Historical evidence only; use the [ACP install guide](../../install/README.md).
 
 # An Ousterhout review of the Open Responses gateway pivot
 

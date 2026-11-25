@@ -210,8 +210,8 @@ story is stronger:
 
 That route finding is a particularly good on-screen engineering artifact. Show
 the concise discovery chain or the regression test—not the generic agent skill
-files. The durable account is in
-[the grant-route security retrospective](grant-route-security-retrospective.md).
+files. The grant-route security retrospective that recorded it was deleted
+with the OpenClaw-era material; Git history keeps it.
 
 The video should show a real working path, not become an architecture
 slideshow. Use the polished diagrams and terminal animation only to orient the

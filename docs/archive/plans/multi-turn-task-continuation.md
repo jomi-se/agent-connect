@@ -71,8 +71,8 @@ each opaque session. At most eight unexpired sessions are provisioned for one
 grant, application, and tool snapshot in a gateway process; the next is refused
 with a retryable `429`. Session lifetime slides on activity rather than running
 from issuance, and is independent of the capability TTL: separate idle, parked
-and stalled clocks govern it, as described in
-[the session lifecycle](parallel-expiring-sessions-mvp.md), which supersedes the
+and stalled clocks govern it, as the later session lifecycle plan described (deleted with the OpenClaw-era
+material; see Git history), which supersedes the
 capability-lease model this plan originally specified. Expiry durably retires
 the opaque session, cancels retained work, and releases the provider session and
 its workspace. Capability refresh remains reuse-only and cannot accidentally
