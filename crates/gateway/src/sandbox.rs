@@ -75,18 +75,21 @@ fn ensure_keepalive(
             .get("Id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("missing inspected keepalive ID"))?;
-        if container.get("Image").and_then(|v| v.as_str()) == Some(image.id.as_str()) {
-            if container
-                .pointer("/State/Running")
-                .and_then(|v| v.as_bool())
-                != Some(true)
-            {
+        let running = container
+            .pointer("/State/Running")
+            .and_then(|v| v.as_bool())
+            == Some(true);
+        if container.get("Image").and_then(|v| v.as_str()) == Some(image.id.as_str())
+            && (!running || answers(id, docker, deadline))
+        {
+            if !running {
                 docker
                     .run(&["start", id], deadline)
                     .context("could not start the egress keepalive")?;
             }
             return Ok(());
         }
+        // Built from another image, or reported running with nothing behind it.
         // Removing it is safe while the egress runs: the egress still counts.
         docker
             .run(&force_remove(program, id), deadline)
@@ -180,6 +183,31 @@ fn egress_start_with(
             docker.run(&args.iter().map(String::as_str).collect::<Vec<_>>(), deadline)
                 .context("could not create egress proxy; check the container engine and any conflicting container name")?;
         }
+        Some(container)
+            if container
+                .pointer("/State/Running")
+                .and_then(|v| v.as_bool())
+                == Some(true)
+                && !answers(
+                    &validate_egress(&container, &image, false)?,
+                    docker,
+                    deadline,
+                ) =>
+        {
+            // The engine reports it running, but nothing runs behind it: a
+            // service manager that stopped the gateway killed the egress with
+            // it before the engine could record the exit. Starting it again is
+            // a no-op on such a container, so replace it by its inspected ID.
+            let id = EgressFacts::read(&container, crate::engine::selected())?.id;
+            docker
+                .run(&force_remove(crate::engine::selected(), &id), deadline)
+                .context(
+                    "could not replace the egress proxy that stopped behind the engine's back",
+                )?;
+            let args = egress_start_args(name, &image.id);
+            docker.run(&args.iter().map(String::as_str).collect::<Vec<_>>(), deadline)
+                .context("could not create egress proxy; check the container engine and any conflicting container name")?;
+        }
         Some(container) => {
             let id = validate_egress(&container, &image, false)?;
             if container
@@ -245,11 +273,25 @@ fn preflight_with(
 ) -> anyhow::Result<()> {
     let deadline = Instant::now() + STARTUP_TIMEOUT;
     let image = inspect_image(image, docker, deadline)?;
-    checked_egress(egress, &image, docker, deadline)?;
+    let id = checked_egress(egress, &image, docker, deadline)?;
+    if !answers(&id, docker, deadline) {
+        bail!(
+            "the egress proxy is reported running but nothing runs behind it; restart the gateway, which replaces it"
+        );
+    }
     if crate::engine::selected() == crate::engine::Program::Podman {
         checked_keepalive(egress, docker, deadline)?;
     }
     Ok(())
+}
+
+/// Whether a container the engine reports running really has its process.
+/// When a service manager kills a gateway's whole control group, Podman's
+/// monitor dies with the container and the engine keeps reporting it
+/// running; only the runtime knows better, and `exec` asks it. This works
+/// where the engine runs in a VM, too, unlike checking a host process ID.
+fn answers(id: &str, docker: &mut impl DockerCommand, deadline: Instant) -> bool {
+    docker.run(&["exec", id, "true"], deadline).is_ok()
 }
 fn checked_keepalive(
     egress: &str,
@@ -264,7 +306,12 @@ fn checked_keepalive(
             == Some(KEEPALIVE_OWNER)
             && c.pointer("/State/Running").and_then(|v| v.as_bool()) == Some(true)
     });
-    if !owned_and_running {
+    let id = keepalive
+        .as_ref()
+        .and_then(|c| c.get("Id"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    if !owned_and_running || !id.is_some_and(|id| answers(&id, docker, deadline)) {
         bail!(
             "the egress keepalive is absent or stopped, so a session ending could cut the egress off; restart the gateway"
         );
@@ -1566,7 +1613,9 @@ mod tests {
                     Ok(&egress_fixture(&id, running).to_string()),
                 ),
             ]);
-            if !running {
+            if running {
+                steps.push_back(step(&["exec", &id, "true"], Ok("")));
+            } else {
                 steps.push_back(step(&["start", &id], Ok(&id)));
             }
             steps.push_back(step(
@@ -1584,6 +1633,42 @@ mod tests {
             egress_start_with("owned-egress", "session:test", &mut docker).unwrap();
             assert!(docker.0.is_empty());
         }
+    }
+
+    #[test]
+    fn egress_start_replaces_an_egress_reported_running_with_nothing_behind_it() {
+        // A service manager killed the gateway's control group, egress
+        // included, and the engine still reports it running.
+        let id = "a".repeat(64);
+        let create = egress_start_args("owned-egress", &format!("sha256:{}", "d".repeat(64)));
+        let mut docker = Fixture(VecDeque::from([
+            step(
+                &["image", "inspect", "--format", "{{json .}}", "session:test"],
+                Ok(&image_fixture()),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "container",
+                    "--format",
+                    "{{json .}}",
+                    "owned-egress",
+                ],
+                Ok(&egress_fixture(&id, true).to_string()),
+            ),
+            step(
+                &["exec", &id, "true"],
+                Err("crun: the container is not running"),
+            ),
+            step(&force_remove(crate::engine::selected(), &id), Ok("")),
+            step(
+                &create.iter().map(String::as_str).collect::<Vec<_>>(),
+                Ok(&id),
+            ),
+        ]));
+        egress_start_with("owned-egress", "session:test", &mut docker).unwrap();
+        assert!(docker.0.is_empty());
     }
 
     #[test]
@@ -1628,7 +1713,22 @@ mod tests {
         ])
         .unwrap();
         let current = keepalive(KEEPALIVE_OWNER, &image.id, true);
-        run(vec![step(&inspect, Ok(&current))]).unwrap();
+        run(vec![
+            step(&inspect, Ok(&current)),
+            step(&["exec", &id, "true"], Ok("")),
+        ])
+        .unwrap();
+        // Reported running with nothing behind it: replaced.
+        run(vec![
+            step(&inspect, Ok(&current)),
+            step(
+                &["exec", &id, "true"],
+                Err("crun: the container is not running"),
+            ),
+            step(&force_remove(Program::Podman, &id), Ok("")),
+            step(&create, Ok(&id)),
+        ])
+        .unwrap();
         let stopped = keepalive(KEEPALIVE_OWNER, &image.id, false);
         run(vec![
             step(&inspect, Ok(&stopped)),
@@ -2014,6 +2114,34 @@ mod tests {
                 .contains("stopped")
         );
         assert!(stopped.0.is_empty());
+        let mut dead = Fixture(VecDeque::from([
+            step(
+                &["image", "inspect", "--format", "{{json .}}", "session:test"],
+                Ok(&image),
+            ),
+            step(
+                &[
+                    "inspect",
+                    "--type",
+                    "container",
+                    "--format",
+                    "{{json .}}",
+                    "egress-name",
+                ],
+                Ok(&egress_fixture(&id, true).to_string()),
+            ),
+            step(
+                &["exec", &id, "true"],
+                Err("crun: the container is not running"),
+            ),
+        ]));
+        assert!(
+            preflight_with("session:test", "egress-name", &mut dead)
+                .unwrap_err()
+                .to_string()
+                .contains("nothing runs behind it")
+        );
+        assert!(dead.0.is_empty());
     }
 
     #[test]

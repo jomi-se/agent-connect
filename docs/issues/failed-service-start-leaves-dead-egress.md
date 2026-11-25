@@ -1,6 +1,6 @@
 # A failed service start leaves a dead egress that the gateway reuses
 
-Status: ready-for-agent
+Status: in-progress
 
 When `serve` runs as the user service, it starts the owned egress from inside
 the service, so the egress's container monitor lives in the service's
@@ -41,3 +41,13 @@ while the engine lists the egress as up and `doctor` passes.
 Related: [a box sometimes never reaches the egress](podman-box-never-reaches-egress.md)
 had a different signature (a retry worked), but a dead egress is one more
 cause to rule out when it recurs.
+
+## Comments
+
+2026-11-25: `podman ps --sync` does not correct the state, and `start` on
+such a container does nothing; `podman exec <id> true` fails on it, also
+where the engine runs in a VM. A starting gateway now replaces an egress or
+keepalive that does not answer, and doctor fails it. Stale state needs the
+service's control group killed, which always means the gateway restarts, so
+repairing at start covers it without moving the egress out of the service.
+Closing waits on reproducing it under systemd with the release build.

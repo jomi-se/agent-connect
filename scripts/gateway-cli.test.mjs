@@ -232,7 +232,7 @@ async function preflightDocker() {
   await writeFile(join(root, "container"), JSON.stringify(container));
   await writeFile(
     join(root, "docker"),
-    '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":["name=rootless"],"operatingSystem":"Linux"}\'; exit 0; fi\nif [ "$1" = image ]; then /bin/cat "$PREFLIGHT_IMAGE"; elif [ "$1" = inspect ]; then /bin/cat "$PREFLIGHT_CONTAINER"; else exit 1; fi\n',
+    '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":["name=rootless"],"operatingSystem":"Linux"}\'; exit 0; fi\nif [ "$1" = image ]; then /bin/cat "$PREFLIGHT_IMAGE"; elif [ "$1" = inspect ]; then /bin/cat "$PREFLIGHT_CONTAINER"; elif [ "$1" = exec ]; then exit 0; else exit 1; fi\n',
   );
   await chmod(join(root, "docker"), 0o755);
   return {
@@ -496,6 +496,7 @@ test("login defaults to the platform harness home; a config's home and box apply
       join(defaultRuntime, "config.json"),
       JSON.stringify({
         harness: "codex",
+        harness_home: join(root, "codex-runtime-home"),
         box_image: "session:default-runtime",
       }),
       { mode: 0o600 },
@@ -507,9 +508,18 @@ test("login defaults to the platform harness home; a config's home and box apply
         "session:default-runtime",
       ),
     );
+    // Another harness borrows the implied runtime's box, but signs in to
+    // its own dedicated home, never the runtime's.
     const other = command(["login", "--harness", "claude"], env);
-    assert.equal(other.status, 2);
-    assert.match(other.stderr, /runtime's configuration/);
+    assert.equal(other.status, 0, other.stderr);
+    const otherArgs = await readFile(env.LOGIN_ARGS, "utf8");
+    assert.ok(otherArgs.includes("session:default-runtime"));
+    assert.ok(
+      otherArgs.includes(
+        `type=bind,src=${join(cliState, "agent-connect/harnesses/claude")},dst=/home/node`,
+      ),
+    );
+    assert.ok(!otherArgs.includes("codex-runtime-home"));
   } finally {
     await rm(defaultRuntime, { recursive: true, force: true });
   }

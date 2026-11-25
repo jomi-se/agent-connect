@@ -338,18 +338,28 @@ async fn run() -> anyhow::Result<()> {
                 };
                 harness
             };
-            if let Some(configured_harness) = configured.as_ref().and_then(|c| c.harness) {
-                if configured_harness != harness {
-                    return Err(UsageError(format!(
-                        "selected harness does not match the runtime's configuration ({}); use its configured harness or name another runtime with --config",
-                        config_path.as_deref().unwrap_or(std::path::Path::new("")).display()
-                    ))
-                    .into());
-                }
+            // Another harness than the runtime's: refused for a runtime named
+            // with --config, but the implied default runtime only lends its
+            // box and engine (the box carries every harness), never its home.
+            let other_harness = configured
+                .as_ref()
+                .and_then(|c| c.harness)
+                .is_some_and(|configured| configured != harness);
+            if other_harness && cli.config.is_some() {
+                return Err(UsageError(format!(
+                    "selected harness does not match the runtime's configuration ({}); use its configured harness or name another runtime with --config",
+                    config_path.as_deref().unwrap_or(std::path::Path::new("")).display()
+                ))
+                .into());
             }
             let path = cli
                 .harness_home
-                .or_else(|| configured.as_ref().and_then(|c| c.harness_home.clone()))
+                .or_else(|| {
+                    configured
+                        .as_ref()
+                        .filter(|_| !other_harness)
+                        .and_then(|c| c.harness_home.clone())
+                })
                 .map(Ok)
                 .unwrap_or_else(|| default_home(harness))?;
             let home = HarnessHome::prepare(&path)?;
