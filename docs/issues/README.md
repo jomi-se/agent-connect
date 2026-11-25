@@ -15,3 +15,5 @@ reproducing it on purpose and checking the fix against that reproduction.
   (ready-for-agent)
 - [Popup pairing fails under cross-origin isolation and says the user cancelled](popup-pairing-fails-under-cross-origin-isolation.md)
   (ready-for-agent)
+- [The teardown gate runs only on Docker](teardown-gate-runs-only-on-docker.md)
+  (ready-for-agent)

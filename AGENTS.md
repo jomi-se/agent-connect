@@ -113,6 +113,12 @@ codex harness home: a few short real turns through a scratch boxed gateway and
 its egress, on this checkout's test box. It spends tokens and needs
 credentials, so CI never runs it.
 
+When a change alters behaviour that a gate asserts, search every gate for the
+old behaviour (`git grep` its wording and the names it checks in `scripts/`)
+and update each one, including gates this machine cannot run (the teardown
+gate needs Docker). A gate that never ran locally is not evidence; CI is the
+only run it gets.
+
 Run routine checks through `quiet-run` (on PATH; `scripts/quiet-run.sh` is the
 fallback), which prints one line on success and a bounded tail on failure. Use
 `--detach` for slow runs, then collect with `--status`.
