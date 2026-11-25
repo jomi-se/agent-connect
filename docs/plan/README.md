@@ -16,12 +16,10 @@ defects are in [issues](../issues/) and unaccepted proposals in
 - [Bind grants to the browser that paired](browser-bound-grants.md)
   (needs-triage): DPoP instead of origin-checked bearer tokens; transport,
   recovery and migration still open.
-- [Owner passkeys](owner-passkeys.md) (in-progress): built and through its
-  design pass; the real-device check remains before release.
 - [Owner security log](owner-security-log.md) (needs-triage): keep the owner's
   security events across restarts and show them on Activity.
 - [Each app sees only its own conversations](app-conversations.md)
-  (needs-triage): after the MCP-over-ACP binding migration
-  ([issue](../issues/mcp-over-acp-binding.md)), which comes first.
+  (needs-triage): the MCP-over-ACP binding migration it waited for shipped in
+  0.0.7.
 - [Harness credentials for boxed sessions](credentials.md): implemented; the
   credential model the gateway follows, kept current.

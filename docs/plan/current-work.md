@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-11-24
+Updated: 2026-11-25
 
 Where the project stands. What comes next is in [plans](README.md), what is
 broken in [issues](../issues/), and what nobody has accepted yet in
@@ -31,7 +31,16 @@ requests in place of the gateway's profiles. 0.0.5 brought container engines
 (Podman as well as Docker, [ADR 0020](../decisions/0020-container-engines.md)),
 the gateway-owned egress and background box refresh.
 
-Releases publish automatically from `main`, only for a commit CI verified
+The first real gateway was upgraded to 0.0.7 the night it shipped and serves
+an app with passkey sign-in. The upgrade found two bugs no test covered,
+because every test started from an empty runtime: setup and `doctor` let the
+earlier owner state through while `serve` refused it, and the resulting crash
+loop left a dead egress the gateway then reused. The first is fixed on `main`
+for the next release; the second is an
+[open issue](../issues/failed-service-start-leaves-dead-egress.md).
+
+Releases publish automatically from `main`, only for a commit CI verified,
+and each one first upgrades a runtime made by the previous release
 ([release process](../install/release.md)).
 
 ## What CI proves

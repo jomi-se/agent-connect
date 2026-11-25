@@ -138,7 +138,7 @@ It uses pure-Rust crypto, with no OpenSSL; it builds static for the Linux musl
 release targets, and its builder refuses IP literal origins. It does not tie a
 credential to its address on the server side, so the gateway's per-address
 storage is the guard. The spike is recorded in the
-[plan](../plan/owner-passkeys.md).
+[plan](../archive/plans/owner-passkeys.md).
 
 ## Qualification
 

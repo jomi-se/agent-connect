@@ -1,13 +1,13 @@
 # Owner passkeys
 
-Status: in-progress
+Status: done
 
 Each entry-point address gets one second factor, a passkey or TOTP, never
 both. A passkey signs in and approves on its own; TOTP needs the passphrase
 too; an address with neither can only enroll one. Passkey is the default, and
 TOTP covers addresses that cannot have one (IP literals). Recovery is one
 host-side reset per address. No migration: the gateway-wide TOTP enrollment is
-dropped on upgrade. [ADR 0019](../decisions/0019-owner-passkeys.md), accepted
+dropped on upgrade. [ADR 0019](../../decisions/0019-owner-passkeys.md), accepted
 2026-11-19, holds the tables and the decisions.
 
 ## How it is checked
@@ -62,7 +62,8 @@ end.
    the response's bytes unencoded, so the pages now encode it themselves; and
    an expired sign-in page said "Signed out". The code field became six boxes.
 10. **macOS build**: the release workflow's build, green in CI. There is no
-    macOS machine to test on by hand.
+    macOS machine to test on by hand. Done 2026-11-25: the release workflow
+    built every target and published gateway 0.0.7 with browser SDK 0.0.11.
 
 ## Open
 
@@ -86,10 +87,15 @@ before release:
   unfixed in 0.9 and 0.10 alike and concerns private-key operations; the
   gateway only verifies RS256 signatures, which older Windows Hello passkeys
   use. The final 0.10.0 already satisfies the library's requirement.
-- **The upgrade note lives in the changelog only.** It says what the gateway's
-  refusal says: remove the old owner state and run setup again.
+- **The upgrade note lives in the changelog.** In 0.0.7 it said what the
+  gateway's refusal said: remove the old owner state and run setup again.
+  Upgrading the first real gateway showed that setup and `doctor` let the old
+  state through and only `serve` refused it, so the service crash-looped. Setup
+  now names the file and offers to replace it (`[y/N]`), and `doctor` fails
+  for it (after 0.0.7). Every release now upgrades from the previous one
+  before its bump ([release process](../../install/release.md#upgrade-from-the-last-release)).
 - **Activity links each request to its own address.** Kept, and written up
-  as the [surface model](../architecture/surface-model.md): to an application each address is its own gateway, so a
+  as the [surface model](../../architecture/surface-model.md): to an application each address is its own gateway, so a
   request is reviewed at the address it came through; to the owner the
   console is one gateway and shows every address.
 - **Rate limits and guess limits are separate.** Rate limits catch runaway or
@@ -140,11 +146,13 @@ Nothing. The design pass is done: every owner page, the error pages and the
 terminal messages now use labels, with explanation kept for a decision that
 can't be taken back and for an uncommon dead end. The approval page's risk
 sentence reads "An approved app can use your agent's login and see other
-apps' conversations." until [per-app conversations](app-conversations.md)
+apps' conversations." until [per-app conversations](../../plan/app-conversations.md)
 land. The recovery commands stop and start a running user service themselves.
 
-## Before release
+## Released
 
-- Step 9, real devices: a phone and a desktop password manager against a live
-  dev build, which doubles as the owner's click-through of the redesigned
-  pages.
+Gateway 0.0.7, 2026-11-25. The first real gateway was upgraded the same night:
+a passkey on a phone and in a desktop password manager, and an app paired and
+used through it. That upgrade also left a dead egress behind its crash loop
+([issue](../../issues/failed-service-start-leaves-dead-egress.md)), which is
+not passkey work.

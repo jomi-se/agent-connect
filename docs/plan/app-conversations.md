@@ -1,7 +1,7 @@
 # Each app sees only its own conversations
 
-Status: needs-triage. Starts after the
-[MCP-over-ACP binding migration](../issues/mcp-over-acp-binding.md).
+Status: needs-triage. The MCP-over-ACP binding migration it waited for
+shipped in gateway 0.0.7 (90f550b).
 
 Every session mounts the same dedicated harness home, which holds the login,
 the harness configuration and every conversation's history. An approved app
