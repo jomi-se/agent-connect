@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.0.8
 
 - Upgrading from a release whose owner state this one cannot read now works
   from setup: it names the file, says what replacing it means and asks

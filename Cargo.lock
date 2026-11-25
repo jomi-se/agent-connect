@@ -136,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "agent-connect-gateway"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "agent-client-protocol",
  "agent-client-protocol-conductor",

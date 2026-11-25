@@ -11,11 +11,16 @@ broken in [issues](../issues/), and what nobody has accepted yet in
 ## Releases
 
 On npm: the browser SDK `@open-agent-connect/web` **0.0.11**, and the gateway,
-its native platform packages and the box **0.0.7**. Versions are independent
+its native platform packages and the box **0.0.8**. Versions are independent
 and stay on 0.0.x until the shape is final; nothing an owner installed is kept
 compatible before 1.0.
 
-0.0.7 signs the owner in with a passkey, or with an authenticator code where a
+0.0.8 makes upgrades from 0.0.7 work as an owner meets them: setup offers
+to replace owner state an earlier release wrote, `doctor` flags it, and a
+starting gateway always replaces its egress, so a failed service start can
+no longer leave a dead one behind. It was checked by upgrading a 0.0.7
+runtime with a passkey, including a crash loop under systemd. 0.0.7 signs
+the owner in with a passkey, or with an authenticator code where a
 passkey cannot work, one per address
 ([ADR 0019](../decisions/0019-owner-passkeys.md)); logs what the owner does as
 `owner_audit` events; and speaks MCP 2026-07-28 over ACP, as current Codex and
@@ -32,12 +37,9 @@ requests in place of the gateway's profiles. 0.0.5 brought container engines
 the gateway-owned egress and background box refresh.
 
 The first real gateway was upgraded to 0.0.7 the night it shipped and serves
-an app with passkey sign-in. The upgrade found two bugs no test covered,
-because every test started from an empty runtime: setup and `doctor` let the
-earlier owner state through while `serve` refused it, and the resulting crash
-loop left a dead egress the gateway then reused. The first is fixed on `main`
-for the next release; the second is an
-[open issue](../issues/failed-service-start-leaves-dead-egress.md).
+an app with passkey sign-in. That upgrade found the two bugs 0.0.8 fixes,
+which no test covered because every test started from an empty runtime
+([the egress](../archive/issues/failed-service-start-leaves-dead-egress.md)).
 
 Releases publish automatically from `main`, only for a commit CI verified,
 and each one first upgrades a runtime made by the previous release
