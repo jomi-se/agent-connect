@@ -47,3 +47,15 @@ Find what leaves the entry behind: a network removed while a container still
 holds it, a cancelled teardown, or a disconnect that fails partway. Then check
 whether a join fails only while such an entry exists. Clearing the stale files
 before a run is a workaround to test the theory, not the fix.
+
+## Comments
+
+2026-11-25: again on Podman 5.7.0, three local boxed runs in a row. The first
+passed five Codex scenarios; cleanup then failed with `could not find network
+acp-sess-net-…` and `network not found` for the test model's container, and
+left an `aardvark-dns` entry for the test model's internal network. Each later
+run passed one scenario and failed the next preflight with `network inspection
+mismatch … internal libpod error`. The same run on the previous commit failed
+the same way, so the egress liveness change was not involved. In an isolated
+Podman (its own HOME, runtime and storage directories) the gates were run
+again to check the change.

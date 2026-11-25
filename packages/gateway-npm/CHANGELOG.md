@@ -8,12 +8,14 @@
   kept the file and `doctor` passed while the service refused to start.
   `doctor` now fails `owner_state` for it.
 - Setup's yes/no questions show `[y/N]` instead of only the default.
-- A gateway that starts finds an egress, or its Podman keepalive, that the
-  engine reports running with nothing behind it, and replaces it. A service
-  manager that stops the gateway kills them with it, and Podman kept them
-  listed as running, so after a failed start every session failed to reach
+- A starting gateway always replaces its egress and Podman keepalive
+  instead of reusing them. When a user service exits on an error, the
+  service manager kills Podman's monitor processes with it; the containers
+  keep running unwatched, the engine reports them running from then on, and
+  the egress dies on its first log line. Every session then failed to reach
   the network until the owner removed the egress by hand. `doctor`'s
-  `network_proxy` check fails for such an egress.
+  `network_proxy` check now fails for an egress that is reported running
+  with nothing behind it.
 - `agent-connect login --harness <other>` without `--config` signs in to that
   harness's own dedicated home, using the default runtime's box, instead of
   refusing because the default runtime uses another harness. A runtime named

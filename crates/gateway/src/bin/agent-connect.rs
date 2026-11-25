@@ -38,7 +38,7 @@ use agent_connect_gateway::policy::{GrantSessions, PermissionProfile, PolicyConf
 use agent_connect_gateway::resume::{
     self, AttachError, Host, RESUME_SUBPROTOCOL, Registry, ResumeConfig, ToSocket, close,
 };
-use agent_connect_gateway::sandbox::{SessionNetwork, box_args, egress_start, egress_stop};
+use agent_connect_gateway::sandbox::{SessionNetwork, box_args, egress_start_fresh, egress_stop};
 use agent_connect_gateway::{FixturePaths, Harness, mock_harness};
 use anyhow::Context;
 use axum::Router;
@@ -427,12 +427,12 @@ async fn run() -> anyhow::Result<()> {
         None
     };
     if cli.boxed {
-        // The gateway owns its egress for as long as it serves: started or
-        // reused here, removed at shutdown.
+        // The gateway owns its egress for as long as it serves: started new
+        // here, never trusted from an earlier run, and removed at shutdown.
         let image = cli.box_image.clone();
         let egress = cli.egress_container.clone().unwrap();
         tokio::task::spawn_blocking(move || {
-            egress_start(&egress, &image)?;
+            egress_start_fresh(&egress, &image)?;
             agent_connect_gateway::sandbox::preflight(&image, &egress)
         })
         .await?

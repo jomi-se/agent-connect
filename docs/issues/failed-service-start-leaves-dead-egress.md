@@ -44,10 +44,21 @@ cause to rule out when it recurs.
 
 ## Comments
 
-2026-11-25: `podman ps --sync` does not correct the state, and `start` on
-such a container does nothing; `podman exec <id> true` fails on it, also
-where the engine runs in a VM. A starting gateway now replaces an egress or
-keepalive that does not answer, and doctor fails it. Stale state needs the
-service's control group killed, which always means the gateway restarts, so
-repairing at start covers it without moving the egress out of the service.
-Closing waits on reproducing it under systemd with the release build.
+2026-11-25, reproduced and understood. Only Podman's monitor (`conmon`)
+lives in the service's control group; the egress process runs in its own
+scope. When `serve` exits on an error, the service manager stops what is
+left in the group, the monitor goes, and the egress keeps running
+unwatched. The engine reports it running from then on. Its first proxied
+request writes a log line into the pipe the monitor used to read, and the
+egress dies; the engine still reports it running, `start` does nothing on
+it, and `podman ps --sync` does not correct it. Replayed on a throwaway
+runtime: 0.0.7's native binary as a transient user unit with
+`Restart=on-failure`, owner state marked earlier so `serve` failed after
+starting the egress; after three restarts the monitor was gone, and one
+proxied request killed the egress.
+
+So checking that the egress answers is not enough at a start: it can still
+be alive and die on first use. A starting gateway now replaces its egress
+and keepalive every time (they hold no state, and no session exists yet), and
+`doctor` fails an egress whose process is gone. Closing waits on the same
+replay against the release build.

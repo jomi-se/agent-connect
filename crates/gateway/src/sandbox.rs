@@ -55,6 +55,7 @@ fn ensure_keepalive(
     program: crate::engine::Program,
     egress: &str,
     image: &BoxImage,
+    fresh: bool,
     docker: &mut impl DockerCommand,
     deadline: Instant,
 ) -> anyhow::Result<()> {
@@ -79,7 +80,8 @@ fn ensure_keepalive(
             .pointer("/State/Running")
             .and_then(|v| v.as_bool())
             == Some(true);
-        if container.get("Image").and_then(|v| v.as_str()) == Some(image.id.as_str())
+        if !fresh
+            && container.get("Image").and_then(|v| v.as_str()) == Some(image.id.as_str())
             && (!running || answers(id, docker, deadline))
         {
             if !running {
@@ -89,8 +91,9 @@ fn ensure_keepalive(
             }
             return Ok(());
         }
-        // Built from another image, or reported running with nothing behind it.
-        // Removing it is safe while the egress runs: the egress still counts.
+        // Fresh on a gateway's start, built from another image, or reported
+        // running with nothing behind it. Removing it is safe while the egress
+        // runs: the egress still counts.
         docker
             .run(&force_remove(program, id), deadline)
             .context("could not replace the egress keepalive")?;
@@ -157,19 +160,40 @@ fn egress_args(program: crate::engine::Program, name: &str, image: &str) -> Vec<
     args
 }
 
+/// Moves a running gateway's egress to `image`, reusing it when it already
+/// serves that box.
 pub fn egress_start(name: &str, image: &str) -> anyhow::Result<()> {
     crate::config::validate_container_name(name)?;
-    egress_start_with(name, image, &mut Docker)
+    egress_start_with(name, image, false, &mut Docker)
+}
+
+/// A starting gateway's egress and keepalive, always new. When a service
+/// manager stops a gateway that exited on an error, it kills Podman's monitor
+/// processes with it; the containers keep running unwatched, the engine keeps
+/// reporting them running whatever happens next, and the egress dies on its
+/// first log line. They hold no state and no session exists yet, so a start
+/// replaces them rather than trusting what the engine reports.
+pub fn egress_start_fresh(name: &str, image: &str) -> anyhow::Result<()> {
+    crate::config::validate_container_name(name)?;
+    egress_start_with(name, image, true, &mut Docker)
 }
 
 fn egress_start_with(
     name: &str,
     image: &str,
+    fresh: bool,
     docker: &mut impl DockerCommand,
 ) -> anyhow::Result<()> {
     let deadline = Instant::now() + STARTUP_TIMEOUT;
     let image = inspect_image(image, docker, deadline)?;
-    ensure_keepalive(crate::engine::selected(), name, &image, docker, deadline)?;
+    ensure_keepalive(
+        crate::engine::selected(),
+        name,
+        &image,
+        fresh,
+        docker,
+        deadline,
+    )?;
     match inspect_container(name, docker, deadline)? {
         Some(container) if serves_another_box(&container, &image, docker, deadline) => {
             // The box was rebuilt (or a refresh stopped halfway): this egress
@@ -184,26 +208,22 @@ fn egress_start_with(
                 .context("could not create egress proxy; check the container engine and any conflicting container name")?;
         }
         Some(container)
-            if container
-                .pointer("/State/Running")
-                .and_then(|v| v.as_bool())
-                == Some(true)
-                && !answers(
-                    &validate_egress(&container, &image, false)?,
-                    docker,
-                    deadline,
-                ) =>
+            if fresh
+                || (container
+                    .pointer("/State/Running")
+                    .and_then(|v| v.as_bool())
+                    == Some(true)
+                    && validate_egress(&container, &image, false)
+                        .is_ok_and(|id| !answers(&id, docker, deadline))) =>
         {
-            // The engine reports it running, but nothing runs behind it: a
-            // service manager that stopped the gateway killed the egress with
-            // it before the engine could record the exit. Starting it again is
-            // a no-op on such a container, so replace it by its inspected ID.
-            let id = EgressFacts::read(&container, crate::engine::selected())?.id;
+            // Ours and sound, checked before anything is removed; replaced by
+            // its inspected ID. Reported running with nothing behind it is
+            // the same case reached while serving: `start` does nothing on
+            // such a container.
+            let id = validate_egress(&container, &image, false)?;
             docker
                 .run(&force_remove(crate::engine::selected(), &id), deadline)
-                .context(
-                    "could not replace the egress proxy that stopped behind the engine's back",
-                )?;
+                .context("could not replace the egress proxy")?;
             let args = egress_start_args(name, &image.id);
             docker.run(&args.iter().map(String::as_str).collect::<Vec<_>>(), deadline)
                 .context("could not create egress proxy; check the container engine and any conflicting container name")?;
@@ -1630,7 +1650,7 @@ mod tests {
                 Ok(&egress_fixture(&id, true).to_string()),
             ));
             let mut docker = Fixture(steps);
-            egress_start_with("owned-egress", "session:test", &mut docker).unwrap();
+            egress_start_with("owned-egress", "session:test", false, &mut docker).unwrap();
             assert!(docker.0.is_empty());
         }
     }
@@ -1667,7 +1687,41 @@ mod tests {
                 Ok(&id),
             ),
         ]));
-        egress_start_with("owned-egress", "session:test", &mut docker).unwrap();
+        egress_start_with("owned-egress", "session:test", false, &mut docker).unwrap();
+        assert!(docker.0.is_empty());
+    }
+
+    #[test]
+    fn a_starting_gateway_replaces_its_own_egress_but_never_a_foreign_one() {
+        let id = "a".repeat(64);
+        let inspect = [
+            "inspect",
+            "--type",
+            "container",
+            "--format",
+            "{{json .}}",
+            "owned-egress",
+        ];
+        let image = ["image", "inspect", "--format", "{{json .}}", "session:test"];
+        let create = egress_start_args("owned-egress", &format!("sha256:{}", "d".repeat(64)));
+        let mut docker = Fixture(VecDeque::from([
+            step(&image, Ok(&image_fixture())),
+            step(&inspect, Ok(&egress_fixture(&id, true).to_string())),
+            step(&force_remove(crate::engine::selected(), &id), Ok("")),
+            step(
+                &create.iter().map(String::as_str).collect::<Vec<_>>(),
+                Ok(&id),
+            ),
+        ]));
+        egress_start_with("owned-egress", "session:test", true, &mut docker).unwrap();
+        assert!(docker.0.is_empty());
+        let mut foreign = egress_fixture(&id, true);
+        foreign["Config"]["Labels"] = serde_json::json!({});
+        let mut docker = Fixture(VecDeque::from([
+            step(&image, Ok(&image_fixture())),
+            step(&inspect, Ok(&foreign.to_string())),
+        ]));
+        assert!(egress_start_with("owned-egress", "session:test", true, &mut docker).is_err());
         assert!(docker.0.is_empty());
     }
 
@@ -1695,18 +1749,20 @@ mod tests {
                 "Config": { "Labels": { EGRESS_LABEL: owner } }, "State": { "Running": running } })
             .to_string()
         };
-        let run = |steps: Vec<(Vec<String>, Result<String, &'static str>)>| {
+        let run_with = |fresh: bool, steps: Vec<(Vec<String>, Result<String, &'static str>)>| {
             let mut docker = Fixture(VecDeque::from(steps));
             let result = ensure_keepalive(
                 Program::Podman,
                 "egress",
                 &image,
+                fresh,
                 &mut docker,
                 Instant::now() + STARTUP_TIMEOUT,
             );
             assert!(docker.0.is_empty());
             result
         };
+        let run = |steps| run_with(false, steps);
         run(vec![
             step(&inspect, Err("no such container")),
             step(&create, Ok(&id)),
@@ -1729,6 +1785,19 @@ mod tests {
             step(&create, Ok(&id)),
         ])
         .unwrap();
+        // A starting gateway replaces even a current one that answers...
+        run_with(
+            true,
+            vec![
+                step(&inspect, Ok(&current)),
+                step(&force_remove(Program::Podman, &id), Ok("")),
+                step(&create, Ok(&id)),
+            ],
+        )
+        .unwrap();
+        // ...but never one that is not ours.
+        let foreign_current = keepalive("someone-else", &image.id, true);
+        assert!(run_with(true, vec![step(&inspect, Ok(&foreign_current))]).is_err());
         let stopped = keepalive(KEEPALIVE_OWNER, &image.id, false);
         run(vec![
             step(&inspect, Ok(&stopped)),
@@ -1750,6 +1819,7 @@ mod tests {
             Program::Docker,
             "egress",
             &image,
+            false,
             &mut docker,
             Instant::now(),
         )
@@ -1790,7 +1860,7 @@ mod tests {
                 Ok(&id),
             ),
         ]));
-        egress_start_with("owned-egress", "session:test", &mut docker).unwrap();
+        egress_start_with("owned-egress", "session:test", false, &mut docker).unwrap();
         assert!(docker.0.is_empty());
 
         // Weakened, unowned, or its own box gone: refused, nothing removed.
@@ -1811,7 +1881,7 @@ mod tests {
                 steps.push_back(step(&own, own_image));
             }
             let mut docker = Fixture(steps);
-            assert!(egress_start_with("owned-egress", "session:test", &mut docker).is_err());
+            assert!(egress_start_with("owned-egress", "session:test", false, &mut docker).is_err());
             assert!(docker.0.is_empty());
         }
     }

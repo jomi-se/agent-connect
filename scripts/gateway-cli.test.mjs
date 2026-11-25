@@ -232,7 +232,7 @@ async function preflightDocker() {
   await writeFile(join(root, "container"), JSON.stringify(container));
   await writeFile(
     join(root, "docker"),
-    '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":["name=rootless"],"operatingSystem":"Linux"}\'; exit 0; fi\nif [ "$1" = image ]; then /bin/cat "$PREFLIGHT_IMAGE"; elif [ "$1" = inspect ]; then /bin/cat "$PREFLIGHT_CONTAINER"; elif [ "$1" = exec ]; then exit 0; else exit 1; fi\n',
+    '#!/bin/sh\nif [ "$1" = info ]; then echo \'{"securityOptions":["name=rootless"],"operatingSystem":"Linux"}\'; exit 0; fi\nif [ "$1" = image ]; then /bin/cat "$PREFLIGHT_IMAGE"; elif [ "$1" = inspect ]; then /bin/cat "$PREFLIGHT_CONTAINER"; elif [ "$1" = exec ] || [ "$1" = rm ]; then exit 0; elif [ "$1" = run ]; then echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; else exit 1; fi\n',
   );
   await chmod(join(root, "docker"), 0o755);
   return {
