@@ -239,10 +239,17 @@ async function restartAfterCrash() {
   await docker(["stop", egress.Id]);
   const next = await serve();
   const taken = await inspect("container", egressName);
-  assert.equal(
+  // A start never trusts an egress an earlier run left: a service manager
+  // that killed that run may have left it unwatched, reported running.
+  assert.notEqual(
     taken.Id,
     egress.Id,
-    "a stopped owned egress is restarted by ID",
+    "a starting gateway replaces the egress an earlier run left",
+  );
+  assert.equal(
+    await inspect("container", egress.Id),
+    null,
+    "the earlier egress is removed, not left beside the new one",
   );
   assert.equal(taken.State.Running, true);
   assert.equal(taken.HostConfig.RestartPolicy.Name, "unless-stopped");
@@ -254,7 +261,7 @@ async function restartAfterCrash() {
     null,
     "the gateway removes its egress when it stops",
   );
-  reports.push({ mode, restartedById: true, removedAtStop: true });
+  reports.push({ mode, replacedOnStart: true, removedAtStop: true });
   console.log(`OK gateway teardown ${mode}`);
 }
 
