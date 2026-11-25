@@ -5,9 +5,36 @@ which must pass CI and be rebased on current main. Every push to `main` runs CI;
 only when it succeeds does the
 [release workflow](../../.github/workflows/release.yml) publish, from that exact
 commit, each package version that is not on npm yet. To release, run
-`npm run release:bump <version>` and commit. Ordinary CI is read-only. Agents
-may prepare and verify artifacts but never push, publish or execute npm
-deprecation.
+`npm run release:bump <version>` and commit, after the
+[upgrade check](#upgrade-from-the-last-release) passes. Ordinary CI is
+read-only. Agents may prepare and verify artifacts but never push, publish or
+execute npm deprecation.
+
+## Upgrade from the last release
+
+Every release is checked by upgrading to it before the bump. CI and the
+clean-room gate only install into empty runtimes, and owners upgrade: 0.0.7
+shipped with setup and `doctor` accepting owner state that `serve` then
+refused, so the service crash-looped on the first upgraded box.
+
+1. Build this checkout's packages with `npm run release:prepare-local`.
+2. In a throwaway HOME, XDG directories and npm prefix (never your own
+   runtime or service), install the latest published
+   `@open-agent-connect/gateway` and run `agent-connect setup` with
+   `--directory` in that HOME, typing a throwaway passphrase at its prompt.
+   Start `agent-connect serve --config <runtime>/config.json`, sign in as the
+   owner and pair an application, so the runtime holds the state a real owner
+   has.
+3. Stop it. Install the packed launcher and platform package from
+   `dist/release` over the published one, and do what this release's
+   changelog tells an upgrading owner to do, nothing more.
+4. Rerun setup. Then `serve` must stay up, `doctor` must pass, and the owner
+   must sign in. Every refusal must reach the owner at setup's terminal, with
+   what to do; one that only shows in the serve log fails the check. Fix the
+   gap or the changelog's upgrade note before bumping.
+5. Remove the throwaway HOME, its containers, egress peer and box images.
+
+Name the release you upgraded from in the bump commit message.
 
 ## Artifacts and pins
 

@@ -134,6 +134,17 @@ Run the formatter once, just before final verification and commit.
   owner's services, and clean up their own installs and caches on success and
   failure.
 
+## Releases
+
+- Before every `npm run release:bump`, upgrade a runtime made by the latest
+  published release to this build, as an owner would, and see it work. A fresh
+  install never covers this: it starts from an empty runtime, and owners
+  upgrade. The steps are in `docs/install/release.md`; the bump commit says
+  which release it upgraded from.
+- The upgrade passes only when the service actually serves and the owner can
+  sign in. Setup finishing and `doctor` passing are not enough; a refusal that
+  appears only in the service log is a failure.
+
 ## Documentation
 
 - Mission and boundaries: `docs/mission.md`
