@@ -365,6 +365,10 @@ pub struct SetupPlan {
     /// after a release changes its format): setup writes a fresh one.
     #[serde(skip)]
     owner_state_to_create: Option<PathBuf>,
+    /// Owner state from an earlier release that this one cannot read. Setup
+    /// replaces it only after the owner says yes at the terminal.
+    #[serde(skip)]
+    owner_state_to_replace: Option<PathBuf>,
     pub upgrade: bool,
     pub previous_box_image: Option<String>,
     /// The harness versions this run resolved from npm; absent when npm was
@@ -514,6 +518,7 @@ pub fn setup_plan(
     }
     .resolve()?;
     let mut owner_state_to_create = None;
+    let mut owner_state_to_replace = None;
     if let Some(previous) = previous {
         if previous.headless_static_bearer == Some(true) {
             return Err(usage(
@@ -554,8 +559,16 @@ pub fn setup_plan(
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 owner_state_to_create = Some(state);
             }
-            _ => private_metadata(&owner, false)
-                .context("existing owner sign-in state is unsafe; setup never replaces it")?,
+            _ => {
+                private_metadata(&owner, false)
+                    .context("existing owner sign-in state is unsafe; setup never replaces it")?;
+                if !crate::authorization::state_file_is_current(&owner).context(
+                    "existing owner sign-in state is unreadable; setup never replaces it",
+                )? {
+                    owner_state_to_create = Some(state);
+                    owner_state_to_replace = Some(owner);
+                }
+            }
         }
     }
     let login_required = !credentials::credential_file_present(&home, harness);
@@ -601,7 +614,9 @@ pub fn setup_plan(
             } else {
                 "initialize-private-runtime"
             },
-            if owner_state_to_create.is_some() {
+            if owner_state_to_replace.is_some() {
+                "replace-earlier-owner-sign-in"
+            } else if owner_state_to_create.is_some() {
                 "create-owner-sign-in"
             } else {
                 "keep-owner-sign-in"
@@ -615,6 +630,7 @@ pub fn setup_plan(
             },
         ],
         owner_state_to_create,
+        owner_state_to_replace,
         upgrade: cli.upgrade,
         previous_box_image,
         harness_versions: harness_versions.cloned(),
@@ -710,6 +726,17 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             "first-time setup needs the owner at a terminal to type the sign-in passphrase",
         ));
     }
+    if let Some(old) = &plan.owner_state_to_replace {
+        eprintln!(
+            "Owner sign-in at {} is from an earlier Agent Connect version, which this one cannot read.\nReplacing it signs out every address and revokes every app; you choose a passphrase again, then set up each address and pair your apps again.",
+            old.display()
+        );
+        if !confirm("Replace it?")? {
+            return Err(usage(
+                "setup kept the earlier owner sign-in, which this version cannot serve; rerun setup and answer y to replace it",
+            ));
+        }
+    }
     // Fail prerequisites before creating private authentication state.
     if cli.box_image.is_none() {
         plan.box_image = box_build::ensure_box(
@@ -758,8 +785,16 @@ pub async fn setup(mut cli: SetupCli) -> anyhow::Result<()> {
             record_rootful_acceptance(&plan.config)?;
         }
         if let Some(state) = plan.owner_state_to_create.clone() {
+            if let Some(old) = &plan.owner_state_to_replace {
+                std::fs::remove_file(old)
+                    .with_context(|| format!("could not remove {}", old.display()))?;
+            }
             let passphrase = config::prompt_owner_passphrase(
-                "Owner sign-in was removed; choose an owner sign-in passphrase (at least 12 characters): ",
+                if plan.owner_state_to_replace.is_some() {
+                    "Choose an owner sign-in passphrase (at least 12 characters): "
+                } else {
+                    "Owner sign-in was removed; choose an owner sign-in passphrase (at least 12 characters): "
+                },
             )?;
             let (origin, profiles, permissions, harness) = (
                 plan.origin.clone(),
@@ -909,8 +944,14 @@ fn prompt(label: &str, default: &str) -> anyhow::Result<String> {
     })
 }
 fn confirm(label: &str) -> anyhow::Result<bool> {
+    eprint!("{label} [y/N]: ");
+    std::io::stderr().flush()?;
+    let mut answer = String::new();
+    if std::io::stdin().lock().read_line(&mut answer)? == 0 {
+        return Err(usage("setup cancelled at end of input"));
+    }
     Ok(matches!(
-        prompt(label, "N")?.to_ascii_lowercase().as_str(),
+        answer.trim().to_ascii_lowercase().as_str(),
         "y" | "yes"
     ))
 }
@@ -954,6 +995,7 @@ fn step_label(step: &str) -> &str {
         "initialize-private-runtime" => "create the runtime",
         "create-owner-sign-in" => "create owner sign-in",
         "keep-owner-sign-in" => "keep owner sign-in",
+        "replace-earlier-owner-sign-in" => "replace owner sign-in from an earlier version",
         "build-local-box" => "build the box",
         "owner-login-if-requested" => "log in, if asked",
         "owner-starts-serve" => "you start it",
@@ -1127,7 +1169,7 @@ mod tests {
         assert!(!dir.exists());
     }
     #[test]
-    fn setup_creates_a_removed_owner_sign_in_and_never_replaces_one() {
+    fn setup_creates_a_removed_owner_sign_in_and_offers_to_replace_an_earlier_one() {
         let dir = std::env::temp_dir().join(format!("acp-setup-owner-{}", uuid::Uuid::new_v4()));
         create_private_directory(&dir).unwrap();
         let cli = options(dir.clone());
@@ -1166,7 +1208,23 @@ mod tests {
                 .owner_state_to_create
                 .is_none()
         );
-        // Anything but a missing file is still refused, never replaced.
+        // State from an earlier release is planned for replacement, which
+        // setup does only after the owner says yes.
+        let mut earlier: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&owner).unwrap()).unwrap();
+        earlier["version"] = serde_json::json!(1);
+        std::fs::write(&owner, serde_json::to_vec(&earlier).unwrap()).unwrap();
+        let outdated = setup_plan(&cli, Some(&test_harness())).unwrap();
+        assert_eq!(
+            outdated.owner_state_to_replace.as_deref(),
+            Some(owner.as_path())
+        );
+        assert_eq!(
+            outdated.owner_state_to_create.as_deref(),
+            Some(auth.as_path())
+        );
+        assert!(outdated.steps.contains(&"replace-earlier-owner-sign-in"));
+        // Anything but a missing or earlier file is still refused, never replaced.
         std::fs::remove_file(&owner).unwrap();
         std::os::unix::fs::symlink(dir.join("elsewhere.json"), &owner).unwrap();
         let refused = setup_plan(&cli, Some(&test_harness())).err().unwrap();

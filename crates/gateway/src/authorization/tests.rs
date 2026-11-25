@@ -5398,7 +5398,8 @@ fn earlier_state_versions_are_refused_with_the_way_forward() {
         .unwrap()
         .to_string();
     assert!(error.contains("earlier Agent Connect version"), "{error}");
-    assert!(error.contains("run setup again"), "{error}");
+    assert!(error.contains("run agent-connect setup"), "{error}");
+    assert!(!super::state_file_is_current(&path).unwrap());
     fs::remove_dir_all(dir).unwrap();
 }
 

@@ -71,8 +71,53 @@ pub async fn doctor(cli: DoctorCli) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Whether the owner sign-in exists, is private and is in this release's
+/// format. Only the version field is read.
+fn report_owner_state(report: &mut DoctorReport, auth: &std::path::Path) {
+    match private_metadata(auth, false) {
+        Ok(()) => match crate::authorization::state_file_is_current(auth) {
+            Ok(true) => report.add(
+                "owner_state",
+                CheckStatus::Pass,
+                "Owner sign-in is present (only its version read)",
+                None,
+            ),
+            Ok(false) => report.add(
+                "owner_state",
+                CheckStatus::Fail,
+                "Owner sign-in is from an earlier Agent Connect version; the gateway will not start",
+                Some("Run agent-connect setup, which offers to replace it"),
+            ),
+            Err(_) => report.add(
+                "owner_state",
+                CheckStatus::Fail,
+                "Owner sign-in file is unreadable",
+                None,
+            ),
+        },
+        Err(_)
+            if std::fs::symlink_metadata(auth)
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            report.add(
+                "owner_state",
+                CheckStatus::Fail,
+                "Owner sign-in is missing",
+                Some("Run agent-connect setup"),
+            )
+        }
+        Err(_) => report.add(
+            "owner_state",
+            CheckStatus::Fail,
+            "Owner sign-in file is unsafe",
+            Some("It must be yours and private (mode 600)"),
+        ),
+    }
+}
+
 /// Heavyweight owner-run CLI checks; do not call on every HTTP request.
-/// Configuration is inspected, but credential contents and authentication state are never read.
+/// Configuration is inspected; credential contents are never read, and of the
+/// owner state only its format version.
 pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
     let mut report = DoctorReport {
         ok: true,
@@ -111,32 +156,10 @@ pub async fn doctor_report(path: &std::path::Path) -> DoctorReport {
             None,
         );
     } else {
-        let auth = configured.state_dir.join("auth/authorization.json");
-        match private_metadata(&auth, false) {
-            Ok(()) => report.add(
-                "owner_state",
-                CheckStatus::Pass,
-                "Owner sign-in is present (contents not read)",
-                None,
-            ),
-            Err(_)
-                if std::fs::symlink_metadata(&auth)
-                    .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
-            {
-                report.add(
-                    "owner_state",
-                    CheckStatus::Fail,
-                    "Owner sign-in is missing",
-                    Some("Run agent-connect setup"),
-                )
-            }
-            Err(_) => report.add(
-                "owner_state",
-                CheckStatus::Fail,
-                "Owner sign-in file is unsafe",
-                Some("It must be yours and private (mode 600)"),
-            ),
-        }
+        report_owner_state(
+            &mut report,
+            &configured.state_dir.join("auth/authorization.json"),
+        );
     }
     if crate::engine::for_runtime(configured.container_engine).is_err() {
         report.add(
@@ -488,6 +511,29 @@ mod tests {
         assert_eq!(report.checks[0].code, "config_valid");
         assert!(report.checks[0].fix.is_some());
         assert!(!directory.exists());
+    }
+    #[test]
+    fn owner_state_from_an_earlier_release_fails_with_the_way_forward() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = std::env::temp_dir().join(format!("acp-doctor-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&directory).unwrap();
+        let auth = directory.join("authorization.json");
+        let check = |version: u32| {
+            std::fs::write(&auth, format!("{{\"version\":{version}}}")).unwrap();
+            std::fs::set_permissions(&auth, std::fs::Permissions::from_mode(0o600)).unwrap();
+            let mut report = DoctorReport {
+                ok: true,
+                checks: Vec::new(),
+            };
+            report_owner_state(&mut report, &auth);
+            let check = report.checks.remove(0);
+            (check.status, check.fix)
+        };
+        assert_eq!(check(2), (CheckStatus::Pass, None));
+        let (status, fix) = check(1);
+        assert_eq!(status, CheckStatus::Fail);
+        assert!(fix.unwrap().contains("agent-connect setup"));
+        std::fs::remove_dir_all(directory).unwrap();
     }
     #[test]
     fn a_rootful_engine_fails_until_the_owner_accepts_it() {

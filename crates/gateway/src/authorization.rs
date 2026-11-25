@@ -68,6 +68,26 @@ const MAX_BODY: usize = 128 * 1024;
 const MAX_SPENT_REFRESH: usize = 16384;
 const MAX_STATE: u64 = 32 * 1024 * 1024;
 const STATE_VERSION: u32 = 2;
+
+/// Whether owner state written by some release is in this release's format.
+/// Reads only the version field, so setup and doctor can tell an upgrade that
+/// must replace the owner sign-in from one that keeps it.
+pub(crate) fn state_version_is_current(bytes: &[u8]) -> Result<bool> {
+    Ok(serde_json::from_slice::<Value>(bytes)?
+        .get("version")
+        .and_then(Value::as_u64)
+        == Some(STATE_VERSION.into()))
+}
+
+/// The same check on the state file at `path`.
+pub(crate) fn state_file_is_current(path: &std::path::Path) -> Result<bool> {
+    let metadata = fs::symlink_metadata(path)?;
+    ensure!(
+        metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() <= MAX_STATE,
+        "invalid authorization state file"
+    );
+    state_version_is_current(&fs::read(path)?)
+}
 const SETUP_TTL: u64 = 600;
 const OWNER_TTL: u64 = 12 * 3600;
 const CEREMONY_TTL: u64 = 600;
@@ -452,12 +472,9 @@ impl AuthService {
                     "authorization state must be private"
                 );
                 let bytes = fs::read(&path)?;
-                let version = serde_json::from_slice::<Value>(&bytes)?
-                    .get("version")
-                    .and_then(Value::as_u64);
                 ensure!(
-                    version == Some(STATE_VERSION.into()),
-                    "owner authorization state at {} is from an earlier Agent Connect version: remove it and run setup again",
+                    state_version_is_current(&bytes)?,
+                    "owner authorization state at {} is from an earlier Agent Connect version: run agent-connect setup, which offers to replace it",
                     path.display()
                 );
                 let stored: Stored = serde_json::from_slice(&bytes)?;

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Upgrading from a release whose owner state this one cannot read now works
+  from setup: it names the file, says what replacing it means and asks
+  `[y/N]` before removing it and asking for a new passphrase. In 0.0.7 setup
+  kept the file and `doctor` passed while the service refused to start.
+  `doctor` now fails `owner_state` for it.
+- Setup's yes/no questions show `[y/N]` instead of only the default.
+
 ## 0.0.7
 
 - Application tools work with current Codex and Claude Code adapters again.

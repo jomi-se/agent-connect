@@ -240,7 +240,9 @@ box, updates the owned service executable even when its image is
 unchanged, names the box images it
 replaced without removing them, and preserves owner
 passphrase, passkeys and authenticators, grant records, journals and login
-homes, except where a release says to run setup again. Image or harness-policy
+homes. A release that changes the owner state's format cannot read the old
+one: setup says so and asks before replacing it, and you set the passphrase,
+each address and your app pairings again. Image or harness-policy
 changes invalidate existing application authority: pair affected apps again.
 Retaining a grant record does not keep it valid under a changed policy. Never
 replay interrupted turns or initialize over existing state.
