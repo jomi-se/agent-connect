@@ -11,7 +11,5 @@ reproducing it on purpose and checking the fix against that reproduction.
   (needs-triage)
 - [Podman: a box sometimes never reaches the egress](podman-box-never-reaches-egress.md)
   (needs-info)
-- [A failed service start leaves a dead egress that the gateway reuses](failed-service-start-leaves-dead-egress.md)
-  (ready-for-agent)
 - [The lateask-cut scenario races Codex's tool listing](lateask-cut-races-tool-listing.md)
   (ready-for-agent)

@@ -1,6 +1,6 @@
 # A failed service start leaves a dead egress that the gateway reuses
 
-Status: in-progress
+Status: done (759c428)
 
 When `serve` runs as the user service, it starts the owned egress from inside
 the service, so the egress's container monitor lives in the service's
@@ -38,7 +38,7 @@ while the engine lists the egress as up and `doctor` passes.
 - A test with a service-manager fixture that fails a start and recovers, then
   checks that a session reaches the network.
 
-Related: [a box sometimes never reaches the egress](podman-box-never-reaches-egress.md)
+Related: [a box sometimes never reaches the egress](../../issues/podman-box-never-reaches-egress.md)
 had a different signature (a retry worked), but a dead egress is one more
 cause to rule out when it recurs.
 
@@ -60,5 +60,6 @@ proxied request killed the egress.
 So checking that the egress answers is not enough at a start: it can still
 be alive and die on first use. A starting gateway now replaces its egress
 and keepalive every time (they hold no state, and no session exists yet), and
-`doctor` fails an egress whose process is gone. Closing waits on the same
-replay against the release build.
+`doctor` fails an egress whose process is gone. The same replay against the release build passed: the build replaced the
+orphaned, dead egress on start, a proxied request answered, and three failed
+starts followed by a recovery left a working egress.

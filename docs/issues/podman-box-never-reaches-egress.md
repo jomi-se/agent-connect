@@ -25,6 +25,6 @@ after a few weeks of sessions on Podman 5, close it as fixed by 0.0.6.
 ## Comments
 
 2026-11-25: a different cause of a box that cannot reach the egress turned up:
-[a failed service start leaves a dead egress](failed-service-start-leaves-dead-egress.md).
+[a failed service start leaves a dead egress](../archive/issues/failed-service-start-leaves-dead-egress.md).
 Its signature differs (no connection in the egress log, and a retry does not
 help), so it does not explain these occurrences on its own.

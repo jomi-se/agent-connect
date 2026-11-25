@@ -154,5 +154,5 @@ land. The recovery commands stop and start a running user service themselves.
 Gateway 0.0.7, 2026-11-25. The first real gateway was upgraded the same night:
 a passkey on a phone and in a desktop password manager, and an app paired and
 used through it. That upgrade also left a dead egress behind its crash loop
-([issue](../../issues/failed-service-start-leaves-dead-egress.md)), which is
+([issue](../issues/failed-service-start-leaves-dead-egress.md)), which is
 not passkey work.
